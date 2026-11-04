@@ -4,7 +4,9 @@ import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.MediaCodecInfo
 import android.media.MediaCodecList
+import android.os.Build
 import app.antresol.core.model.PlaybackCaps
 import app.antresol.core.playback.CodecSupport
 
@@ -18,11 +20,25 @@ object DeviceCaps {
 
     fun current(context: Context): PlaybackCaps = CodecSupport.caps(decoders(), passthrough(context))
 
+    /**
+     * Decoder MIME types. Video counts only hardware decoders: a software VP9/AV1/HEVC decoder
+     * stutters on TV-class CPUs, and the server transcodes to H.264 instead.
+     */
     private fun decoders(): Set<String> = decoderMimes ?: runCatching {
         MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
             .filterNot { it.isEncoder }
-            .flatMapTo(HashSet()) { info -> info.supportedTypes.map { it.lowercase() } }
+            .flatMapTo(HashSet()) { info ->
+                info.supportedTypes.map { it.lowercase() }.filter { !it.startsWith("video/") || info.isHardware() }
+            }
     }.getOrDefault(emptySet()).also { decoderMimes = it }
+
+    private fun MediaCodecInfo.isHardware(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            isHardwareAccelerated
+        } else {
+            val lower = name.lowercase()
+            !lower.startsWith("omx.google.") && !lower.startsWith("c2.android.") && !lower.contains(".sw.")
+        }
 
     /** Re-read on every call: the audio output can change (a receiver switched on). */
     private fun passthrough(context: Context): Set<String> {

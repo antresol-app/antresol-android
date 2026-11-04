@@ -167,7 +167,7 @@ private fun ItemDetail.toModel(progress: Progress?): DetailModel {
     )
 }
 
-private fun ItemDetail.videoInfo(progress: Progress?): VideoInfo {
+internal fun ItemDetail.videoInfo(progress: Progress?): VideoInfo {
     val episodes = Episodes.ordered(this)
     val target = when {
         files.isNotEmpty() -> PlayTarget(

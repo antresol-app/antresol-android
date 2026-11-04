@@ -192,3 +192,73 @@ Running log between milestones. Newest entries at the bottom.
 - Music: no Songs list and no Shuffle All button yet (both need playback). Settings screen not built.
 - Android has no backdrop blur behind the tab bar; it uses a 97 % opaque elevated fill.
 - No on-device run (no emulator here); verified with Robolectric screenshots only.
+
+## TV milestone 2 — browse, details, search, player
+
+### `:core` (shared with `:mobile`)
+- `playback/VideoSession`: opens a **file** through `/api/play` with caps/quality/audioIndex, signs the URL with
+  `?mk=` (`VideoSource` = response + URL + `StreamTimeline`), replaces its own HLS session on every reopen
+  (`replaceSession`), `sessionLost()` after a keepalive 404, `suspendSession()` (DELETE now, reopen later).
+  Keepalives/progress/final stop stay in `PlaybackReporter` (`attachSession` after each reopen).
+- `playback/WebVtt.shift(vtt, offsetMs)`: moves cues to player time for HLS (`timeline.subtitleOffsetMs`), drops
+  cues before 0. `playback/CodecSupport.caps(decoderMimes, passthrough)`: h264 always, hevc/vp9/av1 by decoder,
+  aac/mp3/opus/flac always, ac3/eac3 by decoder or passthrough; containers mp4/mkv/webm.
+  `playback/Episodes`: season/episode order, `after(series, id)` (autoplay), `toPlay(series)` (`next` or first).
+- Tests: `WebVttTest`, `CodecSupportTest`, `EpisodesTest`, `VideoSessionTest`; live
+  `ServerIntegrationTest.videoSessionSwitchesTracksAndQuality` (direct mkv → audio track forces remux HLS with the
+  keyframe-snapped start → VOD playlist with mk → VTT shift → 480p replaces the session (old keepalive 404) →
+  suspend/reopen). All 7 live tests pass against 0.3.0.
+
+### `:ui-common`
+- `playback/DeviceCaps.current(context)`: `MediaCodecList` decoders (video: hardware decoders only, so a software
+  AV1/VP9 decoder does not claim support) + AC-3/E-AC-3 encodings of HDMI/optical outputs. Use it from `:mobile` too.
+- Icons: Pause, Plus, Check, CheckCircle, Audio, Subtitles, Sliders, SkipNext, Restart. EN/RU strings for detail
+  actions and the player (`player_*`, `detail_play_episode`, …).
+
+### `:tv`
+- Routes: `PlayerRoute(itemId, resume)` (`ResumeMode` Ask / Resume / FromStart). Hero Play and Continue Watching
+  cards resume video kinds directly; a series/season id plays its `next` episode (or the first).
+- Detail (`DetailScreen`/`DetailViewModel`): movies/episodes/series/seasons show Play / Resume (or
+  "Play S1 E3" / "Resume S1 E3" for series), Play from Beginning, Want to Watch (movie/series, optimistic) and
+  Mark as Watched/Unwatched (refetches), an "Audio: … · Subtitles: …" line and cast. Series: season pills
+  (select on focus; entering lands on the selected season) and 16:9 episode cards with progress / watched check;
+  OK on an episode opens the player with the resume prompt. The page refreshes silently when it resumes (back from
+  the player). Watched state of a movie/episode = `/api/progress.finished`.
+- Player (`ui/player`): ExoPlayer (+HLS, OkHttp data source sharing `client.httpClient`) owned by
+  `PlayerViewModel`, `PlayerView` only as surface + subtitle renderer. Custom TV controls: title/eyebrow, focusable
+  seek bar (Left/Right ±10 s, OK pause), Play/Pause, Audio, Subtitles, Quality, Next Episode pills; side glass
+  menus with check marks (quality menu explains the stream mode and the server's reason). Controls hide after 5 s
+  of playing; with them hidden OK pauses, Left/Right seek, Up/Down show them; media keys (play/pause, ff/rew, next)
+  always work. Back closes a menu → hides controls → leaves.
+  - Flow: item → file `files[0]` → progress → resume prompt (≥ 10 s saved, Ask mode) → `VideoSession.open` →
+    `PlaybackReporter` (progress 10 s, keepalive 20 s, flush on pause, final write + DELETE on exit via the app
+    scope so it survives the ViewModel). HLS seeks before `startSec` debounce 0.7 s, then reopen with
+    `replaceSession`; audio/quality changes reopen at the current position. Keepalive 404 or a player error →
+    DELETE (best effort) + reopen without `replaceSession` (max 2 tries, then an error screen). 429 → "This
+    profile is already watching on another device." with Try Again.
+  - Subtitles: only text tracks with a `url`; the VTT is downloaded with the Bearer header (retries on
+    `Retry-After`), shifted to the stream start, written to `cacheDir/subtitles`, side-loaded as
+    `SubtitleConfiguration` (re-shifted after every reopen); embedded MKV text tracks are never auto-selected.
+  - Background (ON_STOP): pause, flush, DELETE the HLS session; ON_START reopens it paused at the same spot.
+  - Next episode: on end, "Up Next" with a 10 s countdown (Play Now / Back), then the next episode resumes.
+- `TvTextField`: Up/Down leave the field (a single-line field otherwise eats them), so search results are
+  reachable with the D-pad.
+- Tests: `VideoInfoTest` (JVM, Play target / watched rules). `TvLiveUiTest.searchDetailActionsAndPlayer` (live):
+  search → movie detail (facts, watchlist toggled and back) → player controls → back → series detail (season
+  pills, episode cards) → episode → player with Next Episode. It snapshots and restores the progress of the items
+  it plays (outer rule, after the player's final write). Screenshots `tv/build/screenshots/1*.png`.
+  `:tv:assembleRelease` (R8) builds.
+
+### Decisions
+- Audio track changes always go through the server (`audioIndex` → remux), even for direct-play MKV, so the
+  behaviour is the same for every file and matches the web player.
+- Only the first file of a movie/episode is played (no version picker yet).
+- Image (PGS/VobSub) subtitles are not offered (they need `burnSubtitle`, a full transcode).
+- Resume prompt only from episode cards (Ask); Resume buttons and Continue Watching resume silently.
+
+### Known gaps (for TV milestone 3)
+- Never run on a real device/emulator: decoding, passthrough detection, subtitle rendering and HLS behaviour on
+  hardware are unverified (Robolectric has no decoders; the player UI and server flows were exercised).
+- No MediaSession for the video player (no system "now playing" / Assistant transport controls).
+- No multi-version picker, no image-subtitle burn-in, no trick-play thumbnails, no chapter markers.
+- Home refreshes Continue Watching on return only when its data is older than 30 s.

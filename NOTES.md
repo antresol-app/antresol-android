@@ -353,3 +353,6 @@ Running log between milestones. Newest entries at the bottom.
   only the first file version.
 - EPUB/FB2 reader not built. PDF uses the `page:<n>` locator.
 - `VideoPlayerViewModel` duplicates the TV one (see above).
+- The TV chain added `core/playback/Chapters.kt`, `LyricsSync.kt` and `core/reading/ComicProgress.kt` at the
+  same time as this milestone. `:mobile` still uses its own `PlaybackConnection.chapterAt` and
+  `reader/ReaderProgress`, which do the same jobs. A cleanup should switch `:mobile` to the `:core` versions.

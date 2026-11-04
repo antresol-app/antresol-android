@@ -431,3 +431,68 @@ Running log between milestones. Newest entries at the bottom.
 - Comics show one page at a time (no two-page spreads, no zoom).
 - E-books are not readable on TV (by design for this milestone).
 - Search results for songs still open the album instead of playing the song.
+
+## TV review fixes (after milestone 3)
+
+Reviewer findings for `:core`, `:ui-common` and `:tv`, verified against the code and fixed:
+
+### Core (affects the phone app too)
+- `MediaKeyCache` is bound to the token: a different `client.token` refetches the key (another
+  profile never streams with the previous one's key; a re-sign-in that revoked the old session gets a
+  fresh key). `get(minRemaining)` lets callers ask for a lifetime: `VideoSession.open` asks for the
+  rest of the video plus 1 h, so long films never outlive their key. `VideoApi.mediaKey(minValidMs)`.
+- `AntresolClient` sends the token read when the request starts and reports 401s with that token
+  (`onUnauthorized: (failedToken: String) -> Unit`), so a late 401 for profile A no longer signs out B.
+- `AntresolClient.pinned()` and `playbackApi()` (now pinned to the token at creation): final progress
+  writes and HLS stops after a profile switch still reach the server as the right profile.
+- `SessionManager.beforeSignOut` (suspend hook) runs before the token is revoked; the TV app stops the
+  audio engine there and waits for the audiobook's final write (`AudioEngine.stopAndFlush`).
+  **Phone chain:** set it too if the phone plays audiobooks in a service.
+- `StreamTimeline.needsNewSession(target, availablePlayerMs)`: growing EVENT playlists
+  (`hlsComplete` false) reopen for seeks past the produced part.
+- `CodecSupport.caps(..., maxHeight)`; `DeviceCaps` fills it with min(tallest display mode, tallest
+  H.264/HEVC hardware decode), ignoring values below 720.
+- `MediaUrls.normalizeBaseUrl` throws `InvalidServerAddressException`; the TV maps only that to
+  "invalid server address" (decode errors used to show it). **Phone chain:** `mobile/.../LoadState.kt`
+  still maps every `IllegalArgumentException`.
+- `ui-common`: `<plurals name="song_count">` (EN/RU one/few/many). `detail_song_count` stays only
+  because the phone uses it; switch it to the plural and delete the string.
+
+### TV player
+- Reopens are queued, never cancelled: `/api/play` runs in `NonCancellable`, and a session nobody
+  wants any more (closed player, superseded request, finished item) is DELETEd. Failed reopens stop
+  keepalives and the old session; `onSessionLost` only reopens while playing.
+- Backgrounding detaches the HLS session synchronously (a quick return can no longer stop the new
+  one); a stream opened while in background loads paused and is suspended at once.
+- `recover()` stops keepalives before stopping the session; an HTTP 401 from the stream drops the
+  media key. `begin()` releases a previous attempt's reporter/session. Subtitle files live in a
+  per-player cache directory. Seeks work without a known duration (falls back to the player's).
+- Seeking: Left/Right scrub while held (10 s, then 30 s, 60 s, 2 % of the video per repeat), one seek on
+  release (or after 1.2 s without keys); number keys 0–9 jump to 0–90 %.
+- Up Next has Cancel (and Back): stays on the last frame with the controls.
+
+### TV screens
+- `MainShell` owns a `ViewModelStore` cleared when it leaves composition (profile switch, sign-out,
+  session expiry): the player, comic reader and other back-stack ViewModels are released then.
+- The top nav shows on every page except Player, Comic Reader and Now Playing (no tab selected on
+  detail/grid/songs pages, fading when scrolled); it hides while a Settings panel is open.
+  `OptionsPanel` is opaque (`BackgroundElevated`) over a 50 % black scrim, with `focusIndex`.
+- Sign Out and Change Server ask for confirmation (Cancel focused).
+- Focus: Music/Books header links, the grid's Shuffle and sort pills remember focus; Home refreshes on
+  every resume and moves focus to the neighbouring card when the focused one disappears; error views
+  never take focus from the nav; a comic volume without pages focuses its rows and says why.
+- Long press OK on a Continue Watching card opens its detail page (short press resumes).
+- Songs: Play queues the whole library (`AudioEngine.appendTracks` adds the remaining pages).
+- Shell shuffles show a glass notice on failure or an empty result. Grids page by server offset.
+  Seasons keep their own row state. Detail toggles ignore presses while a request is in flight.
+- Comic reader: the end-of-volume prompt gets the D-pad; OK retries a page that failed.
+- Lyrics show "Loading lyrics…"; transcoded seeks keep the scrobble counter.
+- The profile password field is no longer saved in the instance state.
+
+### Verified
+`ANTRESOL_TEST_SERVER=1 ./gradlew :core:test :tv:testDebugUnitTest assembleDebug` (live UI tests pass).
+
+### Known gaps (from the review, not fixed)
+- Device tokens are stored as plain JSON in DataStore (app backup is off). Keystore encryption needs
+  real-device testing (Robolectric has no AndroidKeyStore), so it is left for a later milestone.
+- The scrub preview shows the target time on the seek bar only (no thumbnails).

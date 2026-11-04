@@ -262,3 +262,94 @@ Running log between milestones. Newest entries at the bottom.
 - No MediaSession for the video player (no system "now playing" / Assistant transport controls).
 - No multi-version picker, no image-subtitle burn-in, no trick-play thumbnails, no chapter markers.
 - Home refreshes Continue Watching on return only when its data is older than 30 s.
+
+## Mobile milestone 2 — player, audio service, audiobooks, readers, settings
+
+### Video (`player/`)
+- `VideoPlayerActivity` is a separate landscape activity (`sensorLandscape`, `supportsPictureInPicture`,
+  handles its own config changes). Only one runs at a time: starting a video finishes the previous one. Starting
+  it pauses music. PiP: auto-enter on Android 12+ while playing, `onUserLeaveHint` below that, aspect ratio from
+  the video, and a Media3 `MediaSession` (id `antresol-video`) supplies the PiP and headset controls. Closing the
+  PiP window finishes the player.
+- `VideoPlayerViewModel` is a **copy** of the TV `PlayerViewModel` (same `/api/play` flow, caps from
+  `DeviceCaps`, HLS keepalive and replace, VTT side-load and shift, recovery, background suspend). It adds
+  absolute `seekTo` for the scrubber, the default quality setting and the autoplay setting (`UpNext.secondsLeft`
+  is null when autoplay is off). I kept it in `:mobile` so I would not touch `:tv` while the TV chain is working.
+  A later cleanup should move one copy into `:ui-common`.
+- Controls (`VideoPlayerScreen`): a tap shows or hides them (they hide after 4 s while playing). A double tap
+  on the left or right third skips 10 s; in the middle it pauses. There are skip ±10 s buttons, a scrubber,
+  audio/subtitle/quality bottom sheets (the quality sheet explains direct/remux/transcode and the reason),
+  Next Episode, a resume prompt (Ask mode from episode thumbnails), an Up Next panel and an error panel.
+- Entry points: hero Play (video kinds resume), the detail page's Play/Resume ("Resume S1 E3" for a series),
+  Play from Beginning, and episode thumbnails (Ask). Tapping episode text still opens the episode page.
+
+### Music & audiobooks (`playback/`)
+- `PlaybackService` (`MediaSessionService`, id `antresol-audio`, `foregroundServiceType=mediaPlayback`): one
+  ExoPlayer that streams through the signed-in client's OkHttp with the Bearer header (no `mk` needed; the
+  client is resolved for each stream). The default Media3 notification is used. Artwork comes through
+  `CoilBitmapLoader`, because server images need the Bearer header. Tapping the notification opens Now Playing
+  (`MainActivity.ACTION_SHOW_NOW_PLAYING`).
+- Queue entries carry a `MediaRef` in `mediaId` (`track:<id>`, `book:<bookId>:<part>:<fileId>`) and extras
+  (duration, star, part start, book length). `onAddMediaItems` rebuilds the stream URI from the id, because
+  URIs do not cross the controller boundary.
+- The service also sends one `POST /api/music/plays` per track after min(30 s, half) of real playing
+  (`ScrobbleTracker`). Audiobooks get a `PlaybackReporter` (AUDIOBOOK timing) that saves the whole-book
+  position every 10 s and on pause, with a final write when the book stops being current.
+- `PlaybackConnection` (in the Application) wraps the `MediaController` and holds the Compose state. It binds
+  on the first command. Commands: play tracks, shuffle, play or resume an audiobook from a book position,
+  chapter seek, ±15/30 s across parts, speed (remembered for audiobooks), sleep timer (minutes, or end of
+  track/chapter), star (shown at once, undone if the server refuses), queue jump. Playback stops when the
+  signed-in profile or server changes.
+- UI: `MiniPlayer` above the tab bar (`LocalBottomBarPadding` grows by `MiniPlayerSpace`). `NowPlayingScreen`
+  is a full-screen overlay with an artwork tint. It has synced lyrics that follow the song and seek on tap
+  (plain lyrics scroll), the queue, chapters, speed and sleep sheets, and a two-column layout on landscape
+  tablets.
+- Music page: a Songs link (paged `/api/music/songs` list with Play/Shuffle) and Shuffle All
+  (`/api/music/shuffle`). Album and playlist pages have Play/Shuffle and tappable tracks; the track that is
+  playing is shown in the accent colour. Artist pages: Play plays the top tracks, Shuffle plays everything by
+  the artist. Audiobooks: Listen/Resume (resume rules from the spec) and tappable chapters.
+- On Android 13+ the app asks for notification permission once, the first time something plays.
+
+### Readers (`reader/`)
+- Comics: `ComicReaderRoute(volumeId)` → `readFileId` → `/api/comics/{fileId}/pages`. A `HorizontalPager`
+  shows the pages, reversed for `rtl`. Pinch or double tap zooms (around the fingers); paging is off while
+  zoomed. Tapping an edge turns the page in that direction; tapping the middle shows the bar with a page
+  slider (it runs in the reading direction) and Next Volume on the last page. The reader is immersive.
+  Progress is saved as `page:<n>`/fraction 1.5 s after a page change and on close. A comic series page
+  continues the volume in progress.
+- PDF: `PdfReaderRoute(bookId)` downloads `/api/stream/{fileId}` (Bearer) into `cacheDir/books` once, then
+  renders with `PdfRenderer` on demand in a vertical list, with pinch zoom. Progress uses the same `page:<n>`
+  locator. **Decision**: the web app's PDF locator format is unknown, so I reused the comic format.
+- **EPUB/FB2 are "coming soon"**: their book pages say "Reading EPUB books in the app is coming soon." (no
+  reader).
+
+### Settings (`ui/settings`, `settings/AppSettings`)
+- Opened from the account sheet. It has the profile (switch, sign out), the server (address, version from
+  `/api/health`, change), default video quality, autoplay next episode, language (System / English / Русский)
+  and signed-in devices (`/api/me/devices`, sign out others after a confirmation), plus the app version.
+- `AppSettings` uses SharedPreferences because the language must be known in `attachBaseContext`. The language
+  applies to every activity and the service and sets `Accept-Language`. Changing it restarts `MainActivity`
+  from scratch, so server text reloads in the new language.
+
+### Tests
+- `PlaybackLogicTest` (JVM): MediaRef encoding, chapter lookup, reader locators, Listen/Read/Unsupported
+  decisions (audiobook resume tail, comic series continue, PDF only).
+- `MobilePlaybackLiveUiTest` (Robolectric, live): the video player activity (controls and quality sheet,
+  landscape), then album → track → mini-player → Now Playing (the star is flipped on the server and back,
+  queue, lyrics, sleep timer), audiobook Resume → Now Playing chapters and speed, comic series → reader, and
+  Settings (server version, this device). It binds the real `PlaybackService` by handing its binder to
+  Robolectric. Progress it touches is restored afterwards. Screenshots: `mobile/build/screenshots/play-*.png`.
+- Verified: `ANTRESOL_TEST_SERVER=1 ./gradlew :core:test :mobile:testDebugUnitTest assembleDebug` is green.
+
+### Known gaps
+- Never run on a real device or emulator. Robolectric cannot decode media, so actual audio/video output,
+  PiP, the notification, lock-screen controls and Bluetooth are unverified on hardware.
+- Transcoded audio (`X-Vault-Transcode`, e.g. ALAC/WAV sources) is not seekable; `&t=` reload seeking is not
+  implemented. FLAC/MP3/AAC/Opus/Vorbis files are served as originals and seek normally.
+- No custom notification buttons for audiobooks (the default prev/next skip parts there; ±15/30 s is in the app).
+- No playback resumption after the process dies (`onPlaybackResumption` not implemented), and no offline
+  downloads.
+- No video MediaSession metadata beyond what Media3 derives; no trick-play thumbnails, no image subtitles, and
+  only the first file version.
+- EPUB/FB2 reader not built. PDF uses the `page:<n>` locator.
+- `VideoPlayerViewModel` duplicates the TV one (see above).

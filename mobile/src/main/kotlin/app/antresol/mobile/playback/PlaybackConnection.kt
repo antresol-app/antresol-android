@@ -60,7 +60,8 @@ sealed interface SleepTimer {
  * The app's handle on [PlaybackService]: a Media3 [MediaController] plus Compose state for the
  * mini-player and the Now Playing screen, and the commands the UI needs (play an album, shuffle,
  * play an audiobook from a whole-book position, chapters, speed, sleep timer, star).
- * Lives in the Application so it survives activity restarts.
+ * Lives in the Application so it survives activity restarts; it binds to the service on the first
+ * command (the service only runs while this process does, so there is nothing to find earlier).
  */
 class PlaybackConnection(
     private val context: Context,

@@ -114,7 +114,6 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
     val app = context.applicationContext as AntresolMobileApp
     val playback = app.playback
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(playback) { playback.connect() }
     LaunchedEffect(playback.nowPlayingRequested) {
         if (playback.nowPlayingRequested) {
             playback.nowPlayingRequested = false

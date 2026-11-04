@@ -68,17 +68,28 @@ class AntresolClient(
     httpClient: OkHttpClient = defaultHttpClient(),
     language: () -> String = { ServerLanguage.EN },
     @Volatile var token: String? = null,
-    private val onUnauthorized: (ApiException) -> Unit = {},
+    private val onUnauthorized: (failedToken: String) -> Unit = {},
 ) {
     val urls = MediaUrls(baseUrl)
     val baseUrl: String get() = urls.baseUrl
+
+    private val baseHttpClient = httpClient
+    private val language = language
 
     val httpClient: OkHttpClient = httpClient.newBuilder()
         .addInterceptor(AntresolHeadersInterceptor({ urls.baseUrl }, { token }, language))
         .build()
 
-    /** Media key for `?mk=` URLs, refreshed automatically. */
-    val mediaKeys = MediaKeyCache(fetch = ::mediaKey)
+    /** Media key for `?mk=` URLs, refreshed automatically and bound to the current [token]. */
+    val mediaKeys = MediaKeyCache(fetch = ::mediaKey, token = { token })
+
+    /**
+     * A client for the same server that keeps sending [token] even after this client's token changes
+     * (profile switch, change server). Used for final writes such as the last progress save, which can
+     * run after the profile was switched. Its 401s are reported here with the pinned token.
+     */
+    fun pinned(token: String? = this.token): AntresolClient =
+        AntresolClient(baseUrl, baseHttpClient, language, token, onUnauthorized)
 
     // region Auth and profiles
 
@@ -288,10 +299,13 @@ class AntresolClient(
     }
 
     private suspend fun execute(request: Request, reportUnauthorized: Boolean = true): RawResponse {
-        val response = httpClient.newCall(request).awaitRaw()
+        // Send the token read now, so a 401 is reported for the token that actually failed.
+        val sentToken = token
+        val authorized = if (sentToken == null) request else request.newBuilder().header("Authorization", "Bearer $sentToken").build()
+        val response = httpClient.newCall(authorized).awaitRaw()
         if (response.status in 200..299) return response
         val error = errorFrom(response)
-        if (error.isUnauthorized && reportUnauthorized && token != null) onUnauthorized(error)
+        if (error.isUnauthorized && reportUnauthorized && sentToken != null) onUnauthorized(sentToken)
         throw error
     }
 

@@ -22,7 +22,7 @@ class VideoSessionTest {
             return PlayResponse(mode = "remux", url = "/api/hls/s$next/index.m3u8", startSec = (request.startSec ?: 0.0) - 1)
         }
 
-        override suspend fun mediaKey() = "key"
+        override suspend fun mediaKey(minValidMs: Long) = "key"
         override suspend fun stopSession(session: String) {
             stopped += session
         }

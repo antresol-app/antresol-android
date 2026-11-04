@@ -22,6 +22,18 @@ class TimelinesTest {
     }
 
     @Test
+    fun growingPlaylistReopensPastItsProducedPart() {
+        val growing = StreamTimeline(PlayResponse(mode = "transcode", url = "/api/hls/s/index.m3u8", startSec = 10.0))
+        assertFalse(growing.needsNewSession(50_000, availablePlayerMs = 60_000))
+        assertTrue(growing.needsNewSession(80_000, availablePlayerMs = 60_000))
+        assertFalse(growing.needsNewSession(80_000))
+        val complete = StreamTimeline(
+            PlayResponse(mode = "transcode", url = "/api/hls/s/index.m3u8", startSec = 10.0, hlsComplete = true),
+        )
+        assertFalse(complete.needsNewSession(80_000, availablePlayerMs = 60_000))
+    }
+
+    @Test
     fun directTimelineIsFileTime() {
         val timeline = StreamTimeline(PlayResponse(mode = "direct", url = "/api/stream/1", startSec = 30.0))
         assertEquals(5_000, timeline.fileMs(5_000))

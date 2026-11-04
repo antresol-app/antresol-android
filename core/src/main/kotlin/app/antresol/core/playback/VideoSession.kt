@@ -6,19 +6,21 @@ import app.antresol.core.model.PlayRequest
 import app.antresol.core.model.PlayResponse
 import app.antresol.core.model.PlaybackCaps
 import app.antresol.core.model.Quality
+import java.time.Duration
 import kotlin.coroutines.cancellation.CancellationException
 
 /** The server calls a [VideoSession] makes; [AntresolClient.videoApi] is the real one. */
 interface VideoApi {
     suspend fun play(fileId: Long, request: PlayRequest): PlayResponse
-    suspend fun mediaKey(): String
+    /** A media key that stays valid for at least [minValidMs] more. */
+    suspend fun mediaKey(minValidMs: Long): String
     suspend fun stopSession(session: String)
     fun playbackUrl(url: String, mediaKey: String): String
 }
 
 fun AntresolClient.videoApi(): VideoApi = object : VideoApi {
     override suspend fun play(fileId: Long, request: PlayRequest) = this@videoApi.play(fileId, request)
-    override suspend fun mediaKey() = mediaKeys.get()
+    override suspend fun mediaKey(minValidMs: Long) = mediaKeys.get(Duration.ofMillis(minValidMs))
     override suspend fun stopSession(session: String) = hlsStop(session)
     override fun playbackUrl(url: String, mediaKey: String) = urls.playback(url, mediaKey)
 }
@@ -74,13 +76,18 @@ class VideoSession(
             replaceSession = session,
         )
         val play = api.play(fileId, request)
-        val opened = VideoSource(play, api.playbackUrl(play.url, api.mediaKey()))
+        // Every segment URI (and a direct stream's range requests) reuse this key until the end.
+        val remainingMs = (play.durationMs - startMs).coerceAtLeast(0)
+        val opened = VideoSource(play, api.playbackUrl(play.url, api.mediaKey(remainingMs + KEY_MARGIN_MS)))
         this.quality = quality
         this.audioIndex = audioIndex
         source = opened
         session = opened.session
         return opened
     }
+
+    /** Forgets the HLS session and returns it, so the caller can stop it later. */
+    fun detachSession(): String? = session.also { session = null }
 
     /** Forgets the HLS session without stopping it (the server already dropped it). */
     fun sessionLost() {
@@ -89,14 +96,21 @@ class VideoSession(
 
     /** Stops the HLS session now (the app went to background); [open] starts a new one later. */
     suspend fun suspendSession() {
-        val open = session ?: return
-        session = null
+        stopSession(detachSession() ?: return)
+    }
+
+    /** Stops [id] (a session from [detachSession], or one opened by a cancelled request), best effort. */
+    suspend fun stopSession(id: String) {
         try {
-            api.stopSession(open)
+            api.stopSession(id)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
             // Best effort: an unreachable server reaps the session on its own.
         }
+    }
+
+    private companion object {
+        const val KEY_MARGIN_MS = 60 * 60 * 1000L
     }
 }

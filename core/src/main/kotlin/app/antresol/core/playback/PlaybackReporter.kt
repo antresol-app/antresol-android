@@ -22,15 +22,22 @@ interface PlaybackApi {
     suspend fun stopSession(session: String)
 }
 
-fun AntresolClient.playbackApi(): PlaybackApi = object : PlaybackApi {
-    override suspend fun saveProgress(itemId: Long, positionMs: Long, durationMs: Long) =
-        this@playbackApi.saveProgress(itemId, ProgressUpdate.playback(positionMs, durationMs))
+/**
+ * The real [PlaybackApi], pinned to the token signed in now: the final progress write and session
+ * stop still reach the server with the right profile after a profile switch.
+ */
+fun AntresolClient.playbackApi(): PlaybackApi {
+    val client = pinned()
+    return object : PlaybackApi {
+        override suspend fun saveProgress(itemId: Long, positionMs: Long, durationMs: Long) =
+            client.saveProgress(itemId, ProgressUpdate.playback(positionMs, durationMs))
 
-    override suspend fun keepalive(session: String) {
-        hlsKeepalive(session)
+        override suspend fun keepalive(session: String) {
+            client.hlsKeepalive(session)
+        }
+
+        override suspend fun stopSession(session: String) = client.hlsStop(session)
     }
-
-    override suspend fun stopSession(session: String) = hlsStop(session)
 }
 
 /** Intervals from the spec: progress every 10 s, HLS keepalive every 20 s. */

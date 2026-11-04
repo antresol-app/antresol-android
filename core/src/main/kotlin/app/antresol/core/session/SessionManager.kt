@@ -67,6 +67,12 @@ class SessionManager(
 
     private val mutex = Mutex()
 
+    /**
+     * Runs before [signOut] revokes the token, so the app can stop playback and send its last
+     * progress write while the token still works.
+     */
+    var beforeSignOut: suspend () -> Unit = {}
+
     /** The client for the current server, or null before a server is configured. */
     @Volatile
     var client: AntresolClient? = null
@@ -180,6 +186,7 @@ class SessionManager(
     /** Revokes the token on the server (best effort) and returns to the profile picker. */
     suspend fun signOut() {
         val signedIn = _state.value as? AuthState.SignedIn ?: return
+        beforeSignOut()
         try {
             requireClient().logout()
         } catch (_: IOException) {
@@ -228,18 +235,18 @@ class SessionManager(
             baseUrl = baseUrl,
             httpClient = httpClient,
             language = language,
-            onUnauthorized = { onUnauthorized(created.token) },
+            onUnauthorized = ::onUnauthorized,
         )
         client = created
         return created
     }
 
     /** A 401 for the active token: forget it and show the profile picker with a notice. */
-    private fun onUnauthorized(failedToken: String?) {
+    private fun onUnauthorized(failedToken: String) {
         scope.launch {
             mutex.withLock {
                 val signedIn = _state.value as? AuthState.SignedIn ?: return@withLock
-                if (failedToken == null || signedIn.session.token != failedToken) return@withLock
+                if (signedIn.session.token != failedToken) return@withLock
                 store.update { it.forgotten(signedIn.session.serverId, signedIn.session.userId) }
                 client?.token = null
                 _state.value = AuthState.ChooseProfile(

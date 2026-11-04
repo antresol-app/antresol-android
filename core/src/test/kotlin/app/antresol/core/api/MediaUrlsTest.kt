@@ -9,6 +9,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.Duration
 import java.time.Instant
 
 class MediaUrlsTest {
@@ -66,6 +67,23 @@ class MediaUrlsTest {
         assertEquals("key2", cache.get())
         cache.invalidate()
         assertEquals("key3", cache.get())
+        now = Instant.parse("2026-11-05T05:00:00Z")
+        assertEquals("key4", cache.get(minRemaining = Duration.ofHours(4)))
+    }
+
+    @Test
+    fun mediaKeyCacheRefetchesForAnotherToken() = runTest {
+        var token = "admin"
+        var fetches = 0
+        val cache = MediaKeyCache(
+            fetch = { fetches++; MediaKey("$token-$fetches", "2026-11-05T08:00:00Z") },
+            token = { token },
+            now = { Instant.parse("2026-11-04T20:00:00Z") },
+        )
+        assertEquals("admin-1", cache.get())
+        assertEquals("admin-1", cache.get())
+        token = "kid"
+        assertEquals("kid-2", cache.get())
     }
 
     @Test

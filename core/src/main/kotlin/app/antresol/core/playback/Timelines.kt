@@ -16,8 +16,18 @@ class StreamTimeline(private val play: PlayResponse) {
 
     fun playerMs(fileMs: Long): Long = fileMs - startMs
 
-    /** Seeking before the HLS start needs a new `/api/play` with `replaceSession`. */
-    fun needsNewSession(targetFileMs: Long): Boolean = play.isHls && targetFileMs < startMs
+    /** A growing EVENT playlist: only what ffmpeg produced so far can be seeked into. */
+    val isGrowing: Boolean = play.isHls && !play.hlsComplete
+
+    /**
+     * Seeking before the HLS start, or past the produced part of a growing EVENT playlist
+     * ([availablePlayerMs], the player's current duration), needs a new `/api/play` with `replaceSession`.
+     */
+    fun needsNewSession(targetFileMs: Long, availablePlayerMs: Long? = null): Boolean {
+        if (!play.isHls) return false
+        if (targetFileMs < startMs) return true
+        return isGrowing && availablePlayerMs != null && targetFileMs > startMs + availablePlayerMs
+    }
 
     /** Where the player must seek right after loading: direct play starts at 0 and seeks to the resume point. */
     val initialPlayerSeekMs: Long = if (play.isHls) 0L else (play.startSec * 1000).toLong()

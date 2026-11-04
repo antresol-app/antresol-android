@@ -87,7 +87,7 @@ fun DetailScreen(
     onOpen: (Card) -> Unit,
     onPlay: (itemId: Long, mode: ResumeMode) -> Unit,
     onNowPlaying: () -> Unit,
-    onRead: (volumeId: Long) -> Unit,
+    onRead: (volumeId: Long, fromStart: Boolean) -> Unit,
 ) {
     // Back from the player: progress, watched marks and the next episode changed.
     var resumedOnce by remember { mutableStateOf(false) }
@@ -106,7 +106,7 @@ private class DetailActions(
     val open: (Card) -> Unit,
     val play: (Long, ResumeMode) -> Unit,
     val nowPlaying: () -> Unit,
-    val read: (Long) -> Unit,
+    val read: (Long, Boolean) -> Unit,
 )
 
 @Composable
@@ -464,11 +464,19 @@ private fun BookActions(book: BookInfo, focus: FocusMemory, viewModel: DetailVie
         book.comic?.let { target ->
             PillButton(
                 text = target.continuePage?.let { stringResource(TvR.string.comic_continue, it) } ?: stringResource(R.string.action_read),
-                onClick = { actions.read(target.volumeId) },
+                onClick = { actions.read(target.volumeId, false) },
                 icon = TvIcons.Book,
                 style = PillStyle.Primary,
                 modifier = Modifier.remembersFocus(focus, PLAY_KEY),
             )
+            if (target.continuePage != null) {
+                PillButton(
+                    text = stringResource(TvR.string.comic_read_from_start),
+                    onClick = { actions.read(target.volumeId, true) },
+                    icon = AntresolIcons.Restart,
+                    modifier = Modifier.remembersFocus(focus, "action/read-start"),
+                )
+            }
         }
         if (detail.kind != Kind.COMIC_VOLUME) {
             PillButton(

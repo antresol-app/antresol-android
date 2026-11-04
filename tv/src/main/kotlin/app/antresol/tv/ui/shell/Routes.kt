@@ -36,9 +36,9 @@ data object SongsRoute
 @Serializable
 data object NowPlayingRoute
 
-/** The comic reader for a comic volume id. */
+/** The comic reader for a comic volume id, at the saved page or (with [fromStart]) the first. */
 @Serializable
-data class ComicReaderRoute(val volumeId: Long)
+data class ComicReaderRoute(val volumeId: Long, val fromStart: Boolean = false)
 
 /** Any card's detail page; [kind] is [Card.kind]. */
 @Serializable

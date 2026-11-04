@@ -8,10 +8,8 @@
     <string name="music_genres">Жанры</string>
     <string name="music_shuffle_all">Перемешать все</string>
     <string name="music_top_songs">Популярные песни</string>
-    <string name="music_genre_counts">Альбомов: %1$d · Песен: %2$d</string>
     <string name="music_favorite">В избранное</string>
     <string name="music_in_favorites">В избранном</string>
-    <string name="music_lossless">Без потерь</string>
     <string name="music_no_songs">Песен пока нет</string>
 
     <!-- Now playing -->
@@ -46,7 +44,6 @@
     <string name="audiobook_listen_from_start">Слушать сначала</string>
     <string name="book_want_to_read">Хочу прочитать</string>
     <string name="book_in_want_to_read">В списке «Хочу прочитать»</string>
-    <string name="book_progress_percent">Прочитано %1$d%%</string>
     <string name="comic_continue">Продолжить · стр. %1$d</string>
     <string name="comic_read_from_start">Читать сначала</string>
     <string name="comic_page_of">Страница %1$d из %2$d</string>
@@ -57,7 +54,6 @@
     <string name="ebook_unavailable">Электронные книги нельзя читать на телевизоре. Откройте книгу в веб-версии Antresol или на телефоне.</string>
 
     <!-- Settings -->
-    <string name="settings_profile">Профиль</string>
     <string name="settings_playback">Воспроизведение</string>
     <string name="settings_default_quality">Качество видео</string>
     <string name="settings_default_quality_hint">Применяется при запуске видео. В плеере его по-прежнему можно изменить.</string>
@@ -72,8 +68,7 @@
     <string name="settings_server_version">Версия сервера</string>
     <string name="settings_library">Медиатека</string>
     <string name="settings_library_counts">Фильмов: %1$d · Серий: %2$d · Альбомов: %3$d · Книг: %4$d</string>
-    <string name="settings_about">О приложении</string>
     <string name="settings_app_version">Antresol для Android TV %1$s</string>
-    <string name="settings_about_text">Клиент для вашего домашнего медиасервера Antresol: фильмы, сериалы, музыка, аудиокниги и комиксы.</string>
+    <string name="settings_about_text">Клиент для вашего медиасервера Antresol.</string>
     <string name="settings_unknown">Неизвестно</string>
 </resources>

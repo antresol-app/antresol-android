@@ -12,10 +12,8 @@
     <string name="music_genres">Genres</string>
     <string name="music_shuffle_all">Shuffle All</string>
     <string name="music_top_songs">Top Songs</string>
-    <string name="music_genre_counts">Albums: %1$d · Songs: %2$d</string>
     <string name="music_favorite">Favorite</string>
     <string name="music_in_favorites">In Favorites</string>
-    <string name="music_lossless">Lossless</string>
     <string name="music_no_songs">No songs yet</string>
 
     <!-- Now playing -->
@@ -50,7 +48,6 @@
     <string name="audiobook_listen_from_start">Listen from Beginning</string>
     <string name="book_want_to_read">Want to Read</string>
     <string name="book_in_want_to_read">In Want to Read</string>
-    <string name="book_progress_percent">%1$d%% read</string>
     <string name="comic_continue">Continue · Page %1$d</string>
     <string name="comic_read_from_start">Read from Beginning</string>
     <string name="comic_page_of">Page %1$d of %2$d</string>
@@ -61,7 +58,6 @@
     <string name="ebook_unavailable">E-books can’t be read on TV. Open this book in the Antresol web app or on your phone.</string>
 
     <!-- Settings -->
-    <string name="settings_profile">Profile</string>
     <string name="settings_playback">Playback</string>
     <string name="settings_default_quality">Video Quality</string>
     <string name="settings_default_quality_hint">Used when a video starts. You can still change it in the player.</string>
@@ -78,8 +74,7 @@
     <string name="settings_server_version">Server Version</string>
     <string name="settings_library">Library</string>
     <string name="settings_library_counts">Movies: %1$d · Episodes: %2$d · Albums: %3$d · Books: %4$d</string>
-    <string name="settings_about">About</string>
     <string name="settings_app_version">Antresol for Android TV %1$s</string>
-    <string name="settings_about_text">A client for your own Antresol home media server: films, TV shows, music, audiobooks and comics.</string>
+    <string name="settings_about_text">A client for your Antresol home media server.</string>
     <string name="settings_unknown">Unknown</string>
 </resources>

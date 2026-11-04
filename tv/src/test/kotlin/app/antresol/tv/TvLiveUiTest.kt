@@ -10,10 +10,10 @@ import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.performImeAction
-import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.antresol.core.api.AntresolClient
@@ -22,14 +22,15 @@ import app.antresol.core.model.ProgressUpdate
 import app.antresol.core.playback.Episodes
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
+import app.antresol.tv.playback.AudioContent
 import app.antresol.tv.ui.root.AntresolTvRoot
 import kotlinx.coroutines.runBlocking
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
+import org.junit.Test
 import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
-import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -54,12 +55,17 @@ class TvLiveUiTest {
      */
     private val restoreProgress = object : ExternalResource() {
         override fun after() {
-            if (saved.isEmpty()) return
+            if (saved.isEmpty() && readerProgress.isEmpty()) return
             repeat(30) {
                 ShadowLooper.idleMainLooper(100, TimeUnit.MILLISECONDS)
                 Thread.sleep(100)
             }
-            runBlocking { app.session.client?.let { client -> saved.forEach { (id, before) -> client.restoreProgress(id, before) } } }
+            runBlocking {
+                app.session.client?.let { client ->
+                    saved.forEach { (id, before) -> client.restoreProgress(id, before) }
+                    readerProgress.forEach { (id, before) -> client.saveProgress(id, ProgressUpdate.reader(before.locator, before.fraction)) }
+                }
+            }
         }
     }
 
@@ -171,6 +177,9 @@ class TvLiveUiTest {
 
     private val saved = mutableMapOf<Long, Progress>()
 
+    /** Comic volumes whose reader position (locator/fraction) the test changes. */
+    private val readerProgress = mutableMapOf<Long, Progress>()
+
     /** Remembers the progress of the items this test may play (the sample movie and the first episode). */
     private suspend fun AntresolClient.rememberProgress() {
         val ids = search("Big Buck").library.map { it.id } +
@@ -189,12 +198,7 @@ class TvLiveUiTest {
 
     private fun searchDetailActionsAndPlayer(session: SessionManager) {
         runBlocking {
-            session.restore()
-            if (session.state.value !is AuthState.SignedIn) {
-                if (session.state.value is AuthState.NoServer) session.connect(serverUrl!!)
-                val admin = session.profiles().first { it.hasPassword }
-                session.signIn(admin, System.getenv("ANTRESOL_TEST_PASSWORD") ?: "admin123")
-            }
+            signIn(session)
             session.requireClient().rememberProgress()
         }
         compose.setContent { AntresolTvTheme { AntresolTvRoot(session) } }
@@ -278,6 +282,158 @@ class TvLiveUiTest {
             }
         }
         waitFor(hasText("Play S1 E", substring = true) or hasText("Resume S1 E", substring = true))
+    }
+
+    @Test
+    fun musicAudiobookComicAndSettings() {
+        val session = app.session
+        runBlocking {
+            signIn(session)
+            val client = session.requireClient()
+            client.books("audiobook").items.forEach { saved[it.id] = client.progress(it.id) }
+            client.books("comic").items.forEach { series ->
+                client.book(series.id).volumes.forEach { readerProgress[it.id] = client.progress(it.id) }
+            }
+        }
+        compose.setContent { AntresolTvTheme { AntresolTvRoot(session) } }
+        waitFor(isFocused() and (hasText("Play") or hasText("Resume") or hasAnyDescendant(hasText("Play") or hasText("Resume"))))
+
+        key(KeyEvent.KEYCODE_DPAD_UP)
+        moveUntilFocused(KeyEvent.KEYCODE_DPAD_DOWN, "Play", maxPresses = 2)
+        // Music: header links, genre chips and shelves; the first album card has focus.
+        key(KeyEvent.KEYCODE_DPAD_UP)
+        key(KeyEvent.KEYCODE_DPAD_RIGHT, times = 3)
+        waitFor(isFocused() and hasAnyDescendant(hasText("Music")))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("All Albums"))
+        waitFor(hasText("Genres"))
+        // The nav keeps focus after switching tabs; Down walks into the page (links, genres, first shelf).
+        moveUntilFocused(KeyEvent.KEYCODE_DPAD_DOWN, "Sample Record")
+        Thread.sleep(1500)
+        shot("20-music")
+
+        // Album page: Play, Shuffle, Favorite and the track list.
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("Track Number 1"))
+        waitFor(isFocused() and hasAnyDescendant(hasText("Play")))
+        Thread.sleep(1500)
+        shot("21-album")
+
+        // Play opens Now Playing with the song, its controls and the synced lyrics panel.
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("NOW PLAYING"))
+        waitFor(hasText("Lyrics"))
+        waitFor(hasContentDescription("Pause") or hasContentDescription("Play"))
+        Thread.sleep(2000)
+        shot("22-now-playing")
+        check(app.audio.currentTrack?.title == "Track Number 1") { "Queue did not start: ${app.audio.currentTrack}" }
+
+        // Back to the music page: the nav shows the now-playing chip.
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(hasText("Track Number 1"))
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(hasContentDescription("Now Playing"))
+        shot("23-music-now-playing-chip")
+
+        // Books: an audiobook page with Listen/Resume and chapters, then its player.
+        key(KeyEvent.KEYCODE_DPAD_UP, times = 3)
+        waitFor(isFocused() and hasAnyDescendant(hasText("Music")))
+        key(KeyEvent.KEYCODE_DPAD_RIGHT)
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("Manga & Comics"))
+        // Down enters the first shelf ("Currently Reading", most recent first); find the audiobook in it.
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        findInRow("Chapter Book")
+        Thread.sleep(1500)
+        shot("24-books")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("Chapters"))
+        waitFor(isFocused() and (hasAnyDescendant(hasText("Resume")) or hasAnyDescendant(hasText("Listen"))))
+        Thread.sleep(1500)
+        shot("25-audiobook")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("Speed · 1×"))
+        waitFor(hasText("Sleep Timer"))
+        Thread.sleep(1500)
+        shot("26-audiobook-playing")
+        check(app.audio.content is AudioContent.Audiobook) { "Audiobook did not start" }
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(hasText("Chapters"))
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(hasText("Manga & Comics"))
+
+        // A comic volume: Read/Continue opens the reader; Right turns the page.
+        findInRow("Hero Tales")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(isFocused() and (hasAnyDescendant(hasText("Read")) or hasAnyDescendant(hasText("Continue", substring = true))))
+        shot("27-comic-volume")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasContentDescription("Page", substring = true))
+        Thread.sleep(2000)
+        shot("28-comic-reader")
+        val before = compose.onAllNodes(hasContentDescription("Page", substring = true), useUnmergedTree = true)
+            .fetchSemanticsNodes().first().config[SemanticsProperties.ContentDescription].first()
+        key(KeyEvent.KEYCODE_DPAD_RIGHT)
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasContentDescription("Page", substring = true), useUnmergedTree = true)
+                .fetchSemanticsNodes().firstOrNull()?.config?.get(SemanticsProperties.ContentDescription)?.first() != before
+        }
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(isFocused() and (hasAnyDescendant(hasText("Read")) or hasAnyDescendant(hasText("Continue", substring = true))))
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(hasText("Manga & Comics"))
+
+        // Settings from the avatar: profile, playback, language and server.
+        key(KeyEvent.KEYCODE_DPAD_UP, times = 3)
+        waitFor(isFocused() and hasAnyDescendant(hasText("Books")))
+        key(KeyEvent.KEYCODE_DPAD_RIGHT, times = 2)
+        waitFor(isFocused() and hasContentDescription("Admin"))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("Video Quality"))
+        waitFor(hasText("Server Version"))
+        waitFor(isFocused() and hasAnyDescendant(hasText("Switch Profile")))
+        shot("29-settings")
+        key(KeyEvent.KEYCODE_DPAD_RIGHT)
+        moveUntilFocused(KeyEvent.KEYCODE_DPAD_UP, "Video Quality")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("Used when a video starts", substring = true))
+        shot("30-settings-quality")
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(isFocused() and hasAnyDescendant(hasText("Video Quality")))
+
+        compose.runOnUiThread { app.audio.stop() }
+    }
+
+    /** Moves Left, then Right, along the focused row until the card titled [title] has focus. */
+    private fun findInRow(title: String) {
+        repeat(6) {
+            if (runCatching { focusedTitle() == title }.getOrDefault(false)) return
+            key(KeyEvent.KEYCODE_DPAD_LEFT)
+        }
+        moveUntilFocused(KeyEvent.KEYCODE_DPAD_RIGHT, title, maxPresses = 8)
+    }
+
+    /** Presses [code] (at most [maxPresses] times) until the focused element is titled [title]. */
+    private fun moveUntilFocused(code: Int, title: String, maxPresses: Int = 5) {
+        val seen = mutableListOf<String>()
+        repeat(maxPresses) {
+            val current = runCatching { focusedTitle() }.getOrDefault("")
+            if (current == title) return
+            seen += current + runCatching { compose.onNode(isFocused()).fetchSemanticsNode().boundsInRoot.toString() }.getOrDefault("")
+            key(code)
+        }
+        if (runCatching { focusedTitle() == title }.getOrDefault(false)) return
+        shot("failure")
+        error("Focus never reached \"$title\"; passed $seen")
+    }
+
+    private suspend fun signIn(session: SessionManager) {
+        session.restore()
+        if (session.state.value !is AuthState.SignedIn) {
+            if (session.state.value is AuthState.NoServer) session.connect(serverUrl!!)
+            val admin = session.profiles().first { it.hasPassword }
+            session.signIn(admin, System.getenv("ANTRESOL_TEST_PASSWORD") ?: "admin123")
+        }
     }
 
     private fun key(code: Int, times: Int = 1) = repeat(times) {

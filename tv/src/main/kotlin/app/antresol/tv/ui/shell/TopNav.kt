@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -35,6 +36,12 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -75,15 +82,31 @@ fun TopNav(
     onNowPlaying: () -> Unit,
     onSettings: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
+    contentFocus: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
+    val focusManager = LocalFocusManager.current
     val requesters = remember { NavTab.entries.associateWith { FocusRequester() } }
     var pillFocused by remember { mutableStateOf(false) }
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = ScreenPaddingH, vertical = 18.dp)
-            .onFocusChanged { onFocusChanged(it.hasFocus) },
+            .onFocusChanged { onFocusChanged(it.hasFocus) }
+            // The page spans the whole screen behind the nav, so geometric search never finds it
+            // below: Down enters the page's focus group, which restores its last focused element.
+            .onPreviewKeyEvent { event ->
+                if (event.key != Key.DirectionDown) return@onPreviewKeyEvent false
+                if (event.type == KeyEventType.KeyDown) {
+                    try {
+                        contentFocus.requestFocus()
+                        focusManager.moveFocus(FocusDirection.Enter)
+                    } catch (_: IllegalStateException) {
+                        // No page attached yet.
+                    }
+                }
+                true
+            },
     ) {
         Row(
             modifier = Modifier.align(Alignment.CenterStart),

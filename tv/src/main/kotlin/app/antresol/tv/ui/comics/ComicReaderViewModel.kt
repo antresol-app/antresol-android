@@ -31,6 +31,7 @@ class ComicReaderViewModel(
     private val client: AntresolClient,
     private val appScope: CoroutineScope,
     private val volumeId: Long,
+    private val fromStart: Boolean = false,
 ) : ViewModel() {
     var state: LoadState<ComicVolume> by mutableStateOf(LoadState.Loading)
         private set
@@ -59,7 +60,7 @@ class ComicReaderViewModel(
                 val pages = if (fileId > 0) client.comicPages(fileId) else ComicPages()
                 ComicVolume(detail, fileId, pages).also { volume ->
                     val progress = detail.progress
-                    page = ComicProgress.startPage(progress?.locator, progress?.finished == true, volume.count)
+                    page = if (fromStart) 0 else ComicProgress.startPage(progress?.locator, progress?.finished == true, volume.count)
                     savedPage = page.takeIf { progress != null && progress.fraction > 0 }
                 }
             }

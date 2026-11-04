@@ -13,7 +13,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -21,9 +25,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -113,6 +119,8 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
             }
         }
     }
+    // Down from the nav enters the page (see [Page]).
+    val contentFocus = remember { FocusRequester() }
     val canTakeFocus = { !navFocused }
     val onScrolledToTop: (Boolean) -> Unit = { contentAtTop = it }
 
@@ -131,8 +139,12 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                 .fillMaxSize()
                 .background(AntresolColors.Background),
         ) {
-            NavHost(navController = navController, startDestination = HomeRoute, modifier = Modifier.fillMaxSize()) {
-                composable<HomeRoute> {
+            NavHost(
+                navController = navController,
+                startDestination = HomeRoute,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                page<HomeRoute>(contentFocus) {
                     HomeScreen(
                         viewModel = viewModel { HomeViewModel(client) },
                         onOpen = open,
@@ -141,13 +153,13 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         canTakeFocus = canTakeFocus,
                     )
                 }
-                composable<MoviesRoute> {
+                page<MoviesRoute>(contentFocus) {
                     LibraryGrid(GridSource(GridKind.Movies), stringResource(R.string.nav_movies), open, onScrolledToTop, canTakeFocus)
                 }
-                composable<ShowsRoute> {
+                page<ShowsRoute>(contentFocus) {
                     LibraryGrid(GridSource(GridKind.Shows), stringResource(R.string.nav_tv_shows), open, onScrolledToTop, canTakeFocus)
                 }
-                composable<MusicRoute> {
+                page<MusicRoute>(contentFocus) {
                     ShelvesScreen(
                         title = stringResource(R.string.nav_music),
                         viewModel = viewModel { ShelvesViewModel({ client.musicHome().shelves }, { client.genres().genres }) },
@@ -164,7 +176,7 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         },
                     )
                 }
-                composable<BooksRoute> {
+                page<BooksRoute>(contentFocus) {
                     ShelvesScreen(
                         title = stringResource(R.string.nav_books),
                         viewModel = viewModel { ShelvesViewModel({ client.booksHome().shelves }) },
@@ -178,7 +190,7 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         },
                     )
                 }
-                composable<SearchRoute> {
+                page<SearchRoute>(contentFocus) {
                     SearchScreen(
                         viewModel = viewModel { SearchViewModel(client) },
                         onOpen = open,
@@ -186,7 +198,7 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         canTakeFocus = canTakeFocus,
                     )
                 }
-                composable<SettingsRoute> {
+                page<SettingsRoute>(contentFocus) {
                     SettingsScreen(
                         state = state,
                         viewModel = viewModel { SettingsViewModel(client) },
@@ -197,7 +209,7 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         onScrolledToTop = onScrolledToTop,
                     )
                 }
-                composable<GridRoute> { entry ->
+                page<GridRoute>(contentFocus) { entry ->
                     val route = entry.toRoute<GridRoute>()
                     val source = GridSource(GridKind.valueOf(route.kind), route.genre.ifEmpty { null })
                     LibraryGrid(
@@ -209,13 +221,13 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         onShuffle = source.shuffle?.let { shuffleSource -> { shuffle(shuffleSource) } },
                     )
                 }
-                composable<SongsRoute> {
+                page<SongsRoute>(contentFocus) {
                     SongsScreen(viewModel = viewModel { SongsViewModel(client, audio) }, audio = audio, onNowPlaying = nowPlaying)
                 }
-                composable<NowPlayingRoute> {
+                page<NowPlayingRoute>(contentFocus) {
                     NowPlayingScreen(viewModel = viewModel { NowPlayingViewModel(client, audio) })
                 }
-                composable<DetailRoute> { entry ->
+                page<DetailRoute>(contentFocus) { entry ->
                     val route = entry.toRoute<DetailRoute>()
                     DetailScreen(
                         viewModel = viewModel { DetailViewModel(client, audio, route.kind, route.id) },
@@ -223,13 +235,13 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         onOpen = open,
                         onPlay = play,
                         onNowPlaying = nowPlaying,
-                        onRead = { volumeId -> navController.navigate(ComicReaderRoute(volumeId)) },
+                        onRead = { volumeId, fromStart -> navController.navigate(ComicReaderRoute(volumeId, fromStart)) },
                     )
                 }
                 composable<ComicReaderRoute> { entry ->
                     val route = entry.toRoute<ComicReaderRoute>()
                     ComicReaderScreen(
-                        viewModel = viewModel { ComicReaderViewModel(client, app.appScope, route.volumeId) },
+                        viewModel = viewModel { ComicReaderViewModel(client, app.appScope, route.volumeId, route.fromStart) },
                         onOpenVolume = { next ->
                             navController.navigate(ComicReaderRoute(next)) {
                                 popUpTo<ComicReaderRoute> { inclusive = true }
@@ -266,9 +278,32 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                     onNowPlaying = nowPlaying,
                     onSettings = { navController.navigate(SettingsRoute) { launchSingleTop = true } },
                     onFocusChanged = { navFocused = it },
+                    contentFocus = contentFocus,
                     modifier = Modifier.graphicsLayer { alpha = navAlpha },
                 )
             }
+        }
+    }
+}
+
+/**
+ * A destination whose page can be entered from the nav with Down. The page spans the whole screen
+ * behind the nav, so geometric focus search never finds it below the pills; the nav instead
+ * focuses this group, which restores the element focused last on this page.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+private inline fun <reified T : Any> NavGraphBuilder.page(
+    contentFocus: FocusRequester,
+    noinline content: @Composable (NavBackStackEntry) -> Unit,
+) {
+    composable<T> { entry ->
+        Box(
+            Modifier
+                .fillMaxSize()
+                .focusRequester(contentFocus)
+                .focusRestorer(),
+        ) {
+            content(entry)
         }
     }
 }

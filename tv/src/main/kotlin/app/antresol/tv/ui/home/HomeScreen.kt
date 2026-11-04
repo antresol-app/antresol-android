@@ -29,6 +29,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import app.antresol.core.model.Card
 import app.antresol.core.model.ShelfId
 import app.antresol.tv.ui.LoadState
@@ -67,10 +69,10 @@ fun HomeScreen(
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
 ) {
-    LaunchedEffect(Unit) { viewModel.refreshIfStale() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
     when (val state = viewModel.state) {
         LoadState.Loading -> LoadingView()
-        is LoadState.Failed -> ErrorView(state.error, onRetry = viewModel::reload)
+        is LoadState.Failed -> ErrorView(state.error, onRetry = viewModel::reload, takeFocus = canTakeFocus())
         is LoadState.Ready ->
             if (state.value.isEmpty) {
                 LaunchedEffect(Unit) { onScrolledToTop(true) }
@@ -119,6 +121,18 @@ private fun HomeContentView(
     // Arrival (first launch or back from a detail page): focus Play or the remembered card.
     LaunchedEffect(Unit) {
         if (canTakeFocus()) focus.restore(homeKey)
+    }
+
+    // A refresh can remove the focused card (a finished Continue Watching item): move focus to its
+    // neighbour in the same shelf, or to Play.
+    var previous by remember { mutableStateOf(content) }
+    LaunchedEffect(content) {
+        val before = previous
+        previous = content
+        val key = focus.focusedKey ?: return@LaunchedEffect
+        if (before === content || key == PLAY_KEY || key == DETAILS_KEY || content.hasCardKey(key)) return@LaunchedEffect
+        if (!canTakeFocus()) return@LaunchedEffect
+        focus.restore(content.neighbourKey(before, key) ?: homeKey)
     }
 
     // Rotate through the hero cards while the user rests on the hero buttons.
@@ -188,9 +202,22 @@ private fun HomeContentView(
                         onOpen = if (shelf.id == ShelfId.CONTINUE) onPlay else onOpen,
                         focus = focus,
                         shapeOf = if (shelf.id == ShelfId.CONTINUE) { _ -> CardShape.Wide } else { card -> card.defaultShape() },
+                        // A long press on a Continue card opens its page (Play from Beginning, the series).
+                        onLongPress = if (shelf.id == ShelfId.CONTINUE) onOpen else null,
                     )
                 }
             }
         }
     }
+}
+
+private fun HomeContent.hasCardKey(key: String): Boolean =
+    shelves.any { shelf -> shelf.cards.any { cardFocusKey(shelf.id, it) == key } }
+
+/** The card now at the position [key] had in [before]'s shelf (or that shelf's last card). */
+private fun HomeContent.neighbourKey(before: HomeContent, key: String): String? {
+    val oldShelf = before.shelves.firstOrNull { shelf -> shelf.cards.any { cardFocusKey(shelf.id, it) == key } } ?: return null
+    val index = oldShelf.cards.indexOfFirst { cardFocusKey(oldShelf.id, it) == key }
+    val shelf = shelves.firstOrNull { it.id == oldShelf.id }?.takeIf { it.cards.isNotEmpty() } ?: return null
+    return cardFocusKey(shelf.id, shelf.cards[index.coerceAtMost(shelf.cards.lastIndex)])
 }

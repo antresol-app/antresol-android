@@ -84,6 +84,7 @@ class ShelvesViewModel(
 /**
  * A tab made of server shelves (Music, Books): page title with header links on the right
  * ([actions]), optional genre chips, then rows of cards. Focus starts on the first card.
+ * [actions] gets a modifier factory that registers each link under a key, so Back returns to it.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -93,7 +94,7 @@ fun ShelvesScreen(
     onOpen: (Card) -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
-    actions: @Composable RowScope.() -> Unit = {},
+    actions: @Composable RowScope.(remembered: Modifier.(key: String) -> Modifier) -> Unit = {},
     onGenre: (Genre) -> Unit = {},
 ) {
     val focus = rememberFocusMemory()
@@ -127,8 +128,9 @@ fun ShelvesScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.trapHorizontalFocus(),
-                        content = actions,
-                    )
+                    ) {
+                        actions { key -> remembersFocus(focus, "link/$key") }
+                    }
                 }
             }
             when (state) {

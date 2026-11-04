@@ -99,11 +99,16 @@ class MediaUrls(baseUrl: String) {
          * Turns user input such as `nas.local`, `192.168.1.5:8420/` or `https://media.example.com`
          * into a base URL without a trailing slash. A bare host gets `http://` and port [DEFAULT_PORT].
          */
+        /** Throws [InvalidServerAddressException] for an empty or malformed address. */
         fun normalizeBaseUrl(url: String): String {
             val trimmed = url.trim().trimEnd('/')
-            require(trimmed.isNotEmpty()) { "Server address is empty" }
+            if (trimmed.isEmpty()) throw InvalidServerAddressException("Server address is empty")
             val hasScheme = trimmed.contains("://")
-            val parsed = (if (hasScheme) trimmed else "http://$trimmed").toHttpUrl()
+            val parsed = try {
+                (if (hasScheme) trimmed else "http://$trimmed").toHttpUrl()
+            } catch (e: IllegalArgumentException) {
+                throw InvalidServerAddressException(e.message ?: "Invalid server address", e)
+            }
             val hostPart = trimmed.substringAfter("://").substringBefore('/')
             val hasPort = Regex(""":\d+$""").containsMatchIn(hostPart)
             val result = if (!hasScheme && !hasPort) parsed.newBuilder().port(DEFAULT_PORT).build() else parsed
@@ -114,3 +119,6 @@ class MediaUrls(baseUrl: String) {
             if (sec == Math.floor(sec)) sec.toLong().toString() else "%.3f".format(java.util.Locale.ROOT, sec)
     }
 }
+
+/** The server address typed by the user cannot be parsed as a URL. */
+class InvalidServerAddressException(message: String, cause: Throwable? = null) : IllegalArgumentException(message, cause)

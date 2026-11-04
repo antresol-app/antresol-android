@@ -71,4 +71,11 @@
     <string name="settings_app_version">Antresol для Android TV %1$s</string>
     <string name="settings_about_text">Клиент для вашего медиасервера Antresol.</string>
     <string name="settings_unknown">Неизвестно</string>
+
+    <!-- Review fixes -->
+    <string name="music_nothing_to_shuffle">Нет песен для перемешивания</string>
+    <string name="settings_sign_out_confirm">Выйти из профиля %1$s?</string>
+    <string name="settings_change_server_confirm">Отключиться от %1$s?</string>
+    <string name="comic_retry_hint">Нажмите OK, чтобы повторить.</string>
+    <string name="lyrics_loading">Загрузка текста…</string>
 </resources>

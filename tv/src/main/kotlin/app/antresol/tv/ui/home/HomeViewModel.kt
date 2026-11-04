@@ -47,7 +47,6 @@ class HomeViewModel(private val client: AntresolClient) : ViewModel() {
     var state: LoadState<HomeContent> by mutableStateOf(LoadState.Loading)
         private set
 
-    private var loadedAt = 0L
     private var job: Job? = null
 
     init {
@@ -62,27 +61,18 @@ class HomeViewModel(private val client: AntresolClient) : ViewModel() {
     }
 
     /**
-     * Refreshes in place when the screen comes back and the data is older than [maxAgeMs], so
+     * Refreshes in place whenever the screen comes back (from the player, a detail page), so
      * Continue Watching reflects what was just played. Failures keep the shown content.
      */
-    fun refreshIfStale(maxAgeMs: Long = STALE_AFTER_MS) {
+    fun refresh() {
         if (state !is LoadState.Ready || job?.isActive == true) return
-        if (System.currentTimeMillis() - loadedAt < maxAgeMs) return
         job = viewModelScope.launch {
             val fresh = load { HomeContent.from(client.home()) }
-            if (fresh is LoadState.Ready) {
-                state = fresh
-                loadedAt = System.currentTimeMillis()
-            }
+            if (fresh is LoadState.Ready && fresh != state) state = fresh
         }
     }
 
     private suspend fun fetch() {
         state = load { HomeContent.from(client.home()) }
-        if (state is LoadState.Ready) loadedAt = System.currentTimeMillis()
-    }
-
-    private companion object {
-        const val STALE_AFTER_MS = 30_000L
     }
 }

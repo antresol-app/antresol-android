@@ -270,7 +270,8 @@ private fun PasswordStep(
     onSubmit: (String) -> Unit,
     onCancel: () -> Unit,
 ) {
-    var password by rememberSaveable(profile.id) { mutableStateOf("") }
+    // Not saveable: a password must not end up in the saved-instance-state Bundle.
+    var password by remember(profile.id) { mutableStateOf("") }
     val fieldFocus = remember { FocusRequester() }
     LaunchedEffect(profile.id) { fieldFocus.tryRequestFocus() }
     Column(

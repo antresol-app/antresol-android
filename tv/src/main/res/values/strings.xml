@@ -77,4 +77,11 @@
     <string name="settings_app_version">Antresol for Android TV %1$s</string>
     <string name="settings_about_text">A client for your Antresol home media server.</string>
     <string name="settings_unknown">Unknown</string>
+
+    <!-- Review fixes -->
+    <string name="music_nothing_to_shuffle">No songs to shuffle</string>
+    <string name="settings_sign_out_confirm">Sign out of %1$s?</string>
+    <string name="settings_change_server_confirm">Disconnect from %1$s?</string>
+    <string name="comic_retry_hint">Press OK to try again.</string>
+    <string name="lyrics_loading">Loading lyrics…</string>
 </resources>

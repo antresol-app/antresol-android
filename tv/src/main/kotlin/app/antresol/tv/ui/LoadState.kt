@@ -2,6 +2,7 @@ package app.antresol.tv.ui
 
 import android.content.res.Resources
 import app.antresol.core.api.ApiException
+import app.antresol.core.api.InvalidServerAddressException
 import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.tv.ui.player.PlaybackUnavailableException
 import app.antresol.ui.R
@@ -33,7 +34,7 @@ fun Throwable.userMessage(resources: Resources): String = when (this) {
         status == 200 -> resources.getString(R.string.error_generic)
         else -> message ?: resources.getString(R.string.error_generic)
     }
-    is IllegalArgumentException -> resources.getString(R.string.server_invalid_address)
+    is InvalidServerAddressException -> resources.getString(R.string.server_invalid_address)
     is IOException -> resources.getString(R.string.error_network)
     else -> resources.getString(R.string.error_generic)
 }

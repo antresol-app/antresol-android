@@ -123,6 +123,12 @@ class DetailViewModel(
 
     private var job: Job? = null
 
+    /**
+     * The watchlist/watched/star/want request in flight. Presses meanwhile are ignored, so add and
+     * remove never race and the page always shows what the server ends up with.
+     */
+    private var toggleJob: Job? = null
+
     init {
         reload()
     }
@@ -135,7 +141,7 @@ class DetailViewModel(
 
     /** Re-reads the page in place (back from the player); failures keep what is shown. */
     fun refresh() {
-        if (state !is LoadState.Ready || job?.isActive == true) return
+        if (state !is LoadState.Ready || job?.isActive == true || toggleJob?.isActive == true) return
         job = viewModelScope.launch {
             val fresh = load { fetch() }
             if (fresh is LoadState.Ready) state = fresh
@@ -143,21 +149,23 @@ class DetailViewModel(
     }
 
     fun toggleWatchlist() {
+        if (toggleJob?.isActive == true) return
         val model = (state as? LoadState.Ready)?.value ?: return
         val video = model.video ?: return
         val add = !video.inWatchlist
         state = LoadState.Ready(model.copy(video = video.copy(inWatchlist = add)))
-        act(onFailure = { state = LoadState.Ready(model) }) {
+        toggleJob = act(onFailure = { state = LoadState.Ready(model) }) {
             if (add) client.addToWatchlist(model.card.id) else client.removeFromWatchlist(model.card.id)
         }
     }
 
     fun toggleWatched() {
+        if (toggleJob?.isActive == true) return
         val model = (state as? LoadState.Ready)?.value ?: return
         val video = model.video ?: return
         val watched = !video.watched
         state = LoadState.Ready(model.copy(video = video.copy(watched = watched)))
-        act(onFailure = { state = LoadState.Ready(model) }) {
+        toggleJob = act(onFailure = { state = LoadState.Ready(model) }) {
             client.setWatched(model.card.id, watched)
             // Episodes, progress bars and the next episode all change; read them again.
             state = LoadState.Ready(fetch())
@@ -184,11 +192,12 @@ class DetailViewModel(
     }
 
     fun toggleStar() {
+        if (toggleJob?.isActive == true) return
         val model = (state as? LoadState.Ready)?.value ?: return
         val music = model.music?.takeIf { it.canStar } ?: return
         val star = !music.starred
         state = LoadState.Ready(model.copy(music = music.copy(starred = star)))
-        act(onFailure = { state = LoadState.Ready(model) }) {
+        toggleJob = act(onFailure = { state = LoadState.Ready(model) }) {
             if (star) client.star(model.card.id) else client.unstar(model.card.id)
         }
     }
@@ -206,18 +215,19 @@ class DetailViewModel(
     }
 
     fun toggleWant() {
+        if (toggleJob?.isActive == true) return
         val model = (state as? LoadState.Ready)?.value ?: return
         val book = model.book ?: return
         val want = !book.want
         state = LoadState.Ready(model.copy(book = book.copy(want = want)))
-        act(onFailure = { state = LoadState.Ready(model) }) {
+        toggleJob = act(onFailure = { state = LoadState.Ready(model) }) {
             if (want) client.addToWatchlist(model.card.id) else client.removeFromWatchlist(model.card.id)
         }
     }
 
-    private fun act(onFailure: () -> Unit, block: suspend () -> Unit) {
+    private fun act(onFailure: () -> Unit, block: suspend () -> Unit): Job {
         actionError = null
-        viewModelScope.launch {
+        return viewModelScope.launch {
             try {
                 block()
             } catch (e: CancellationException) {

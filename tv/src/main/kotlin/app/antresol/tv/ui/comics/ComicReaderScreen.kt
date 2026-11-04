@@ -65,9 +65,13 @@ private const val PREFETCH_AHEAD = 2
 /** How long the page counter stays up after a page turn. */
 private const val OVERLAY_MS = 2_500L
 
+private val PROMPT_KEYS = setOf(
+    Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown, Key.DirectionCenter, Key.Enter, Key.NumPadEnter,
+)
+
 /**
  * The comic reader: one page at a time, fitted to the screen. Left/Right turn pages (swapped for
- * right-to-left manga), OK shows the page counter, Back leaves. Pages load with the Bearer header
+ * right-to-left manga), OK shows the page counter (or retries a page that failed), Back leaves. Pages load with the Bearer header
  * through the app's image loader, the next ones in advance. Past the last page it offers the next volume.
  */
 @Composable
@@ -91,6 +95,7 @@ private fun Reader(volume: ComicVolume, viewModel: ComicReaderViewModel, onOpenV
     var overlayToken by remember { mutableIntStateOf(1) }
     var overlay by remember { mutableStateOf(true) }
     var failed by remember(page) { mutableStateOf(false) }
+    var attempt by remember(page) { mutableIntStateOf(0) }
 
     LaunchedEffect(viewModel.atEnd) { if (!viewModel.atEnd) focus.tryRequestFocus() }
     LaunchedEffect(overlayToken) {
@@ -113,6 +118,8 @@ private fun Reader(volume: ComicVolume, viewModel: ComicReaderViewModel, onOpenV
             .focusRequester(focus)
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                // The end-of-volume prompt's buttons need the D-pad and OK for themselves.
+                if (viewModel.atEnd && event.key in PROMPT_KEYS) return@onKeyEvent false
                 val forward = if (volume.isRightToLeft) Key.DirectionLeft else Key.DirectionRight
                 val backward = if (volume.isRightToLeft) Key.DirectionRight else Key.DirectionLeft
                 when (event.key) {
@@ -126,7 +133,11 @@ private fun Reader(volume: ComicVolume, viewModel: ComicReaderViewModel, onOpenV
                         overlayToken++
                         true
                     }
-                    Key.DirectionCenter, Key.Enter, Key.DirectionUp, Key.DirectionDown -> {
+                    Key.DirectionCenter, Key.Enter -> {
+                        if (failed) attempt++ else overlayToken++
+                        true
+                    }
+                    Key.DirectionUp, Key.DirectionDown -> {
                         overlayToken++
                         true
                     }
@@ -137,14 +148,21 @@ private fun Reader(volume: ComicVolume, viewModel: ComicReaderViewModel, onOpenV
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
-            model = ImageRequest.Builder(context).data(urls.comicPage(volume.fileId, page)).build(),
+            model = ImageRequest.Builder(context)
+                .data(urls.comicPage(volume.fileId, page))
+                // A new attempt is a new request; the cache key stays the page's.
+                .setParameter("attempt", attempt, memoryCacheKey = null)
+                .build(),
             contentDescription = stringResource(TvR.string.comic_page_of, page + 1, volume.count),
             contentScale = ContentScale.Fit,
             onState = { failed = it is AsyncImagePainter.State.Error },
             modifier = Modifier.fillMaxSize(),
         )
         if (failed) {
-            Text(stringResource(TvR.string.comic_page_failed), style = Antresol.typography.body, color = AntresolColors.LabelSecondary)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(TvR.string.comic_page_failed), style = Antresol.typography.body, color = AntresolColors.LabelSecondary)
+                Text(stringResource(TvR.string.comic_retry_hint), style = Antresol.typography.caption)
+            }
         }
         AnimatedVisibility(
             visible = overlay && !viewModel.atEnd,

@@ -79,13 +79,14 @@ class SettingsViewModel(private val client: AntresolClient) : ViewModel() {
     }
 }
 
-private enum class SettingsMenu { Quality, Subtitles, Language }
+private enum class SettingsMenu { Quality, Subtitles, Language, ConfirmSignOut, ConfirmChangeServer }
 
 /**
  * Settings, opened from the avatar: the profile (switch, sign out), playback defaults (video
  * quality, subtitle language), the app language, the server (address, version, library, change)
- * and about the app. Choices open a side panel; a new language restarts the app's screens from Home,
- * so text from the server reloads in that language too.
+ * and about the app. Choices open a side panel (the shell hides its nav meanwhile, see
+ * [onMenuOpenChanged]); a new language restarts the app's screens from Home, so text from the server
+ * reloads in that language too. Sign Out and Change Server ask first, with Cancel focused.
  */
 @Composable
 fun SettingsScreen(
@@ -96,9 +97,11 @@ fun SettingsScreen(
     onSignOut: () -> Unit,
     onChangeServer: () -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
+    onMenuOpenChanged: (Boolean) -> Unit,
 ) {
     val preferences by settings.preferences.collectAsStateWithLifecycle()
     var menu by remember { mutableStateOf<SettingsMenu?>(null) }
+    LaunchedEffect(menu != null) { onMenuOpenChanged(menu != null) }
     val first = remember { FocusRequester() }
     val activity = LocalContext.current as? Activity
     BackHandler(enabled = menu != null) { menu = null }
@@ -114,7 +117,12 @@ fun SettingsScreen(
                 .padding(start = 48.dp, end = 48.dp, top = 84.dp),
             horizontalArrangement = Arrangement.spacedBy(48.dp),
         ) {
-            ProfileColumn(state, onSwitchProfile, onSignOut, switchModifier = Modifier.focusRequester(first))
+            ProfileColumn(
+                state = state,
+                onSwitchProfile = onSwitchProfile,
+                onSignOut = { menu = SettingsMenu.ConfirmSignOut },
+                switchModifier = Modifier.focusRequester(first),
+            )
             LazyColumn(
                 contentPadding = PaddingValues(bottom = 48.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -163,7 +171,11 @@ fun SettingsScreen(
                 }
                 item {
                     Box(Modifier.padding(top = 10.dp)) {
-                        PillButton(stringResource(R.string.server_change), onClick = onChangeServer, icon = AntresolIcons.Server)
+                        PillButton(
+                            stringResource(R.string.server_change),
+                            onClick = { menu = SettingsMenu.ConfirmChangeServer },
+                            icon = AntresolIcons.Server,
+                        )
                     }
                 }
             }
@@ -195,6 +207,18 @@ fun SettingsScreen(
                         }
                     }
                 },
+                onDismiss = { menu = null },
+            )
+            SettingsMenu.ConfirmSignOut -> ConfirmPanel(
+                title = stringResource(TvR.string.settings_sign_out_confirm, state.session.userName),
+                confirmLabel = stringResource(R.string.profile_sign_out),
+                onConfirm = onSignOut,
+                onDismiss = { menu = null },
+            )
+            SettingsMenu.ConfirmChangeServer -> ConfirmPanel(
+                title = stringResource(TvR.string.settings_change_server_confirm, viewModel.serverUrl),
+                confirmLabel = stringResource(R.string.server_change),
+                onConfirm = onChangeServer,
                 onDismiss = { menu = null },
             )
             null -> Unit
@@ -245,6 +269,20 @@ private fun ProfileColumn(
         )
         Text(stringResource(TvR.string.settings_about_text), style = Antresol.typography.caption, textAlign = TextAlign.Center)
     }
+}
+
+/** Cancel (focused) or the destructive action. */
+@Composable
+private fun ConfirmPanel(title: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    OptionsPanel(
+        title = title,
+        options = listOf(
+            MenuOption(stringResource(R.string.action_cancel), selected = false) {},
+            MenuOption(confirmLabel, selected = false, onSelect = onConfirm),
+        ),
+        onDismiss = onDismiss,
+        focusIndex = 0,
+    )
 }
 
 @Composable

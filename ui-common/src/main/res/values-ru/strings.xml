@@ -114,6 +114,12 @@
     <string name="detail_albums">Альбомы</string>
     <string name="detail_appears_on">Участвует в</string>
     <string name="detail_song_count">Песен: %1$d</string>
+    <plurals name="song_count">
+        <item quantity="one">%1$d песня</item>
+        <item quantity="few">%1$d песни</item>
+        <item quantity="many">%1$d песен</item>
+        <item quantity="other">%1$d песни</item>
+    </plurals>
     <!-- Detail actions and player -->
     <string name="detail_play_episode">Смотреть S%1$d E%2$d</string>
     <string name="detail_resume_episode">Продолжить S%1$d E%2$d</string>

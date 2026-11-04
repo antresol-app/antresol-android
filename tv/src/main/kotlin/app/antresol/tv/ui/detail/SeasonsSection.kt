@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -78,23 +79,34 @@ fun SeasonsSection(
                 Text(titles.first(), style = Antresol.typography.sectionTitle)
             }
         }
-        val start = season.episodes.indexOfFirst { it.id == initialEpisodeId }.coerceAtLeast(0)
-        HorizontalRowScrolling {
-            LazyRow(
-                state = rememberLazyListState(initialFirstVisibleItemIndex = start),
-                contentPadding = PaddingValues(horizontal = ScreenPaddingH, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-                modifier = Modifier
-                    .trapHorizontalFocus()
-                    .focusRestorer(),
-            ) {
-                items(season.episodes, key = { it.id }) { episode ->
-                    EpisodeTile(
-                        episode = episode,
-                        onClick = { onPlayEpisode(episode) },
-                        surfaceModifier = Modifier.remembersFocus(focus, episodeFocusKey(episode)),
-                    )
-                }
+        // Each season gets its own scroll state and focus restorer, starting at the episode to watch.
+        key(season.number) {
+            SeasonRow(season, initialEpisodeId, focus, onPlayEpisode)
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun SeasonRow(season: SeasonInfo, initialEpisodeId: Long?, focus: FocusMemory, onPlayEpisode: (EpisodeCard) -> Unit) {
+    val start = season.episodes.indexOfFirst { it.id == initialEpisodeId }
+        .takeIf { it >= 0 }
+        ?: season.episodes.indexOfFirst { it.progress > 0.0 && !it.watched }.coerceAtLeast(0)
+    HorizontalRowScrolling {
+        LazyRow(
+            state = rememberLazyListState(initialFirstVisibleItemIndex = start),
+            contentPadding = PaddingValues(horizontal = ScreenPaddingH, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            modifier = Modifier
+                .trapHorizontalFocus()
+                .focusRestorer(),
+        ) {
+            items(season.episodes, key = { it.id }) { episode ->
+                EpisodeTile(
+                    episode = episode,
+                    onClick = { onPlayEpisode(episode) },
+                    surfaceModifier = Modifier.remembersFocus(focus, episodeFocusKey(episode)),
+                )
             }
         }
     }

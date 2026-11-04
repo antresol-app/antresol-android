@@ -28,15 +28,17 @@ object CodecSupport {
 
     /**
      * [decoderMimes]: lower-case MIME types with a decoder. [passthrough]: API codec names
-     * (`ac3`, `eac3`) the current audio output accepts as a bitstream.
+     * (`ac3`, `eac3`) the current audio output accepts as a bitstream. [maxHeight]: the tallest video
+     * the device can show and decode (null = no limit); the server transcodes larger sources.
      */
-    fun caps(decoderMimes: Set<String>, passthrough: Set<String> = emptySet()): PlaybackCaps {
+    fun caps(decoderMimes: Set<String>, passthrough: Set<String> = emptySet(), maxHeight: Int? = null): PlaybackCaps {
         val video = VIDEO_MIMES.filter { (name, mime) -> name == "h264" || mime in decoderMimes }.keys.toList()
         val optionalAudio = OPTIONAL_AUDIO_MIMES.filter { (name, mime) -> mime in decoderMimes || name in passthrough }.keys
         return PlaybackCaps(
             videoCodecs = video,
             audioCodecs = ALWAYS_AUDIO + optionalAudio,
             containers = CONTAINERS,
+            maxHeight = maxHeight,
         )
     }
 }

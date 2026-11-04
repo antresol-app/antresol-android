@@ -1,24 +1,55 @@
 package app.antresol.ui.playback
 
 import android.content.Context
+import android.hardware.display.DisplayManager
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.os.Build
+import android.view.Display
 import app.antresol.core.model.PlaybackCaps
 import app.antresol.core.playback.CodecSupport
 
 /**
  * The `/api/play` caps of this device for ExoPlayer: decoders from [MediaCodecList] (HEVC, VP9, AV1,
- * AC-3/E-AC-3) plus Dolby passthrough reported by the connected audio outputs (HDMI, optical).
+ * AC-3/E-AC-3), Dolby passthrough reported by the connected audio outputs (HDMI, optical), and the
+ * tallest video the display and the hardware decoders handle (a 1080p stick gets 4K transcoded).
  */
 object DeviceCaps {
     @Volatile
     private var decoderMimes: Set<String>? = null
 
-    fun current(context: Context): PlaybackCaps = CodecSupport.caps(decoders(), passthrough(context))
+    @Volatile
+    private var decoderMaxHeight: Int? = null
+
+    fun current(context: Context): PlaybackCaps =
+        CodecSupport.caps(decoders(), passthrough(context), maxHeight(context))
+
+    /**
+     * The smaller of the display's tallest mode (its short side, so phones count in landscape) and
+     * the tallest H.264/HEVC hardware decode. Unknown or implausible values (below 720) mean no limit.
+     */
+    private fun maxHeight(context: Context): Int? {
+        val display = context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY)
+        val displayHeight = display?.supportedModes
+            ?.maxOfOrNull { minOf(it.physicalWidth, it.physicalHeight) }
+            ?.takeIf { it >= MIN_PLAUSIBLE_HEIGHT }
+        val decoderHeight = decoderHeight()?.takeIf { it >= MIN_PLAUSIBLE_HEIGHT }
+        return listOfNotNull(displayHeight, decoderHeight).minOrNull()
+    }
+
+    private fun decoderHeight(): Int? = decoderMaxHeight ?: runCatching {
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+            .filter { !it.isEncoder && it.isHardware() }
+            .flatMap { info ->
+                info.supportedTypes
+                    .filter { it.lowercase() in SIZE_LIMITED_MIMES }
+                    .mapNotNull { type -> info.getCapabilitiesForType(type).videoCapabilities?.supportedHeights?.upper }
+            }
+            .maxOrNull()
+    }.getOrNull().also { decoderMaxHeight = it }
 
     /**
      * Decoder MIME types. Video counts only hardware decoders: a software VP9/AV1/HEVC decoder
@@ -51,6 +82,9 @@ object DeviceCaps {
             if (AudioFormat.ENCODING_E_AC3 in encodings) add("eac3")
         }
     }
+
+    private const val MIN_PLAUSIBLE_HEIGHT = 720
+    private val SIZE_LIMITED_MIMES = setOf("video/avc", "video/hevc")
 
     private val PASSTHROUGH_OUTPUTS = setOf(
         AudioDeviceInfo.TYPE_HDMI,

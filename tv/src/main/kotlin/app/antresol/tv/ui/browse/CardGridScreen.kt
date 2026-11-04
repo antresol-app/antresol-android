@@ -43,6 +43,7 @@ import app.antresol.tv.ui.components.TvIcons
 import app.antresol.tv.ui.components.VerticalShelfScrolling
 import app.antresol.tv.ui.components.rememberFocusMemory
 import app.antresol.tv.ui.components.remembersFocus
+import app.antresol.tv.ui.components.remembersGroupFocus
 import app.antresol.tv.ui.components.trapHorizontalFocus
 import app.antresol.ui.R
 import app.antresol.ui.theme.Antresol
@@ -108,10 +109,20 @@ fun CardGridScreen(
                     Spacer(Modifier.weight(1f))
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (onShuffle != null) {
-                            PillButton(stringResource(R.string.action_shuffle), onClick = onShuffle, icon = TvIcons.Shuffle)
+                            PillButton(
+                                stringResource(R.string.action_shuffle),
+                                onClick = onShuffle,
+                                icon = TvIcons.Shuffle,
+                                modifier = Modifier.remembersFocus(focus, "header/shuffle"),
+                            )
                         }
                         if (sortLabels.size > 1) {
-                            SegmentedPills(options = sortLabels, selectedIndex = viewModel.sortIndex, onSelect = viewModel::select)
+                            SegmentedPills(
+                                options = sortLabels,
+                                selectedIndex = viewModel.sortIndex,
+                                onSelect = viewModel::select,
+                                modifier = Modifier.remembersGroupFocus(focus, "header/sort"),
+                            )
                         }
                     }
                 }
@@ -119,7 +130,7 @@ fun CardGridScreen(
             when (state) {
                 LoadState.Loading -> item(span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.padding(top = 120.dp)) { LoadingView() } }
                 is LoadState.Failed -> item(span = { GridItemSpan(maxLineSpan) }) {
-                    Box(Modifier.padding(top = 60.dp)) { ErrorView(state.error, onRetry = viewModel::reload) }
+                    Box(Modifier.padding(top = 60.dp)) { ErrorView(state.error, onRetry = viewModel::reload, takeFocus = canTakeFocus()) }
                 }
                 is LoadState.Ready ->
                     if (state.value.cards.isEmpty()) {

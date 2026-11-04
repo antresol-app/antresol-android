@@ -10,10 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,11 +52,17 @@ import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.format.Durations
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** Every song of the library, paged, with Play and Shuffle. */
-class SongsViewModel(private val client: AntresolClient, private val audio: AudioEngine) : ViewModel() {
+class SongsViewModel(
+    private val client: AntresolClient,
+    private val audio: AudioEngine,
+    private val appScope: CoroutineScope,
+) : ViewModel() {
     data class Songs(val tracks: List<Track>, val total: Int) {
         val hasMore: Boolean get() = tracks.size < total
     }
@@ -86,9 +95,26 @@ class SongsViewModel(private val client: AntresolClient, private val audio: Audi
         }
     }
 
+    /** Plays the library from [index]; the pages not loaded yet are fetched and queued behind it. */
     fun play(index: Int) {
         val songs = (state as? LoadState.Ready)?.value ?: return
-        audio.playTracks(songs.tracks, index)
+        val queue = audio.playTracks(songs.tracks, index) ?: return
+        if (!songs.hasMore) return
+        appScope.launch {
+            var offset = songs.tracks.size
+            while (offset < songs.total) {
+                val page = try {
+                    client.songs(offset = offset)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    return@launch // The queue just ends earlier; playing what is loaded matters more.
+                }
+                if (page.items.isEmpty()) return@launch
+                audio.appendTracks(queue, page.items)
+                offset += page.items.size
+            }
+        }
     }
 
     /** Shuffles the whole library on the server side (not only the loaded page). */
@@ -109,8 +135,11 @@ class SongsViewModel(private val client: AntresolClient, private val audio: Audi
 
 /** The Songs page: header with Play / Shuffle, then one focusable row per song. */
 @Composable
-fun SongsScreen(viewModel: SongsViewModel, audio: AudioEngine, onNowPlaying: () -> Unit) {
+fun SongsScreen(viewModel: SongsViewModel, audio: AudioEngine, onNowPlaying: () -> Unit, onScrolledToTop: (Boolean) -> Unit) {
     val focus = rememberFocusMemory()
+    val listState = rememberLazyListState()
+    val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 40 } }
+    LaunchedEffect(atTop) { onScrolledToTop(atTop) }
     val state = viewModel.state
     val songs = (state as? LoadState.Ready)?.value
     LaunchedEffect(songs != null) {
@@ -118,7 +147,9 @@ fun SongsScreen(viewModel: SongsViewModel, audio: AudioEngine, onNowPlaying: () 
     }
     VerticalShelfScrolling(leadingFraction = 0.25f, trailingFraction = 0.2f) {
         LazyColumn(
-            contentPadding = PaddingValues(start = ScreenPaddingH, end = ScreenPaddingH, top = 40.dp, bottom = 48.dp),
+            state = listState,
+            // Room for the top navigation above the title.
+            contentPadding = PaddingValues(start = ScreenPaddingH, end = ScreenPaddingH, top = 84.dp, bottom = 48.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.fillMaxSize(),
         ) {

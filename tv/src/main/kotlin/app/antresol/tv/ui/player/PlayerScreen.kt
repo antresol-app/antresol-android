@@ -53,6 +53,7 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Text
 import app.antresol.core.model.ItemDetail
 import app.antresol.tv.ui.components.ErrorView
+import app.antresol.tv.ui.components.GlassNotice
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.ScreenPaddingH
@@ -411,12 +412,6 @@ private fun Notice(viewModel: PlayerViewModel) {
         viewModel.notice = null
     }
     Box(Modifier.fillMaxWidth().padding(top = 28.dp), contentAlignment = Alignment.TopCenter) {
-        Text(
-            text = stringResource(message),
-            style = Antresol.typography.body,
-            modifier = Modifier
-                .background(AntresolColors.Glass, AntresolShapes.pill)
-                .padding(horizontal = 22.dp, vertical = 10.dp),
-        )
+        GlassNotice(stringResource(message))
     }
 }

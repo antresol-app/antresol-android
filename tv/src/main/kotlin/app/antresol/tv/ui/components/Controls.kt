@@ -45,8 +45,9 @@ import app.antresol.ui.theme.AntresolShapes
 data class MenuOption(val label: String, val selected: Boolean, val onSelect: () -> Unit)
 
 /**
- * A glass panel on the right with a list of choices; picking one applies it and closes the panel.
- * Focus starts on the selected choice and stays in the panel until Back ([onDismiss] by the caller).
+ * An opaque panel on the right, over a dimmed page, with a list of choices; picking one applies it
+ * and closes the panel. Focus starts on [focusIndex] (default: the selected choice) and stays in the
+ * panel until Back ([onDismiss] by the caller).
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -56,16 +57,21 @@ fun OptionsPanel(
     onDismiss: () -> Unit,
     note: String? = null,
     width: Dp = 340.dp,
+    focusIndex: Int = options.indexOfFirst { it.selected }.coerceAtLeast(0),
 ) {
-    val selectedIndex = options.indexOfFirst { it.selected }.coerceAtLeast(0)
     val focus = remember(title) { FocusRequester() }
     LaunchedEffect(title) { focus.tryRequestFocus() }
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f)),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxHeight()
                 .width(width)
-                .background(AntresolColors.Glass)
+                .background(AntresolColors.BackgroundElevated)
                 .padding(horizontal = 20.dp, vertical = 36.dp)
                 .focusProperties { exit = { FocusRequester.Cancel } },
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -82,7 +88,7 @@ fun OptionsPanel(
                             option.onSelect()
                             onDismiss()
                         },
-                        modifier = if (index == selectedIndex) Modifier.focusRequester(focus) else Modifier,
+                        modifier = if (index == focusIndex) Modifier.focusRequester(focus) else Modifier,
                     )
                 }
             }

@@ -282,7 +282,7 @@ private fun SleepButton(audio: AudioEngine, isBook: Boolean, onMenu: (NowPlaying
 private fun LyricsPanel(viewModel: NowPlayingViewModel) {
     PanelTitle(stringResource(TvR.string.now_playing_lyrics))
     when (val state = viewModel.lyrics) {
-        LoadState.Loading -> Unit
+        LoadState.Loading -> PanelMessage(stringResource(TvR.string.lyrics_loading))
         is LoadState.Failed -> PanelMessage(state.error.userMessage(LocalContext.current.resources))
         is LoadState.Ready -> {
             val lyrics = state.value

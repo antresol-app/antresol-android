@@ -140,6 +140,7 @@ class AudioEngine(
     private var reporter: BookReporter? = null
     private var scrobble: ScrobbleTracker? = null
     private var scrobbledMediaId: String? = null
+    private var queueId = 0L
     private var lastTickAt = 0L
     private var sleepEndsAt: Long? = null
     private var sleepUntilBookMs: Long? = null
@@ -189,35 +190,52 @@ class AudioEngine(
 
     // region Starting
 
-    /** Plays [tracks] from [startIndex]; [shuffled] plays them in a random order instead. */
-    fun playTracks(tracks: List<Track>, startIndex: Int = 0, shuffled: Boolean = false) {
-        val client = clientProvider() ?: return
-        if (tracks.isEmpty()) return
+    /**
+     * Plays [tracks] from [startIndex]; [shuffled] plays them in a random order instead. Returns an id
+     * of this queue for [appendTracks], or null when nothing started.
+     */
+    fun playTracks(tracks: List<Track>, startIndex: Int = 0, shuffled: Boolean = false): Long? {
+        val client = clientProvider() ?: return null
+        if (tracks.isEmpty()) return null
         endAudiobook()
         val queue = if (shuffled) tracks.shuffled() else tracks
         val start = if (shuffled) 0 else startIndex.coerceIn(0, queue.lastIndex)
         knownDurations.clear()
-        val items = queue.map { track ->
-            mediaItem(
-                id = "$TRACK_PREFIX${track.id}",
-                uri = client.urls.track(track.id),
-                durationMs = track.durationMs,
-                metadata = MediaMetadata.Builder()
-                    .setTitle(track.title)
-                    .setArtist(track.artist)
-                    .setAlbumTitle(track.album)
-                    .setArtworkUri(client.urls.image(track.cover)?.let(Uri::parse))
-                    .setTrackNumber(track.trackNo.takeIf { it > 0 })
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                    .build(),
-            )
-        }
+        val items = queue.map { trackItem(client, it) }
         content = AudioContent.Music(queue)
+        queueId++
         exo.shuffleModeEnabled = false
         exo.repeatMode = Player.REPEAT_MODE_OFF
         exo.setPlaybackSpeed(1f)
         begin(items, start, 0)
+        return queueId
     }
+
+    /**
+     * Adds [tracks] to the end of the music queue [queue] (from [playTracks]), e.g. the next pages of
+     * the Songs list. Does nothing when something else has started playing since.
+     */
+    fun appendTracks(queue: Long, tracks: List<Track>) {
+        val client = clientProvider() ?: return
+        val music = content as? AudioContent.Music ?: return
+        if (queue != queueId || tracks.isEmpty()) return
+        exo.addMediaItems(tracks.map { trackItem(client, it) })
+        content = AudioContent.Music(music.tracks + tracks)
+    }
+
+    private fun trackItem(client: AntresolClient, track: Track): MediaItem = mediaItem(
+        id = "$TRACK_PREFIX${track.id}",
+        uri = client.urls.track(track.id),
+        durationMs = track.durationMs,
+        metadata = MediaMetadata.Builder()
+            .setTitle(track.title)
+            .setArtist(track.artist)
+            .setAlbumTitle(track.album)
+            .setArtworkUri(client.urls.image(track.cover)?.let(Uri::parse))
+            .setTrackNumber(track.trackNo.takeIf { it > 0 })
+            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+            .build(),
+    )
 
     /** Plays [book] from the whole-book position [startBookMs] (use `Resume.audiobookStartMs`). */
     fun playAudiobook(book: BookDetail, startBookMs: Long) {
@@ -242,6 +260,7 @@ class AudioEngine(
             )
         }
         content = audiobook
+        queueId++
         exo.shuffleModeEnabled = false
         exo.repeatMode = Player.REPEAT_MODE_OFF
         exo.setPlaybackSpeed(speed)
@@ -426,6 +445,7 @@ class AudioEngine(
         positionMs = 0
         durationMs = 0
         scrobbledMediaId = null
+        queueId++
         context.stopService(Intent(context, PlaybackService::class.java))
         return finalWrite
     }

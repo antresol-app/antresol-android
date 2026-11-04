@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -88,6 +91,8 @@ fun DetailScreen(
     onPlay: (itemId: Long, mode: ResumeMode) -> Unit,
     onNowPlaying: () -> Unit,
     onRead: (volumeId: Long, fromStart: Boolean) -> Unit,
+    onScrolledToTop: (Boolean) -> Unit,
+    canTakeFocus: () -> Boolean,
 ) {
     // Back from the player: progress, watched marks and the next episode changed.
     var resumedOnce by remember { mutableStateOf(false) }
@@ -96,8 +101,15 @@ fun DetailScreen(
     }
     when (val state = viewModel.state) {
         LoadState.Loading -> LoadingView()
-        is LoadState.Failed -> ErrorView(state.error, onRetry = viewModel::reload)
-        is LoadState.Ready -> DetailContent(state.value, viewModel, audio, DetailActions(onOpen, onPlay, onNowPlaying, onRead))
+        is LoadState.Failed -> ErrorView(state.error, onRetry = viewModel::reload, takeFocus = canTakeFocus())
+        is LoadState.Ready -> DetailContent(
+            model = state.value,
+            viewModel = viewModel,
+            audio = audio,
+            actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead),
+            onScrolledToTop = onScrolledToTop,
+            canTakeFocus = canTakeFocus,
+        )
     }
 }
 
@@ -115,8 +127,13 @@ private fun DetailContent(
     viewModel: DetailViewModel,
     audio: AudioEngine,
     actions: DetailActions,
+    onScrolledToTop: (Boolean) -> Unit,
+    canTakeFocus: () -> Boolean,
 ) {
     val focus = rememberFocusMemory()
+    val listState = rememberLazyListState()
+    val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 80 } }
+    LaunchedEffect(atTop) { onScrolledToTop(atTop) }
     val video = model.video
     val music = model.music
     val book = model.book
@@ -127,18 +144,20 @@ private fun DetailContent(
         video?.playTarget != null -> PLAY_KEY
         !music?.tracks.isNullOrEmpty() -> PLAY_KEY
         book != null && (book.isAudiobook || book.comic != null) -> PLAY_KEY
-        book != null -> WANT_KEY
+        book != null && book.detail.kind != Kind.COMIC_VOLUME -> WANT_KEY
+        // A comic volume without a readable file has no buttons: start on its rows.
         else -> model.rows.firstOrNull()?.let { cardFocusKey(it.id, it.cards.first()) }
     }
     val onOpen = actions.open
     val onPlay = actions.play
     LaunchedEffect(firstKey) {
-        if (firstKey != null) focus.restore(firstKey)
+        if (firstKey != null && canTakeFocus()) focus.restore(firstKey)
     }
     Box(Modifier.fillMaxSize()) {
         HeroBackground(model.card)
         VerticalShelfScrolling {
             LazyColumn(
+                state = listState,
                 contentPadding = PaddingValues(bottom = 56.dp),
                 verticalArrangement = Arrangement.spacedBy(30.dp),
                 modifier = Modifier.fillMaxSize(),
@@ -277,7 +296,7 @@ private fun DetailText(model: DetailModel) {
     val meta = listOfNotNull(
         card.year?.toString(),
         model.durationMs?.let { spokenDuration(it) },
-        model.songCount?.let { stringResource(R.string.detail_song_count, it) },
+        model.songCount?.let { pluralStringResource(R.plurals.song_count, it, it) },
         model.rating?.ifBlank { null },
         model.genres.take(3).joinToString(", ").ifBlank { null },
     ).joinToString(" · ")
@@ -430,6 +449,9 @@ private fun BookActions(book: BookInfo, focus: FocusMemory, viewModel: DetailVie
             remainingDuration((detail.durationMs - book.resumeMs).coerceAtLeast(0)),
             style = Antresol.typography.caption,
         )
+    }
+    if (detail.kind == Kind.COMIC_VOLUME && book.comic == null) {
+        Text(stringResource(TvR.string.comic_no_pages), style = Antresol.typography.caption)
     }
     if (book.isEbook) {
         Text(

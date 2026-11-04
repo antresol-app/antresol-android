@@ -5,8 +5,19 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import app.antresol.tv.ui.LoadState
+import app.antresol.tv.ui.components.GlassNotice
+import app.antresol.tv.ui.load
+import app.antresol.tv.ui.userMessage
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -82,6 +94,22 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
+    // The shell's own ViewModel store: its back stack ViewModels (a playing video, a comic's final
+    // save) are cleared when the profile changes or the session expires, not when the Activity dies.
+    // Remembered first, so it is cleared after the NavHost left composition.
+    val viewModelStoreOwner = remember {
+        object : ViewModelStoreOwner {
+            override val viewModelStore = ViewModelStore()
+        }
+    }
+    DisposableEffect(viewModelStoreOwner) { onDispose { viewModelStoreOwner.viewModelStore.clear() } }
+    CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
+        ShellContent(session, state)
+    }
+}
+
+@Composable
+private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val client = session.requireClient()
     val app = LocalContext.current.applicationContext as AntresolTvApp
     val audio = app.audio
@@ -91,9 +119,20 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
     val selectedTab = NavTab.entries.firstOrNull { tab ->
         backStack?.destination?.hierarchy?.any { it.hasRoute(tab.route::class) } == true
     }
-    val onSettings = backStack?.destination?.hasRoute(SettingsRoute::class) == true
-    val navVisible = selectedTab != null || onSettings
+    // Full-screen experiences hide the nav; detail, grid and settings pages keep it (no tab selected).
+    val fullScreen = backStack?.destination?.let { destination ->
+        destination.hasRoute(PlayerRoute::class) || destination.hasRoute(ComicReaderRoute::class) ||
+            destination.hasRoute(NowPlayingRoute::class)
+    } ?: true
+    var settingsMenuOpen by remember { mutableStateOf(false) }
+    val navVisible = !fullScreen && !settingsMenuOpen
     var contentAtTop by remember { mutableStateOf(true) }
+    LaunchedEffect(backStack?.id) {
+        contentAtTop = true
+        settingsMenuOpen = false
+    }
+    var notice by remember { mutableStateOf<String?>(null) }
+    val resources = LocalContext.current.resources
     var navFocused by remember { mutableStateOf(false) }
     val showNav = navVisible && (navFocused || contentAtTop)
     val navAlpha by animateFloatAsState(if (showNav) 1f else 0f, tween(AntresolMotion.MEDIUM_MS), label = "nav-alpha")
@@ -112,10 +151,15 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
     val openGrid: (GridKind, String?) -> Unit = { kind, genre -> navController.navigate(GridRoute(kind.name, genre.orEmpty())) }
     val shuffle: (ShuffleSource) -> Unit = { source ->
         scope.launch {
-            val queue = runCatching { client.shuffle(source).tracks }.getOrDefault(emptyList())
-            if (queue.isNotEmpty()) {
-                audio.playTracks(queue)
-                nowPlaying()
+            when (val queue = load { client.shuffle(source).tracks }) {
+                is LoadState.Ready -> if (queue.value.isEmpty()) {
+                    notice = resources.getString(TvR.string.music_nothing_to_shuffle)
+                } else {
+                    audio.playTracks(queue.value)
+                    nowPlaying()
+                }
+                is LoadState.Failed -> notice = queue.error.userMessage(resources)
+                LoadState.Loading -> Unit
             }
         }
     }
@@ -167,12 +211,17 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
                         onGenre = { genre -> openGrid(GridKind.Albums, genre.name) },
-                        actions = {
-                            LinkButton(stringResource(TvR.string.music_all_albums), onClick = { openGrid(GridKind.Albums, null) })
-                            LinkButton(stringResource(TvR.string.music_artists), onClick = { openGrid(GridKind.Artists, null) })
-                            LinkButton(stringResource(TvR.string.music_songs), onClick = { navController.navigate(SongsRoute) })
-                            LinkButton(stringResource(TvR.string.music_playlists), onClick = { openGrid(GridKind.Playlists, null) })
-                            PillButton(stringResource(TvR.string.music_shuffle_all), onClick = { shuffle(ShuffleSource.All) }, icon = TvIcons.Shuffle)
+                        actions = { link ->
+                            LinkButton(stringResource(TvR.string.music_all_albums), { openGrid(GridKind.Albums, null) }, Modifier.link("albums"))
+                            LinkButton(stringResource(TvR.string.music_artists), { openGrid(GridKind.Artists, null) }, Modifier.link("artists"))
+                            LinkButton(stringResource(TvR.string.music_songs), { navController.navigate(SongsRoute) }, Modifier.link("songs"))
+                            LinkButton(stringResource(TvR.string.music_playlists), { openGrid(GridKind.Playlists, null) }, Modifier.link("playlists"))
+                            PillButton(
+                                stringResource(TvR.string.music_shuffle_all),
+                                onClick = { shuffle(ShuffleSource.All) },
+                                icon = TvIcons.Shuffle,
+                                modifier = Modifier.link("shuffle"),
+                            )
                         },
                     )
                 }
@@ -183,10 +232,10 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         onOpen = open,
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
-                        actions = {
-                            LinkButton(stringResource(TvR.string.books_all), onClick = { openGrid(GridKind.Books, null) })
-                            LinkButton(stringResource(TvR.string.books_audiobooks), onClick = { openGrid(GridKind.Audiobooks, null) })
-                            LinkButton(stringResource(TvR.string.books_comics), onClick = { openGrid(GridKind.Comics, null) })
+                        actions = { link ->
+                            LinkButton(stringResource(TvR.string.books_all), { openGrid(GridKind.Books, null) }, Modifier.link("books"))
+                            LinkButton(stringResource(TvR.string.books_audiobooks), { openGrid(GridKind.Audiobooks, null) }, Modifier.link("audiobooks"))
+                            LinkButton(stringResource(TvR.string.books_comics), { openGrid(GridKind.Comics, null) }, Modifier.link("comics"))
                         },
                     )
                 }
@@ -207,6 +256,7 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         onSignOut = { scope.launch { session.signOut() } },
                         onChangeServer = { scope.launch { session.changeServer() } },
                         onScrolledToTop = onScrolledToTop,
+                        onMenuOpenChanged = { settingsMenuOpen = it },
                     )
                 }
                 page<GridRoute>(contentFocus) { entry ->
@@ -216,13 +266,18 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         source = source,
                         title = source.genre ?: stringResource(gridTitle(source.kind)),
                         open = open,
-                        onScrolledToTop = {},
-                        canTakeFocus = { true },
+                        onScrolledToTop = onScrolledToTop,
+                        canTakeFocus = canTakeFocus,
                         onShuffle = source.shuffle?.let { shuffleSource -> { shuffle(shuffleSource) } },
                     )
                 }
                 page<SongsRoute>(contentFocus) {
-                    SongsScreen(viewModel = viewModel { SongsViewModel(client, audio) }, audio = audio, onNowPlaying = nowPlaying)
+                    SongsScreen(
+                        viewModel = viewModel { SongsViewModel(client, audio, app.appScope) },
+                        audio = audio,
+                        onNowPlaying = nowPlaying,
+                        onScrolledToTop = onScrolledToTop,
+                    )
                 }
                 page<NowPlayingRoute>(contentFocus) {
                     NowPlayingScreen(viewModel = viewModel { NowPlayingViewModel(client, audio) })
@@ -236,6 +291,8 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         onPlay = play,
                         onNowPlaying = nowPlaying,
                         onRead = { volumeId, fromStart -> navController.navigate(ComicReaderRoute(volumeId, fromStart)) },
+                        onScrolledToTop = onScrolledToTop,
+                        canTakeFocus = canTakeFocus,
                     )
                 }
                 composable<ComicReaderRoute> { entry ->
@@ -282,9 +339,18 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                     modifier = Modifier.graphicsLayer { alpha = navAlpha },
                 )
             }
+            notice?.let { message ->
+                LaunchedEffect(message) {
+                    delay(NOTICE_MS)
+                    notice = null
+                }
+                GlassNotice(message, Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp))
+            }
         }
     }
 }
+
+private const val NOTICE_MS = 3_500L
 
 /**
  * A destination whose page can be entered from the nav with Down. The page spans the whole screen
@@ -322,7 +388,7 @@ private fun LibraryGrid(
     CardGridScreen(
         title = title,
         viewModel = viewModel(key = source.toString()) {
-            CardGridViewModel(client, source) { count -> resources.getString(R.string.detail_song_count, count) }
+            CardGridViewModel(client, source) { count -> resources.getQuantityString(R.plurals.song_count, count, count) }
         },
         onOpen = open,
         onScrolledToTop = onScrolledToTop,

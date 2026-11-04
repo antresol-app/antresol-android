@@ -69,6 +69,7 @@ fun MediaCard(
     surfaceModifier: Modifier = Modifier,
     shape: CardShape = card.defaultShape(),
     showBadges: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val urls = LocalMediaUrls.current
     val width = when (shape) {
@@ -93,6 +94,7 @@ fun MediaCard(
     ) {
         CardSurface(
             onClick = onClick,
+            onLongClick = onLongClick,
             outline = outline,
             modifier = surfaceModifier
                 .fillMaxWidth()
@@ -120,10 +122,12 @@ fun CardSurface(
     onClick: () -> Unit,
     outline: Shape,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     Surface(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = modifier,
         shape = ClickableSurfaceDefaults.shape(outline),
         colors = ClickableSurfaceDefaults.colors(

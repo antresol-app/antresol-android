@@ -37,6 +37,7 @@ fun ShelfRow(
     focus: FocusMemory,
     modifier: Modifier = Modifier,
     shapeOf: (Card) -> CardShape = { it.defaultShape() },
+    onLongPress: ((Card) -> Unit)? = null,
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (title.isNotBlank()) {
@@ -61,6 +62,7 @@ fun ShelfRow(
                         onClick = { onOpen(card) },
                         shape = shapeOf(card),
                         surfaceModifier = Modifier.remembersFocus(focus, cardFocusKey(shelfId, card)),
+                        onLongClick = onLongPress?.let { { it(card) } },
                     )
                 }
             }

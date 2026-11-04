@@ -80,8 +80,9 @@ class CardGridViewModel(
     val source: GridSource,
     private val songCount: (Int) -> String,
 ) : ViewModel() {
-    data class Grid(val cards: List<Card>, val total: Int) {
-        val hasMore: Boolean get() = cards.size < total
+    /** [nextOffset] counts what the server returned (before de-duplication), as spec 4.2 pages. */
+    data class Grid(val cards: List<Card>, val total: Int, val nextOffset: Int, val exhausted: Boolean = false) {
+        val hasMore: Boolean get() = !exhausted && nextOffset < total
     }
 
     var sortIndex: Int by mutableStateOf(0)
@@ -107,7 +108,7 @@ class CardGridViewModel(
         job?.cancel()
         state = LoadState.Loading
         job = viewModelScope.launch {
-            state = load { source.page(client, sort, 0, songCount).let { Grid(it.items, it.total) } }
+            state = load { source.page(client, sort, 0, songCount).let { Grid(it.items, it.total, it.items.size, it.items.isEmpty()) } }
         }
     }
 
@@ -116,10 +117,18 @@ class CardGridViewModel(
         val grid = (state as? LoadState.Ready)?.value ?: return
         if (!grid.hasMore || job?.isActive == true) return
         job = viewModelScope.launch {
-            val next = load { source.page(client, sort, grid.cards.size, songCount) }
+            val next = load { source.page(client, sort, grid.nextOffset, songCount) }
             if (next is LoadState.Ready) {
+                val page = next.value
                 val known = grid.cards.mapTo(HashSet()) { it.id }
-                state = LoadState.Ready(Grid(grid.cards + next.value.items.filter { it.id !in known }, next.value.total))
+                state = LoadState.Ready(
+                    Grid(
+                        cards = grid.cards + page.items.filter { it.id !in known },
+                        total = page.total,
+                        nextOffset = grid.nextOffset + page.items.size,
+                        exhausted = page.items.isEmpty(),
+                    ),
+                )
             }
         }
     }

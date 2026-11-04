@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
+import app.antresol.core.api.InvalidServerAddressException
 import app.antresol.core.session.NotAntresolServerException
 import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.core.session.SessionManager
@@ -79,7 +80,7 @@ fun ServerScreen(session: SessionManager) {
             } catch (e: Exception) {
                 error = when (e) {
                     is NotAntresolServerException -> resources.getString(R.string.server_not_antresol)
-                    is ServerNeedsSetupException, is IllegalArgumentException -> e.userMessage(resources)
+                    is ServerNeedsSetupException, is InvalidServerAddressException -> e.userMessage(resources)
                     is IOException -> resources.getString(R.string.server_unreachable)
                     else -> e.userMessage(resources)
                 }

@@ -18,6 +18,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -46,11 +47,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
 
 /** How the player picks its start position. */
 enum class ResumeMode {
@@ -151,8 +155,13 @@ class PlayerViewModel(
     private var session: VideoSession? = null
     private var reporter: PlaybackReporter? = null
     private val rawSubtitles = HashMap<String, String>()
-    private val subtitleDir = File(context.cacheDir, "subtitles")
+
+    // Per player, so a closing player never deletes the files of the next one.
+    private val subtitleDir = File(context.cacheDir, "subtitles/${UUID.randomUUID()}")
     private var pendingSeekMs: Long? = null
+    private var scrubTargetMs: Long? = null
+    private var backgrounded = false
+    private var pendingReopen: ReopenRequest? = null
     private var lastFileMs = 0L
     private var suspendedAtMs: Long? = null
     private var recoveries = 0
@@ -160,6 +169,7 @@ class PlayerViewModel(
     private var startJob: Job? = null
     private var reopenJob: Job? = null
     private var seekJob: Job? = null
+    private var scrubJob: Job? = null
     private var subtitleJob: Job? = null
     private var upNextJob: Job? = null
 
@@ -183,7 +193,12 @@ class PlayerViewModel(
             }
         }
 
-        override fun onPlayerError(error: PlaybackException) = recover(error)
+        override fun onPlayerError(error: PlaybackException) {
+            // A 401 on the stream means the media key died (its session was revoked): fetch a new one.
+            val http = error.cause as? HttpDataSource.InvalidResponseCodeException
+            if (http?.responseCode == 401) appScope.launch { client.mediaKeys.invalidate() }
+            recover(error)
+        }
 
         override fun onTracksChanged(tracks: Tracks) = applyTextSelection()
     }
@@ -271,11 +286,12 @@ class PlayerViewModel(
     }
 
     private suspend fun begin(file: FileInfo, startMs: Long) {
+        releaseStream()
         val newSession = VideoSession(client.videoApi(), file.id, DeviceCaps.current(context), quality = preferences.defaultQuality)
         session = newSession
         selectedSubtitle = null
         rawSubtitles.clear()
-        val opened = newSession.open(startMs)
+        val opened = openOrStop(newSession) { newSession.open(startMs) }
         val duration = opened.play.durationMs.takeIf { it > 0 } ?: file.durationMs ?: 0L
         durationMs = duration
         reporter = PlaybackReporter(
@@ -288,8 +304,39 @@ class PlayerViewModel(
             onSessionLost = { onSessionLost() },
         ).also { it.start(opened.session) }
         preselectSubtitle(opened)
-        load(opened, opened.timeline.initialPlayerSeekMs, playWhenReady = true)
+        load(opened, opened.timeline.initialPlayerSeekMs, playWhenReady = !backgrounded)
         phase = PlayerPhase.Playing
+        // Opened while in the background: give the HLS slot back until the app returns.
+        if (backgrounded) onBackground()
+    }
+
+    /** Stops the reporter and HLS session of a previous attempt (retry after a failed start). */
+    private fun releaseStream() {
+        val oldReporter = reporter
+        val oldSession = session
+        reporter = null
+        session = null
+        source = null
+        val orphan = oldSession?.detachSession()?.takeIf { it != oldReporter?.hlsSession }
+        if (oldReporter == null && orphan == null) return
+        appScope.launch {
+            oldReporter?.stop()
+            if (orphan != null && oldSession != null) oldSession.stopSession(orphan)
+        }
+    }
+
+    /**
+     * Runs [open] to completion even if the caller is cancelled: a cancelled HTTP call does not undo
+     * `/api/play` on the server. When the result is no longer wanted, its HLS session is stopped so
+     * it does not hold one of the profile's two slots.
+     */
+    private suspend fun openOrStop(target: VideoSession, open: suspend () -> VideoSource): VideoSource {
+        val opened = withContext(NonCancellable) { open() }
+        if (!currentCoroutineContext().isActive || released || session !== target) {
+            target.detachSession()?.let { id -> appScope.launch { target.stopSession(id) } }
+            throw CancellationException("Stream no longer wanted")
+        }
+        return opened
     }
 
     // endregion
@@ -303,13 +350,73 @@ class PlayerViewModel(
 
     /** Seeks by [deltaMs] on the file timeline; before the HLS start this reopens the stream. */
     fun seekBy(deltaMs: Long) {
+        if (source == null || isSwitching) return
+        seekTo(clampTarget((pendingSeekMs ?: currentFileMs()) + deltaMs))
+    }
+
+    /**
+     * Left/Right held down: moves the target shown on the seek bar, faster the longer the key is
+     * held (10 s, then 30 s, 60 s and 2 % of the film per repeat). [commitScrub] seeks once.
+     */
+    fun scrub(forward: Boolean, repeatCount: Int) {
+        if (source == null || isSwitching) return
+        val step = scrubStepMs(repeatCount)
+        val base = scrubTargetMs ?: pendingSeekMs ?: currentFileMs()
+        val target = clampTarget(base + if (forward) step else -step)
+        scrubTargetMs = target
+        positionMs = target
+        // A lost key-up still ends the scrub.
+        scrubJob?.cancel()
+        scrubJob = viewModelScope.launch {
+            delay(SCRUB_IDLE_MS)
+            commitScrub()
+        }
+    }
+
+    /** The scrub key was released: seek to the target shown. */
+    fun commitScrub() {
+        scrubJob?.cancel()
+        scrubJob = null
+        val target = scrubTargetMs ?: return
+        scrubTargetMs = null
+        if (source == null || isSwitching) return
+        seekTo(target)
+    }
+
+    /** Number keys: 0–9 jump to 0–90 % of the video. */
+    fun jumpToTenth(tenth: Int) {
+        val duration = knownDurationMs()
+        if (source == null || isSwitching || duration <= 0) return
+        seekTo(clampTarget(duration * tenth.coerceIn(0, 9) / 10))
+    }
+
+    private fun scrubStepMs(repeatCount: Int): Long = when {
+        repeatCount < 8 -> SEEK_STEP_MS
+        repeatCount < 20 -> 30_000L
+        repeatCount < 40 -> 60_000L
+        else -> maxOf(60_000L, knownDurationMs() / 50)
+    }
+
+    /** The duration from `/api/play` or the file, else what the player knows (file time). */
+    private fun knownDurationMs(): Long {
+        if (durationMs > 0) return durationMs
+        val timeline = source?.timeline ?: return 0
+        val playerDuration = player.duration
+        return if (playerDuration == C.TIME_UNSET) 0 else timeline.fileMs(playerDuration)
+    }
+
+    private fun clampTarget(targetMs: Long): Long {
+        val duration = knownDurationMs()
+        val upper = if (duration > 0) (duration - END_GUARD_MS).coerceAtLeast(0) else Long.MAX_VALUE
+        return targetMs.coerceIn(0, upper)
+    }
+
+    private fun seekTo(target: Long) {
         val current = source ?: return
-        if (isSwitching) return
-        val base = pendingSeekMs ?: currentFileMs()
-        val target = (base + deltaMs).coerceIn(0, (durationMs - END_GUARD_MS).coerceAtLeast(0))
         positionMs = target
         seekJob?.cancel()
-        if (current.timeline.needsNewSession(target)) {
+        val available = player.duration.takeIf { it != C.TIME_UNSET }
+        if (current.timeline.needsNewSession(target, available)) {
             pendingSeekMs = target
             // Wait for the key presses to settle so one reopen covers several of them.
             seekJob = viewModelScope.launch {
@@ -385,6 +492,14 @@ class PlayerViewModel(
 
     // region Episodes
 
+    /** "Cancel" on the Up Next prompt: stay on the last frame with the controls. */
+    fun cancelUpNext() {
+        if (phase !is PlayerPhase.UpNext) return
+        upNextJob?.cancel()
+        upNextJob = null
+        phase = PlayerPhase.Playing
+    }
+
     fun playNext() {
         val next = nextEpisode ?: return
         upNextJob?.cancel()
@@ -420,6 +535,7 @@ class PlayerViewModel(
         reporter = null
         session = null
         source = null
+        pendingReopen = null
         player.stop()
         player.clearMediaItems()
         ending?.stop()
@@ -431,20 +547,25 @@ class PlayerViewModel(
 
     /** The app went to background: pause, save, and give the HLS slot back to the profile. */
     fun onBackground() {
-        if (released || source == null || phase != PlayerPhase.Playing) return
+        backgrounded = true
+        if (released) return
         player.pause()
+        if (source == null || phase != PlayerPhase.Playing || isSwitching) return
         val current = session ?: return
-        if (current.session == null) return
+        // Detach now, so a quick return (which opens a new session) is never stopped by this.
+        val toStop = current.detachSession() ?: return
         suspendedAtMs = currentFileMs()
+        val active = reporter
+        active?.attachSession(null)
         appScope.launch {
-            reporter?.flush()
-            current.suspendSession()
-            reporter?.attachSession(null)
+            active?.flush()
+            current.stopSession(toStop)
         }
     }
 
     /** Back from background: reopen the suspended HLS stream, paused, where it was. */
     fun onForeground() {
+        backgrounded = false
         val at = suspendedAtMs ?: return
         suspendedAtMs = null
         reopen(at, playWhenReady = false)
@@ -457,8 +578,11 @@ class PlayerViewModel(
         player.release()
         val ending = reporter
         reporter = null
+        val stream = session
+        val orphan = stream?.detachSession()?.takeIf { it != ending?.hlsSession }
         appScope.launch {
             ending?.stop()
+            if (orphan != null && stream != null) stream.stopSession(orphan)
             withContext(Dispatchers.IO) { subtitleDir.deleteRecursively() }
         }
     }
@@ -467,31 +591,60 @@ class PlayerViewModel(
 
     // region Streams
 
+    private data class ReopenRequest(val fileMs: Long, val quality: String?, val audioIndex: Int?, val playWhenReady: Boolean)
+
+    /**
+     * Opens the stream again at [fileMs] (new session replacing the current one). Requests made while
+     * one is in flight are merged and run after it, never cancelling an `/api/play` that may already
+     * have created a session on the server.
+     */
     private fun reopen(
         fileMs: Long,
         quality: String? = null,
         audioIndex: Int? = null,
         playWhenReady: Boolean = player.playWhenReady,
     ) {
-        val current = session ?: return
-        reopenJob?.cancel()
+        if (session == null) return
         isSwitching = true
         pendingSeekMs = fileMs
         positionMs = fileMs
+        val queued = pendingReopen
+        pendingReopen = ReopenRequest(fileMs, quality ?: queued?.quality, audioIndex ?: queued?.audioIndex, playWhenReady)
+        if (reopenJob?.isActive == true) return
         reopenJob = viewModelScope.launch {
             try {
-                val opened = current.open(fileMs, quality ?: current.quality, audioIndex ?: current.audioIndex)
-                reporter?.attachSession(opened.session)
-                val playerMs = if (opened.isHls) (fileMs - opened.timeline.startMs).coerceAtLeast(0) else fileMs
-                load(opened, playerMs, playWhenReady)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                player.pause()
-                phase = PlayerPhase.Failed(e)
+                runReopens()
             } finally {
                 pendingSeekMs = null
                 isSwitching = false
+            }
+        }
+    }
+
+    private suspend fun runReopens() {
+        while (true) {
+            val request = pendingReopen ?: return
+            pendingReopen = null
+            val current = session ?: return
+            try {
+                val opened = openOrStop(current) {
+                    current.open(request.fileMs, request.quality ?: current.quality, request.audioIndex ?: current.audioIndex)
+                }
+                if (pendingReopen != null) continue // Superseded: the next open replaces this session.
+                reporter?.attachSession(opened.session)
+                val playerMs = if (opened.isHls) (request.fileMs - opened.timeline.startMs).coerceAtLeast(0) else request.fileMs
+                load(opened, playerMs, request.playWhenReady && !backgrounded)
+                if (backgrounded) onBackground()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (pendingReopen != null) continue
+                player.pause()
+                // Nothing keeps the old session alive any more; stop it if the server still has it.
+                reporter?.attachSession(null)
+                current.detachSession()?.let { id -> appScope.launch { current.stopSession(id) } }
+                phase = PlayerPhase.Failed(e)
+                return
             }
         }
     }
@@ -560,6 +713,7 @@ class PlayerViewModel(
 
     private fun onSessionLost() {
         session?.sessionLost()
+        if (phase != PlayerPhase.Playing || backgrounded) return
         reopen(currentFileMs())
     }
 
@@ -572,10 +726,11 @@ class PlayerViewModel(
         }
         recoveries++
         val at = currentFileMs()
-        viewModelScope.launch {
-            current.suspendSession()
-            reopen(at)
-        }
+        // Stop keepalives first: a 404 for the stopped session must not start a second reopen.
+        reporter?.attachSession(null)
+        val broken = current.detachSession()
+        if (broken != null) appScope.launch { current.stopSession(broken) }
+        reopen(at)
     }
 
     private fun currentFileMs(): Long {
@@ -590,7 +745,7 @@ class PlayerViewModel(
         if (released || source == null) return
         val position = currentFileMs()
         lastFileMs = position
-        if (pendingSeekMs == null) positionMs = position
+        if (pendingSeekMs == null && scrubTargetMs == null) positionMs = position
         bufferedMs = source?.timeline?.fileMs(player.bufferedPosition) ?: 0L
     }
 
@@ -617,6 +772,7 @@ class PlayerViewModel(
         const val UP_NEXT_SECONDS = 10
         private const val TICK_MS = 500L
         private const val SEEK_SETTLE_MS = 700L
+        private const val SCRUB_IDLE_MS = 1_200L
         private const val END_GUARD_MS = 1_000L
         private const val MAX_RECOVERIES = 2
         private const val SUBTITLE_ATTEMPTS = 6

@@ -64,6 +64,8 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
             language = ::serverLanguage,
             scope = appScope,
         )
+        // Save the audiobook position while the token still works; sign-out revokes it next.
+        session.beforeSignOut = { if (audioEngine.isInitialized()) audio.stopAndFlush() }
         // Another profile (or none) must not keep listening to what the previous one played.
         appScope.launch {
             session.state

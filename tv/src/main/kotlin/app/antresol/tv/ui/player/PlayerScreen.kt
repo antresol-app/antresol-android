@@ -70,8 +70,9 @@ private const val CONTROLS_HIDE_MS = 5_000L
 private const val NOTICE_MS = 3_500L
 
 /**
- * The full-screen video player. With the controls hidden, OK toggles pause, Left/Right seek 10 s
- * and Up/Down show the controls; Back hides the controls, closes a menu or leaves the player.
+ * The full-screen video player. With the controls hidden, OK toggles pause, Left/Right seek (10 s a
+ * press, faster while held) and Up/Down show the controls; 0–9 jump to 0–90 %. Back hides the
+ * controls, closes a menu or leaves the player.
  */
 @Composable
 fun PlayerScreen(viewModel: PlayerViewModel, onExit: () -> Unit) {
@@ -92,7 +93,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onExit: () -> Unit) {
                 ResumePrompt(viewModel.item, phase.positionMs, onChoose = viewModel::chooseResume)
             }
             PlayerPhase.Playing -> PlayingOverlay(viewModel)
-            is PlayerPhase.UpNext -> UpNextOverlay(phase, onPlayNow = viewModel::playNext)
+            is PlayerPhase.UpNext -> UpNextOverlay(phase, onPlayNow = viewModel::playNext, onCancel = viewModel::cancelUpNext)
             is PlayerPhase.Failed -> Backdrop(viewModel.item) { ErrorView(phase.error, onRetry = viewModel::retry) }
             PlayerPhase.Finished -> Unit
         }
@@ -247,8 +248,31 @@ private fun PlayingOverlay(viewModel: PlayerViewModel) {
     }
 }
 
-/** Remote media keys work whether or not the controls are showing. */
+private val DigitKeys = listOf(
+    Key.Zero, Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine,
+)
+
+/** Left/Right on the seek bar or with the controls hidden: scrub while held, seek on release. */
+private fun handleScrubKey(event: KeyEvent, viewModel: PlayerViewModel): Boolean {
+    val forward = when (event.key) {
+        Key.DirectionRight -> true
+        Key.DirectionLeft -> false
+        else -> return false
+    }
+    when (event.type) {
+        KeyEventType.KeyDown -> viewModel.scrub(forward, event.nativeKeyEvent.repeatCount)
+        KeyEventType.KeyUp -> viewModel.commitScrub()
+    }
+    return true
+}
+
+/** Remote media keys and number keys work whether or not the controls are showing. */
 private fun handleMediaKey(event: KeyEvent, viewModel: PlayerViewModel): Boolean {
+    val digit = DigitKeys.indexOf(event.key)
+    if (digit >= 0) {
+        if (event.type == KeyEventType.KeyDown) viewModel.jumpToTenth(digit)
+        return true
+    }
     val action: (() -> Unit) = when (event.key) {
         Key.MediaPlayPause -> viewModel::togglePlayPause
         Key.MediaPlay -> { { viewModel.player.play() } }
@@ -267,12 +291,13 @@ private fun handleHiddenKey(event: KeyEvent, viewModel: PlayerViewModel, show: (
     val handled = event.key in setOf(
         Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown,
     )
-    if (!handled || event.type != KeyEventType.KeyDown) return handled
-    when (event.key) {
-        Key.DirectionLeft -> viewModel.seekBy(-PlayerViewModel.SEEK_STEP_MS)
-        Key.DirectionRight -> viewModel.seekBy(PlayerViewModel.SEEK_STEP_MS)
-        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> viewModel.togglePlayPause()
+    if (!handled) return false
+    if (handleScrubKey(event, viewModel)) {
+        if (event.type == KeyEventType.KeyDown) show()
+        return true
     }
+    if (event.type != KeyEventType.KeyDown) return true
+    if (event.key in setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)) viewModel.togglePlayPause()
     show()
     return true
 }
@@ -308,7 +333,9 @@ private fun TransportControls(
                 durationMs = viewModel.durationMs,
                 onSeek = viewModel::seekBy,
                 onToggle = viewModel::togglePlayPause,
-                modifier = Modifier.focusRequester(seekFocus),
+                modifier = Modifier
+                    .focusRequester(seekFocus)
+                    .onPreviewKeyEvent { handleScrubKey(it, viewModel) },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 val playing = viewModel.playWhenReady
@@ -335,9 +362,10 @@ private fun TransportControls(
 }
 
 @Composable
-private fun UpNextOverlay(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit) {
+private fun UpNextOverlay(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit, onCancel: () -> Unit) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.tryRequestFocus() }
+    BackHandler(onBack = onCancel)
     Box(
         Modifier
             .fillMaxSize()
@@ -360,13 +388,16 @@ private fun UpNextOverlay(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit) {
                 style = Antresol.typography.caption,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
-            PillButton(
-                text = stringResource(R.string.player_play_now),
-                onClick = onPlayNow,
-                icon = AntresolIcons.Play,
-                style = PillStyle.Primary,
-                modifier = Modifier.focusRequester(focus),
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PillButton(text = stringResource(R.string.action_cancel), onClick = onCancel)
+                PillButton(
+                    text = stringResource(R.string.player_play_now),
+                    onClick = onPlayNow,
+                    icon = AntresolIcons.Play,
+                    style = PillStyle.Primary,
+                    modifier = Modifier.focusRequester(focus),
+                )
+            }
         }
     }
 }

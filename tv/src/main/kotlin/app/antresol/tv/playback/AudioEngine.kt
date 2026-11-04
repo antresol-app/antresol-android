@@ -139,6 +139,7 @@ class AudioEngine(
 
     private var reporter: BookReporter? = null
     private var scrobble: ScrobbleTracker? = null
+    private var scrobbledMediaId: String? = null
     private var lastTickAt = 0L
     private var sleepEndsAt: Long? = null
     private var sleepUntilBookMs: Long? = null
@@ -166,7 +167,9 @@ class AudioEngine(
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 index = exo.currentMediaItemIndex
-                startScrobble()
+                // A transcoded seek replaces the item with the same track at `&t=`: keep the played time.
+                val sameItem = reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED && mediaItem?.mediaId == scrobbledMediaId
+                if (!sameItem) startScrobble()
                 updatePosition()
             }
 
@@ -403,8 +406,17 @@ class AudioEngine(
 
     /** Stops playback and forgets the queue; the audiobook's final position is saved. Used on sign-out and profile switch. */
     fun stop() {
-        if (content == null) return
-        endAudiobook()
+        stopPlayback()
+    }
+
+    /** [stop], returning once the audiobook's final position is saved (before a sign-out revokes the token). */
+    suspend fun stopAndFlush() {
+        stopPlayback()?.join()
+    }
+
+    private fun stopPlayback(): Job? {
+        if (content == null) return null
+        val finalWrite = endAudiobook()
         clearSleepTimer()
         exo.stop()
         exo.clearMediaItems()
@@ -413,7 +425,9 @@ class AudioEngine(
         ticker = null
         positionMs = 0
         durationMs = 0
+        scrobbledMediaId = null
         context.stopService(Intent(context, PlaybackService::class.java))
+        return finalWrite
     }
 
     /** The next entries of the music queue in play order (shuffle aware), with their media indexes. */
@@ -432,12 +446,12 @@ class AudioEngine(
 
     // endregion
 
-    private fun endAudiobook() {
-        val ending = reporter ?: return
+    private fun endAudiobook(): Job? {
+        val ending = reporter ?: return null
         reporter = null
         // Freeze the position now: the final write runs after the queue is replaced or cleared.
         ending.frozenPositionMs = bookPositionMs()
-        scope.launch {
+        return scope.launch {
             try {
                 ending.reporter.stop()
             } catch (e: CancellationException) {
@@ -470,6 +484,7 @@ class AudioEngine(
     }
 
     private fun startScrobble() {
+        scrobbledMediaId = exo.currentMediaItem?.mediaId
         scrobble = currentTrack?.let { ScrobbleTracker(it.durationMs) }
     }
 

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="brand_name" translatable="false">Antresol</string>
+
+    <!-- Navigation -->
+    <string name="nav_search">Search</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_movies">Movies</string>
+    <string name="nav_tv_shows">TV Shows</string>
+    <string name="nav_music">Music</string>
+    <string name="nav_books">Books</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Server and sign-in -->
+    <string name="server_title">Connect to your server</string>
+    <string name="server_address_hint">Server address, e.g. 192.168.1.10:8420</string>
+    <string name="server_connect">Connect</string>
+    <string name="server_unreachable">Can’t reach the server. Check the address and that it’s on the same network.</string>
+    <string name="profiles_title">Who’s watching?</string>
+    <string name="profile_password">Password</string>
+    <string name="profile_sign_in">Sign In</string>
+    <string name="profile_switch">Switch Profile</string>
+    <string name="profile_sign_out">Sign Out</string>
+    <string name="profile_kid">Kids</string>
+
+    <!-- Actions -->
+    <string name="action_play">Play</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_details">Details</string>
+    <string name="action_play_from_start">Play from Beginning</string>
+    <string name="action_shuffle">Shuffle</string>
+    <string name="action_add_watchlist">Want to Watch</string>
+    <string name="action_remove_watchlist">Remove from Want to Watch</string>
+    <string name="action_mark_watched">Mark as Watched</string>
+    <string name="action_mark_unwatched">Mark as Unwatched</string>
+    <string name="action_read">Read</string>
+    <string name="action_listen">Listen</string>
+    <string name="action_retry">Try Again</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_see_all">See All</string>
+
+    <!-- Sorting -->
+    <string name="sort_recent">Recently Added</string>
+    <string name="sort_title">By Title</string>
+    <string name="sort_year">By Year</string>
+    <string name="sort_artist">By Artist</string>
+    <string name="sort_author">By Author</string>
+
+    <!-- Hero -->
+    <string name="hero_new_in_library">New in Library</string>
+    <string name="kind_movie">Movie</string>
+    <string name="kind_series">TV Show</string>
+    <string name="kind_episode">Episode</string>
+    <string name="kind_album">Album</string>
+    <string name="kind_artist">Artist</string>
+    <string name="kind_playlist">Playlist</string>
+    <string name="kind_audiobook">Audiobook</string>
+    <string name="kind_book">Book</string>
+    <string name="kind_comic">Comic</string>
+
+    <!-- Detail -->
+    <string name="detail_seasons">Seasons</string>
+    <string name="detail_season_number">Season %1$d</string>
+    <string name="detail_episode_number">Episode %1$d</string>
+    <string name="detail_cast">Cast</string>
+    <string name="detail_audio">Audio</string>
+    <string name="detail_subtitles">Subtitles</string>
+    <string name="detail_subtitles_off">Off</string>
+    <string name="detail_quality">Quality</string>
+    <string name="detail_chapters">Chapters</string>
+    <string name="detail_tracks">Songs</string>
+    <string name="detail_narrated_by">Narrated by %1$s</string>
+    <string name="quality_auto">Auto</string>
+    <string name="quality_original">Original</string>
+
+    <!-- Search -->
+    <string name="search_hint">Movies, shows, music, books</string>
+    <string name="search_no_results">No results for “%1$s”</string>
+
+    <!-- States -->
+    <string name="state_loading">Loading…</string>
+    <string name="state_empty">Nothing here yet</string>
+    <string name="error_generic">Something went wrong</string>
+    <string name="error_network">No connection to the server</string>
+    <string name="error_session_expired">You were signed out. Choose your profile again.</string>
+    <string name="error_too_many_streams">This profile is already watching on another device.</string>
+
+    <!-- Formatting -->
+    <string name="duration_hours_minutes">%1$d h %2$d min</string>
+    <string name="duration_hours">%1$d h</string>
+    <string name="duration_minutes">%1$d min</string>
+    <string name="duration_left">%1$s left</string>
+    <string name="track_number">Track %1$d</string>
+    <string name="subtitle_forced">%1$s (Forced)</string>
+</resources>

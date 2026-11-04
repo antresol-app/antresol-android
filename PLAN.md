@@ -14,4 +14,7 @@ Design follows the existing Antresol iOS/web apps: pure black, white type, pill 
 artwork-tinted hero, white "Play" pill, rounded poster cards with badges, brand gradient #3a1c8c → #9b2fc9.
 
 ## Build
-    ./gradlew :tv:assembleDebug :mobile:assembleDebug
+    ./gradlew :core:test assembleDebug          # unit tests + both apps
+    ANTRESOL_TEST_SERVER=1 ./gradlew :core:test # plus integration tests against http://127.0.0.1:8420
+
+See NOTES.md for the module map and hand-off log.

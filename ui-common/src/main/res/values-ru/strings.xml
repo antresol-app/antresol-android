@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Навигация -->
+    <string name="nav_search">Поиск</string>
+    <string name="nav_home">Главная</string>
+    <string name="nav_movies">Фильмы</string>
+    <string name="nav_tv_shows">Сериалы</string>
+    <string name="nav_music">Музыка</string>
+    <string name="nav_books">Книги</string>
+    <string name="nav_settings">Настройки</string>
+
+    <!-- Сервер и вход -->
+    <string name="server_title">Подключение к серверу</string>
+    <string name="server_address_hint">Адрес сервера, например 192.168.1.10:8420</string>
+    <string name="server_connect">Подключиться</string>
+    <string name="server_unreachable">Сервер недоступен. Проверьте адрес и что устройство в той же сети.</string>
+    <string name="profiles_title">Кто смотрит?</string>
+    <string name="profile_password">Пароль</string>
+    <string name="profile_sign_in">Войти</string>
+    <string name="profile_switch">Сменить профиль</string>
+    <string name="profile_sign_out">Выйти</string>
+    <string name="profile_kid">Детский</string>
+
+    <!-- Действия -->
+    <string name="action_play">Смотреть</string>
+    <string name="action_resume">Продолжить</string>
+    <string name="action_details">Подробнее</string>
+    <string name="action_play_from_start">Смотреть сначала</string>
+    <string name="action_shuffle">Перемешать</string>
+    <string name="action_add_watchlist">Буду смотреть</string>
+    <string name="action_remove_watchlist">Убрать из «Буду смотреть»</string>
+    <string name="action_mark_watched">Отметить просмотренным</string>
+    <string name="action_mark_unwatched">Отметить непросмотренным</string>
+    <string name="action_read">Читать</string>
+    <string name="action_listen">Слушать</string>
+    <string name="action_retry">Повторить</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_see_all">Все</string>
+
+    <!-- Сортировка -->
+    <string name="sort_recent">Недавно добавленные</string>
+    <string name="sort_title">По названию</string>
+    <string name="sort_year">По году</string>
+    <string name="sort_artist">По исполнителю</string>
+    <string name="sort_author">По автору</string>
+
+    <!-- Герой -->
+    <string name="hero_new_in_library">Новое в библиотеке</string>
+    <string name="kind_movie">Фильм</string>
+    <string name="kind_series">Сериал</string>
+    <string name="kind_episode">Эпизод</string>
+    <string name="kind_album">Альбом</string>
+    <string name="kind_artist">Исполнитель</string>
+    <string name="kind_playlist">Плейлист</string>
+    <string name="kind_audiobook">Аудиокнига</string>
+    <string name="kind_book">Книга</string>
+    <string name="kind_comic">Комикс</string>
+
+    <!-- Карточка -->
+    <string name="detail_seasons">Сезоны</string>
+    <string name="detail_season_number">Сезон %1$d</string>
+    <string name="detail_episode_number">Серия %1$d</string>
+    <string name="detail_cast">В ролях</string>
+    <string name="detail_audio">Звук</string>
+    <string name="detail_subtitles">Субтитры</string>
+    <string name="detail_subtitles_off">Выкл.</string>
+    <string name="detail_quality">Качество</string>
+    <string name="detail_chapters">Главы</string>
+    <string name="detail_tracks">Песни</string>
+    <string name="detail_narrated_by">Читает %1$s</string>
+    <string name="quality_auto">Авто</string>
+    <string name="quality_original">Оригинал</string>
+
+    <!-- Поиск -->
+    <string name="search_hint">Фильмы, сериалы, музыка, книги</string>
+    <string name="search_no_results">По запросу «%1$s» ничего не найдено</string>
+
+    <!-- Состояния -->
+    <string name="state_loading">Загрузка…</string>
+    <string name="state_empty">Здесь пока пусто</string>
+    <string name="error_generic">Что-то пошло не так</string>
+    <string name="error_network">Нет связи с сервером</string>
+    <string name="error_session_expired">Сеанс завершён. Выберите профиль снова.</string>
+    <string name="error_too_many_streams">В этом профиле уже идёт просмотр на другом устройстве.</string>
+
+    <!-- Форматирование -->
+    <string name="duration_hours_minutes">%1$d ч %2$d мин</string>
+    <string name="duration_hours">%1$d ч</string>
+    <string name="duration_minutes">%1$d мин</string>
+    <string name="duration_left">Осталось %1$s</string>
+    <string name="track_number">Дорожка %1$d</string>
+    <string name="subtitle_forced">%1$s (форсированные)</string>
+</resources>

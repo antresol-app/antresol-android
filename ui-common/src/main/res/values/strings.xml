@@ -116,4 +116,24 @@
     <string name="detail_albums">Albums</string>
     <string name="detail_appears_on">Appears On</string>
     <string name="detail_song_count">%1$d songs</string>
+    <!-- Detail actions and player -->
+    <string name="detail_play_episode">Play S%1$d E%2$d</string>
+    <string name="detail_resume_episode">Resume S%1$d E%2$d</string>
+    <string name="detail_episode_title">%1$d. %2$s</string>
+    <string name="detail_watched">Watched</string>
+    <string name="detail_in_watchlist">In Want to Watch</string>
+    <string name="detail_versions">%1$d versions</string>
+    <string name="player_resume_title">Resume watching?</string>
+    <string name="player_resume_from">Resume from %1$s</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_up_next">Up Next</string>
+    <string name="player_next_in">Starts in %1$d s</string>
+    <string name="player_play_now">Play Now</string>
+    <string name="player_next_episode">Next Episode</string>
+    <string name="player_subtitles_failed">Couldn’t load these subtitles.</string>
+    <string name="player_mode_direct">Direct Play</string>
+    <string name="player_mode_remux">Direct Stream</string>
+    <string name="player_mode_transcode">Transcoding</string>
+    <string name="player_back">Back</string>
+    <string name="error_playback">This video can’t be played right now.</string>
 </resources>

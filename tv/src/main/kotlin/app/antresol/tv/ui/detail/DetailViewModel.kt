@@ -9,14 +9,23 @@ import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.AlbumDetail
 import app.antresol.core.model.ArtistDetail
+import app.antresol.core.model.AudioTrack
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
+import app.antresol.core.model.CastMember
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
 import app.antresol.core.model.PlaylistDetail
+import app.antresol.core.model.Progress
+import app.antresol.core.model.SeasonInfo
+import app.antresol.core.model.SubTrack
+import app.antresol.core.playback.Episodes
+import app.antresol.core.playback.Resume
 import app.antresol.tv.ui.LoadState
 import app.antresol.tv.ui.load
 import app.antresol.ui.R
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** A row of related cards on a detail page; the title is server text or a string resource. */
@@ -38,8 +47,28 @@ data class DetailModel(
     val songCount: Int? = null,
     val overview: String = "",
     val rows: List<DetailRow> = emptyList(),
-    /** Focus key of the card to focus first (the next episode of a series). */
-    val preferredCard: Pair<String, Card>? = null,
+    /** Play, watchlist and watched state of movies, series, seasons and episodes. */
+    val video: VideoInfo? = null,
+)
+
+/** What "Play" starts: the item itself, or for a series the episode to continue with. */
+data class PlayTarget(
+    val itemId: Long,
+    val resumeMs: Long,
+    val season: Int? = null,
+    val episode: Int? = null,
+)
+
+/** The playable side of a movie, episode, series or season detail page. */
+data class VideoInfo(
+    val playTarget: PlayTarget?,
+    val canWatchlist: Boolean,
+    val inWatchlist: Boolean,
+    val watched: Boolean,
+    val audio: List<AudioTrack> = emptyList(),
+    val subtitles: List<SubTrack> = emptyList(),
+    val cast: List<CastMember> = emptyList(),
+    val seasons: List<SeasonInfo> = emptyList(),
 )
 
 /** Loads the detail of any card kind through the matching endpoint. */
@@ -51,13 +80,65 @@ class DetailViewModel(
     var state: LoadState<DetailModel> by mutableStateOf(LoadState.Loading)
         private set
 
+    /** A failed watchlist/watched action, shown under the buttons until the next action. */
+    var actionError: Throwable? by mutableStateOf(null)
+        private set
+
+    private var job: Job? = null
+
     init {
         reload()
     }
 
     fun reload() {
+        job?.cancel()
         state = LoadState.Loading
-        viewModelScope.launch { state = load { fetch() } }
+        job = viewModelScope.launch { state = load { fetch() } }
+    }
+
+    /** Re-reads the page in place (back from the player); failures keep what is shown. */
+    fun refresh() {
+        if (state !is LoadState.Ready || job?.isActive == true) return
+        job = viewModelScope.launch {
+            val fresh = load { fetch() }
+            if (fresh is LoadState.Ready) state = fresh
+        }
+    }
+
+    fun toggleWatchlist() {
+        val model = (state as? LoadState.Ready)?.value ?: return
+        val video = model.video ?: return
+        val add = !video.inWatchlist
+        state = LoadState.Ready(model.copy(video = video.copy(inWatchlist = add)))
+        act(onFailure = { state = LoadState.Ready(model) }) {
+            if (add) client.addToWatchlist(model.card.id) else client.removeFromWatchlist(model.card.id)
+        }
+    }
+
+    fun toggleWatched() {
+        val model = (state as? LoadState.Ready)?.value ?: return
+        val video = model.video ?: return
+        val watched = !video.watched
+        state = LoadState.Ready(model.copy(video = video.copy(watched = watched)))
+        act(onFailure = { state = LoadState.Ready(model) }) {
+            client.setWatched(model.card.id, watched)
+            // Episodes, progress bars and the next episode all change; read them again.
+            state = LoadState.Ready(fetch())
+        }
+    }
+
+    private fun act(onFailure: () -> Unit, block: suspend () -> Unit) {
+        actionError = null
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onFailure()
+                actionError = e
+            }
+        }
     }
 
     private suspend fun fetch(): DetailModel = when (kind) {
@@ -65,16 +146,15 @@ class DetailViewModel(
         Kind.ARTIST -> client.artist(id).toModel()
         Kind.PLAYLIST -> client.playlist(id).toModel()
         Kind.AUDIOBOOK, Kind.BOOK, Kind.COMIC, Kind.COMIC_VOLUME -> client.book(id).toModel()
-        else -> client.item(id).toModel()
+        else -> {
+            val item = client.item(id)
+            val progress = if (item.files.isNotEmpty()) runCatching { client.progress(item.id) }.getOrNull() else null
+            item.toModel(progress)
+        }
     }
 }
 
-private fun ItemDetail.toModel(): DetailModel {
-    val rows = seasons.filter { it.episodes.isNotEmpty() }.map { season ->
-        DetailRow(id = "season-${season.id}", title = season.title, cards = season.episodes.map { it.toCard() })
-    }
-    val nextCard = next?.toCard()
-    val preferred = nextCard?.let { card -> rows.firstOrNull { row -> row.cards.any { it.id == card.id } }?.let { it.id to card } }
+private fun ItemDetail.toModel(progress: Progress?): DetailModel {
     val fileDuration = files.firstOrNull()?.durationMs
     return DetailModel(
         card = toCard(),
@@ -83,8 +163,32 @@ private fun ItemDetail.toModel(): DetailModel {
         rating = rating,
         genres = genres,
         overview = overview,
-        rows = rows,
-        preferredCard = preferred,
+        video = videoInfo(progress),
+    )
+}
+
+private fun ItemDetail.videoInfo(progress: Progress?): VideoInfo {
+    val episodes = Episodes.ordered(this)
+    val target = when {
+        files.isNotEmpty() -> PlayTarget(
+            itemId = id,
+            resumeMs = progress?.let { (Resume.videoStartSec(it) * 1000).toLong() } ?: 0L,
+        )
+        else -> Episodes.toPlay(this)?.let { episode ->
+            val resume = if (episode.watched) 0L else ((episode.durationMs ?: 0L) * episode.progress).toLong()
+            PlayTarget(episode.id, resume, episode.seasonNo, episode.episodeNo)
+        }
+    }
+    val file = files.firstOrNull()
+    return VideoInfo(
+        playTarget = target,
+        canWatchlist = kind == Kind.MOVIE || kind == Kind.SERIES,
+        inWatchlist = inWatchlist,
+        watched = if (files.isNotEmpty()) progress?.finished == true else episodes.isNotEmpty() && episodes.all { it.watched },
+        audio = file?.audio.orEmpty(),
+        subtitles = file?.subs.orEmpty(),
+        cast = cast,
+        seasons = seasons.filter { it.episodes.isNotEmpty() }.sortedBy { it.number },
     )
 }
 

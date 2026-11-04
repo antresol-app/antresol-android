@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -30,6 +31,7 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
+import app.antresol.tv.AntresolTvApp
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.account.AccountScreen
 import app.antresol.tv.ui.browse.LibraryGridScreen
@@ -40,6 +42,9 @@ import app.antresol.tv.ui.detail.DetailScreen
 import app.antresol.tv.ui.detail.DetailViewModel
 import app.antresol.tv.ui.home.HomeScreen
 import app.antresol.tv.ui.home.HomeViewModel
+import app.antresol.tv.ui.player.PlayerScreen
+import app.antresol.tv.ui.player.PlayerViewModel
+import app.antresol.tv.ui.player.ResumeMode
 import app.antresol.tv.ui.search.SearchScreen
 import app.antresol.tv.ui.search.SearchViewModel
 import app.antresol.ui.R
@@ -67,6 +72,12 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
     val navAlpha by animateFloatAsState(if (showNav) 1f else 0f, tween(AntresolMotion.MEDIUM_MS), label = "nav-alpha")
 
     val open: (Card) -> Unit = { card -> navController.navigate(DetailRoute(card)) }
+    val play: (Long, ResumeMode) -> Unit = { id, mode -> navController.navigate(PlayerRoute(id, mode.name)) }
+    // Hero Play and Continue Watching: video cards resume in the player, anything else opens its page.
+    val playCard: (Card) -> Unit = { card ->
+        if (card.kind in PLAYABLE_KINDS) play(card.id, ResumeMode.Resume) else open(card)
+    }
+    val app = LocalContext.current.applicationContext as AntresolTvApp
     val canTakeFocus = { !navFocused }
     val onScrolledToTop: (Boolean) -> Unit = { contentAtTop = it }
 
@@ -81,8 +92,7 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                     HomeScreen(
                         viewModel = viewModel { HomeViewModel(client) },
                         onOpen = open,
-                        // The player arrives with the next milestone; until then Play opens the detail page.
-                        onPlay = open,
+                        onPlay = playCard,
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
                     )
@@ -146,6 +156,16 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                     DetailScreen(
                         viewModel = viewModel { DetailViewModel(client, route.kind, route.id) },
                         onOpen = open,
+                        onPlay = play,
+                    )
+                }
+                composable<PlayerRoute> { entry ->
+                    val route = entry.toRoute<PlayerRoute>()
+                    PlayerScreen(
+                        viewModel = viewModel {
+                            PlayerViewModel(app, client, app.appScope, route.itemId, ResumeMode.valueOf(route.resume))
+                        },
+                        onExit = { navController.popBackStack() },
                     )
                 }
             }
@@ -170,6 +190,8 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
         }
     }
 }
+
+private val PLAYABLE_KINDS = setOf(Kind.MOVIE, Kind.EPISODE, Kind.SERIES, Kind.SEASON)
 
 /** Switches tabs the TV way: one entry per tab, each keeping its own scroll and focus state. */
 private fun NavHostController.navigateToTab(tab: NavTab) {

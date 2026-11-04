@@ -3,6 +3,7 @@ package app.antresol.tv.ui
 import android.content.res.Resources
 import app.antresol.core.api.ApiException
 import app.antresol.core.session.ServerNeedsSetupException
+import app.antresol.tv.ui.player.PlaybackUnavailableException
 import app.antresol.ui.R
 import kotlinx.coroutines.CancellationException
 import java.io.IOException
@@ -26,6 +27,7 @@ suspend fun <T> load(block: suspend () -> T): LoadState<T> = try {
 /** A sentence for the user. Server errors are already localized by `Accept-Language`. */
 fun Throwable.userMessage(resources: Resources): String = when (this) {
     is ServerNeedsSetupException -> resources.getString(R.string.server_needs_setup)
+    is PlaybackUnavailableException -> resources.getString(R.string.error_playback)
     is ApiException -> when {
         isTooManySessions -> resources.getString(R.string.error_too_many_streams)
         status == 200 -> resources.getString(R.string.error_generic)

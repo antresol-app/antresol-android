@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -23,6 +24,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -50,6 +52,7 @@ fun TvTextField(
     imeAction: ImeAction = ImeAction.Done,
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     var focused by remember { mutableStateOf(false) }
     BasicTextField(
         value = value,
@@ -70,12 +73,20 @@ fun TvTextField(
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .onPreviewKeyEvent { event ->
-                // The remote's OK key opens the keyboard instead of doing nothing.
-                if (event.key == Key.DirectionCenter && event.type == KeyEventType.KeyUp) {
-                    keyboard?.show()
-                    true
-                } else {
-                    false
+                when (event.key) {
+                    // The remote's OK key opens the keyboard instead of doing nothing.
+                    Key.DirectionCenter -> {
+                        if (event.type == KeyEventType.KeyUp) keyboard?.show()
+                        event.type == KeyEventType.KeyUp
+                    }
+                    // A single-line field would eat Up/Down to move its cursor; leave the field instead.
+                    Key.DirectionDown, Key.DirectionUp -> {
+                        if (event.type == KeyEventType.KeyDown) {
+                            focusManager.moveFocus(if (event.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
+                        }
+                        true
+                    }
+                    else -> false
                 }
             },
         decorationBox = { inner ->

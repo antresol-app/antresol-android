@@ -6,6 +6,11 @@ import app.antresol.core.model.Kind
 import app.antresol.core.model.PlayMode
 import app.antresol.core.model.PlayRequest
 import app.antresol.core.model.PlaybackCaps
+import app.antresol.core.model.Quality
+import app.antresol.core.playback.CodecSupport
+import app.antresol.core.playback.VideoSession
+import app.antresol.core.playback.WebVtt
+import app.antresol.core.playback.videoApi
 import app.antresol.core.model.ShuffleSource
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
@@ -153,6 +158,54 @@ class ServerIntegrationTest {
             }
         } finally {
             client.hlsStop(session)
+        }
+    }
+
+    @Test
+    fun videoSessionSwitchesTracksAndQuality() = runBlocking<Unit> {
+        val client = client()
+        val file = client.items(kind = Kind.MOVIE).items.flatMap { client.item(it.id).files }
+            .firstOrNull { it.audio.size > 1 && it.subs.any { sub -> sub.url != null } }
+        assumeTrue("no movie with two audio tracks and text subtitles", file != null)
+        val session = VideoSession(client.videoApi(), file!!.id, CodecSupport.caps(setOf("video/avc", "video/hevc")))
+
+        // mkv in caps: the default track plays directly, at the requested position.
+        val direct = session.open(startMs = 20_000)
+        assertEquals(PlayMode.DIRECT, direct.play.mode)
+        assertEquals(20_000, direct.timeline.initialPlayerSeekMs)
+        assertEquals(206, client.status(direct.url, range = true))
+
+        // Another audio track forces HLS; the playlist starts at the keyframe before 20 s.
+        val second = file.audio.first { !it.isDefault }.index
+        val remux = session.open(startMs = 20_000, audioIndex = second)
+        assertTrue(remux.isHls)
+        assertTrue(remux.timeline.startMs in 1..20_000)
+        val first = requireNotNull(session.session)
+        val playlist = client.httpClient.newCall(Request.Builder().url(remux.url).build()).execute().use { it.body!!.string() }
+        assertTrue(playlist.contains("#EXT-X-PLAYLIST-TYPE:VOD") && playlist.contains("mk="))
+
+        // Subtitle cues move to player time.
+        val vtt = client.subtitleVtt(remux.play.subtitles.first { it.url != null }.url!!)
+        val shifted = WebVtt.shift(vtt, remux.timeline.subtitleOffsetMs)
+        assertTrue(shifted.startsWith("WEBVTT"))
+
+        // A quality change replaces the session; the old one is gone.
+        val lower = session.open(startMs = 25_000, quality = Quality.P480)
+        assertEquals(PlayMode.TRANSCODE, lower.play.mode)
+        assertEquals(second, lower.play.audioIndex)
+        val replaced = runCatching { client.hlsKeepalive(first) }.exceptionOrNull() as? ApiException
+        assertEquals(404, replaced?.status)
+
+        // Background: the session is stopped and a later open starts a fresh one.
+        val current = requireNotNull(session.session)
+        session.suspendSession()
+        assertEquals(404, (runCatching { client.hlsKeepalive(current) }.exceptionOrNull() as? ApiException)?.status)
+        val reopened = session.open(startMs = 25_000)
+        try {
+            assertTrue(reopened.isHls)
+            client.hlsKeepalive(requireNotNull(session.session))
+        } finally {
+            session.suspendSession()
         }
     }
 

@@ -114,4 +114,24 @@
     <string name="detail_albums">Альбомы</string>
     <string name="detail_appears_on">Участвует в</string>
     <string name="detail_song_count">Песен: %1$d</string>
+    <!-- Detail actions and player -->
+    <string name="detail_play_episode">Смотреть S%1$d E%2$d</string>
+    <string name="detail_resume_episode">Продолжить S%1$d E%2$d</string>
+    <string name="detail_episode_title">%1$d. %2$s</string>
+    <string name="detail_watched">Просмотрено</string>
+    <string name="detail_in_watchlist">В «Буду смотреть»</string>
+    <string name="detail_versions">Версий: %1$d</string>
+    <string name="player_resume_title">Продолжить просмотр?</string>
+    <string name="player_resume_from">Продолжить с %1$s</string>
+    <string name="player_pause">Пауза</string>
+    <string name="player_up_next">Далее</string>
+    <string name="player_next_in">Начнётся через %1$d с</string>
+    <string name="player_play_now">Смотреть сейчас</string>
+    <string name="player_next_episode">Следующая серия</string>
+    <string name="player_subtitles_failed">Не удалось загрузить субтитры.</string>
+    <string name="player_mode_direct">Прямое воспроизведение</string>
+    <string name="player_mode_remux">Перепаковка потока</string>
+    <string name="player_mode_transcode">Перекодирование</string>
+    <string name="player_back">Назад</string>
+    <string name="error_playback">Сейчас это видео не воспроизводится.</string>
 </resources>

@@ -184,7 +184,8 @@ private fun HomeContentView(
                         shelfId = shelf.id,
                         title = shelf.title,
                         cards = shelf.cards,
-                        onOpen = onOpen,
+                        // Continue Watching resumes right away; other shelves open the detail page.
+                        onOpen = if (shelf.id == ShelfId.CONTINUE) onPlay else onOpen,
                         focus = focus,
                         shapeOf = if (shelf.id == ShelfId.CONTINUE) { _ -> CardShape.Wide } else { card -> card.defaultShape() },
                     )

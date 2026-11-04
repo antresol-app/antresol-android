@@ -3,6 +3,7 @@ package app.antresol.tv.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,26 +91,13 @@ fun MediaCard(
         modifier = modifier.width(width),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Surface(
+        CardSurface(
             onClick = onClick,
+            outline = outline,
             modifier = surfaceModifier
                 .fillMaxWidth()
                 .aspectRatio(aspect)
                 .onFocusChanged { focused = it.hasFocus },
-            shape = ClickableSurfaceDefaults.shape(outline),
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = AntresolColors.BackgroundElevated,
-                focusedContainerColor = AntresolColors.BackgroundElevated,
-                pressedContainerColor = AntresolColors.BackgroundElevated,
-            ),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = AntresolMotion.CARD_FOCUS_SCALE),
-            border = ClickableSurfaceDefaults.border(
-                border = Border(BorderStroke(1.dp, AntresolColors.Hairline), shape = outline),
-                focusedBorder = Border(BorderStroke(2.5.dp, AntresolColors.Label), inset = 0.dp, shape = outline),
-            ),
-            glow = ClickableSurfaceDefaults.glow(
-                focusedGlow = Glow(elevationColor = Color.White.copy(alpha = 0.25f), elevation = 16.dp),
-            ),
         ) {
             ArtworkImage(url = image, title = card.title, shape = outline, modifier = Modifier.fillMaxSize()) {
                 if (card.progress > 0.0) {
@@ -124,6 +112,35 @@ fun MediaCard(
         }
         CardCaption(card, focused, showBadges, centered = shape == CardShape.Round)
     }
+}
+
+/** The focusable artwork frame of every card: 1.04 lift, white edge and soft glow on focus. */
+@Composable
+fun CardSurface(
+    onClick: () -> Unit,
+    outline: Shape,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = ClickableSurfaceDefaults.shape(outline),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = AntresolColors.BackgroundElevated,
+            focusedContainerColor = AntresolColors.BackgroundElevated,
+            pressedContainerColor = AntresolColors.BackgroundElevated,
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = AntresolMotion.CARD_FOCUS_SCALE),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(BorderStroke(1.dp, AntresolColors.Hairline), shape = outline),
+            focusedBorder = Border(BorderStroke(2.5.dp, AntresolColors.Label), inset = 0.dp, shape = outline),
+        ),
+        glow = ClickableSurfaceDefaults.glow(
+            focusedGlow = Glow(elevationColor = Color.White.copy(alpha = 0.25f), elevation = 16.dp),
+        ),
+        content = content,
+    )
 }
 
 @Composable

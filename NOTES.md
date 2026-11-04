@@ -356,3 +356,78 @@ Running log between milestones. Newest entries at the bottom.
 - The TV chain added `core/playback/Chapters.kt`, `LyricsSync.kt` and `core/reading/ComicProgress.kt` at the
   same time as this milestone. `:mobile` still uses its own `PlaybackConnection.chapterAt` and
   `reader/ReaderProgress`, which do the same jobs. A cleanup should switch `:mobile` to the `:core` versions.
+
+## TV milestone 3 — music, audiobooks, comics, settings, polish
+
+### `:core` (shared)
+- `playback/Chapters` (chapter at a book position, previous/next targets with a 3 s restart threshold,
+  chapter end), `playback/LyricsSync` (`Lyrics.lineIndexAt`, `plainText`), `reading/ComicProgress`
+  (`page:<n>` locator, fraction, start page). Unit tests `ChaptersTest`, `ComicProgressTest`.
+
+### `:tv`
+- `playback/AudioEngine` (app-scoped, created on first use by `AntresolTvApp.audio`): one ExoPlayer for
+  music queues and audiobooks. Streams go through the signed-in client's OkHttp (Bearer header), not `mk`,
+  so a long queue never outlives a media key. Compose snapshot state (content, index, position, duration,
+  shuffle, repeat, speed, sleep timer, error). Music scrobbles once per track (`ScrobbleTracker`);
+  audiobooks play `files` as one book, `PlaybackReporter` (AUDIOBOOK timing) writes the whole-book position
+  every 10 s, on pause, at the end and when the book is replaced or stopped (the final position is frozen
+  first). Sleep timer: 15/30/45/60 min or end of chapter/song. Speeds 0.75–3× (audiobooks only, kept for
+  the session). Stops when the profile or server changes; a video start pauses it.
+- `playback/TranscodeSeekingPlayer` (ForwardingPlayer): transcoded audio (no Range) seeks by replacing the
+  item with `&t=<sec>` and adding that offset to every reported position/duration; resume positions of
+  unseekable parts are applied once the stream is known to be unseekable. Everything (UI, session,
+  reporter) uses it.
+- `playback/PlaybackService` (`MediaSessionService`, `foregroundServiceType=mediaPlayback`) wraps the
+  engine's player in a MediaSession (Coil-backed `BitmapLoader` for Bearer artwork, session activity opens
+  Now Playing via `MainActivity.ACTION_NOW_PLAYING`; the activity is `singleTask`).
+- UI: Music page (header links All Albums / Artists / Songs / Playlists, Shuffle All pill, genre chips →
+  albums of the genre with a Shuffle pill, shelves), Books page (All Books / Audiobooks / Manga & Comics),
+  generic `CardGridScreen` + `GridSource` (movies, shows, albums with 4 sorts, artists, playlists, books with
+  3 sorts), `SongsScreen` (paged, Play / Shuffle all), Now Playing (`ui/nowplaying`: artwork-tinted
+  background, transport row, lyrics or Up Next panel for music, chapters panel, speed and sleep side panels
+  for audiobooks), now-playing chip with animated bars in the top nav. Detail pages: albums/playlists/
+  artists get Play, Shuffle (artists shuffle on the server), Favorite (albums; the artist detail has no
+  starred flag) and track rows; audiobooks Listen/Resume, Listen from Beginning, Want to Read, time left,
+  chapter rows; comic volumes Continue · Page N / Read from Beginning; comic series open the first
+  unfinished volume; e-books explain they are not readable on TV.
+- `ui/comics`: reader with Left/Right (swapped for rtl), media/page keys, page counter overlay, prefetch of
+  the next two pages (and the previous one) through Coil, progress saved 1.2 s after a turn and on close
+  (app scope), end-of-volume prompt with Next Volume (replaces the reader route).
+- `ui/settings` (replaces the Account page; avatar → Settings): Switch Profile, Sign Out, Video Quality
+  (default for `/api/play`), Subtitles (language auto-selected at start, matching 2- and 3-letter codes,
+  non-forced first), App Language (System / English / Русский), server address/version/library counts,
+  Change Server, app version. `settings/TvSettings` is SharedPreferences (read synchronously in
+  `attachBaseContext` of the app and the activity); a language change restarts the activity task so server
+  text reloads in the new language.
+- Shared TV components: `OptionsPanel`/`MenuOption` (the player's track menu now uses it), `RoundIconButton`,
+  `LinkButton`, `TrackRow`, `TvIcons`. TV-only strings live in `tv/src/main/res/values{,-ru}` (not
+  `:ui-common`), so the two chains do not edit the same resource file.
+- **Fixed (from milestone 1)**: Down from the top nav never entered the page — the page's focus group spans
+  the whole screen behind the nav, so geometric search found nothing below the pills. The nav now handles
+  Down by focusing the destination's focus group (`page<T>()` in `MainShell`, each with its own
+  `focusRestorer`) and entering it, which returns to the element focused there last. A single restorer
+  around the whole NavHost crashed in Compose 1.7 ("Release should only be called once") after the
+  destination changed, hence one per destination.
+- Media3 unstable APIs are opted in (`@androidx.annotation.OptIn(UnstableApi::class)`), so
+  `:tv:lintDebug` passes (warnings only); it also failed on milestone 2's player before.
+
+### Tests
+- JVM: `TvSettingsTest` (subtitle language matching), `ComicTargetTest` (Continue page, series volume).
+- `TvLiveUiTest.musicAudiobookComicAndSettings` (live): Down from the nav into Home, Music page → album
+  (track list) → Play → Now Playing (lyrics) → nav chip; Books → audiobook (Resume, chapters) → Now Playing
+  (speed, sleep timer); comic volume → reader (page turn); Settings via the avatar → quality panel.
+  It restores audiobook and comic progress afterwards (the server's "updated" order of Currently Reading
+  still changes). Screenshots `tv/build/screenshots/2*.png`, `3*.png`.
+- Verified locally: `ANTRESOL_TEST_SERVER=1 ./gradlew :core:test :tv:testDebugUnitTest` (all 3 live UI tests
+  pass), `:mobile:testDebugUnitTest`, `assembleDebug`, `:tv:assembleRelease` (R8) and `:tv:lintDebug`.
+
+### Known gaps
+- Never run on a real device or emulator: audio output, the MediaSession on the TV's now-playing card,
+  foreground-service behaviour, transcoded-audio seeking and comic image rendering are unverified on
+  hardware (Robolectric decodes nothing; artwork often has not loaded when screenshots are taken).
+- The video player still has no MediaSession.
+- No playback resumption after the process dies; the speed is not persisted across launches.
+- No queue editing, playlist editing or per-track favorite in lists (favorite is on Now Playing and albums).
+- Comics show one page at a time (no two-page spreads, no zoom).
+- E-books are not readable on TV (by design for this milestone).
+- Search results for songs still open the album instead of playing the song.

@@ -16,6 +16,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -63,6 +64,7 @@ enum class SleepTimer(val minutes: Int) { Off(0), Min15(15), Min30(30), Min45(45
  * book; progress is the whole-book position, written every 10 s, on pause and on stop.
  * State is Compose snapshot state, updated on the main thread.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class AudioEngine(
     private val context: Context,
     private val clientProvider: () -> AntresolClient?,

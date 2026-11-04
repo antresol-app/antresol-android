@@ -16,6 +16,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -85,6 +86,7 @@ class PlaybackUnavailableException(cause: Throwable? = null) : Exception(cause)
  * track and quality changes, side-loaded WebVTT subtitles shifted to the HLS start, and recovery
  * when the server drops the session. ExoPlayer lives here so it survives recomposition.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class PlayerViewModel(
     private val context: Context,
     private val client: AntresolClient,

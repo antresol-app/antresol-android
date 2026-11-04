@@ -36,8 +36,10 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
     lateinit var settings: TvSettings
         private set
 
-    /** Music and audiobook playback, shared with [app.antresol.tv.playback.PlaybackService]. */
-    val audio: AudioEngine by lazy { AudioEngine(this, { session.client }, appScope) }
+    private val audioEngine = lazy { AudioEngine(this, { session.client }, appScope) }
+
+    /** Music and audiobook playback, shared with [app.antresol.tv.playback.PlaybackService]. Created on first use. */
+    val audio: AudioEngine by audioEngine
 
     /** Set when the system asks to show the now-playing screen (tap on the media session). */
     val nowPlayingRequested = MutableStateFlow(false)
@@ -68,7 +70,7 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
                 .map { (it as? AuthState.SignedIn)?.session?.let { active -> active.serverId to active.userId } }
                 .distinctUntilChanged()
                 .drop(1)
-                .collect { audio.stop() }
+                .collect { if (audioEngine.isInitialized()) audio.stop() }
         }
     }
 

@@ -5,6 +5,7 @@ import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import kotlin.math.abs
 
@@ -15,6 +16,7 @@ import kotlin.math.abs
  * Original files seek normally. Everyone (UI, media session, progress reporting) goes through
  * this player, so the offset is invisible to them.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 internal class TranscodeSeekingPlayer(
     private val exo: ExoPlayer,
     /** The known length of an item from the server (track or part duration), if any. */

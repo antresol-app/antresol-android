@@ -1,6 +1,7 @@
 package app.antresol.tv.ui.settings
 
 import android.app.Activity
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -83,7 +84,8 @@ private enum class SettingsMenu { Quality, Subtitles, Language }
 /**
  * Settings, opened from the avatar: the profile (switch, sign out), playback defaults (video
  * quality, subtitle language), the app language, the server (address, version, library, change)
- * and about the app. Choices open a side panel; a new language restarts the screen in that language.
+ * and about the app. Choices open a side panel; a new language restarts the app's screens from Home,
+ * so text from the server reloads in that language too.
  */
 @Composable
 fun SettingsScreen(
@@ -112,7 +114,7 @@ fun SettingsScreen(
                 .padding(start = 48.dp, end = 48.dp, top = 84.dp),
             horizontalArrangement = Arrangement.spacedBy(48.dp),
         ) {
-            ProfileColumn(state, onSwitchProfile, onSignOut, Modifier.focusRequester(first))
+            ProfileColumn(state, onSwitchProfile, onSignOut, switchModifier = Modifier.focusRequester(first))
             LazyColumn(
                 contentPadding = PaddingValues(bottom = 48.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -189,7 +191,7 @@ fun SettingsScreen(
                     MenuOption(languageLabel(language), language == preferences.language) {
                         if (language != preferences.language) {
                             settings.update { it.copy(language = language) }
-                            activity?.recreate()
+                            activity?.let(::restartInNewLanguage)
                         }
                     }
                 },
@@ -201,7 +203,12 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun ProfileColumn(state: AuthState.SignedIn, onSwitchProfile: () -> Unit, onSignOut: () -> Unit, firstModifier: Modifier) {
+private fun ProfileColumn(
+    state: AuthState.SignedIn,
+    onSwitchProfile: () -> Unit,
+    onSignOut: () -> Unit,
+    @Suppress("ModifierParameter") switchModifier: Modifier,
+) {
     val session = state.session
     Column(
         modifier = Modifier
@@ -226,7 +233,7 @@ private fun ProfileColumn(state: AuthState.SignedIn, onSwitchProfile: () -> Unit
             onClick = onSwitchProfile,
             icon = AntresolIcons.SwitchProfile,
             style = PillStyle.Primary,
-            modifier = firstModifier,
+            modifier = switchModifier,
         )
         PillButton(text = stringResource(R.string.profile_sign_out), onClick = onSignOut, icon = AntresolIcons.SignOut)
         Spacer(Modifier.weight(1f))
@@ -300,4 +307,11 @@ private fun languageLabel(language: AppLanguage): String = when (language) {
     AppLanguage.System -> stringResource(TvR.string.language_system)
     AppLanguage.English -> stringResource(TvR.string.language_english)
     AppLanguage.Russian -> stringResource(TvR.string.language_russian)
+}
+
+/** Starts the activity afresh (new ViewModels, so server text is fetched again in the new language). */
+private fun restartInNewLanguage(activity: Activity) {
+    activity.startActivity(
+        Intent(activity, activity.javaClass).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+    )
 }

@@ -5,6 +5,7 @@
 
     <!-- usesCleartextTraffic: home servers are usually plain http on the LAN. -->
     <application
+        android:name=".AntresolMobileApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"

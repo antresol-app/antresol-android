@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shell -->
+    <string name="back">Назад</string>
+    <string name="account">Аккаунт</string>
+    <string name="account_kid">Детский профиль</string>
+    <string name="account_profile">Профиль</string>
+
+    <!-- Sort pills -->
+    <string name="sort_new">Новые</string>
+    <string name="sort_az">А–Я</string>
+    <string name="sort_by_year">По году</string>
+    <string name="sort_by_artist">По исполнителю</string>
+    <string name="sort_by_author">По автору</string>
+
+    <!-- Music and books pages -->
+    <string name="music_all_albums">Все альбомы</string>
+    <string name="music_artists">Исполнители</string>
+    <string name="music_playlists">Плейлисты</string>
+    <string name="music_genres">Жанры</string>
+    <string name="books_all">Все книги</string>
+    <string name="books_audiobooks">Аудиокниги</string>
+    <string name="books_comics">Манга и комиксы</string>
+
+    <!-- Search -->
+    <string name="search_field_hint">Фильмы, музыка и книги</string>
+    <string name="search_clear">Очистить</string>
+    <string name="search_filter_all">Все</string>
+    <string name="search_browse">Обзор</string>
+
+    <!-- Sign-in -->
+    <string name="password_show">Показать пароль</string>
+    <string name="password_hide">Скрыть пароль</string>
+    <string name="password_wrong">Неверный пароль. Попробуйте ещё раз.</string>
+
+    <!-- Detail -->
+    <string name="detail_watchlist">Буду смотреть</string>
+    <string name="detail_want">Хочу прочитать</string>
+    <string name="detail_watched">Просмотрено</string>
+    <string name="detail_up_next">Далее</string>
+    <string name="detail_episodes">Эпизоды</string>
+    <string name="detail_genres">Жанры</string>
+    <string name="detail_about">Описание</string>
+    <string name="detail_file">Файл</string>
+    <string name="detail_rated">Рейтинг %1$s</string>
+    <string name="detail_episode_code">С%1$d · Э%2$d</string>
+    <string name="detail_pages">Страниц: %1$d</string>
+    <string name="detail_mark_season_watched">Отметить сезон просмотренным</string>
+    <string name="detail_mark_season_unwatched">Снять отметку с сезона</string>
+    <string name="detail_action_failed">Не удалось сохранить изменение. Проверьте подключение и попробуйте ещё раз.</string>
+</resources>

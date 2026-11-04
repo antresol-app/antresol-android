@@ -1,4 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Antresol</string>
+
+    <!-- Shell -->
+    <string name="back">Back</string>
+    <string name="account">Account</string>
+    <string name="account_kid">Kids profile</string>
+    <string name="account_profile">Profile</string>
+
+    <!-- Sort pills -->
+    <string name="sort_new">New</string>
+    <string name="sort_az">A–Z</string>
+    <string name="sort_by_year">By Year</string>
+    <string name="sort_by_artist">By Artist</string>
+    <string name="sort_by_author">By Author</string>
+
+    <!-- Music and books pages -->
+    <string name="music_all_albums">All Albums</string>
+    <string name="music_artists">Artists</string>
+    <string name="music_playlists">Playlists</string>
+    <string name="music_genres">Genres</string>
+    <string name="books_all">All Books</string>
+    <string name="books_audiobooks">Audiobooks</string>
+    <string name="books_comics">Manga &amp; Comics</string>
+
+    <!-- Search -->
+    <string name="search_field_hint">Movies, music and books</string>
+    <string name="search_clear">Clear</string>
+    <string name="search_filter_all">All</string>
+    <string name="search_browse">Browse</string>
+
+    <!-- Sign-in -->
+    <string name="password_show">Show password</string>
+    <string name="password_hide">Hide password</string>
+    <string name="password_wrong">Wrong password. Try again.</string>
+
+    <!-- Detail -->
+    <string name="detail_watchlist">Want to Watch</string>
+    <string name="detail_want">Want to Read</string>
+    <string name="detail_watched">Watched</string>
+    <string name="detail_up_next">Up Next</string>
+    <string name="detail_episodes">Episodes</string>
+    <string name="detail_genres">Genres</string>
+    <string name="detail_about">About</string>
+    <string name="detail_file">File</string>
+    <string name="detail_rated">Rated %1$s</string>
+    <string name="detail_episode_code">S%1$d · E%2$d</string>
+    <string name="detail_pages">%1$d pages</string>
+    <string name="detail_mark_season_watched">Mark Season as Watched</string>
+    <string name="detail_mark_season_unwatched">Mark Season as Unwatched</string>
+    <string name="detail_action_failed">Couldn’t save the change. Check the connection and try again.</string>
 </resources>

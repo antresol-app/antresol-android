@@ -143,3 +143,52 @@ Running log between milestones. Newest entries at the bottom.
 - Tokens are stored in app-private DataStore, not encrypted with the Keystore (nice-to-have).
 - No on-device run was possible (no emulator/KVM here); behaviour was verified with Robolectric only.
 - Account page is minimal; settings (language override, quality, devices) belong to milestone 3.
+
+## Mobile milestone 1 — onboarding, shell, home, browse, detail, search
+
+### `:mobile` (package `app.antresol.mobile`, Compose Material 3, dark only, edge to edge)
+- `AntresolMobileApp` builds the shared `SessionManager` (DataStore store, device name = phone model such as
+  "Google Pixel 8", `Accept-Language` from the system locale) and is Coil's `ImageLoaderFactory` (Bearer images).
+- `ui/root/AntresolMobileRoot`: crossfades splash → `ServerScreen` (address, Connect, specific errors for
+  unreachable / not Antresol / needs setup) → `ProfilesScreen` (avatars with lock badge, password step with
+  show/hide, "wrong password" on 401, session-expired notice, Change Server) → `MainShell` (keyed per profile).
+- `ui/shell`: type-safe navigation-compose routes (`Routes.kt`). Floating glass `BottomBar` like phone_*.png:
+  pill with Home, Movies, TV Shows, Music, Books plus a round Search button. Each tab keeps its back stack
+  (save/restore state); re-tapping the current tab pops to its root. The tab header (logo + "Antresol",
+  avatar) scrolls with the content; the avatar opens `AccountSheet` (switch profile, change server, sign out).
+  `LocalBottomBarPadding` tells scrolling content how much room the bar needs.
+- Home: hero pager (artwork-tinted glow, eyebrow, huge title, white Play + glass Details; rotates every 8 s,
+  centred on phones, left-aligned on tablets) and every `/api/home` shelf (Continue Watching as 16:9 tiles).
+  Shelf chevrons open the matching library grid, or the shelf's own cards (`GridSource.forShelf`).
+- Grids (`browse/CardGridScreen` + `GridSource`): Movies / TV Shows tabs and pushed pages (All Albums, genre
+  albums, Artists, Playlists, All Books, Audiobooks, Manga & Comics, shelf "see all"), adaptive columns
+  (3 across a phone, 5–7 on tablets), segmented sort pills (New / A–Z / By Year / By Artist / By Author), paging.
+- Music page: links, genre chips, music shelves. Books page: links + books shelves.
+- Detail: `VideoDetailScreen` (movie/series/season/episode): tinted backdrop header, meta and badges,
+  Watchlist and Watched toggles (optimistic, undone with a snackbar on failure), overview, Up Next, season pills,
+  episode rows with their own watched toggle, "Mark Season as Watched", file/audio/subtitle info, cast.
+  Movie/episode watched state comes from `/api/progress/{id}.finished`. `MediaDetailScreen` covers albums,
+  artists, playlists, books, audiobooks and comics (track list, chapters, volumes, artist albums, Want to Read).
+- Search: debounced `/api/search`, filter pills (All / Movies / TV Shows / Music / Books regroup the last answer),
+  results as shelves, songs as rows that open their album; with an empty query the coloured Browse tiles.
+- Strings: mobile-only strings in `mobile/src/main/res/values{,-ru}`; shared ones from `:ui-common`.
+  `LoadState`/`userMessage` and `kindLabel` are small copies of the TV ones (kept in `:mobile` so the two chains
+  did not edit shared files at the same time) — a later cleanup can move them into `:ui-common`.
+- No changes to `:core` or `:ui-common` in this milestone.
+
+### Tests
+- `BrowseLogicTest` (JVM): grid source route encoding (found and fixed a genre containing `|`), shelf chevron
+  mapping, search filter grouping. Runs in CI (`:mobile:testDebugUnitTest`).
+- `MobileLiveUiTest` (Robolectric, NATIVE graphics, only with `ANTRESOL_TEST_SERVER`): phone flow — server error
+  + connect, profiles, password, home, Movies sort, movie detail (watchlist toggled on the server and back),
+  series detail with seasons, Music, All Albums, Books, Search browse + results, account sheet, switch profile;
+  tablet (1024×768) home, Movies grid, detail. Screenshots in `mobile/build/screenshots/`.
+  Waits advance Robolectric's paused main looper so `delay()`-based work (search debounce) runs.
+
+### Known gaps (for mobile milestone 2)
+- **No player yet**: hero Play opens the detail page (`MainShell` `onPlay`), detail pages have no Play/Resume,
+  album/playlist track rows and audiobook chapters are not tappable, books/comics have no Read/Listen. Milestone 2
+  should add the player, the MediaSessionService for music/audiobooks, readers, and wire these.
+- Music: no Songs list and no Shuffle All button yet (both need playback). Settings screen not built.
+- Android has no backdrop blur behind the tab bar; it uses a 97 % opaque elevated fill.
+- No on-device run (no emulator here); verified with Robolectric screenshots only.

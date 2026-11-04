@@ -121,5 +121,6 @@ private fun TabItem(tab: NavTab, selected: Boolean, onClick: () -> Unit, modifie
 private fun Modifier.glass(shape: androidx.compose.ui.graphics.Shape): Modifier = this
     .shadow(16.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
     .clip(shape)
-    .background(AntresolColors.Glass)
+    // Android has no backdrop blur for this: a near-opaque fill keeps labels readable over artwork.
+    .background(AntresolColors.BackgroundElevated.copy(alpha = 0.97f))
     .border(1.dp, AntresolColors.GlassBorder, shape)

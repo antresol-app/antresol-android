@@ -121,14 +121,15 @@ sealed interface GridSource {
 
     companion object {
         fun decode(value: String): GridSource {
-            val parts = value.split('|', limit = 3)
-            return when (parts[0]) {
-                "items" -> Items(parts[1])
-                "albums" -> Albums(parts.getOrNull(1)?.ifBlank { null })
+            val type = value.substringBefore('|')
+            val rest = value.substringAfter('|', "")
+            return when (type) {
+                "items" -> Items(rest)
+                "albums" -> Albums(rest.ifBlank { null })
                 "artists" -> Artists
                 "playlists" -> Playlists
-                "books" -> Books(parts[1])
-                "shelf" -> ShelfCards(ShelfPage.valueOf(parts[1]), parts[2])
+                "books" -> Books(rest)
+                "shelf" -> ShelfCards(ShelfPage.valueOf(rest.substringBefore('|')), rest.substringAfter('|'))
                 else -> throw IllegalArgumentException("Unknown grid source $value")
             }
         }

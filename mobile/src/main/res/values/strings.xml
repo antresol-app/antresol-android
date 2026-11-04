@@ -36,7 +36,7 @@
     <string name="password_wrong">Wrong password. Try again.</string>
 
     <!-- Detail -->
-    <string name="detail_watchlist">Want to Watch</string>
+    <string name="detail_watchlist">Watchlist</string>
     <string name="detail_want">Want to Read</string>
     <string name="detail_watched">Watched</string>
     <string name="detail_up_next">Up Next</string>

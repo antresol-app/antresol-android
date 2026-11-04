@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
@@ -89,12 +89,15 @@ fun CardGridScreen(
         val sort = viewModel.sort
         if (sorts.isNotEmpty() && sort != null) {
             fullWidth("sorts") {
-                SegmentedPills(
+                // The Box gives the pills loose width constraints, so they hug their content on tablets.
+                Box(Modifier.fillMaxWidth()) {
+                    SegmentedPills(
                     options = sorts,
                     selected = sort,
                     label = { stringResource(it.label) },
-                    onSelect = viewModel::select,
-                )
+                        onSelect = viewModel::select,
+                    )
+                }
             }
         }
         when (val state = viewModel.state) {

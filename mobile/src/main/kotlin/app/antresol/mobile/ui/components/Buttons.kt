@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
@@ -64,12 +65,12 @@ private fun PillButton(
             .then(if (border != null) Modifier.border(1.dp, border, AntresolShapes.pill) else Modifier)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .alpha(if (enabled) 1f else 0.5f)
-            .padding(horizontal = 22.dp, vertical = 12.dp),
+            .padding(horizontal = 18.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
-        Text(text, style = Antresol.typography.button.copy(color = content), maxLines = 1)
+        Text(text, style = Antresol.typography.button.copy(color = content), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

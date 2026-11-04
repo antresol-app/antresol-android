@@ -1,6 +1,5 @@
 package app.antresol.tv.ui.browse
 
-import androidx.annotation.StringRes
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import app.antresol.core.model.Card
@@ -36,8 +36,10 @@ import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.LoadingView
 import app.antresol.tv.ui.components.MediaCard
 import app.antresol.tv.ui.components.MessageView
+import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.tv.ui.components.SegmentedPills
+import app.antresol.tv.ui.components.TvIcons
 import app.antresol.tv.ui.components.VerticalShelfScrolling
 import app.antresol.tv.ui.components.rememberFocusMemory
 import app.antresol.tv.ui.components.remembersFocus
@@ -48,25 +50,31 @@ import app.antresol.ui.theme.Antresol
 /** Distance from the end of the loaded cards at which the next page is requested. */
 private const val PREFETCH_DISTANCE = 18
 
-/** Movies or TV Shows: page title, segmented sort pills and a poster grid. */
+/**
+ * A library grid (Movies, TV Shows, albums, artists, playlists, books…): page title, segmented
+ * sort pills, an optional Shuffle pill (genre albums), and the cards in the source's shape.
+ */
 @Composable
-fun LibraryGridScreen(
-    @StringRes title: Int,
-    viewModel: LibraryGridViewModel,
+fun CardGridScreen(
+    title: String,
+    viewModel: CardGridViewModel,
     onOpen: (Card) -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
+    onShuffle: (() -> Unit)? = null,
 ) {
     val focus = rememberFocusMemory()
     val gridState = rememberLazyGridState()
     val atTop by remember { derivedStateOf { gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset < 40 } }
     LaunchedEffect(atTop) { onScrolledToTop(atTop) }
 
-    val sortLabels = listOf(
-        stringResource(R.string.sort_recent),
-        stringResource(R.string.sort_title),
-        stringResource(R.string.sort_year),
-    )
+    val source = viewModel.source
+    val sortLabels = source.sorts.map { stringResource(it.label) }
+    val cardWidth = when (source.shape) {
+        CardShape.Poster -> CardSizes.posterWidth
+        CardShape.Wide -> CardSizes.wideWidth
+        CardShape.Square, CardShape.Round -> CardSizes.squareWidth
+    }
     val state = viewModel.state
     val firstKey = (state as? LoadState.Ready)?.value?.cards?.firstOrNull()?.let { gridKey(it) }
     // Restore focus once per arrival; later reloads (a new sort) leave focus on the sort pills.
@@ -79,7 +87,7 @@ fun LibraryGridScreen(
 
     VerticalShelfScrolling(leadingFraction = 0.2f, trailingFraction = 0.14f) {
         LazyVerticalGrid(
-            columns = GridCells.FixedSize(CardSizes.posterWidth),
+            columns = GridCells.FixedSize(cardWidth),
             state = gridState,
             contentPadding = PaddingValues(start = ScreenPaddingH, end = ScreenPaddingH, top = 84.dp, bottom = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(18.dp),
@@ -96,13 +104,16 @@ fun LibraryGridScreen(
                         .padding(bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(stringResource(title), style = Antresol.typography.pageTitle)
+                    Text(title, style = Antresol.typography.pageTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.weight(1f))
-                    SegmentedPills(
-                        options = sortLabels,
-                        selectedIndex = viewModel.sort.ordinal,
-                        onSelect = { viewModel.select(LibrarySort.entries[it]) },
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (onShuffle != null) {
+                            PillButton(stringResource(R.string.action_shuffle), onClick = onShuffle, icon = TvIcons.Shuffle)
+                        }
+                        if (sortLabels.size > 1) {
+                            SegmentedPills(options = sortLabels, selectedIndex = viewModel.sortIndex, onSelect = viewModel::select)
+                        }
+                    }
                 }
             }
             when (state) {
@@ -121,7 +132,7 @@ fun LibraryGridScreen(
                             MediaCard(
                                 card = card,
                                 onClick = { onOpen(card) },
-                                shape = CardShape.Poster,
+                                shape = source.shape,
                                 surfaceModifier = Modifier
                                     .remembersFocus(focus, gridKey(card))
                                     .onFocusChanged {

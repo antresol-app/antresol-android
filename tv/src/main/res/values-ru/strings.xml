@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Music -->
+    <string name="music_all_albums">Все альбомы</string>
+    <string name="music_artists">Исполнители</string>
+    <string name="music_songs">Песни</string>
+    <string name="music_playlists">Плейлисты</string>
+    <string name="music_genres">Жанры</string>
+    <string name="music_shuffle_all">Перемешать все</string>
+    <string name="music_top_songs">Популярные песни</string>
+    <string name="music_genre_counts">Альбомов: %1$d · Песен: %2$d</string>
+    <string name="music_favorite">В избранное</string>
+    <string name="music_in_favorites">В избранном</string>
+    <string name="music_lossless">Без потерь</string>
+    <string name="music_no_songs">Песен пока нет</string>
+
+    <!-- Now playing -->
+    <string name="now_playing">Сейчас играет</string>
+    <string name="now_playing_lyrics">Текст</string>
+    <string name="now_playing_up_next">Далее</string>
+    <string name="now_playing_no_lyrics">Для этой песни нет текста.</string>
+    <string name="now_playing_queue_end">Больше в очереди ничего нет.</string>
+    <string name="now_playing_nothing">Сейчас ничего не играет. Выберите альбом, плейлист или аудиокнигу.</string>
+    <string name="now_playing_error">Сейчас это не удаётся воспроизвести.</string>
+    <string name="now_playing_shuffle">Перемешать</string>
+    <string name="now_playing_repeat">Повтор</string>
+    <string name="now_playing_repeat_one">Повтор песни</string>
+    <string name="now_playing_previous">Предыдущий</string>
+    <string name="now_playing_next">Следующий</string>
+    <string name="now_playing_back_15">Назад на 15 секунд</string>
+    <string name="now_playing_forward_30">Вперёд на 30 секунд</string>
+    <string name="now_playing_speed">Скорость</string>
+    <string name="now_playing_sleep">Таймер сна</string>
+    <string name="now_playing_chapter_of">Глава %1$d из %2$d</string>
+
+    <!-- Sleep timer -->
+    <string name="sleep_off">Выкл.</string>
+    <string name="sleep_minutes">%1$d мин</string>
+    <string name="sleep_end_of_chapter">До конца главы</string>
+    <string name="sleep_end_of_song">До конца песни</string>
+
+    <!-- Books, audiobooks, comics -->
+    <string name="books_all">Все книги</string>
+    <string name="books_audiobooks">Аудиокниги</string>
+    <string name="books_comics">Манга и комиксы</string>
+    <string name="audiobook_listen_from_start">Слушать сначала</string>
+    <string name="book_want_to_read">Хочу прочитать</string>
+    <string name="book_in_want_to_read">В списке «Хочу прочитать»</string>
+    <string name="book_progress_percent">Прочитано %1$d%%</string>
+    <string name="comic_continue">Продолжить · стр. %1$d</string>
+    <string name="comic_read_from_start">Читать сначала</string>
+    <string name="comic_page_of">Страница %1$d из %2$d</string>
+    <string name="comic_next_volume">Следующий том</string>
+    <string name="comic_end">Это конец тома.</string>
+    <string name="comic_page_failed">Не удалось загрузить страницу.</string>
+    <string name="comic_no_pages">В этом томе нет страниц.</string>
+    <string name="ebook_unavailable">Электронные книги нельзя читать на телевизоре. Откройте книгу в веб-версии Antresol или на телефоне.</string>
+
+    <!-- Settings -->
+    <string name="settings_profile">Профиль</string>
+    <string name="settings_playback">Воспроизведение</string>
+    <string name="settings_default_quality">Качество видео</string>
+    <string name="settings_default_quality_hint">Применяется при запуске видео. В плеере его по-прежнему можно изменить.</string>
+    <string name="settings_subtitles">Субтитры</string>
+    <string name="settings_subtitles_hint">Включаются автоматически, если у видео есть субтитры на этом языке.</string>
+    <string name="settings_off">Выкл.</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_app_language">Язык приложения</string>
+    <string name="language_system">Как в системе</string>
+    <string name="settings_server">Сервер</string>
+    <string name="settings_server_address">Адрес</string>
+    <string name="settings_server_version">Версия сервера</string>
+    <string name="settings_library">Медиатека</string>
+    <string name="settings_library_counts">Фильмов: %1$d · Серий: %2$d · Альбомов: %3$d · Книг: %4$d</string>
+    <string name="settings_about">О приложении</string>
+    <string name="settings_app_version">Antresol для Android TV %1$s</string>
+    <string name="settings_about_text">Клиент для вашего домашнего медиасервера Antresol: фильмы, сериалы, музыка, аудиокниги и комиксы.</string>
+    <string name="settings_unknown">Неизвестно</string>
+</resources>

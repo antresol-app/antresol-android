@@ -38,6 +38,8 @@ import app.antresol.core.playback.VideoSource
 import app.antresol.core.playback.WebVtt
 import app.antresol.core.playback.playbackApi
 import app.antresol.core.playback.videoApi
+import app.antresol.tv.settings.TvPreferences
+import app.antresol.tv.settings.TvSettings
 import app.antresol.ui.playback.DeviceCaps
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -89,6 +91,7 @@ class PlayerViewModel(
     private val appScope: CoroutineScope,
     itemId: Long,
     resume: ResumeMode,
+    private val preferences: TvPreferences = TvPreferences(),
 ) : ViewModel() {
     val player: ExoPlayer = buildPlayer()
 
@@ -266,7 +269,7 @@ class PlayerViewModel(
     }
 
     private suspend fun begin(file: FileInfo, startMs: Long) {
-        val newSession = VideoSession(client.videoApi(), file.id, DeviceCaps.current(context))
+        val newSession = VideoSession(client.videoApi(), file.id, DeviceCaps.current(context), quality = preferences.defaultQuality)
         session = newSession
         selectedSubtitle = null
         rawSubtitles.clear()
@@ -282,6 +285,7 @@ class PlayerViewModel(
             isPlaying = { !released && player.isPlaying },
             onSessionLost = { onSessionLost() },
         ).also { it.start(opened.session) }
+        preselectSubtitle(opened)
         load(opened, opened.timeline.initialPlayerSeekMs, playWhenReady = true)
         phase = PlayerPhase.Playing
     }
@@ -324,6 +328,24 @@ class PlayerViewModel(
     fun selectQuality(value: String) {
         if (value == quality) return
         reopen(currentFileMs(), quality = value)
+    }
+
+    /** Turns on the subtitle language chosen in Settings, if the video has it (forced tracks last). */
+    private suspend fun preselectSubtitle(opened: VideoSource) {
+        val language = preferences.subtitleLanguage.ifEmpty { return }
+        val track = opened.play.subtitles
+            .filter { it.url != null && TvSettings.sameLanguage(it.lang, language) }
+            .minByOrNull { if (it.forced) 1 else 0 }
+            ?: return
+        val url = track.url ?: return
+        try {
+            rawSubtitles[url] = downloadVtt(url)
+            selectedSubtitle = track
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            notice = app.antresol.ui.R.string.player_subtitles_failed
+        }
     }
 
     fun selectSubtitle(track: SubTrack?) {

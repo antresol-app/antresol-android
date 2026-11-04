@@ -1,6 +1,12 @@
 package app.antresol.tv.ui.shell
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
@@ -12,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,13 +29,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
@@ -38,6 +48,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import app.antresol.tv.R as TvR
 import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
@@ -49,7 +60,8 @@ import app.antresol.ui.theme.AntresolShapes
 
 /**
  * The web app's top bar: brand on the left, the centred glass pill of tabs (white pill = current
- * tab), and the profile avatar on the right. Entering the pill from below lands on the current tab.
+ * tab), and on the right the now-playing chip (while music or an audiobook is loaded) and the
+ * profile avatar, which opens Settings. Entering the pill from below lands on the current tab.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -57,8 +69,11 @@ fun TopNav(
     selected: NavTab?,
     userName: String,
     avatar: String,
+    nowPlaying: String?,
+    nowPlayingActive: Boolean,
     onSelect: (NavTab) -> Unit,
-    onAccount: () -> Unit,
+    onNowPlaying: () -> Unit,
+    onSettings: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -101,26 +116,103 @@ fun TopNav(
                 )
             }
         }
-        Surface(
-            onClick = onAccount,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .size(34.dp)
-                .semantics { contentDescription = userName },
-            shape = ClickableSurfaceDefaults.shape(CircleShape),
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent,
-                pressedContainerColor = Color.Transparent,
-            ),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.15f),
-            border = ClickableSurfaceDefaults.border(
-                focusedBorder = Border(BorderStroke(2.dp, AntresolColors.Label), inset = 2.dp, shape = CircleShape),
-            ),
-            glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.3f), 10.dp)),
+        Row(
+            modifier = Modifier.align(Alignment.CenterEnd),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ProfileAvatar(name = userName, avatar = avatar, size = 34.dp)
+            if (nowPlaying != null) NowPlayingChip(nowPlaying, nowPlayingActive, onNowPlaying)
+            AvatarButton(userName, avatar, onSettings)
         }
+    }
+}
+
+/** The glass chip with the playing song or audiobook; opens Now Playing. */
+@Composable
+private fun NowPlayingChip(title: String, active: Boolean, onClick: () -> Unit) {
+    val label = stringResource(TvR.string.now_playing)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .height(32.dp)
+            .widthIn(max = 190.dp)
+            .semantics { contentDescription = label },
+        shape = ClickableSurfaceDefaults.shape(AntresolShapes.pill),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = AntresolColors.Glass,
+            contentColor = AntresolColors.Label,
+            focusedContainerColor = AntresolColors.Label,
+            focusedContentColor = AntresolColors.LabelInverse,
+            pressedContainerColor = AntresolColors.LabelSecondary,
+            pressedContentColor = AntresolColors.LabelInverse,
+        ),
+        border = ClickableSurfaceDefaults.border(border = Border(BorderStroke(1.dp, AntresolColors.GlassBorder), shape = AntresolShapes.pill)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+    ) {
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            EqualizerBars(active, LocalContentColor.current)
+            Text(
+                title,
+                style = Antresol.typography.caption.copy(fontSize = 13.sp),
+                color = LocalContentColor.current,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** Three bars that bounce while audio plays and rest flat when paused. */
+@Composable
+private fun EqualizerBars(active: Boolean, color: Color) {
+    val transition = rememberInfiniteTransition(label = "equalizer")
+    val phases = listOf(0, 180, 360).map { delayMs ->
+        transition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(420, delayMillis = delayMs), RepeatMode.Reverse),
+            label = "bar",
+        )
+    }
+    Canvas(Modifier.size(width = 12.dp, height = 12.dp)) {
+        val barWidth = size.width / 5
+        phases.forEachIndexed { index, phase ->
+            val height = size.height * if (active) phase.value else 0.3f
+            drawRect(
+                color = color,
+                topLeft = Offset(index * 2 * barWidth, size.height - height),
+                size = Size(barWidth, height),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AvatarButton(userName: String, avatar: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(34.dp)
+            .semantics { contentDescription = userName },
+        shape = ClickableSurfaceDefaults.shape(CircleShape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent,
+            pressedContainerColor = Color.Transparent,
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.15f),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(BorderStroke(2.dp, AntresolColors.Label), inset = 2.dp, shape = CircleShape),
+        ),
+        glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.3f), 10.dp)),
+    ) {
+        ProfileAvatar(name = userName, avatar = avatar, size = 34.dp)
     }
 }
 

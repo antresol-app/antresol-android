@@ -24,7 +24,21 @@ data object BooksRoute
 data object SearchRoute
 
 @Serializable
-data object AccountRoute
+data object SettingsRoute
+
+/** A library grid; [kind] is a [app.antresol.tv.ui.browse.GridKind] name, [genre] narrows albums. */
+@Serializable
+data class GridRoute(val kind: String, val genre: String = "")
+
+@Serializable
+data object SongsRoute
+
+@Serializable
+data object NowPlayingRoute
+
+/** The comic reader for a comic volume id. */
+@Serializable
+data class ComicReaderRoute(val volumeId: Long)
 
 /** Any card's detail page; [kind] is [Card.kind]. */
 @Serializable

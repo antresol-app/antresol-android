@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +33,10 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.tv.material3.Text
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.core.playback.Chapters
+import app.antresol.tv.R as TvR
+import app.antresol.tv.playback.AudioContent
+import app.antresol.tv.playback.AudioEngine
 import app.antresol.tv.ui.LoadState
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.components.ErrorView
@@ -41,6 +46,8 @@ import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.tv.ui.components.ShelfRow
+import app.antresol.tv.ui.components.TrackRow
+import app.antresol.tv.ui.components.TvIcons
 import app.antresol.tv.ui.components.VerticalShelfScrolling
 import app.antresol.tv.ui.components.cardFocusKey
 import app.antresol.tv.ui.components.kindLabel
@@ -54,14 +61,19 @@ import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.components.BadgeRow
+import app.antresol.ui.format.Durations
 import app.antresol.ui.format.TrackLabels
+import app.antresol.ui.format.remainingDuration
 import app.antresol.ui.format.spokenDuration
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
 
-/** Focus key of the Play button of a video detail page. */
+/** Focus key of the first action (Play, Listen, Read) of a detail page. */
 private const val PLAY_KEY = "action/play"
+
+/** Focus key of the Want to Read button of a book page. */
+private const val WANT_KEY = "action/want"
 
 /**
  * The detail page of any card: tinted backdrop, artwork, title, meta and overview. Movies,
@@ -71,8 +83,11 @@ private const val PLAY_KEY = "action/play"
 @Composable
 fun DetailScreen(
     viewModel: DetailViewModel,
+    audio: AudioEngine,
     onOpen: (Card) -> Unit,
     onPlay: (itemId: Long, mode: ResumeMode) -> Unit,
+    onNowPlaying: () -> Unit,
+    onRead: (volumeId: Long) -> Unit,
 ) {
     // Back from the player: progress, watched marks and the next episode changed.
     var resumedOnce by remember { mutableStateOf(false) }
@@ -82,25 +97,41 @@ fun DetailScreen(
     when (val state = viewModel.state) {
         LoadState.Loading -> LoadingView()
         is LoadState.Failed -> ErrorView(state.error, onRetry = viewModel::reload)
-        is LoadState.Ready -> DetailContent(state.value, viewModel, onOpen, onPlay)
+        is LoadState.Ready -> DetailContent(state.value, viewModel, audio, DetailActions(onOpen, onPlay, onNowPlaying, onRead))
     }
 }
+
+/** Where the detail page's buttons and cards lead. */
+private class DetailActions(
+    val open: (Card) -> Unit,
+    val play: (Long, ResumeMode) -> Unit,
+    val nowPlaying: () -> Unit,
+    val read: (Long) -> Unit,
+)
 
 @Composable
 private fun DetailContent(
     model: DetailModel,
     viewModel: DetailViewModel,
-    onOpen: (Card) -> Unit,
-    onPlay: (Long, ResumeMode) -> Unit,
+    audio: AudioEngine,
+    actions: DetailActions,
 ) {
     val focus = rememberFocusMemory()
     val video = model.video
-    val tall = model.rows.isEmpty() && video?.seasons.isNullOrEmpty()
+    val music = model.music
+    val book = model.book
+    val chapters = book?.takeIf { it.isAudiobook }?.detail?.chapters.orEmpty()
+    val tall = model.rows.isEmpty() && video?.seasons.isNullOrEmpty() && music?.tracks.isNullOrEmpty() && chapters.isEmpty()
     val headerHeight = (LocalConfiguration.current.screenHeightDp * if (tall) 1f else 0.62f).dp
     val firstKey = when {
         video?.playTarget != null -> PLAY_KEY
+        !music?.tracks.isNullOrEmpty() -> PLAY_KEY
+        book != null && (book.isAudiobook || book.comic != null) -> PLAY_KEY
+        book != null -> WANT_KEY
         else -> model.rows.firstOrNull()?.let { cardFocusKey(it.id, it.cards.first()) }
     }
+    val onOpen = actions.open
+    val onPlay = actions.play
     LaunchedEffect(firstKey) {
         if (firstKey != null) focus.restore(firstKey)
     }
@@ -131,6 +162,14 @@ private fun DetailContent(
                                     onToggleWatchlist = viewModel::toggleWatchlist,
                                     onToggleWatched = viewModel::toggleWatched,
                                 )
+                            }
+                            if (music != null && music.tracks.isNotEmpty()) {
+                                MusicActions(music, focus, viewModel, actions.nowPlaying)
+                            }
+                            if (book != null) {
+                                BookActions(book, focus, viewModel, actions)
+                            }
+                            if (video != null || music != null || book != null) {
                                 viewModel.actionError?.let { error ->
                                     Text(
                                         error.userMessage(LocalContext.current.resources),
@@ -140,6 +179,40 @@ private fun DetailContent(
                                 }
                             }
                         }
+                    }
+                }
+                if (music != null && music.tracks.isNotEmpty()) {
+                    item(key = "tracks-title") { SectionTitle(stringResource(music.tracksTitle)) }
+                    itemsIndexed(music.tracks, key = { index, track -> "track/${track.id}/$index" }) { index, track ->
+                        TrackRow(
+                            leading = (track.trackNo.takeIf { model.card.kind == Kind.ALBUM && it > 0 } ?: (index + 1)).toString(),
+                            title = track.title,
+                            subtitle = track.artist.takeIf { it.isNotBlank() && it != model.byline },
+                            trailing = Durations.clock(track.durationMs),
+                            playing = audio.currentTrack?.id == track.id,
+                            onClick = { viewModel.playTracks(index, onStarted = actions.nowPlaying) },
+                            modifier = Modifier
+                                .padding(horizontal = ScreenPaddingH)
+                                .remembersFocus(focus, "track/${track.id}/$index"),
+                        )
+                    }
+                }
+                if (book != null && chapters.size > 1) {
+                    val playingBook = (audio.content as? AudioContent.Audiobook)?.takeIf { it.book.card.id == book.detail.card.id }
+                    val current = playingBook?.let { Chapters.indexAt(it.chapters, audio.positionMs) }
+                    item(key = "chapters-title") { SectionTitle(stringResource(R.string.detail_chapters)) }
+                    itemsIndexed(chapters, key = { _, chapter -> "chapter/${chapter.idx}" }) { index, chapter ->
+                        TrackRow(
+                            leading = (index + 1).toString(),
+                            title = chapter.title.ifBlank { stringResource(TvR.string.now_playing_chapter_of, index + 1, chapters.size) },
+                            subtitle = Durations.clock(chapter.startMs),
+                            trailing = Durations.clock((chapter.endMs - chapter.startMs).coerceAtLeast(0)),
+                            playing = current == index,
+                            onClick = { viewModel.listen(fromMs = chapter.startMs, onStarted = actions.nowPlaying) },
+                            modifier = Modifier
+                                .padding(horizontal = ScreenPaddingH)
+                                .remembersFocus(focus, "chapter/${chapter.idx}"),
+                        )
                     }
                 }
                 if (video != null && video.seasons.isNotEmpty()) {
@@ -307,5 +380,103 @@ private fun VideoActions(
             icon = AntresolIcons.CheckCircle,
             modifier = Modifier.remembersFocus(focus, "action/watched"),
         )
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(start = ScreenPaddingH, end = ScreenPaddingH, top = 4.dp, bottom = 4.dp))
+}
+
+/** Play, Shuffle and Favorite of an album, playlist or artist. */
+@Composable
+private fun MusicActions(music: MusicInfo, focus: FocusMemory, viewModel: DetailViewModel, onNowPlaying: () -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .trapHorizontalFocus(),
+    ) {
+        PillButton(
+            text = stringResource(R.string.action_play),
+            onClick = { viewModel.playTracks(0, onStarted = onNowPlaying) },
+            icon = AntresolIcons.Play,
+            style = PillStyle.Primary,
+            modifier = Modifier.remembersFocus(focus, PLAY_KEY),
+        )
+        PillButton(
+            text = stringResource(R.string.action_shuffle),
+            onClick = { viewModel.playTracks(0, shuffled = true, onStarted = onNowPlaying) },
+            icon = TvIcons.Shuffle,
+            modifier = Modifier.remembersFocus(focus, "action/shuffle"),
+        )
+        if (music.canStar) {
+            PillButton(
+                text = stringResource(if (music.starred) TvR.string.music_in_favorites else TvR.string.music_favorite),
+                onClick = viewModel::toggleStar,
+                icon = if (music.starred) TvIcons.HeartFilled else TvIcons.Heart,
+                modifier = Modifier.remembersFocus(focus, "action/star"),
+            )
+        }
+    }
+}
+
+/** Listen / Read / Want to Read of a book page; e-books explain that they are read elsewhere. */
+@Composable
+private fun BookActions(book: BookInfo, focus: FocusMemory, viewModel: DetailViewModel, actions: DetailActions) {
+    val detail = book.detail
+    if (book.isAudiobook && book.resumeMs > 0) {
+        Text(
+            remainingDuration((detail.durationMs - book.resumeMs).coerceAtLeast(0)),
+            style = Antresol.typography.caption,
+        )
+    }
+    if (book.isEbook) {
+        Text(
+            stringResource(TvR.string.ebook_unavailable),
+            style = Antresol.typography.caption,
+            modifier = Modifier.widthIn(max = 560.dp),
+        )
+    }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .trapHorizontalFocus(),
+    ) {
+        if (book.isAudiobook) {
+            PillButton(
+                text = stringResource(if (book.resumeMs > 0) R.string.action_resume else R.string.action_listen),
+                onClick = { viewModel.listen(onStarted = actions.nowPlaying) },
+                icon = AntresolIcons.Play,
+                style = PillStyle.Primary,
+                modifier = Modifier.remembersFocus(focus, PLAY_KEY),
+            )
+            if (book.resumeMs > 0) {
+                PillButton(
+                    text = stringResource(TvR.string.audiobook_listen_from_start),
+                    onClick = { viewModel.listen(fromStart = true, onStarted = actions.nowPlaying) },
+                    icon = AntresolIcons.Restart,
+                    modifier = Modifier.remembersFocus(focus, "action/restart"),
+                )
+            }
+        }
+        book.comic?.let { target ->
+            PillButton(
+                text = target.continuePage?.let { stringResource(TvR.string.comic_continue, it) } ?: stringResource(R.string.action_read),
+                onClick = { actions.read(target.volumeId) },
+                icon = TvIcons.Book,
+                style = PillStyle.Primary,
+                modifier = Modifier.remembersFocus(focus, PLAY_KEY),
+            )
+        }
+        if (detail.kind != Kind.COMIC_VOLUME) {
+            PillButton(
+                text = stringResource(if (book.want) TvR.string.book_in_want_to_read else TvR.string.book_want_to_read),
+                onClick = viewModel::toggleWant,
+                icon = if (book.want) AntresolIcons.Check else AntresolIcons.Plus,
+                modifier = Modifier.remembersFocus(focus, WANT_KEY),
+            )
+        }
     }
 }

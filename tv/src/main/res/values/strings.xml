@@ -3,4 +3,83 @@
     <string name="app_name" translatable="false">Antresol</string>
     <!-- Device name shown in the server's device list. %1$s = TV model. -->
     <string name="device_name" translatable="false">Android TV (%1$s)</string>
+
+    <!-- Music -->
+    <string name="music_all_albums">All Albums</string>
+    <string name="music_artists">Artists</string>
+    <string name="music_songs">Songs</string>
+    <string name="music_playlists">Playlists</string>
+    <string name="music_genres">Genres</string>
+    <string name="music_shuffle_all">Shuffle All</string>
+    <string name="music_top_songs">Top Songs</string>
+    <string name="music_genre_counts">Albums: %1$d · Songs: %2$d</string>
+    <string name="music_favorite">Favorite</string>
+    <string name="music_in_favorites">In Favorites</string>
+    <string name="music_lossless">Lossless</string>
+    <string name="music_no_songs">No songs yet</string>
+
+    <!-- Now playing -->
+    <string name="now_playing">Now Playing</string>
+    <string name="now_playing_lyrics">Lyrics</string>
+    <string name="now_playing_up_next">Up Next</string>
+    <string name="now_playing_no_lyrics">No lyrics for this song.</string>
+    <string name="now_playing_queue_end">Nothing else in the queue.</string>
+    <string name="now_playing_nothing">Nothing is playing. Pick an album, a playlist or an audiobook.</string>
+    <string name="now_playing_error">This can’t be played right now.</string>
+    <string name="now_playing_shuffle">Shuffle</string>
+    <string name="now_playing_repeat">Repeat</string>
+    <string name="now_playing_repeat_one">Repeat One</string>
+    <string name="now_playing_previous">Previous</string>
+    <string name="now_playing_next">Next</string>
+    <string name="now_playing_back_15">Back 15 seconds</string>
+    <string name="now_playing_forward_30">Forward 30 seconds</string>
+    <string name="now_playing_speed">Speed</string>
+    <string name="now_playing_sleep">Sleep Timer</string>
+    <string name="now_playing_chapter_of">Chapter %1$d of %2$d</string>
+
+    <!-- Sleep timer -->
+    <string name="sleep_off">Off</string>
+    <string name="sleep_minutes">%1$d min</string>
+    <string name="sleep_end_of_chapter">End of Chapter</string>
+    <string name="sleep_end_of_song">End of Song</string>
+
+    <!-- Books, audiobooks, comics -->
+    <string name="books_all">All Books</string>
+    <string name="books_audiobooks">Audiobooks</string>
+    <string name="books_comics">Manga &amp; Comics</string>
+    <string name="audiobook_listen_from_start">Listen from Beginning</string>
+    <string name="book_want_to_read">Want to Read</string>
+    <string name="book_in_want_to_read">In Want to Read</string>
+    <string name="book_progress_percent">%1$d%% read</string>
+    <string name="comic_continue">Continue · Page %1$d</string>
+    <string name="comic_read_from_start">Read from Beginning</string>
+    <string name="comic_page_of">Page %1$d of %2$d</string>
+    <string name="comic_next_volume">Next Volume</string>
+    <string name="comic_end">You’ve reached the end of this volume.</string>
+    <string name="comic_page_failed">This page couldn’t be loaded.</string>
+    <string name="comic_no_pages">This volume has no pages.</string>
+    <string name="ebook_unavailable">E-books can’t be read on TV. Open this book in the Antresol web app or on your phone.</string>
+
+    <!-- Settings -->
+    <string name="settings_profile">Profile</string>
+    <string name="settings_playback">Playback</string>
+    <string name="settings_default_quality">Video Quality</string>
+    <string name="settings_default_quality_hint">Used when a video starts. You can still change it in the player.</string>
+    <string name="settings_subtitles">Subtitles</string>
+    <string name="settings_subtitles_hint">Turned on automatically when a video has them in this language.</string>
+    <string name="settings_off">Off</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_app_language">App Language</string>
+    <string name="language_system">System</string>
+    <string name="language_english" translatable="false">English</string>
+    <string name="language_russian" translatable="false">Русский</string>
+    <string name="settings_server">Server</string>
+    <string name="settings_server_address">Address</string>
+    <string name="settings_server_version">Server Version</string>
+    <string name="settings_library">Library</string>
+    <string name="settings_library_counts">Movies: %1$d · Episodes: %2$d · Albums: %3$d · Books: %4$d</string>
+    <string name="settings_about">About</string>
+    <string name="settings_app_version">Antresol for Android TV %1$s</string>
+    <string name="settings_about_text">A client for your own Antresol home media server: films, TV shows, music, audiobooks and comics.</string>
+    <string name="settings_unknown">Unknown</string>
 </resources>

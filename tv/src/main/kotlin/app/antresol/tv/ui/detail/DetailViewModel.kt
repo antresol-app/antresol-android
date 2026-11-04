@@ -18,9 +18,15 @@ import app.antresol.core.model.Kind
 import app.antresol.core.model.PlaylistDetail
 import app.antresol.core.model.Progress
 import app.antresol.core.model.SeasonInfo
+import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.SubTrack
+import app.antresol.core.model.Track
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.Resume
+import app.antresol.core.reading.ComicProgress
+import app.antresol.tv.R as TvR
+import app.antresol.tv.playback.AudioContent
+import app.antresol.tv.playback.AudioEngine
 import app.antresol.tv.ui.LoadState
 import app.antresol.tv.ui.load
 import app.antresol.ui.R
@@ -49,7 +55,37 @@ data class DetailModel(
     val rows: List<DetailRow> = emptyList(),
     /** Play, watchlist and watched state of movies, series, seasons and episodes. */
     val video: VideoInfo? = null,
+    /** Tracks, favorite and shuffle of albums, playlists and artists. */
+    val music: MusicInfo? = null,
+    /** Listen / read actions of books, audiobooks and comics. */
+    val book: BookInfo? = null,
 )
+
+/** The playable side of an album, playlist or artist page. */
+data class MusicInfo(
+    val tracks: List<Track>,
+    @StringRes val tracksTitle: Int,
+    /** Albums and artists can be favorited; playlists cannot. */
+    val canStar: Boolean,
+    val starred: Boolean,
+    /** Artists shuffle all their songs on the server; albums and playlists shuffle their own tracks. */
+    val shuffle: ShuffleSource? = null,
+)
+
+/** The comic volume a Read/Continue button opens, and the 1-based page it continues at. */
+data class ComicTarget(val volumeId: Long, val continuePage: Int?)
+
+/** The actions of a book, audiobook, comic series or comic volume page. */
+data class BookInfo(
+    val detail: BookDetail,
+    val want: Boolean,
+    /** Whole-book position to resume an audiobook at (0 = start). */
+    val resumeMs: Long = 0,
+    val comic: ComicTarget? = null,
+) {
+    val isAudiobook: Boolean get() = detail.kind == Kind.AUDIOBOOK && detail.files.isNotEmpty()
+    val isEbook: Boolean get() = detail.kind == Kind.BOOK
+}
 
 /** What "Play" starts: the item itself, or for a series the episode to continue with. */
 data class PlayTarget(
@@ -74,6 +110,7 @@ data class VideoInfo(
 /** Loads the detail of any card kind through the matching endpoint. */
 class DetailViewModel(
     private val client: AntresolClient,
+    private val audio: AudioEngine,
     private val kind: String,
     private val id: Long,
 ) : ViewModel() {
@@ -124,6 +161,57 @@ class DetailViewModel(
             client.setWatched(model.card.id, watched)
             // Episodes, progress bars and the next episode all change; read them again.
             state = LoadState.Ready(fetch())
+        }
+    }
+
+    /** Plays the page's tracks from [index], or shuffled. */
+    fun playTracks(index: Int, shuffled: Boolean = false, onStarted: () -> Unit) {
+        val music = (state as? LoadState.Ready)?.value?.music ?: return
+        val source = music.shuffle
+        if (shuffled && source != null) {
+            act(onFailure = {}) {
+                val queue = client.shuffle(source).tracks
+                if (queue.isNotEmpty()) {
+                    audio.playTracks(queue)
+                    onStarted()
+                }
+            }
+            return
+        }
+        if (music.tracks.isEmpty()) return
+        audio.playTracks(music.tracks, index, shuffled)
+        onStarted()
+    }
+
+    fun toggleStar() {
+        val model = (state as? LoadState.Ready)?.value ?: return
+        val music = model.music?.takeIf { it.canStar } ?: return
+        val star = !music.starred
+        state = LoadState.Ready(model.copy(music = music.copy(starred = star)))
+        act(onFailure = { state = LoadState.Ready(model) }) {
+            if (star) client.star(model.card.id) else client.unstar(model.card.id)
+        }
+    }
+
+    /** Listens to the audiobook from the saved position, the start, or [fromMs]; opens Now Playing. */
+    fun listen(fromStart: Boolean = false, fromMs: Long? = null, onStarted: () -> Unit) {
+        val book = (state as? LoadState.Ready)?.value?.book?.takeIf { it.isAudiobook } ?: return
+        val playing = audio.content as? AudioContent.Audiobook
+        if (!fromStart && fromMs == null && playing?.book?.card?.id == book.detail.card.id) {
+            onStarted()
+            return
+        }
+        audio.playAudiobook(book.detail, fromMs ?: if (fromStart) 0L else book.resumeMs)
+        onStarted()
+    }
+
+    fun toggleWant() {
+        val model = (state as? LoadState.Ready)?.value ?: return
+        val book = model.book ?: return
+        val want = !book.want
+        state = LoadState.Ready(model.copy(book = book.copy(want = want)))
+        act(onFailure = { state = LoadState.Ready(model) }) {
+            if (want) client.addToWatchlist(model.card.id) else client.removeFromWatchlist(model.card.id)
         }
     }
 
@@ -198,10 +286,20 @@ private fun AlbumDetail.toModel() = DetailModel(
     durationMs = durationMs.takeIf { it > 0 },
     genres = genres,
     songCount = trackCount.takeIf { it > 0 } ?: tracks.size,
+    rating = quality.ifBlank { null },
+    music = MusicInfo(tracks = tracks, tracksTitle = R.string.detail_tracks, canStar = true, starred = starred),
 )
 
 private fun ArtistDetail.toModel() = DetailModel(
     card = card,
+    music = MusicInfo(
+        tracks = topTracks,
+        tracksTitle = TvR.string.music_top_songs,
+        // The artist detail does not say whether the artist is a favorite, so no toggle is offered.
+        canStar = false,
+        starred = false,
+        shuffle = ShuffleSource.Artist(card.id),
+    ),
     rows = listOf(
         DetailRow(id = "albums", titleRes = R.string.detail_albums, cards = albums),
         DetailRow(id = "appears-on", titleRes = R.string.detail_appears_on, cards = appearsOn),
@@ -212,6 +310,7 @@ private fun PlaylistDetail.toModel() = DetailModel(
     card = Card(id = playlist.id, kind = Kind.PLAYLIST, title = playlist.name, poster = playlist.cover),
     durationMs = playlist.durationMs.takeIf { it > 0 },
     songCount = playlist.trackCount,
+    music = MusicInfo(tracks = tracks, tracksTitle = R.string.detail_tracks, canStar = false, starred = false),
 )
 
 private fun BookDetail.toModel() = DetailModel(
@@ -222,4 +321,21 @@ private fun BookDetail.toModel() = DetailModel(
     overview = description,
     rows = listOf(DetailRow(id = "volumes", titleRes = R.string.detail_volumes, cards = volumes.map { it.toCard() }))
         .filter { it.cards.isNotEmpty() },
+    book = BookInfo(
+        detail = this,
+        want = want,
+        resumeMs = Resume.audiobookStartMs(progress, durationMs),
+        comic = comicTarget(),
+    ),
 )
+
+/** The volume to read: this volume, or the first unfinished volume of a series. */
+internal fun BookDetail.comicTarget(): ComicTarget? = when (kind) {
+    Kind.COMIC_VOLUME -> if (readFileId == 0L) null else ComicTarget(
+        volumeId = card.id,
+        continuePage = progress?.takeIf { !it.finished && it.fraction > 0 }?.let { ComicProgress.startPage(it.locator, false, Int.MAX_VALUE) + 1 },
+    )
+    Kind.COMIC -> volumes.firstOrNull { it.progress < 1.0 }?.let { ComicTarget(it.id, null) }
+        ?: volumes.firstOrNull()?.let { ComicTarget(it.id, null) }
+    else -> null
+}

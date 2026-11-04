@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -32,7 +31,12 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.antresol.core.model.Card
 import app.antresol.core.model.Chapter
 import app.antresol.core.model.Kind
-import app.antresol.core.model.Track
+import app.antresol.mobile.playback.PlaybackConnection
+import app.antresol.mobile.ui.components.PrimaryPillButton
+import app.antresol.mobile.ui.components.TrackRow
+import app.antresol.mobile.ui.music.PlayShuffleRow
+import app.antresol.ui.components.AntresolIcons
+import androidx.compose.foundation.clickable
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
@@ -61,7 +65,13 @@ import app.antresol.ui.R as UiR
  * chapters, volumes or albums.
  */
 @Composable
-fun MediaDetailScreen(viewModel: MediaDetailViewModel, onOpen: (Card) -> Unit, onBack: () -> Unit) {
+fun MediaDetailScreen(
+    viewModel: MediaDetailViewModel,
+    playback: PlaybackConnection,
+    onOpen: (Card) -> Unit,
+    onBack: () -> Unit,
+    onRead: (BookAction) -> Unit,
+) {
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
         onPauseOrDispose { }
@@ -72,14 +82,21 @@ fun MediaDetailScreen(viewModel: MediaDetailViewModel, onOpen: (Card) -> Unit, o
         when (val state = viewModel.state) {
             LoadState.Loading -> DetailStateBox(onBack) { LoadingView() }
             is LoadState.Failed -> DetailStateBox(onBack) { ErrorView(state.error, onRetry = viewModel::reload) }
-            is LoadState.Ready -> MediaDetailContent(state.value, viewModel::toggleWant, onOpen, onBack)
+            is LoadState.Ready -> MediaDetailContent(state.value, viewModel, playback, onOpen, onBack, onRead)
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(LocalBottomBarPadding.current))
     }
 }
 
 @Composable
-private fun MediaDetailContent(detail: MediaDetail, onToggleWant: () -> Unit, onOpen: (Card) -> Unit, onBack: () -> Unit) {
+private fun MediaDetailContent(
+    detail: MediaDetail,
+    viewModel: MediaDetailViewModel,
+    playback: PlaybackConnection,
+    onOpen: (Card) -> Unit,
+    onBack: () -> Unit,
+    onRead: (BookAction) -> Unit,
+) {
     val urls = LocalMediaUrls.current
     val card = detail.card
     val bottom = LocalBottomBarPadding.current
@@ -128,28 +145,34 @@ private fun MediaDetailContent(detail: MediaDetail, onToggleWant: () -> Unit, on
                 }
             }
         }
-        detail.want?.let { want ->
-            item("want") {
-                Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
-                    GlassPillButton(
-                        text = stringResource(R.string.detail_want),
-                        icon = if (want) MobileIcons.Check else MobileIcons.Plus,
-                        onClick = onToggleWant,
-                        modifier = Modifier.testTag("toggle-want"),
-                    )
-                }
-            }
-        }
+        item("actions") { MediaActions(detail, viewModel, playback, onRead) }
         if (detail.description.isNotBlank()) item("description") { ExpandableText(detail.description) }
         if (detail.tracks.isNotEmpty()) {
             item("tracks-title") { SectionTitle(stringResource(UiR.string.detail_tracks), Modifier.padding(top = 16.dp)) }
             itemsIndexed(detail.tracks, key = { index, track -> "track-$index-${track.id}" }) { index, track ->
-                TrackRow(track, number = if (detail.tracksShowArtist) index + 1 else track.trackNo.takeIf { it > 0 } ?: (index + 1), showArtist = detail.tracksShowArtist)
+                TrackRow(
+                    track = track,
+                    number = if (detail.tracksShowArtist) index + 1 else track.trackNo.takeIf { it > 0 } ?: (index + 1),
+                    showArtist = detail.tracksShowArtist || card.kind == Kind.ARTIST,
+                    playing = playback.current?.trackId == track.id,
+                    onClick = { playback.playTracks(detail.tracks, index) },
+                )
             }
         }
         if (detail.chapters.isNotEmpty()) {
             item("chapters-title") { SectionTitle(stringResource(UiR.string.detail_chapters), Modifier.padding(top = 16.dp)) }
-            items(detail.chapters, key = { "chapter-${it.idx}" }) { ChapterRow(it) }
+            val book = detail.book
+            val playingThis = book != null && playback.current?.bookId == book.card.id
+            val currentChapter = if (playingThis) playback.currentChapter else null
+            items(detail.chapters, key = { "chapter-${it.idx}" }) { chapter ->
+                ChapterRow(chapter, current = chapter == currentChapter) {
+                    when {
+                        book == null -> Unit
+                        playingThis -> playback.playChapter(chapter)
+                        else -> playback.playAudiobook(book, chapter.startMs)
+                    }
+                }
+            }
         }
         items(detail.rows, key = { it.id }) { row ->
             Shelf(title = stringResource(row.titleRes), cards = row.cards, onOpen = onOpen)
@@ -158,31 +181,88 @@ private fun MediaDetailContent(detail: MediaDetail, onToggleWant: () -> Unit, on
 }
 
 @Composable
-private fun TrackRow(track: Track, number: Int, showArtist: Boolean) {
+private fun ChapterRow(chapter: Chapter, current: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag("chapter-${chapter.idx}")
+            .padding(horizontal = PageGutter, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(number.toString(), style = Antresol.typography.caption, textAlign = TextAlign.End, modifier = Modifier.width(24.dp))
-        Column(Modifier.weight(1f)) {
-            Text(track.title, style = Antresol.typography.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (showArtist && track.artist.isNotBlank()) {
-                Text(track.artist, style = Antresol.typography.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        Text(Durations.clock(track.durationMs), style = Antresol.typography.caption)
+        Text(
+            chapter.title,
+            style = Antresol.typography.body.copy(color = if (current) AntresolColors.Accent else AntresolColors.Label),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(Durations.clock(chapter.startMs), style = Antresol.typography.caption)
     }
 }
 
+/** Play/Shuffle for music, Listen/Read plus Want to Read for books, or a note for formats the app cannot open. */
 @Composable
-private fun ChapterRow(chapter: Chapter) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(chapter.title, style = Antresol.typography.body, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Text(Durations.clock(chapter.startMs), style = Antresol.typography.caption)
+private fun MediaActions(detail: MediaDetail, viewModel: MediaDetailViewModel, playback: PlaybackConnection, onRead: (BookAction) -> Unit) {
+    val card = detail.card
+    when (card.kind) {
+        Kind.ALBUM, Kind.PLAYLIST -> if (detail.tracks.isNotEmpty()) {
+            PlayShuffleRow(
+                onPlay = { playback.playTracks(detail.tracks) },
+                onShuffle = { playback.playTracks(detail.tracks, shuffled = true) },
+            )
+        }
+        Kind.ARTIST -> PlayShuffleRow(
+            onPlay = { playback.playTracks(detail.tracks) },
+            onShuffle = { viewModel.shuffleArtist { tracks -> playback.playTracks(tracks) } },
+        )
+        else -> {
+            val book = detail.book
+            val action = book?.let { BookAction.of(it) }
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), modifier = Modifier.fillMaxWidth()) {
+                    when (action) {
+                        is BookAction.Listen -> PrimaryPillButton(
+                            text = stringResource(if (action.resume) UiR.string.action_resume else UiR.string.action_listen),
+                            icon = AntresolIcons.Play,
+                            onClick = {
+                                if (action.resume) playback.resumeAudiobook(book, action.fromMs) else playback.playAudiobook(book, 0L)
+                            },
+                            modifier = Modifier.weight(1f, fill = false).testTag("book-listen"),
+                        )
+                        is BookAction.ReadComic, is BookAction.ReadPdf -> {
+                            val resume = (action as? BookAction.ReadComic)?.resume ?: (action as BookAction.ReadPdf).resume
+                            PrimaryPillButton(
+                                text = stringResource(if (resume) R.string.detail_continue_reading else UiR.string.action_read),
+                                icon = MobileIcons.Book,
+                                onClick = { onRead(action) },
+                                modifier = Modifier.weight(1f, fill = false).testTag("book-read"),
+                            )
+                        }
+                        is BookAction.Unsupported, null -> Unit
+                    }
+                    detail.want?.let { want ->
+                        GlassPillButton(
+                            text = stringResource(R.string.detail_want),
+                            icon = if (want) MobileIcons.Check else MobileIcons.Plus,
+                            onClick = viewModel::toggleWant,
+                            modifier = Modifier.weight(1f, fill = false).testTag("toggle-want"),
+                        )
+                    }
+                }
+                if (action is BookAction.Unsupported) {
+                    Text(
+                        stringResource(R.string.detail_format_coming_soon, action.format.ifBlank { "?" }),
+                        style = Antresol.typography.caption,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
     }
 }

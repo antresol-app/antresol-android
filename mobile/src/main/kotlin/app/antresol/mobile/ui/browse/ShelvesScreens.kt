@@ -29,6 +29,7 @@ import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.components.EmptyView
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.LinkRow
+import app.antresol.mobile.ui.music.ShuffleAllButton
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PageTitle
@@ -46,14 +47,17 @@ data class MusicHome(val shelves: List<Shelf>, val genres: List<Genre>)
 /** Opens a grid page. */
 typealias OpenGrid = (source: GridSource, title: String) -> Unit
 
-/** Music: links to every album, artist and playlist, genre chips, then the music shelves. */
+/** Music: links to every album, song, artist and playlist, Shuffle All, genre chips, then the music shelves. */
 @Composable
 fun MusicScreen(
     viewModel: LoadViewModel<MusicHome>,
     onOpen: (Card) -> Unit,
     onGrid: OpenGrid,
+    onSongs: (title: String) -> Unit,
+    onShuffleAll: () -> Unit,
 ) {
     val allAlbums = stringResource(R.string.music_all_albums)
+    val songs = stringResource(R.string.music_songs)
     val artists = stringResource(R.string.music_artists)
     val playlists = stringResource(R.string.music_playlists)
     ShelvesPage(
@@ -63,11 +67,13 @@ fun MusicScreen(
         onResume = viewModel::refresh,
         links = listOf(
             allAlbums to { onGrid(GridSource.Albums(), allAlbums) },
+            songs to { onSongs(songs) },
             artists to { onGrid(GridSource.Artists, artists) },
             playlists to { onGrid(GridSource.Playlists, playlists) },
         ),
         shelves = { it.shelves },
         extra = { music ->
+            item("shuffle") { ShuffleAllButton(onShuffleAll) }
             if (music.genres.isNotEmpty()) {
                 item("genres") {
                     SectionTitle(stringResource(R.string.music_genres), Modifier.padding(top = 12.dp))

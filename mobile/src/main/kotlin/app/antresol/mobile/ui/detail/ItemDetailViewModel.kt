@@ -9,17 +9,32 @@ import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
 import app.antresol.core.model.SeasonInfo
+import app.antresol.core.playback.Episodes
+import app.antresol.core.playback.Resume
 import app.antresol.mobile.ui.LoadViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+
+/** What the Play button starts: [itemId] (a movie or episode), [episode] for a series or season. */
+data class PlayTarget(val itemId: Long, val episode: EpisodeCard?, val resume: Boolean)
 
 /** A movie, series, season or episode with the profile's watched state. */
 data class VideoDetail(
     val item: ItemDetail,
     /** Movie/episode: finished. Series/season: every episode watched. */
     val watched: Boolean,
+    /** Movie/episode: the saved position (0 when none or finished). */
+    val positionMs: Long = 0,
 ) {
     val canWatchlist: Boolean get() = item.kind == Kind.MOVIE || item.kind == Kind.SERIES
+
+    /** Movies and episodes play themselves; a series or season plays its next (or first) episode. */
+    val playTarget: PlayTarget?
+        get() = when (item.kind) {
+            Kind.MOVIE, Kind.EPISODE -> if (item.files.isEmpty()) null else PlayTarget(item.id, null, resume = positionMs > 0)
+            Kind.SERIES, Kind.SEASON -> Episodes.toPlay(item)?.let { PlayTarget(it.id, it, resume = it.progress > 0.0 && !it.watched) }
+            else -> null
+        }
 }
 
 /**
@@ -87,11 +102,13 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
     private companion object {
         suspend fun fetchDetail(client: AntresolClient, id: Long): VideoDetail {
             val item = client.item(id)
-            val watched = when (item.kind) {
-                Kind.MOVIE, Kind.EPISODE -> client.progress(id).finished
-                else -> item.allEpisodesWatched()
+            return when (item.kind) {
+                Kind.MOVIE, Kind.EPISODE -> {
+                    val progress = client.progress(id)
+                    VideoDetail(item, progress.finished, (Resume.videoStartSec(progress) * 1000).toLong())
+                }
+                else -> VideoDetail(item, item.allEpisodesWatched())
             }
-            return VideoDetail(item, watched)
         }
     }
 }

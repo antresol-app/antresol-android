@@ -1,7 +1,34 @@
 package app.antresol.mobile.ui.shell
 
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.core.content.ContextCompat
+import app.antresol.mobile.AntresolMobileApp
+import app.antresol.mobile.MainActivity
+import app.antresol.mobile.player.ResumeMode
+import app.antresol.mobile.player.VideoPlayerActivity
+import app.antresol.mobile.reader.ComicReaderScreen
+import app.antresol.mobile.reader.ComicReaderViewModel
+import app.antresol.mobile.reader.PdfReaderScreen
+import app.antresol.mobile.reader.PdfReaderViewModel
+import app.antresol.mobile.settings.AppSettings
+import app.antresol.mobile.ui.detail.BookAction
+import app.antresol.mobile.ui.music.SongsScreen
+import app.antresol.mobile.ui.music.SongsViewModel
+import app.antresol.mobile.ui.nowplaying.MiniPlayer
+import app.antresol.mobile.ui.nowplaying.MiniPlayerSpace
+import app.antresol.mobile.ui.nowplaying.NowPlayingScreen
+import app.antresol.mobile.ui.settings.SettingsScreen
+import app.antresol.mobile.ui.settings.SettingsViewModel
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -84,16 +111,38 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
         NavTab.entries.firstOrNull { destination.hasRoute(it.route::class) }?.let { currentTab = it }
     }
 
+    val app = context.applicationContext as AntresolMobileApp
+    val playback = app.playback
+    var showNowPlaying by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(playback) { playback.connect() }
+    LaunchedEffect(playback.nowPlayingRequested) {
+        if (playback.nowPlayingRequested) {
+            playback.nowPlayingRequested = false
+            if (playback.current != null) showNowPlaying = true
+        }
+    }
+    NotificationPermission(app.settings, asked = playback.current != null)
+
     val open: (Card) -> Unit = { card -> navController.navigate(DetailRoute(card)) }
+    val playVideo: (Long, ResumeMode) -> Unit = { id, mode -> VideoPlayerActivity.start(context, id, mode) }
+    val read: (BookAction) -> Unit = { action ->
+        when (action) {
+            is BookAction.ReadComic -> navController.navigate(ComicReaderRoute(action.volumeId))
+            is BookAction.ReadPdf -> navController.navigate(PdfReaderRoute(action.bookId))
+            else -> Unit
+        }
+    }
     val openGrid: OpenGrid = { source, title -> navController.navigate(GridRoute(source.encode(), title)) }
     val selectTab: (NavTab) -> Unit = { tab -> navController.selectTab(tab, reselect = tab == currentTab) }
     val back: () -> Unit = { navController.popBackStack() }
 
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val fullScreen = backStack?.destination?.let { it.hasRoute(ComicReaderRoute::class) || it.hasRoute(PdfReaderRoute::class) } == true
+    val miniPlayerSpace = if (playback.current != null) MiniPlayerSpace else 0.dp
     val user = state.user
     CompositionLocalProvider(
         LocalMediaUrls provides client.urls,
-        LocalBottomBarPadding provides PaddingValues(bottom = navBottom + BottomBarSpace),
+        LocalBottomBarPadding provides PaddingValues(bottom = navBottom + BottomBarSpace + miniPlayerSpace),
         LocalHeaderProfile provides HeaderProfile(
             name = user?.name ?: state.session.userName,
             avatar = user?.avatar ?: state.session.avatar,
@@ -114,8 +163,8 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                     HomeScreen(
                         viewModel = viewModel { LoadViewModel { HomeContent.from(client.home()) } },
                         onOpen = open,
-                        // Playback arrives with the next milestone; until then Play opens the detail page.
-                        onPlay = open,
+                        // Videos play (resuming); a hero album or book opens its page.
+                        onPlay = { card -> if (card.kind in VIDEO_KINDS) playVideo(card.id, ResumeMode.Resume) else open(card) },
                         onSeeAll = { shelf -> openGrid(GridSource.forShelf(ShelfPage.Home, shelf.id), shelf.title) },
                     )
                 }
@@ -138,6 +187,12 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         viewModel = viewModel { LoadViewModel { MusicHome(client.musicHome().shelves, client.genres().genres) } },
                         onOpen = open,
                         onGrid = openGrid,
+                        onSongs = { title -> navController.navigate(SongsRoute(title)) },
+                        onShuffleAll = {
+                            scope.launch {
+                                runCatching { client.shuffle().tracks }.onSuccess { playback.playTracks(it) }
+                            }
+                        },
                     )
                 }
                 composable<BooksRoute> {
@@ -171,21 +226,73 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                             viewModel = viewModel { ItemDetailViewModel(client, route.id) },
                             onOpen = open,
                             onBack = back,
+                            onPlay = playVideo,
                         )
                     } else {
                         MediaDetailScreen(
                             viewModel = viewModel { MediaDetailViewModel(client, route.kind, route.id) },
+                            playback = playback,
                             onOpen = open,
                             onBack = back,
+                            onRead = read,
                         )
                     }
                 }
+                composable<SongsRoute> { entry ->
+                    SongsScreen(
+                        viewModel = viewModel { SongsViewModel(client, starred = false) },
+                        title = entry.toRoute<SongsRoute>().title,
+                        playback = playback,
+                        onBack = back,
+                    )
+                }
+                composable<ComicReaderRoute> { entry ->
+                    val route = entry.toRoute<ComicReaderRoute>()
+                    ComicReaderScreen(
+                        viewModel = viewModel { ComicReaderViewModel(client, app.appScope, route.volumeId) },
+                        onBack = back,
+                        onOpenVolume = { next ->
+                            navController.navigate(ComicReaderRoute(next)) {
+                                popUpTo<ComicReaderRoute> { inclusive = true }
+                            }
+                        },
+                    )
+                }
+                composable<PdfReaderRoute> { entry ->
+                    val route = entry.toRoute<PdfReaderRoute>()
+                    PdfReaderScreen(
+                        viewModel = viewModel { PdfReaderViewModel(client, app.appScope, context.cacheDir, route.bookId) },
+                        onBack = back,
+                    )
+                }
+                composable<SettingsRoute> {
+                    val activity = LocalContext.current as? ComponentActivity
+                    SettingsScreen(
+                        viewModel = viewModel { SettingsViewModel(client) },
+                        settings = app.settings,
+                        session = state.session,
+                        user = user,
+                        onBack = back,
+                        onSwitchProfile = { scope.launch { session.switchProfile() } },
+                        onSignOut = { scope.launch { session.signOut() } },
+                        onChangeServer = { scope.launch { session.changeServer() } },
+                        onLanguageChanged = { activity?.let(MainActivity::restart) },
+                    )
+                }
             }
-            BottomBar(
-                selected = currentTab,
-                onSelect = selectTab,
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
+            if (!fullScreen) {
+                Column(Modifier.align(Alignment.BottomCenter), horizontalAlignment = Alignment.CenterHorizontally) {
+                    MiniPlayer(playback, onOpen = { showNowPlaying = true }, modifier = Modifier.padding(bottom = 8.dp))
+                    BottomBar(selected = currentTab, onSelect = selectTab)
+                }
+            }
+            AnimatedVisibility(
+                visible = showNowPlaying && playback.current != null,
+                enter = slideInVertically { it },
+                exit = slideOutVertically { it },
+            ) {
+                NowPlayingScreen(playback, client, onClose = { showNowPlaying = false })
+            }
         }
         if (showAccount) {
             AccountSheet(
@@ -204,8 +311,26 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                     showAccount = false
                     scope.launch { session.changeServer() }
                 },
+                onSettings = {
+                    showAccount = false
+                    navController.navigate(SettingsRoute)
+                },
             )
         }
+    }
+}
+
+/** Asks once (Android 13+) for the notification permission the media controls need, when something first plays. */
+@Composable
+private fun NotificationPermission(settings: AppSettings, asked: Boolean) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(asked) {
+        if (!asked || settings.notificationsAsked) return@LaunchedEffect
+        settings.markNotificationsAsked()
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (!granted) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
 

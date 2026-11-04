@@ -56,7 +56,12 @@ import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.mobile.ui.components.ErrorView
+import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.GlassPillButton
+import app.antresol.mobile.ui.components.PrimaryPillButton
+import app.antresol.mobile.player.ResumeMode
+import app.antresol.ui.components.AntresolIcons
+import androidx.compose.foundation.layout.widthIn
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PageGutter
@@ -85,7 +90,12 @@ import app.antresol.ui.R as UiR
  * (each with its own watched toggle), file details and cast.
  */
 @Composable
-fun VideoDetailScreen(viewModel: ItemDetailViewModel, onOpen: (Card) -> Unit, onBack: () -> Unit) {
+fun VideoDetailScreen(
+    viewModel: ItemDetailViewModel,
+    onOpen: (Card) -> Unit,
+    onBack: () -> Unit,
+    onPlay: (itemId: Long, mode: ResumeMode) -> Unit,
+) {
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
         onPauseOrDispose { }
@@ -96,7 +106,7 @@ fun VideoDetailScreen(viewModel: ItemDetailViewModel, onOpen: (Card) -> Unit, on
         when (val state = viewModel.state) {
             LoadState.Loading -> DetailStateBox(onBack) { LoadingView() }
             is LoadState.Failed -> DetailStateBox(onBack) { ErrorView(state.error, onRetry = viewModel::reload) }
-            is LoadState.Ready -> VideoDetailContent(state.value, viewModel, onOpen, onBack)
+            is LoadState.Ready -> VideoDetailContent(state.value, viewModel, onOpen, onBack, onPlay)
         }
         SnackbarHost(
             snackbar,
@@ -113,6 +123,7 @@ private fun VideoDetailContent(
     viewModel: ItemDetailViewModel,
     onOpen: (Card) -> Unit,
     onBack: () -> Unit,
+    onPlay: (itemId: Long, mode: ResumeMode) -> Unit,
 ) {
     val item = detail.item
     val urls = LocalMediaUrls.current
@@ -160,6 +171,9 @@ private fun VideoDetailContent(
                 BadgeRow(item.badges, max = 4)
             }
         }
+        detail.playTarget?.let { target ->
+            item("play") { PlayRow(target, onPlay) }
+        }
         item("actions") {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 16.dp),
@@ -188,7 +202,7 @@ private fun VideoDetailContent(
         item.next?.takeIf { item.kind == Kind.SERIES }?.let { next ->
             item("next") {
                 SectionTitle(stringResource(R.string.detail_up_next), Modifier.padding(top = 12.dp))
-                EpisodeRow(next, onOpen = { onOpen(next.toCard()) }, onToggleWatched = { viewModel.toggleEpisodeWatched(next) })
+                EpisodeRow(next, onOpen = { onOpen(next.toCard()) }, onPlay = { onPlay(next.id, ResumeMode.Ask) }, onToggleWatched = { viewModel.toggleEpisodeWatched(next) })
             }
         }
         if (season != null) {
@@ -208,7 +222,7 @@ private fun VideoDetailContent(
                 }
             }
             items(season.episodes, key = { "episode-${it.id}" }) { episode ->
-                EpisodeRow(episode, onOpen = { onOpen(episode.toCard()) }, onToggleWatched = { viewModel.toggleEpisodeWatched(episode) })
+                EpisodeRow(episode, onOpen = { onOpen(episode.toCard()) }, onPlay = { onPlay(episode.id, ResumeMode.Ask) }, onToggleWatched = { viewModel.toggleEpisodeWatched(episode) })
             }
         }
         item.files.firstOrNull()?.let { file -> item("file") { FileDetails(file) } }
@@ -230,9 +244,45 @@ private fun SeasonWatchedToggle(season: SeasonInfo, onToggle: () -> Unit) {
     )
 }
 
-/** An episode: still with progress, "S1 · E2", title, length and overview, and a watched toggle. */
+/** The white Play/Resume pill ("Resume S1 E3" for a series) and, when resuming, Play from Beginning. */
 @Composable
-private fun EpisodeRow(episode: EpisodeCard, onOpen: () -> Unit, onToggleWatched: () -> Unit) {
+private fun PlayRow(target: PlayTarget, onPlay: (itemId: Long, mode: ResumeMode) -> Unit) {
+    val episode = target.episode
+    val label = when {
+        episode != null && target.resume -> stringResource(UiR.string.detail_resume_episode, episode.seasonNo, episode.episodeNo)
+        episode != null -> stringResource(UiR.string.detail_play_episode, episode.seasonNo, episode.episodeNo)
+        target.resume -> stringResource(UiR.string.action_resume)
+        else -> stringResource(UiR.string.action_play)
+    }
+    val wide = LocalConfiguration.current.screenWidthDp >= 600
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = PageGutter, end = PageGutter, top = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PrimaryPillButton(
+            text = label,
+            icon = AntresolIcons.Play,
+            onClick = { onPlay(target.itemId, ResumeMode.Resume) },
+            modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.weight(1f)).testTag("detail-play"),
+        )
+        if (target.resume) {
+            GlassIconButton(
+                icon = AntresolIcons.Restart,
+                contentDescription = stringResource(UiR.string.action_play_from_start),
+                onClick = { onPlay(target.itemId, ResumeMode.FromStart) },
+                modifier = Modifier.size(50.dp).testTag("detail-play-from-start"),
+            )
+        }
+    }
+}
+
+/**
+ * An episode: still with progress (tap to play), "S1 · E2", title, length and overview (tap for
+ * the episode page), and a watched toggle.
+ */
+@Composable
+private fun EpisodeRow(episode: EpisodeCard, onOpen: () -> Unit, onPlay: () -> Unit, onToggleWatched: () -> Unit) {
     val urls = LocalMediaUrls.current
     val wide = LocalConfiguration.current.screenWidthDp >= 600
     val toggleLabel = stringResource(if (episode.watched) UiR.string.action_mark_unwatched else UiR.string.action_mark_watched)
@@ -248,8 +298,22 @@ private fun EpisodeRow(episode: EpisodeCard, onOpen: () -> Unit, onToggleWatched
             url = urls?.image(episode.backdrop.ifBlank { episode.poster }),
             title = episode.title,
             shape = AntresolShapes.smallCard,
-            modifier = Modifier.width(if (wide) 200.dp else 136.dp).aspectRatio(AntresolMotion.BACKDROP_ASPECT),
+            modifier = Modifier
+                .width(if (wide) 200.dp else 136.dp)
+                .aspectRatio(AntresolMotion.BACKDROP_ASPECT)
+                .clip(AntresolShapes.smallCard)
+                .clickable(onClick = onPlay)
+                .testTag("episode-play-${episode.id}"),
         ) {
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(34.dp)
+                    .background(AntresolColors.Glass.copy(alpha = 0.7f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(AntresolIcons.Play, contentDescription = stringResource(UiR.string.action_play), tint = AntresolColors.Label, modifier = Modifier.size(16.dp))
+            }
             if (episode.progress > 0.0 && !episode.watched) {
                 ProgressBar(episode.progress.toFloat(), Modifier.align(Alignment.BottomCenter).padding(8.dp))
             }

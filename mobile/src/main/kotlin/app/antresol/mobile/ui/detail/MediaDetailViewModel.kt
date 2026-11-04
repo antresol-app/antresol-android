@@ -12,6 +12,7 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Chapter
 import app.antresol.core.model.Kind
 import app.antresol.core.model.PlaylistDetail
+import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.Track
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LoadViewModel
@@ -38,6 +39,8 @@ data class MediaDetail(
     val rows: List<RelatedRow> = emptyList(),
     /** Books, audiobooks and comic series: the "want" flag (watchlist API); null = not offered. */
     val want: Boolean? = null,
+    /** The book behind a book, audiobook or comic page (files, progress, volumes). */
+    val book: BookDetail? = null,
 )
 
 /** Loads the detail of a music or book card through the matching endpoint. */
@@ -49,6 +52,19 @@ class MediaDetailViewModel(private val client: AntresolClient, kind: String, pri
 
     fun consumeFailure() {
         failed = false
+    }
+
+    /** Artist pages: shuffle everything by the artist (`/api/music/shuffle?artistId=`). */
+    fun shuffleArtist(play: (List<Track>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                play(client.shuffle(ShuffleSource.Artist(id)).tracks)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                failed = true
+            }
+        }
     }
 
     fun toggleWant() {
@@ -117,5 +133,6 @@ private fun BookDetail.toDetail(): MediaDetail {
         rows = listOf(RelatedRow("volumes", app.antresol.ui.R.string.detail_volumes, volumes.map { it.toCard() }))
             .filter { it.cards.isNotEmpty() },
         want = if (isVolume) null else want,
+        book = this,
     )
 }

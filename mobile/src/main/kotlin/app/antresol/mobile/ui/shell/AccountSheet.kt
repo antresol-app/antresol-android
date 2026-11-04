@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import app.antresol.core.model.Me
 import app.antresol.core.session.StoredSession
 import app.antresol.mobile.R
+import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
@@ -35,7 +36,7 @@ import app.antresol.ui.theme.AntresolShapes
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import app.antresol.ui.R as UiR
 
-/** The avatar's sheet: who is signed in where, Switch Profile, Sign Out and Change Server. */
+/** The avatar's sheet: who is signed in where, Settings, Switch Profile, Change Server and Sign Out. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountSheet(
@@ -45,6 +46,7 @@ fun AccountSheet(
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
     onChangeServer: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -73,6 +75,7 @@ fun AccountSheet(
                 }
             }
             HorizontalDivider(color = AntresolColors.Hairline, modifier = Modifier.padding(vertical = 8.dp))
+            SheetAction(MobileIcons.Gear, stringResource(UiR.string.nav_settings), AntresolColors.Label, onSettings, "account-settings")
             SheetAction(AntresolIcons.SwitchProfile, stringResource(UiR.string.profile_switch), AntresolColors.Label, onSwitchProfile, "account-switch")
             SheetAction(AntresolIcons.Server, stringResource(UiR.string.server_change), AntresolColors.Label, onChangeServer, "account-server")
             SheetAction(AntresolIcons.SignOut, stringResource(UiR.string.profile_sign_out), AntresolColors.Red, onSignOut, "account-sign-out")

@@ -39,6 +39,21 @@ data class DetailRoute(val kind: String, val id: Long) {
 @Serializable
 data class GridRoute(val source: String, val title: String)
 
+/** Every song, paged; [title] is the page title. */
+@Serializable
+data class SongsRoute(val title: String)
+
+@Serializable
+data object SettingsRoute
+
+/** The comic reader for volume [volumeId]; full screen without the tab bar. */
+@Serializable
+data class ComicReaderRoute(val volumeId: Long)
+
+/** The PDF reader for book [bookId]; full screen without the tab bar. */
+@Serializable
+data class PdfReaderRoute(val bookId: Long)
+
 /** The bottom bar tabs in display order; Search sits in its own round button next to the pill. */
 enum class NavTab(val route: Any, @StringRes val label: Int, val icon: ImageVector) {
     Home(HomeRoute, R.string.nav_home, MobileIcons.Home),

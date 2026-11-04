@@ -52,18 +52,22 @@ data class AntresolTypography(
             avatarInitial = style(22, FontWeight.Bold),
         )
 
+        /**
+         * TV sizes in sp for the 960×540 dp TV canvas: roughly half the web app's 1920 px values,
+         * nudged up for 10-foot reading.
+         */
         val tv = AntresolTypography(
-            heroTitle = style(64, FontWeight.Bold, -0.025, 1.04),
-            pageTitle = style(44, FontWeight.Bold, -0.02, 1.08),
-            sectionTitle = style(26, FontWeight.Bold, -0.01),
-            eyebrow = style(15, FontWeight.SemiBold, 0.08).copy(color = AntresolColors.LabelSecondary),
-            title = style(18, FontWeight.SemiBold),
-            body = style(18, FontWeight.Normal, lineHeight = 1.4),
-            bodyEmphasis = style(18, FontWeight.SemiBold, lineHeight = 1.4),
-            caption = style(15, FontWeight.Normal).copy(color = AntresolColors.LabelSecondary),
-            badge = style(13, FontWeight.SemiBold, 0.02),
-            button = style(19, FontWeight.SemiBold),
-            avatarInitial = style(40, FontWeight.Bold),
+            heroTitle = style(46, FontWeight.Bold, -0.025, 1.05),
+            pageTitle = style(32, FontWeight.Bold, -0.02, 1.1),
+            sectionTitle = style(19, FontWeight.Bold, -0.01),
+            eyebrow = style(11, FontWeight.SemiBold, 0.08).copy(color = AntresolColors.LabelSecondary),
+            title = style(14, FontWeight.SemiBold),
+            body = style(14, FontWeight.Normal, lineHeight = 1.4),
+            bodyEmphasis = style(14, FontWeight.SemiBold, lineHeight = 1.4),
+            caption = style(12, FontWeight.Normal).copy(color = AntresolColors.LabelSecondary),
+            badge = style(10, FontWeight.SemiBold, 0.02),
+            button = style(15, FontWeight.SemiBold),
+            avatarInitial = style(30, FontWeight.Bold),
         )
     }
 }

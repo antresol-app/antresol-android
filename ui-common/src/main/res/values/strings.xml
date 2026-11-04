@@ -92,4 +92,28 @@
     <string name="duration_left">%1$s left</string>
     <string name="track_number">Track %1$d</string>
     <string name="subtitle_forced">%1$s (Forced)</string>
+    <!-- Onboarding and account -->
+    <string name="server_subtitle">Enter the address of the computer running Antresol. The default port 8420 is added for you.</string>
+    <string name="server_connecting">Connecting…</string>
+    <string name="server_invalid_address">That doesn’t look like a server address.</string>
+    <string name="server_not_antresol">This address answers, but it isn’t an Antresol server.</string>
+    <string name="server_needs_setup">The server isn’t set up yet. Open it in a browser to create the first account, then try again.</string>
+    <string name="server_change">Change Server</string>
+    <string name="server_connected_to">Connected to %1$s</string>
+    <string name="password_title">Enter the password for %1$s</string>
+    <string name="password_show_keyboard">Press OK to type</string>
+    <string name="account_admin">Administrator</string>
+    <string name="home_empty">Your library is empty. Add media on the server and it will show up here.</string>
+    <string name="search_section_library">Movies &amp; TV Shows</string>
+    <string name="search_section_albums">Albums</string>
+    <string name="search_section_artists">Artists</string>
+    <string name="search_section_songs">Songs</string>
+    <string name="search_section_audiobooks">Audiobooks</string>
+    <string name="search_section_books">Books</string>
+    <string name="search_section_comics">Comics</string>
+    <string name="search_prompt">Find movies, shows, music and books in your library.</string>
+    <string name="detail_volumes">Volumes</string>
+    <string name="detail_albums">Albums</string>
+    <string name="detail_appears_on">Appears On</string>
+    <string name="detail_song_count">%1$d songs</string>
 </resources>

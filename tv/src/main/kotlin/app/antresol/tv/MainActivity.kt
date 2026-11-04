@@ -6,7 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
-import app.antresol.ui.components.BrandSplash
+import app.antresol.tv.ui.root.AntresolTvRoot
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolTheme
 import app.antresol.ui.theme.AntresolTypography
@@ -14,9 +14,10 @@ import app.antresol.ui.theme.AntresolTypography
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val session = (application as AntresolTvApp).session
         setContent {
             AntresolTvTheme {
-                BrandSplash()
+                AntresolTvRoot(session)
             }
         }
     }

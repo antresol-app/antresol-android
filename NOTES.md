@@ -85,3 +85,61 @@ Running log between milestones. Newest entries at the bottom.
 - SSE (`/api/events`) and admin endpoints (settings, users, scan trigger, app passwords) are not wrapped;
   `libraryStatus()` is. Not needed by the TV/phone clients so far.
 - `:ui-common` has no unit tests (formatters use Android resources).
+
+## TV milestone 1 — onboarding, profiles, shell, home
+
+### `:core`
+- `session/SessionManager` (shared with `:mobile`): owns the `AntresolClient` and an `AuthState` flow
+  (`Starting` → `NoServer` → `ChooseProfile` → `SignedIn`). `restore()` re-uses the stored token (validated
+  with `/api/me`; offline keeps the stored session), `connect(address)` validates `/api/health` + `/api/setup`
+  (`NotAntresolServerException`, `ServerNeedsSetupException`), `resume(profile)` / `signIn(profile, password)`,
+  `switchProfile()`, `signOut()` (best-effort `/api/logout`), `changeServer()`. A 401 for the active token
+  forgets it and returns to `ChooseProfile(notice = SessionExpired)`.
+- `SessionState` gained `serverId`, `connected()`, `disconnected()`. 9 new unit tests (`SessionManagerTest`).
+- Decision: saved tokens are re-used only for **passwordless** profiles; switching into a password profile always
+  asks for the password (a shared TV must not let a kid hop into the admin profile). The active session still
+  survives app restarts.
+
+### `:ui-common`
+- `AntresolTypography.tv` re-scaled for the 960×540 dp TV canvas (about half the web's 1920 px sizes).
+- `components/AntresolIcons` (24-grid line icons: search, info, chevron, lock, server, sign-out, profile, play).
+- `image/ArtworkTint` + `rememberArtworkTint(url, fallback)`: vivid, readable tint from artwork (hero glow).
+- New EN/RU strings: server/onboarding errors, password, account, home empty, search sections, detail rows.
+
+### `:tv` (package `app.antresol.tv`)
+- `AntresolTvApp` builds the `SessionManager` (DataStore store, device name `Android TV (<Build.MODEL>)`,
+  `Accept-Language` from the system locale) and is Coil's `ImageLoaderFactory` (Bearer images).
+- `ui/root/AntresolTvRoot`: crossfades splash → `ServerScreen` → `ProfilesScreen` (avatars, lock icon,
+  password step, "Change Server") → `MainShell` (keyed per profile, so a switch resets navigation).
+- `ui/shell`: type-safe navigation-compose routes (`Routes.kt`), `TopNav` (brand, centred glass pill: search icon,
+  Home, Movies, TV Shows, Music, Books; avatar → `AccountScreen`). Tabs switch on OK with save/restore state.
+  Entering the pill from the content lands on the current tab. The nav fades out while content is scrolled
+  and returns when focused. Detail pages hide it.
+- `ui/home`: hero (backdrop + artwork-tinted glow, eyebrow "NEW IN LIBRARY · MOVIE", huge title, year/badges,
+  white Play/Resume + glass Details pills, rotation every 10 s while the hero is focused, dots), Continue
+  Watching as 16:9 wide cards with progress, every non-empty `/api/home` shelf (albums square, others 2:3).
+  When the server sends no hero, the first video card of Continue/Recent/Watchlist is used.
+- Focus: initial focus on hero Play; `FocusMemory` (rememberSaveable keys) restores the focused card after Back;
+  rows use `focusRestorer` (up/down returns to the row's last card) and `trapHorizontalFocus()` (Left/Right at a
+  row end stays in the row); `VerticalShelfScrolling`/`HorizontalRowScrolling` keep the focused card inside a
+  comfortable zone (captions stay visible). Back deep in Home returns to the hero first. Screens never steal
+  focus from the nav (switching tabs keeps focus on the pill).
+- Also usable already: Movies / TV Shows grids (sort pills, paging), Music / Books shelf pages, Search
+  (debounced, sections; songs open their album), a basic detail page for every card kind (backdrop/artwork,
+  meta, overview, seasons → episode rows, artist albums, comic volumes), Account (switch profile, sign out,
+  change server).
+- Tests: `HomeContentTest` (JVM). `TvLiveUiTest` (Robolectric, NATIVE graphics) drives the real UI against the
+  live server with D-pad key events — server entry (error + success), profile picker, password, Play focused,
+  shelves, detail, Back focus restore, row focus restore, nav entry on the current tab, Movies, Music — and writes
+  screenshots to `tv/build/screenshots/`. Run: `ANTRESOL_TEST_SERVER=1 ./gradlew :tv:testDebugUnitTest`
+  (excluded otherwise). Robolectric fetches `android-all-instrumented` 14 and 15 from Maven Central; in this
+  container I pre-downloaded them into `~/.m2/repository` from the Google mirror.
+- CI now runs `:core:test :tv:testDebugUnitTest assembleDebug`. `:tv:assembleRelease` (R8) also builds.
+
+### Known gaps (for TV milestones 2–3)
+- **No player yet**: hero Play/Resume and Continue Watching cards open the detail page. Milestone 2 should route
+  `onPlay` in `MainShell` to the player.
+- Detail page is basic (no Play/watchlist/watched actions, no track lists, no cast, no audio/subtitle pickers).
+- Tokens are stored in app-private DataStore, not encrypted with the Keystore (nice-to-have).
+- No on-device run was possible (no emulator/KVM here); behaviour was verified with Robolectric only.
+- Account page is minimal; settings (language override, quality, devices) belong to milestone 3.

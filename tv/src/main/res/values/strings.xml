@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Antresol</string>
+    <!-- Device name shown in the server's device list. %1$s = TV model. -->
+    <string name="device_name" translatable="false">Android TV (%1$s)</string>
 </resources>

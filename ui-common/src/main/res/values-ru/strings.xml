@@ -90,4 +90,28 @@
     <string name="duration_left">Осталось %1$s</string>
     <string name="track_number">Дорожка %1$d</string>
     <string name="subtitle_forced">%1$s (форсированные)</string>
+    <!-- Подключение и учётная запись -->
+    <string name="server_subtitle">Введите адрес компьютера, на котором работает Antresol. Порт 8420 добавится сам.</string>
+    <string name="server_connecting">Подключение…</string>
+    <string name="server_invalid_address">Это не похоже на адрес сервера.</string>
+    <string name="server_not_antresol">По этому адресу отвечает не сервер Antresol.</string>
+    <string name="server_needs_setup">Сервер ещё не настроен. Откройте его в браузере, создайте первую учётную запись и попробуйте снова.</string>
+    <string name="server_change">Сменить сервер</string>
+    <string name="server_connected_to">Подключено к %1$s</string>
+    <string name="password_title">Введите пароль профиля %1$s</string>
+    <string name="password_show_keyboard">Нажмите OK, чтобы ввести</string>
+    <string name="account_admin">Администратор</string>
+    <string name="home_empty">Медиатека пуста. Добавьте файлы на сервер, и они появятся здесь.</string>
+    <string name="search_section_library">Фильмы и сериалы</string>
+    <string name="search_section_albums">Альбомы</string>
+    <string name="search_section_artists">Исполнители</string>
+    <string name="search_section_songs">Песни</string>
+    <string name="search_section_audiobooks">Аудиокниги</string>
+    <string name="search_section_books">Книги</string>
+    <string name="search_section_comics">Комиксы</string>
+    <string name="search_prompt">Ищите фильмы, сериалы, музыку и книги в своей медиатеке.</string>
+    <string name="detail_volumes">Тома</string>
+    <string name="detail_albums">Альбомы</string>
+    <string name="detail_appears_on">Участвует в</string>
+    <string name="detail_song_count">Песен: %1$d</string>
 </resources>

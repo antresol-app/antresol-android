@@ -20,15 +20,25 @@ data class StoredSession(
 @Serializable
 data class SessionState(
     val serverUrl: String? = null,
+    /** `serverId` from `/api/health` of [serverUrl]; keys the saved tokens. */
+    val serverId: String? = null,
     val active: StoredSession? = null,
     val saved: List<StoredSession> = emptyList(),
 ) {
     fun tokenFor(serverId: String, userId: Long): StoredSession? =
         saved.firstOrNull { it.serverId == serverId && it.userId == userId }
 
+    /** Points the app at a validated server with no profile signed in. Saved tokens are kept. */
+    fun connected(serverUrl: String, serverId: String): SessionState =
+        copy(serverUrl = serverUrl, serverId = serverId, active = null)
+
+    /** Forgets the current server (the user wants to enter another address). */
+    fun disconnected(): SessionState = copy(serverUrl = null, serverId = null, active = null)
+
     /** Makes [session] the active one and remembers it for later profile switches. */
     fun signedIn(session: StoredSession): SessionState = copy(
         serverUrl = session.serverUrl,
+        serverId = session.serverId,
         active = session,
         saved = saved.filterNot { it.serverId == session.serverId && it.userId == session.userId } + session,
     )

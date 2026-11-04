@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -34,6 +35,18 @@ android {
         compose = true
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // The Robolectric UI test drives the app against a live server; it runs only when
+            // ANTRESOL_TEST_SERVER is set (see NOTES.md), so CI does not download Android runtimes for it.
+            val liveServer = System.getenv("ANTRESOL_TEST_SERVER") ?: ""
+            it.inputs.property("antresolTestServer", liveServer)
+            if (liveServer.isEmpty()) it.filter.excludeTestsMatching("*LiveUiTest")
+            it.maxHeapSize = "2g"
+        }
+    }
 }
 
 kotlin {
@@ -54,4 +67,12 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.tv.material)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

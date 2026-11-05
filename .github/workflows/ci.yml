@@ -16,4 +16,4 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
       - name: Unit tests and debug builds
-        run: ./gradlew --no-daemon :core:test :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug
+        run: ./gradlew --no-daemon :core:test :ui-common:testDebugUnitTest :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug

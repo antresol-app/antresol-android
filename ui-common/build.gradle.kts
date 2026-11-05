@@ -24,6 +24,10 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests.all { it.maxHeapSize = "1g" }
+    }
 }
 
 kotlin {
@@ -48,4 +52,9 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

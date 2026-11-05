@@ -849,3 +849,13 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
 - The faint rectangle behind the focused profile circle on TV is how Robolectric draws the tv-material glow; not
   checked on a device.
 - Hero/now-playing artwork in some shots is still mid-crossfade (Robolectric clock), showing the placeholder.
+
+## Play listing graphics
+
+- `scripts/render-store-graphics.js` (Playwright/Chromium, Inter font) renders into
+  `{mobile,tv}/fastlane/metadata/android/{en-US,ru-RU}/images/`: `icon.png` 512×512 (full-bleed `app-icon.svg`,
+  re-encoded as RGBA because Chromium writes opaque PNGs as 24-bit and Play wants 32-bit), `featureGraphic.png`
+  1024×500 and, for TV, `tvBanner.png` 1280×720 (gradient + mark + wordmark + localized tagline).
+- Screenshots: phone shots are framed 1080×1920 with localized captions (raw 1080×2400 exceeds Play's 2:1 aspect
+  limit); tablet (`tenInchScreenshots/`) and TV (`tvScreenshots/`) gallery shots are copied unchanged. Selections
+  and captions are lists at the top of the script. Details and caveats in `docs/PLAY_STORE.md` → Graphics.

@@ -14,17 +14,26 @@ uploaded with `fastlane supply --metadata_path mobile/fastlane/metadata/android 
 versionCode, so copy the text to `changelogs/<versionCode>.txt` (or `default.txt`) for the build you upload.
 The copy follows the server README: the app needs the user's own Antresol server and provides no content.
 
-## Graphics still to make
+## Graphics
 
-- **Both**: 512×512 icon (from `docs/design-ref/logo-mark.svg` on the brand gradient, like the launcher icon),
-  1024×500 feature graphic.
-- **Phone**: at least 2 phone screenshots; 7" and 10" tablet screenshots. Candidates from the Robolectric gallery:
-  `docs/screenshots/mobile/phone-*.png` (1080×2400) and `docs/screenshots/mobile/tablet-*.png` (2048×1536).
-- **TV**: Play requires TV screenshots (1920×1080) and a TV banner (1280×720). The app already has its leanback
-  banner (`tv/src/main/res/drawable-xhdpi/tv_banner.png`, 320×180, set as `android:banner`); export a 1280×720
-  version of it for the listing. Candidates: `docs/screenshots/tv/*.png` (1920×1080). Replace the gallery shots with
-  shots from a real device before publishing if possible: the Robolectric shots use the test server's library,
-  which has no posters.
+All listing graphics are in the fastlane trees next to the text (`<app>/fastlane/metadata/android/<locale>/images/`),
+so `fastlane supply` uploads them with the listing. They are rendered by `scripts/render-store-graphics.js`
+(Playwright + Chromium, `node scripts/render-store-graphics.js`); re-run it after the logo, the tagline or the
+gallery changes. Both locales (en-US, ru-RU) of both apps have:
+
+- `icon.png` 512×512, 32-bit RGBA PNG, full-bleed square from `docs/design-ref/app-icon.svg` (Play applies the mask).
+- `featureGraphic.png` 1024×500: brand gradient, logo mark, "Antresol" and the localized tagline, centred
+  (en "Your films, music and books. One library.", ru "Твои фильмы. Твоя музыка. Твои книги. В одной библиотеке.").
+- **Phone app**: `phoneScreenshots/` — 8 gallery shots framed on the brand gradient with a localized caption,
+  1080×1920 (the raw 1080×2400 gallery shots are taller than Play's 2:1 limit, so they cannot be uploaded as they
+  are); `tenInchScreenshots/` — 8 tablet shots (2048×1536) copied as they are.
+- **TV app**: `tvBanner.png` 1280×720 in the feature-graphic style; `tvScreenshots/` — 8 gallery shots
+  (1920×1080) copied as they are.
+
+Caveats: the screenshots come from the Robolectric gallery (English UI, test library without posters), so the
+ru-RU listing shows English UI under Russian captions. Replace them with shots from a real device and a real
+library (and Russian UI for ru-RU) before publishing if possible, then re-run the script. No 7" tablet set is
+made; Play accepts the 10" set for tablets.
 
 ## Android TV review notes
 

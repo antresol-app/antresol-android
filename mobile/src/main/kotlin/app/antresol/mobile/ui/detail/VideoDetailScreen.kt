@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
@@ -58,6 +59,7 @@ import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.GlassPillButton
+import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.player.ResumeMode
 import app.antresol.ui.components.AntresolIcons
@@ -158,7 +160,25 @@ private fun VideoDetailContent(
             ) {
                 Spacer(Modifier.height(artHeight - 120.dp))
                 val eyebrow = if (item.kind == Kind.EPISODE) item.subtitle else kindLabel(item.kind).orEmpty()
-                if (eyebrow.isNotBlank()) Text(eyebrow.uppercase(Locale.getDefault()), style = Antresol.typography.eyebrow)
+                val seriesId = item.seriesId?.takeIf { it > 0 && (item.kind == Kind.EPISODE || item.kind == Kind.SEASON) }
+                if (seriesId != null) {
+                    // Episodes and seasons lead back to their show (opened from search or Continue Watching).
+                    val goToSeries = stringResource(R.string.detail_go_to_series)
+                    Row(
+                        modifier = Modifier
+                            .clip(AntresolShapes.pill)
+                            .focusClickable(AntresolShapes.pill) { onOpen(Card(id = seriesId, kind = Kind.SERIES, title = "")) }
+                            .semantics { contentDescription = goToSeries }
+                            .padding(vertical = 4.dp)
+                            .testTag("detail-go-to-series"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(eyebrow.ifBlank { goToSeries }.uppercase(Locale.getDefault()), style = Antresol.typography.eyebrow)
+                        Icon(AntresolIcons.ChevronRight, contentDescription = null, tint = AntresolColors.LabelSecondary, modifier = Modifier.size(16.dp))
+                    }
+                } else if (eyebrow.isNotBlank()) {
+                    Text(eyebrow.uppercase(Locale.getDefault()), style = Antresol.typography.eyebrow)
+                }
                 Text(item.title, style = Antresol.typography.heroTitle, modifier = Modifier.testTag("detail-title"))
                 val runtime = item.runtime?.let { it * 60_000L } ?: item.files.firstOrNull()?.durationMs
                 val meta = listOfNotNull(
@@ -371,7 +391,8 @@ private fun CastRow(cast: List<CastMember>) {
             contentPadding = PaddingValues(horizontal = PageGutter),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            items(cast, key = { it.name + it.character.orEmpty() }) { member ->
+            // The same person can be listed twice: the position keeps keys unique.
+            itemsIndexed(cast, key = { index, member -> "$index-${member.name}" }) { _, member ->
                 Column(Modifier.width(84.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     ProfileAvatar(name = member.name, avatar = AntresolGradients.avatarIds[Math.floorMod(member.name.hashCode(), AntresolGradients.avatarIds.size)], size = 64.dp)
                     Text(member.name, style = Antresol.typography.caption.copy(color = AntresolColors.Label), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))

@@ -145,7 +145,7 @@ class AntresolClientTest {
         assertEquals("/api/play/12", request.path)
         val body = takeJson(request)
         assertEquals(setOf("caps", "startSec", "audioIndex"), body.keys)
-        assertEquals(listOf("mp4", "mkv", "webm"), body["caps"]!!.jsonObject["containers"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("mp4", "mov", "mkv", "webm"), body["caps"]!!.jsonObject["containers"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertFalse(body["caps"]!!.jsonObject.containsKey("maxHeight"))
     }
 

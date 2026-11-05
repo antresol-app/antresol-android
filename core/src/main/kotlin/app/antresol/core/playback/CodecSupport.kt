@@ -24,7 +24,7 @@ object CodecSupport {
         "eac3" to "audio/eac3",
     )
 
-    val CONTAINERS: List<String> = listOf("mp4", "mkv", "webm")
+    val CONTAINERS: List<String> = listOf("mp4", "mov", "mkv", "webm")
 
     /**
      * [decoderMimes]: lower-case MIME types with a decoder. [passthrough]: API codec names

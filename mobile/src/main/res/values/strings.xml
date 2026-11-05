@@ -111,4 +111,7 @@
     <string name="confirm_sign_out_body">This device forgets the profile. You will have to choose it (and enter its password) again.</string>
     <string name="confirm_change_server_title">Change server?</string>
     <string name="confirm_change_server_body">You will go back to entering a server address. Your profiles stay signed in.</string>
+    <string name="reader_page_failed">Page %1$d couldn’t be loaded.</string>
+    <string name="detail_go_to_series">Go to Series</string>
+    <string name="settings_revoke_failed">Couldn’t sign that device out. Check the connection and try again.</string>
 </resources>

@@ -109,4 +109,7 @@
     <string name="confirm_sign_out_body">Устройство забудет профиль. Его придётся снова выбрать (и ввести пароль).</string>
     <string name="confirm_change_server_title">Сменить сервер?</string>
     <string name="confirm_change_server_body">Вы вернётесь к вводу адреса сервера. Вход в профили сохранится.</string>
+    <string name="reader_page_failed">Не удалось загрузить страницу %1$d.</string>
+    <string name="detail_go_to_series">К сериалу</string>
+    <string name="settings_revoke_failed">Не удалось выйти на этом устройстве. Проверьте подключение и попробуйте снова.</string>
 </resources>

@@ -149,7 +149,7 @@ class MobileLiveUiTest {
         shot("phone-12-search-results")
 
         // Avatar → account sheet → switch profile.
-        compose.onAllNodes(hasContentDescription("Admin")).onFirst().performClick()
+        compose.onAllNodes(hasContentDescription("Account: Admin")).onFirst().performClick()
         waitFor(hasTestTag("account-switch"))
         shot("phone-13-account")
         compose.onNode(hasTestTag("account-switch")).performClick()

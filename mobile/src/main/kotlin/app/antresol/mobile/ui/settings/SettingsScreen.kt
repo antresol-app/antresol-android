@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -52,9 +54,11 @@ import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LoadViewModel
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.components.BackBar
+import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.SegmentedPills
+import app.antresol.mobile.ui.detail.NoticeSnackbar
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
@@ -69,6 +73,14 @@ import app.antresol.ui.R as UiR
 data class ServerInfo(val health: Health?, val devices: List<DeviceSession>)
 
 class SettingsViewModel(private val client: AntresolClient) : LoadViewModel<ServerInfo>(fetch = { fetchInfo(client) }) {
+    /** A string resource to show once (a revoke failed); the screen calls [consumeNotice]. */
+    var notice: Int? by mutableStateOf(null)
+        private set
+
+    fun consumeNotice() {
+        notice = null
+    }
+
     /** Signs another device out of this profile, then refreshes the list. */
     fun revoke(device: DeviceSession) {
         viewModelScope.launch {
@@ -77,7 +89,7 @@ class SettingsViewModel(private val client: AntresolClient) : LoadViewModel<Serv
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // The refreshed list shows whether it worked.
+                notice = R.string.settings_revoke_failed
             }
             refresh(force = true)
         }
@@ -110,6 +122,8 @@ fun SettingsScreen(
 ) {
     var qualitySheet by remember { mutableStateOf(false) }
     var revoking by remember { mutableStateOf<DeviceSession?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    NoticeSnackbar(viewModel.notice, snackbar, viewModel::consumeNotice)
     val bottom = LocalBottomBarPadding.current
     Box(Modifier.fillMaxSize().background(AntresolColors.Background)) {
         LazyColumn(
@@ -186,7 +200,7 @@ fun SettingsScreen(
             header(R.string.settings_devices)
             when (val state = viewModel.state) {
                 LoadState.Loading -> item("devices-loading") { Text(stringResource(UiR.string.state_loading), style = Antresol.typography.caption, modifier = Modifier.padding(horizontal = PageGutter)) }
-                is LoadState.Failed -> item("devices-failed") { Text(stringResource(UiR.string.error_generic), style = Antresol.typography.caption, modifier = Modifier.padding(horizontal = PageGutter)) }
+                is LoadState.Failed -> item("devices-failed") { ErrorView(state.error, onRetry = viewModel::reload) }
                 is LoadState.Ready -> group {
                     state.value.devices.forEachIndexed { index, device ->
                         if (index > 0) Divider()
@@ -200,6 +214,7 @@ fun SettingsScreen(
                 ValueRow(stringResource(R.string.settings_app_version), BuildConfig.VERSION_NAME)
             }
         }
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom))
     }
     if (qualitySheet) {
         QualityDialog(settings.videoQuality, onSelect = { settings.updateVideoQuality(it); qualitySheet = false }, onDismiss = { qualitySheet = false })

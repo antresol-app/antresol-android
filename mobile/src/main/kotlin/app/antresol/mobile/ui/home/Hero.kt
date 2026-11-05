@@ -23,7 +23,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
@@ -118,7 +123,8 @@ private fun HeroPage(
 ) {
     val urls = LocalMediaUrls.current
     val artwork = urls?.image(card.backdrop.ifBlank { card.poster })
-    val tint by rememberArtworkTint(urls?.image(card.poster.ifBlank { card.backdrop }), AntresolColors.BrandStart)
+    // The glow below comes from the image that is drawn, so the two always match.
+    val tint by rememberArtworkTint(artwork, AntresolColors.BrandStart)
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         Box(
@@ -134,7 +140,13 @@ private fun HeroPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(maxHeight * 0.78f)
-                    .alpha(0.9f),
+                    .alpha(0.9f)
+                    // The artwork fades out on its own, so it has no hard bottom edge behind the title.
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(Brush.verticalGradient(0f to Color.Black, 0.5f to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
+                    },
             )
         }
         Box(Modifier.fillMaxSize().background(AntresolGradients.heroFade))

@@ -203,7 +203,7 @@ class MobilePlaybackLiveUiTest {
         // Settings from the account sheet.
         tab("Home")
         waitFor(hasText("Details"))
-        compose.onAllNodes(hasContentDescription("Admin")).onFirst().performClick()
+        compose.onAllNodes(hasContentDescription("Account: Admin")).onFirst().performClick()
         waitFor(hasTestTag("account-settings"))
         compose.onNode(hasTestTag("account-settings")).performClick()
         waitFor(hasText("This device"))

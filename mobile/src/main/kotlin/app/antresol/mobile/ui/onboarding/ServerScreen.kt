@@ -32,7 +32,7 @@ import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
-import app.antresol.ui.components.LogoMark
+import app.antresol.ui.components.LogoTile
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import kotlinx.coroutines.CancellationException
@@ -80,7 +80,7 @@ fun ServerScreen(session: SessionManager) {
     }
 
     OnboardingScaffold {
-        LogoMark(size = 84.dp)
+        LogoTile(size = 84.dp)
         Spacer(Modifier.height(4.dp))
         Text(stringResource(R.string.server_title), style = Antresol.typography.pageTitle, textAlign = TextAlign.Center)
         Text(

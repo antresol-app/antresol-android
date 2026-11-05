@@ -28,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -37,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -48,6 +50,7 @@ import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.GlassIconButton
+import app.antresol.mobile.ui.components.GlassPillButton
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PrimaryPillButton
@@ -55,13 +58,14 @@ import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
+import coil.request.ImageRequest
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
  * Comic/manga reader: one page per screen, swiped in the volume's reading direction (manga
  * right to left), pinch or double tap to zoom, tap the edges to turn pages and the middle for
- * the title bar and page slider. The last page offers the next volume.
+ * the title bar and page slider. Reaching the last page shows the bar with the next volume.
  */
 @Composable
 fun ComicReaderScreen(viewModel: ComicReaderViewModel, onBack: () -> Unit, onOpenVolume: (Long) -> Unit) {
@@ -95,6 +99,8 @@ private fun ComicPagesView(volume: ComicVolume, viewModel: ComicReaderViewModel,
     LaunchedEffect(pager.settledPage) {
         viewModel.onPage(pager.settledPage, count)
         zoom.filterKeys { it != pager.settledPage }.values.forEach { it.reset() }
+        // Turned to the end of the volume: bring up the bar with "Next Volume".
+        if (pager.settledPage != volume.startPage && pager.settledPage == count - 1 && volume.nextId > 0) chrome = true
     }
     val turn: (Int) -> Unit = { delta ->
         val target = (pager.currentPage + delta).coerceIn(0, count - 1)
@@ -111,6 +117,10 @@ private fun ComicPagesView(volume: ComicVolume, viewModel: ComicReaderViewModel,
     ) { index ->
         val state = zoom.getOrPut(index) { ZoomState() }
         var loading by remember { mutableStateOf(true) }
+        var failed by remember { mutableStateOf(false) }
+        // Bumped by "Try Again": a new request for the same page (not served from the failed one).
+        var attempt by remember { mutableIntStateOf(0) }
+        val context = LocalContext.current
         Box(
             Modifier
                 .fillMaxSize()
@@ -126,14 +136,35 @@ private fun ComicPagesView(volume: ComicVolume, viewModel: ComicReaderViewModel,
                 },
             contentAlignment = Alignment.Center,
         ) {
+            val url = urls?.comicPage(volume.fileId, index)
+            val request = remember(url, attempt) {
+                ImageRequest.Builder(context).data(url).memoryCacheKey("$url#$attempt").build()
+            }
             AsyncImage(
-                model = urls?.comicPage(volume.fileId, index),
+                model = request,
                 contentDescription = stringResource(R.string.reader_page_of, index + 1, count),
                 contentScale = ContentScale.Fit,
-                onState = { loading = it is AsyncImagePainter.State.Loading },
+                onState = {
+                    loading = it is AsyncImagePainter.State.Loading
+                    failed = it is AsyncImagePainter.State.Error
+                },
                 modifier = Modifier.fillMaxSize(),
             )
             if (loading) CircularProgressIndicator(color = AntresolColors.LabelSecondary, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
+            if (failed) {
+                // Below the middle, so a tap in the middle still toggles the bar.
+                Column(modifier = Modifier.padding(top = 180.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        stringResource(R.string.reader_page_failed, index + 1),
+                        style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary),
+                    )
+                    GlassPillButton(
+                        text = stringResource(app.antresol.ui.R.string.action_retry),
+                        onClick = { attempt++ },
+                        modifier = Modifier.testTag("reader-page-retry"),
+                    )
+                }
+            }
         }
     }
 

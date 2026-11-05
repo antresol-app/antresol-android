@@ -9,7 +9,7 @@ class CodecSupportTest {
         val caps = CodecSupport.caps(decoderMimes = setOf("video/avc", "audio/mp4a-latm"))
         assertEquals(listOf("h264"), caps.videoCodecs)
         assertEquals(listOf("aac", "mp3", "opus", "flac"), caps.audioCodecs)
-        assertEquals(listOf("mp4", "mkv", "webm"), caps.containers)
+        assertEquals(listOf("mp4", "mov", "mkv", "webm"), caps.containers)
     }
 
     @Test

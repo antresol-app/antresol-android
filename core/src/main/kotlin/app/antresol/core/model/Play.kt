@@ -13,11 +13,11 @@ data class PlaybackCaps(
     val hevcNeedsHvc1: Boolean? = null,
 ) {
     companion object {
-        /** A safe ExoPlayer baseline; apps refine it from MediaCodecList. `mkv` enables direct MKV play. */
+        /** A safe ExoPlayer baseline; apps refine it from MediaCodecList. `mkv` enables direct MKV play; QuickTime `mov` plays through the MP4 extractor. */
         val EXOPLAYER_BASELINE = PlaybackCaps(
             videoCodecs = listOf("h264", "hevc"),
             audioCodecs = listOf("aac", "mp3", "ac3", "eac3", "opus", "flac"),
-            containers = listOf("mp4", "mkv", "webm"),
+            containers = listOf("mp4", "mov", "mkv", "webm"),
         )
     }
 }

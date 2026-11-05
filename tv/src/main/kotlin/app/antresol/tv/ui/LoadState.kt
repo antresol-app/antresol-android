@@ -4,11 +4,11 @@ import android.content.res.Resources
 import app.antresol.core.api.ApiException
 import app.antresol.core.api.InvalidServerAddressException
 import app.antresol.core.session.ServerNeedsSetupException
-import app.antresol.tv.ui.player.PlaybackUnavailableException
-import app.antresol.tv.ui.player.StreamLimitException
 import app.antresol.ui.R
-import kotlinx.coroutines.CancellationException
+import app.antresol.ui.playback.PlaybackUnavailableException
+import app.antresol.ui.playback.StreamLimitException
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 
 /** The state of a screen that loads one thing from the server. */
 sealed interface LoadState<out T> {

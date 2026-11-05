@@ -5,10 +5,10 @@ import app.antresol.core.api.ApiException
 import app.antresol.core.api.InvalidServerAddressException
 import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.mobile.R as MobileR
-import app.antresol.mobile.player.StreamLimitException
 import app.antresol.ui.R
-import kotlinx.coroutines.CancellationException
+import app.antresol.ui.playback.StreamLimitException
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 
 /** The state of a screen that loads one thing from the server. */
 sealed interface LoadState<out T> {

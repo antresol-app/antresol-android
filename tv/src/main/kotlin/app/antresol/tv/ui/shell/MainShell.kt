@@ -11,16 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
-import app.antresol.tv.ui.LoadState
-import app.antresol.tv.ui.components.GlassNotice
-import app.antresol.tv.ui.load
-import app.antresol.tv.ui.userMessage
-import kotlinx.coroutines.delay
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -30,8 +20,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -41,7 +31,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -62,6 +57,7 @@ import app.antresol.core.session.SessionManager
 import app.antresol.tv.AntresolTvApp
 import app.antresol.tv.R as TvR
 import app.antresol.tv.playback.AudioContent
+import app.antresol.tv.ui.LoadState
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.browse.CardGridScreen
 import app.antresol.tv.ui.browse.CardGridViewModel
@@ -71,6 +67,7 @@ import app.antresol.tv.ui.browse.ShelvesScreen
 import app.antresol.tv.ui.browse.ShelvesViewModel
 import app.antresol.tv.ui.comics.ComicReaderScreen
 import app.antresol.tv.ui.comics.ComicReaderViewModel
+import app.antresol.tv.ui.components.GlassNotice
 import app.antresol.tv.ui.components.LinkButton
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.TvIcons
@@ -78,21 +75,24 @@ import app.antresol.tv.ui.detail.DetailScreen
 import app.antresol.tv.ui.detail.DetailViewModel
 import app.antresol.tv.ui.home.HomeScreen
 import app.antresol.tv.ui.home.HomeViewModel
+import app.antresol.tv.ui.load
 import app.antresol.tv.ui.music.SongsScreen
 import app.antresol.tv.ui.music.SongsViewModel
 import app.antresol.tv.ui.nowplaying.NowPlayingScreen
 import app.antresol.tv.ui.nowplaying.NowPlayingViewModel
 import app.antresol.tv.ui.player.PlayerScreen
 import app.antresol.tv.ui.player.PlayerViewModel
-import app.antresol.tv.ui.player.ResumeMode
 import app.antresol.tv.ui.search.BrowseTarget
 import app.antresol.tv.ui.search.SearchScreen
 import app.antresol.tv.ui.search.SearchViewModel
 import app.antresol.tv.ui.settings.SettingsScreen
 import app.antresol.tv.ui.settings.SettingsViewModel
+import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
+import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**

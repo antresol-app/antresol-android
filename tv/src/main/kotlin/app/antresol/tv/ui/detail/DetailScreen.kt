@@ -58,7 +58,6 @@ import app.antresol.tv.ui.components.rememberFocusMemory
 import app.antresol.tv.ui.components.remembersFocus
 import app.antresol.tv.ui.components.trapHorizontalFocus
 import app.antresol.tv.ui.home.HeroBackground
-import app.antresol.tv.ui.player.ResumeMode
 import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
@@ -68,6 +67,7 @@ import app.antresol.ui.format.Durations
 import app.antresol.ui.format.TrackLabels
 import app.antresol.ui.format.remainingDuration
 import app.antresol.ui.format.spokenDuration
+import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion

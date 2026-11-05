@@ -1,4 +1,4 @@
-package app.antresol.mobile.player
+package app.antresol.ui.playback
 
 import android.content.Context
 import android.net.Uri
@@ -39,12 +39,13 @@ import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.playback.PlaybackReporter
 import app.antresol.core.playback.Resume
+import app.antresol.core.playback.SubtitleLanguages
 import app.antresol.core.playback.VideoSession
 import app.antresol.core.playback.VideoSource
 import app.antresol.core.playback.WebVtt
 import app.antresol.core.playback.playbackApi
 import app.antresol.core.playback.videoApi
-import app.antresol.ui.playback.DeviceCaps
+import app.antresol.ui.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -75,6 +76,7 @@ sealed interface PlayerPhase {
     data object Loading : PlayerPhase
     data class AskResume(val positionMs: Long) : PlayerPhase
     data object Playing : PlayerPhase
+
     /** The next episode; [secondsLeft] counts down to autoplay, null when autoplay is off. */
     data class UpNext(val episode: EpisodeCard, val secondsLeft: Int?) : PlayerPhase
     data class Failed(val error: Throwable) : PlayerPhase
@@ -89,24 +91,37 @@ class PlaybackUnavailableException(cause: Throwable? = null) : Exception(cause)
 /** `/api/play` answered 429: the profile already streams on as many devices as it may. */
 class StreamLimitException(cause: ApiException) : Exception(cause)
 
+/** What differs between the TV and the phone player. */
+class VideoPlayerOptions(
+    /** `/api/play` quality for the first open (the user's setting). */
+    val defaultQuality: String = Quality.AUTO,
+    /** ISO 639-1 subtitle language to turn on when a video starts, "" for none. */
+    val subtitleLanguage: String = "",
+    /**
+     * Cap the stream height at the display (a TV), or only at the decoder (a phone scales any
+     * decodable video to its screen and may be cast or connected to a bigger one).
+     */
+    val limitToDisplay: Boolean = true,
+    /** Start the next episode after the Up Next countdown. */
+    val autoplayNext: () -> Boolean = { true },
+)
+
 /**
  * Plays one movie or episode (and the following episodes) with ExoPlayer, following the spec's
  * video flow: `/api/play` with the device caps, direct or HLS via `?mk=`, HLS keepalive and stop,
- * progress every 10 s and on pause/exit, `replaceSession` for seeks before the HLS start, audio
+ * progress every 10 s and on every pause/exit, `replaceSession` for seeks before the HLS start, audio
  * track and quality changes, side-loaded WebVTT subtitles shifted to the HLS start, and recovery
- * when the server drops the session. ExoPlayer lives here so it survives recomposition.
+ * when the server drops the session or the device fails to decode. ExoPlayer lives here so it
+ * survives recomposition. Shared by the TV and phone players; each keeps its own controls.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
-class VideoPlayerViewModel(
+open class VideoPlayerViewModel(
     private val context: Context,
     client: AntresolClient,
     private val appScope: CoroutineScope,
     itemId: Long,
     resume: ResumeMode,
-    /** `/api/play` quality for the first open (the user's setting). */
-    private val defaultQuality: String,
-    /** Start the next episode after the countdown. */
-    private val autoplayNext: () -> Boolean,
+    private val options: VideoPlayerOptions,
     /** Final writes and session stops, awaited by screens that show progress. */
     private val pendingWrites: PendingWrites,
 ) : ViewModel() {
@@ -146,7 +161,7 @@ class VideoPlayerViewModel(
     var isSwitching: Boolean by mutableStateOf(false)
         private set
 
-    /** File position shown by the controls; during a pending seek, its target. */
+    /** File position shown by the controls; during a pending seek or a preview, its target. */
     var positionMs: Long by mutableLongStateOf(0)
         private set
 
@@ -176,6 +191,9 @@ class VideoPlayerViewModel(
     // Per player, so a closing player never deletes the files of the next one.
     private val subtitleDir = File(context.cacheDir, "subtitles/${UUID.randomUUID()}")
     private var pendingSeekMs: Long? = null
+
+    /** A target the controls show without seeking yet (TV scrubbing); the position ticks do not move it. */
+    private var previewMs: Long? = null
     private var backgrounded = false
     private var pendingReopen: ReopenRequest? = null
     private var lastFileMs = 0L
@@ -192,7 +210,7 @@ class VideoPlayerViewModel(
     /** HLS stops in flight; a new `/api/play` waits for them, so the profile never briefly holds three sessions. */
     private var stopping: Job? = null
 
-    /** The final write and stop for this player started (the activity is finishing). */
+    /** The final write and stop for this player started ([close]). */
     private var closed = false
 
     private val listener = object : Player.Listener {
@@ -216,13 +234,22 @@ class VideoPlayerViewModel(
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            // A 401 on the stream means the media key died (its session was revoked): fetch a new one.
             val http = error.cause as? HttpDataSource.InvalidResponseCodeException
-            if (http?.responseCode == 401) appScope.launch { client.mediaKeys.invalidate() }
+            if (http?.responseCode == 401) {
+                // The media key died: its device session was revoked or deleted. Drop the key, and let
+                // an authenticated call report the 401 so the app returns to the profile picker.
+                appScope.launch {
+                    this@VideoPlayerViewModel.client.mediaKeys.invalidate()
+                    runCatching { this@VideoPlayerViewModel.client.me() }
+                }
+            }
             recover(error)
         }
 
-        override fun onTracksChanged(tracks: Tracks) = applyTextSelection()
+        override fun onTracksChanged(tracks: Tracks) {
+            applyTextSelection()
+            applyAudioSelection()
+        }
     }
 
     init {
@@ -314,10 +341,9 @@ class VideoPlayerViewModel(
 
     private suspend fun begin(file: FileInfo, startMs: Long) {
         releaseStream()
-        // Enumerating codecs is slow: keep it off the main thread. A phone scales any decodable video
-        // to its screen, so only the decoder limits the height (not the display).
-        val caps = withContext(Dispatchers.Default) { DeviceCaps.current(context, limitToDisplay = false) }
-        val newSession = VideoSession(client.videoApi(), file.id, caps, quality = defaultQuality)
+        // Enumerating codecs can take hundreds of ms on a slow device: keep it off the main thread.
+        val caps = withContext(Dispatchers.Default) { DeviceCaps.current(context, limitToDisplay = options.limitToDisplay) }
+        val newSession = VideoSession(client.videoApi(), file.id, caps, quality = options.defaultQuality)
         session = newSession
         selectedSubtitle = null
         rawSubtitles.clear()
@@ -333,6 +359,7 @@ class VideoPlayerViewModel(
             isPlaying = { !released && player.isPlaying },
             onSessionLost = ::onSessionLost,
         ).also { it.start(opened.session) }
+        preselectSubtitle(opened)
         load(opened, opened.timeline.initialPlayerSeekMs, playWhenReady = !backgrounded)
         phase = PlayerPhase.Playing
         // Opened while in the background: give the HLS slot back until the app returns.
@@ -393,16 +420,23 @@ class VideoPlayerViewModel(
 
     // region Player control
 
+    /** Whether seeks are possible now (a stream is loaded and not being reopened). */
+    protected val canSeek: Boolean get() = source != null && !isSwitching
+
     fun togglePlayPause() {
         if (player.playbackState == Player.STATE_ENDED) return
         player.playWhenReady = !player.playWhenReady
     }
 
-    /** Seeks by [deltaMs] on the file timeline (skip buttons, double taps). */
-    fun seekBy(deltaMs: Long) = seekTo((pendingSeekMs ?: currentFileMs()) + deltaMs)
+    /** Seeks by [deltaMs] on the file timeline (skip buttons, double taps, remote keys). */
+    fun seekBy(deltaMs: Long) {
+        if (!canSeek) return
+        seekTo((pendingSeekMs ?: currentFileMs()) + deltaMs)
+    }
 
     /** Seeks to [fileMs] on the file timeline; before the HLS start this reopens the stream. */
     fun seekTo(fileMs: Long) {
+        previewMs = null
         val current = source ?: return
         if (isSwitching) return
         val target = clampTarget(fileMs)
@@ -422,8 +456,19 @@ class VideoPlayerViewModel(
         }
     }
 
+    /** Shows [fileMs] (clamped) as the position without seeking; [seekTo] commits it. Returns the shown target. */
+    protected fun preview(fileMs: Long): Long {
+        val target = clampTarget(fileMs)
+        previewMs = target
+        positionMs = target
+        return target
+    }
+
+    /** Where a relative move starts: the preview, a pending seek, or the playing position. */
+    protected fun targetBaseMs(): Long = previewMs ?: pendingSeekMs ?: currentFileMs()
+
     /** The duration from `/api/play` or the file, else what the player knows (file time). */
-    private fun knownDurationMs(): Long {
+    protected fun knownDurationMs(): Long {
         if (durationMs > 0) return durationMs
         val timeline = source?.timeline ?: return 0
         val playerDuration = player.duration
@@ -446,6 +491,20 @@ class VideoPlayerViewModel(
         reopen(currentFileMs(), quality = value)
     }
 
+    /** Turns on the subtitle language chosen in the settings, if the video has it. */
+    private suspend fun preselectSubtitle(opened: VideoSource) {
+        val track = SubtitleLanguages.preferred(opened.play.subtitles, options.subtitleLanguage) ?: return
+        val url = track.url ?: return
+        try {
+            rawSubtitles[url] = downloadVtt(url)
+            selectedSubtitle = track
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            notice = R.string.player_subtitles_failed
+        }
+    }
+
     fun selectSubtitle(track: SubTrack?) {
         subtitleJob?.cancel()
         if (track == null) {
@@ -463,7 +522,7 @@ class VideoPlayerViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                notice = app.antresol.ui.R.string.player_subtitles_failed
+                notice = R.string.player_subtitles_failed
             }
         }
     }
@@ -481,8 +540,17 @@ class VideoPlayerViewModel(
 
     // region Episodes
 
-    /** "Play Now", "Next Episode" and the end of the Up Next countdown; a second call is ignored. */
+    /** "Cancel" on the Up Next prompt: stay on the last frame with the controls. */
+    fun cancelUpNext() {
+        if (phase !is PlayerPhase.UpNext) return
+        upNextJob?.cancel()
+        upNextJob = null
+        phase = PlayerPhase.Playing
+    }
+
+    /** "Play Now", "Next Episode", the remote's Next key and the end of the countdown; a second call is ignored. */
     fun playNext() {
+        // Loading (a second press) is ignored: it would skip another episode.
         if (phase != PlayerPhase.Playing && phase !is PlayerPhase.UpNext) return
         val next = nextEpisode ?: return
         nextEpisode = null
@@ -500,7 +568,14 @@ class VideoPlayerViewModel(
             phase = PlayerPhase.Finished
             return
         }
-        if (!autoplayNext()) {
+        startUpNext(next)
+    }
+
+    /** Shows Up Next for [next]; with autoplay on, it counts down and then plays it. */
+    private fun startUpNext(next: EpisodeCard) {
+        upNextJob?.cancel()
+        upNextJob = null
+        if (!options.autoplayNext()) {
             phase = PlayerPhase.UpNext(next, null)
             return
         }
@@ -531,19 +606,33 @@ class VideoPlayerViewModel(
     // region Lifecycle
 
     /**
-     * The app went to background: pause, save, and give the HLS slot back to the profile. A reopen
-     * in flight suspends its stream once loaded.
+     * The app went to background: pause, save, and give the HLS slot back to the profile. The Up
+     * Next countdown stops (it restarts on return). A reopen in flight suspends its stream once loaded.
      */
     fun onBackground() {
         backgrounded = true
         if (released || closed) return
         player.pause()
-        if (source == null || phase != PlayerPhase.Playing || isSwitching) return
-        suspendStream(resumeAtMs = currentFileMs())
+        if (source == null || isSwitching) return
+        if (phase is PlayerPhase.UpNext) {
+            upNextJob?.cancel()
+            upNextJob = null
+        }
+        // Only a playing stream reopens on return; at Up Next or after an error there is nothing to resume.
+        suspendStream(resumeAtMs = if (phase == PlayerPhase.Playing) currentFileMs() else null)
     }
 
-    /** Stops keepalives and the HLS session; [onForeground] reopens at [resumeAtMs]. */
-    private fun suspendStream(resumeAtMs: Long) {
+    /** Back from background: restart the Up Next countdown, or reopen the suspended stream, paused, where it was. */
+    fun onForeground() {
+        backgrounded = false
+        (phase as? PlayerPhase.UpNext)?.let { if (it.secondsLeft != null && upNextJob?.isActive != true) startUpNext(it.episode) }
+        val at = suspendedAtMs ?: return
+        suspendedAtMs = null
+        reopen(at, playWhenReady = false)
+    }
+
+    /** Stops keepalives and the HLS session; [resumeAtMs] is where [onForeground] reopens (null: it does not). */
+    private fun suspendStream(resumeAtMs: Long?) {
         val current = session ?: return
         // Detach now, so a quick return (which opens a new session) is never stopped by this.
         val toStop = current.detachSession() ?: return
@@ -556,17 +645,10 @@ class VideoPlayerViewModel(
         }
     }
 
-    /** Back from background: reopen the suspended HLS stream, paused, where it was. */
-    fun onForeground() {
-        backgrounded = false
-        val at = suspendedAtMs ?: return
-        suspendedAtMs = null
-        reopen(at, playWhenReady = false)
-    }
-
     /**
-     * The player is closing (the activity finishes): the final progress write and the session stop
-     * start now, before the previous screen resumes and refreshes, and are tracked in [pendingWrites].
+     * The player is closing: the final progress write and the session stop start now (before the
+     * previous screen resumes and refreshes) and are tracked in [pendingWrites]. Called by the
+     * screen when it finishes, and at the latest when the ViewModel is cleared.
      */
     fun close() {
         if (closed || released) return
@@ -672,6 +754,10 @@ class VideoPlayerViewModel(
             .apply { if (opened.isHls) setMimeType(MimeTypes.APPLICATION_M3U8) }
             .setSubtitleConfigurations(listOfNotNull(subtitle))
             .build()
+        // The audio override of a previous direct stream refers to tracks of another file.
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+            .build()
         player.setMediaItem(mediaItem, playerStartMs)
         player.playWhenReady = playWhenReady
         player.prepare()
@@ -723,6 +809,23 @@ class VideoPlayerViewModel(
             if (group != null) builder.addOverride(TrackSelectionOverride(group.mediaTrackGroup, 0))
         }
         player.trackSelectionParameters = builder.build()
+    }
+
+    /**
+     * Direct play keeps ExoPlayer's own audio choice from following the server's: select the audio
+     * track the server reports as playing (`audioIndex`, by its order among the file's audio streams).
+     */
+    private fun applyAudioSelection() {
+        if (released) return
+        val play = source?.play ?: return
+        if (play.isHls) return
+        val wanted = play.audioIndex ?: return
+        val ordinal = play.audio.sortedBy { it.index }.indexOfFirst { it.index == wanted }
+        val group = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.getOrNull(ordinal) ?: return
+        if (group.isSelected || !group.isTrackSupported(0)) return
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+            .build()
     }
 
     /** A keepalive got 404 for [lost]. Ignored unless it is the session this player still holds. */
@@ -805,7 +908,7 @@ class VideoPlayerViewModel(
         if (released || source == null) return
         val position = currentFileMs()
         lastFileMs = position
-        if (pendingSeekMs == null) positionMs = position
+        if (pendingSeekMs == null && previewMs == null) positionMs = position
         bufferedMs = source?.timeline?.fileMs(player.bufferedPosition) ?: 0L
     }
 

@@ -62,6 +62,8 @@ import app.antresol.tv.ui.home.HeroBackground
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.format.Durations
+import app.antresol.ui.playback.PlayerPhase
+import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
@@ -290,8 +292,8 @@ private fun handleMediaKey(event: KeyEvent, viewModel: PlayerViewModel): Boolean
         Key.MediaPlayPause -> viewModel::togglePlayPause
         Key.MediaPlay -> { { viewModel.player.play() } }
         Key.MediaPause -> { { viewModel.player.pause() } }
-        Key.MediaFastForward -> { { viewModel.seekBy(PlayerViewModel.SEEK_STEP_MS) } }
-        Key.MediaRewind -> { { viewModel.seekBy(-PlayerViewModel.SEEK_STEP_MS) } }
+        Key.MediaFastForward -> { { viewModel.seekBy(VideoPlayerViewModel.SEEK_STEP_MS) } }
+        Key.MediaRewind -> { { viewModel.seekBy(-VideoPlayerViewModel.SEEK_STEP_MS) } }
         Key.MediaNext -> viewModel::playNext
         else -> return false
     }
@@ -397,11 +399,14 @@ private fun UpNextOverlay(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit, onCa
             if (phase.episode.subtitle.isNotBlank()) {
                 Text(phase.episode.subtitle, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, maxLines = 1)
             }
-            Text(
-                stringResource(R.string.player_next_in, phase.secondsLeft),
-                style = Antresol.typography.caption,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
+            // The TV always counts down (autoplay is not a TV setting).
+            phase.secondsLeft?.let { seconds ->
+                Text(
+                    stringResource(R.string.player_next_in, seconds),
+                    style = Antresol.typography.caption,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 PillButton(text = stringResource(R.string.action_cancel), onClick = onCancel)
                 PillButton(

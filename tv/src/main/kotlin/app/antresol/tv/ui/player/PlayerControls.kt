@@ -39,6 +39,7 @@ import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.ui.R
 import app.antresol.ui.format.Durations
 import app.antresol.ui.format.TrackLabels
+import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
@@ -58,8 +59,8 @@ fun SeekBar(
     onSeek: (Long) -> Unit,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
-    backStepMs: Long = PlayerViewModel.SEEK_STEP_MS,
-    forwardStepMs: Long = PlayerViewModel.SEEK_STEP_MS,
+    backStepMs: Long = VideoPlayerViewModel.SEEK_STEP_MS,
+    forwardStepMs: Long = VideoPlayerViewModel.SEEK_STEP_MS,
 ) {
     var focused by remember { mutableStateOf(false) }
     val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f

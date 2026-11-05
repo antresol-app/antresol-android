@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -59,17 +60,16 @@ import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.GlassPillButton
-import app.antresol.mobile.ui.components.focusClickable
-import app.antresol.mobile.ui.components.PrimaryPillButton
-import app.antresol.mobile.player.ResumeMode
-import app.antresol.ui.components.AntresolIcons
-import androidx.compose.foundation.layout.widthIn
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PageGutter
+import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.SegmentedPills
+import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.mobile.ui.components.kindLabel
+import app.antresol.ui.R as UiR
+import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.components.BadgeRow
 import app.antresol.ui.components.ProfileAvatar
@@ -77,6 +77,7 @@ import app.antresol.ui.components.ProgressBar
 import app.antresol.ui.format.Durations
 import app.antresol.ui.format.TrackLabels
 import app.antresol.ui.format.spokenDuration
+import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolGradients
@@ -84,7 +85,6 @@ import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 import coil.compose.AsyncImage
 import java.util.Locale
-import app.antresol.ui.R as UiR
 
 /**
  * Movie, series, season and episode detail: tinted backdrop header with title and meta, the

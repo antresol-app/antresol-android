@@ -25,10 +25,13 @@ import app.antresol.core.model.Progress
 import app.antresol.core.model.ProgressUpdate
 import app.antresol.core.session.AuthState
 import app.antresol.mobile.playback.PlaybackService
-import app.antresol.mobile.player.ResumeMode
 import app.antresol.mobile.player.VideoPlayerActivity
 import app.antresol.mobile.ui.root.AntresolMobileRoot
+import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.AntresolTheme
+import java.io.File
+import java.time.Duration
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -42,9 +45,6 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowLooper
-import java.io.File
-import java.time.Duration
-import java.util.concurrent.TimeUnit
 
 /**
  * Live playback flows on a phone against a real server (only with `ANTRESOL_TEST_SERVER`): the

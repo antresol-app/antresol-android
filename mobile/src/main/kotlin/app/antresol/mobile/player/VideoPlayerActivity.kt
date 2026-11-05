@@ -30,11 +30,14 @@ import androidx.media3.session.MediaSession
 import app.antresol.core.session.AuthState
 import app.antresol.mobile.AntresolMobileApp
 import app.antresol.mobile.settings.AppSettings
+import app.antresol.ui.playback.ResumeMode
+import app.antresol.ui.playback.VideoPlayerOptions
+import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.theme.AntresolTheme
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Full-screen landscape video playback in its own activity, so it can shrink to
@@ -110,8 +113,12 @@ class VideoPlayerActivity : ComponentActivity() {
                         appScope = app.appScope,
                         itemId = itemId,
                         resume = mode,
-                        defaultQuality = settings.videoQuality,
-                        autoplayNext = { settings.autoplayNext },
+                        // A phone scales any decodable video to its screen: only the decoder limits the height.
+                        options = VideoPlayerOptions(
+                            defaultQuality = settings.videoQuality,
+                            limitToDisplay = false,
+                            autoplayNext = { settings.autoplayNext },
+                        ),
                         pendingWrites = app.pendingWrites,
                     )
                 }

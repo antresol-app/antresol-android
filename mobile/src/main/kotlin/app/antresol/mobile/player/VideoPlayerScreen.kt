@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,15 +68,18 @@ import app.antresol.mobile.ui.components.RoundIconButton
 import app.antresol.mobile.ui.components.SkipSecondsButton
 import app.antresol.mobile.ui.components.TimeSlider
 import app.antresol.mobile.ui.userMessage
+import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.format.Durations
 import app.antresol.ui.format.TrackLabels
+import app.antresol.ui.playback.PlaybackUnavailableException
+import app.antresol.ui.playback.PlayerPhase
+import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
-import kotlinx.coroutines.delay
 import java.util.Locale
-import app.antresol.ui.R as UiR
+import kotlinx.coroutines.delay
 
 private const val CONTROLS_HIDE_MS = 4_000L
 private const val NOTICE_MS = 3_500L

@@ -3,6 +3,7 @@ package app.antresol.tv.ui.shell
 import androidx.annotation.StringRes
 import app.antresol.core.model.Card
 import app.antresol.ui.R
+import app.antresol.ui.playback.ResumeMode
 import kotlinx.serialization.Serializable
 
 @Serializable

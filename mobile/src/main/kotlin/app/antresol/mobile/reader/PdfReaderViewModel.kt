@@ -8,7 +8,7 @@ import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.ApiException
 import app.antresol.core.model.BookDetail
-import app.antresol.core.model.ProgressUpdate
+import app.antresol.core.reading.ComicProgress
 import app.antresol.mobile.ui.LoadViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -104,7 +104,7 @@ class PdfReaderViewModel(
         val current = page
         if (current < 0 || current == savedPage) return
         try {
-            client.saveProgress(bookId, ProgressUpdate.reader(ReaderProgress.locator(current), ReaderProgress.fraction(current, total)))
+            client.saveProgress(bookId, ComicProgress.update(current, total))
             savedPage = current
         } catch (e: CancellationException) {
             throw e
@@ -130,7 +130,7 @@ class PdfReaderViewModel(
                 bookId = bookId,
                 title = book.card.title,
                 document = document,
-                startPage = ReaderProgress.startPage(progress?.locator, progress?.finished == true, document.pageCount),
+                startPage = ComicProgress.startPage(progress?.locator, progress?.finished == true, document.pageCount),
             )
         }
 

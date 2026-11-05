@@ -52,6 +52,8 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
             scope = appScope,
         )
         playback = PlaybackConnection(this, appScope, settings) { session.client }
+        // The last audiobook position must be written before sign-out revokes the token.
+        session.beforeSignOut = { playback.stopAndFlush() }
         // Whatever was playing belongs to the profile that played it.
         appScope.launch {
             session.state

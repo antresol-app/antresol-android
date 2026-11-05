@@ -113,7 +113,6 @@
     <string name="detail_volumes">Тома</string>
     <string name="detail_albums">Альбомы</string>
     <string name="detail_appears_on">Участвует в</string>
-    <string name="detail_song_count">Песен: %1$d</string>
     <plurals name="song_count">
         <item quantity="one">%1$d песня</item>
         <item quantity="few">%1$d песни</item>

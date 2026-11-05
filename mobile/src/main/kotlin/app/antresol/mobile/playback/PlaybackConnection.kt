@@ -21,6 +21,7 @@ import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Chapter
 import app.antresol.core.model.Track
 import app.antresol.core.playback.AudiobookTimeline
+import app.antresol.core.playback.Chapters
 import app.antresol.mobile.settings.AppSettings
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CancellationException
@@ -29,6 +30,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.random.Random
 
 /** The queue entry that is playing, as the UI shows it. */
@@ -123,7 +125,7 @@ class PlaybackConnection(
 
     val bookDurationMs: Long get() = current?.bookDurationMs?.takeIf { it > 0 } ?: durationMs
 
-    val currentChapter: Chapter? get() = book?.chapters?.let { chapterAt(it, bookPositionMs) }
+    val currentChapter: Chapter? get() = book?.chapters?.let { it.getOrNull(Chapters.indexAt(it, bookPositionMs)) }
 
     // endregion
 
@@ -308,6 +310,20 @@ class PlaybackConnection(
         pending.clear()
     }
 
+    /**
+     * Stops playback and waits (briefly) for the service's last audiobook progress write, so it
+     * still goes out with the current token. Used before sign-out revokes that token.
+     */
+    suspend fun stopAndFlush() {
+        val connected = controller
+        stop()
+        if (connected == null) return
+        withTimeoutOrNull(FLUSH_TIMEOUT_MS) {
+            while (connected.mediaItemCount > 0) delay(FLUSH_POLL_MS)
+        }
+        FinalProgressWrites.await(FLUSH_TIMEOUT_MS)
+    }
+
     // endregion
 
     private fun itemKey(): Any? = currentChapter?.idx?.let { "chapter-$it" } ?: "item-$currentIndex-${current?.ref}"
@@ -399,9 +415,7 @@ class PlaybackConnection(
 
         private const val POLL_MS = 250L
         private const val SLEEP_POLL_MS = 300L
-
-        /** The chapter containing [bookMs]: the last one that starts at or before it. */
-        fun chapterAt(chapters: List<Chapter>, bookMs: Long): Chapter? =
-            chapters.lastOrNull { it.startMs <= bookMs } ?: chapters.firstOrNull()
+        private const val FLUSH_POLL_MS = 20L
+        private const val FLUSH_TIMEOUT_MS = 3_000L
     }
 }

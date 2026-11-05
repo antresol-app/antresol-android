@@ -78,11 +78,12 @@ object QueueItems {
 
     /**
      * The stream URL for [ref]. No `mk`: the service streams through the shared OkHttp client,
-     * which adds the Bearer header for the server's origin.
+     * which adds the Bearer header for the server's origin. [startSec] starts a transcoded stream
+     * later (such streams cannot seek).
      */
-    fun streamUri(ref: MediaRef, urls: MediaUrls): String = when (ref) {
-        is MediaRef.Track -> urls.track(ref.trackId)
-        is MediaRef.BookPart -> urls.audio(ref.fileId)
+    fun streamUri(ref: MediaRef, urls: MediaUrls, startSec: Double? = null): String = when (ref) {
+        is MediaRef.Track -> urls.track(ref.trackId, startSec = startSec)
+        is MediaRef.BookPart -> urls.audio(ref.fileId, startSec = startSec)
     }
 
     /** Re-attaches the stream URI to an entry that crossed the session boundary without it. */

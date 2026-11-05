@@ -115,7 +115,6 @@
     <string name="detail_volumes">Volumes</string>
     <string name="detail_albums">Albums</string>
     <string name="detail_appears_on">Appears On</string>
-    <string name="detail_song_count">%1$d songs</string>
     <plurals name="song_count">
         <item quantity="one">%1$d song</item>
         <item quantity="other">%1$d songs</item>

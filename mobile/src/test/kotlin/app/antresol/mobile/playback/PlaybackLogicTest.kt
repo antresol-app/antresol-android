@@ -4,10 +4,8 @@ import app.antresol.core.model.BookDetail
 import app.antresol.core.model.BookFile
 import app.antresol.core.model.BookProgress
 import app.antresol.core.model.Card
-import app.antresol.core.model.Chapter
 import app.antresol.core.model.Kind
 import app.antresol.core.model.VolumeCard
-import app.antresol.mobile.reader.ReaderProgress
 import app.antresol.mobile.ui.detail.BookAction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -23,28 +21,6 @@ class PlaybackLogicTest {
         assertNull(MediaRef.parse("book:1:2"))
         assertNull(MediaRef.parse("track:x"))
         assertNull(MediaRef.parse("video:1"))
-    }
-
-    @Test
-    fun chapterAtPicksTheChapterContainingThePosition() {
-        val chapters = listOf(Chapter(0, "One", startMs = 0, endMs = 30_000), Chapter(1, "Two", startMs = 30_041, endMs = 60_000))
-        assertEquals("One", PlaybackConnection.chapterAt(chapters, 0)?.title)
-        assertEquals("One", PlaybackConnection.chapterAt(chapters, 30_040)?.title)
-        assertEquals("Two", PlaybackConnection.chapterAt(chapters, 30_041)?.title)
-        assertEquals("Two", PlaybackConnection.chapterAt(chapters, 90_000)?.title)
-        assertNull(PlaybackConnection.chapterAt(emptyList(), 5))
-    }
-
-    @Test
-    fun readerLocatorsFollowTheSpec() {
-        assertEquals("page:1", ReaderProgress.locator(0))
-        assertEquals(0.25, ReaderProgress.fraction(0, 4), 1e-9)
-        assertEquals(1.0, ReaderProgress.fraction(3, 4), 1e-9)
-        assertEquals(4, ReaderProgress.startPage("page:5", finished = false, count = 10))
-        assertEquals(9, ReaderProgress.startPage("page:50", finished = false, count = 10))
-        assertEquals(0, ReaderProgress.startPage("page:5", finished = true, count = 10))
-        assertEquals(0, ReaderProgress.startPage("epubcfi(/6/4)", finished = false, count = 10))
-        assertEquals(0, ReaderProgress.startPage(null, finished = false, count = 10))
     }
 
     @Test

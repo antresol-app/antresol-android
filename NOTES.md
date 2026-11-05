@@ -352,7 +352,7 @@ Running log between milestones. Newest entries at the bottom.
 - No video MediaSession metadata beyond what Media3 derives; no trick-play thumbnails, no image subtitles, and
   only the first file version.
 - EPUB/FB2 reader not built. PDF uses the `page:<n>` locator.
-- `VideoPlayerViewModel` duplicates the TV one (see above).
+- ~~`VideoPlayerViewModel` duplicates the TV one (see above).~~ Shared since "Android reconcile + gaps".
 - The TV chain added `core/playback/Chapters.kt`, `LyricsSync.kt` and `core/reading/ComicProgress.kt` at the
   same time as this milestone. `:mobile` still uses its own `PlaybackConnection.chapterAt` and
   `reader/ReaderProgress`, which do the same jobs. A cleanup should switch `:mobile` to the `:core` versions.
@@ -540,8 +540,8 @@ Applied the "Phone chain" items from the TV review fixes and the TV player harde
   stream turns out to be unseekable, so the "transcoded audio is not seekable" gap above is closed.
 
 ### Still open
-- `VideoPlayerViewModel` and `TranscodeSeekingPlayer` remain copies of the TV ones (now with the same
-  fixes); moving one copy of each into `:ui-common` is still the cleanup to do.
+- ~~`VideoPlayerViewModel` and `TranscodeSeekingPlayer` remain copies of the TV ones.~~ Both live in
+  `:ui-common` now (see "Android reconcile + gaps").
 - The other "Mobile milestone 2 → Known gaps" above still apply (no device testing, no
   playback resumption, no EPUB/FB2 reader).
 - Verified: `ANTRESOL_TEST_SERVER=1 ./gradlew --no-daemon :core:test :mobile:testDebugUnitTest assembleDebug`
@@ -603,8 +603,8 @@ Applied the "Phone chain" items from the TV review fixes and the TV player harde
 updated for the scope pills on Search).
 
 ### Known gaps
-- Device tokens are still plain JSON in DataStore (now excluded from backup and device transfer);
-  Keystore wrapping needs real-device testing.
+- ~~Device tokens are still plain JSON in DataStore.~~ Sealed with an AndroidKeyStore key since
+  "Android reconcile + gaps" (still to be verified on a real device).
 - A "See All" tile is not a focusable shelf title as on the web; Search scope is client-side.
 
 ## Phone review fixes
@@ -647,12 +647,88 @@ updated for the scope pills on Search).
 - Finding "LoadViewModel refresh race" and "onCleared final write" were the same issue: fixed once (see above).
 
 ### Known gaps
-- Tokens are still plain JSON in DataStore (no backup or transfer). Keystore wrapping is not done.
-- If the Songs queue fails to fetch a page while appending, appending stops. The list shows Try Again, but
-  pages loaded afterwards are not added to the queue.
-- Focus rings cover the shared buttons, cards and tabs. Some one-off rows (settings rows, chapter rows) still use plain
-  `clickable`.
+- ~~Tokens are still plain JSON in DataStore.~~ ~~Songs queue stops on a failed page.~~ ~~One-off rows use plain
+  `clickable`.~~ All three fixed in "Android reconcile + gaps".
 
 ### Verified
 `ANTRESOL_TEST_SERVER=1 ./gradlew :core:test :mobile:testDebugUnitTest assembleDebug` green (live UI tests
 updated for the avatar description "Account: Admin").
+
+## Android reconcile + gaps
+
+### Reconciled lost work (`backup/phone-hardening-unpushed` 8cf6d96, `backup/phone-stash` d1fcbd7)
+- Compared both with main. 8cf6d96 (phone video/audio hardening) was redone, more thoroughly, in 35c66fb,
+  5937f80, 30190d5 and 5f281b5: the video session fixes, `STOP_AND_FLUSH`/`FLUSH_AND_STOP`, controller
+  reconnect, position polling only while watched, `Episodes.toPlay`, `DeviceCaps.limitToDisplay`, the
+  shared `TranscodeSeekingPlayer`, closing the video player on a profile switch and the scrubber keeping the
+  controls are all on main. **Ported** the one fix main lacked: the audiobook reporter keeps its own last
+  position (`LastPosition`), so a final write after the queue moved to another book no longer uses the new
+  book's position.
+- The stash (working tree on top of 8cf6d96 plus two untracked files) held phone UI work that main never got.
+  **Ported**: pull to refresh (`RefreshBox`) on Home, Music, Books and every grid; `PagedViewModel` (grids and
+  Songs share paging, Try Again, refresh); Shuffle All above the Music links so it works while the shelves
+  failed. **Not ported** (main has newer equivalents): the 429 `streaming` flag (main uses
+  `StreamLimitException`), `NothingToPlayException`/`LocalNotices` (main shows notices per page), the stash's
+  own Songs queue (replaced, see below).
+- The branches and the local `stray/phone-hardening-unpushed` / stash are kept (not deleted).
+
+### Shared code (`:core` / `:ui-common`)
+- `ui-common/playback/VideoPlayerViewModel` is the one video player for both apps (sessions, progress,
+  tracks, subtitles, recovery, Up Next, background suspend, `close()`), with `VideoPlayerOptions`
+  (default quality, subtitle language, `limitToDisplay`, autoplay). `ResumeMode`, `PlayerPhase`,
+  `PlaybackUnavailableException`, `StreamLimitException` moved there too. The TV `PlayerViewModel` is a
+  subclass that adds remote scrubbing and number keys (`preview`/`targetBaseMs`/`canSeek` hooks); the phone uses
+  the base class directly. Behaviour is the union of both copies: every pause saves, the recovery budget
+  refills after 30 s of healthy playback, direct play follows the server's audio track, a 401 on the stream
+  drops the media key and re-checks the token, Up Next pauses its countdown in the background (and has no
+  countdown when autoplay is off).
+- `core/playback/SubtitleLanguages` (was `TvSettings.sameLanguage`) picks the auto-enabled subtitle.
+- Already done before this task and verified: one `TranscodeSeekingPlayer` (with the duplicate-track fix),
+  `PendingWrites` on the phone (no `FinalProgressWrites`), `DeviceCaps` off the main thread, `LogoTile`.
+- `core/music/PlaylistEdits`: PATCH bodies (rename, append, remove, move → `order` permutation) and the same
+  edits applied locally. Tests `PlaylistEditsTest`, `SubtitleLanguagesTest`.
+
+### Token encryption
+- `ui-common/data/TokenCipher` + `KeystoreTokenCipher` (AES-256-GCM, non-exportable AndroidKeyStore key
+  `antresol_session`, IV prepended, Base64). `DataStoreSessionStore(store, cipher)` stores the session state as
+  `sealed1:<…>`. Plain JSON from older versions is sealed on the first load. If sealing fails the state is stored
+  as plain JSON and a warning is logged (sign-in keeps working). A sealed state that cannot be opened (key lost)
+  reads as signed out. `DataStoreSessionStoreTest` (Robolectric, fake cipher). CI now also runs
+  `:ui-common:testDebugUnitTest` (the authoritative check command does not include it; run it too).
+  Robolectric has no AndroidKeyStore, so the live UI tests exercise the plain fallback.
+
+### Phone
+- Songs: Play/Shuffle queue the whole list through `PagedViewModel.followToEnd`: failed pages are retried
+  (2 s, 5 s, 15 s), then wait for Try Again; pages loaded later (retry or scrolling) still join the queue. The
+  queue follows while the Songs page is open (leaving the page stops appending). `PagedViewModelTest`.
+- Focus rings: every remaining plain `clickable` (settings, chapter, track, episode, account and sheet rows,
+  genre chips, sort pills, section titles, Now Playing toggles, mini-player) uses `focusClickable`.
+  **Note:** the task listed this for the TV, but the TV rows were already tv-material `Surface`s with the
+  shared focus treatment (white fill); the plain-`clickable` gap was the phone's.
+- Playlists: Playlists page "New Playlist"; "Add to Playlist" sheet (album button, or long press on a song in
+  album/artist/playlist pages and Songs) with a new-playlist option; playlist page Edit (move up/down, remove),
+  Rename, Delete (confirmation sheet). Edits are optimistic, one at a time, rolled back on failure.
+  Decision: name entry and the delete confirmation are bottom sheets, not `AlertDialog`s — opening an
+  `AlertDialog` from a click inside the signed-in shell never got idle under Robolectric (a standalone dialog
+  did), so it could not be tested; sheets match the app's other sheets anyway.
+- Live test `MobileLiveUiTest.phonePlaylists` (create, add album, move, remove, rename, delete; cleans up).
+
+### TV
+- Settings: Signed-in Devices section (last): this device, then others; OK asks to sign one out.
+- Playlists: album pages "Add to Playlist" (panel with New Playlist → name panel with `TvTextField`), playlist
+  pages "Delete Playlist" with confirmation (also for empty playlists). The nav hides while a panel is open
+  (`MainShell.panelOpen`, shared with Settings). Live test `TvLiveUiTest.playlistsCreateAddDelete`.
+- **Observed, not fixed:** under Robolectric, focus does not move into an `OptionsPanel` (the existing Settings
+  panels behave the same: focus stays on the opener behind the scrim), and tv `Surface`s take no touch input,
+  so the live tests press panel rows through their semantics click action. Verify panel focus on a device.
+
+### Verified
+`ANTRESOL_TEST_SERVER=1 ./gradlew --no-daemon :core:test :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug`
+green, plus `:ui-common:testDebugUnitTest`.
+
+### Known gaps
+- Never run on a device: Keystore sealing, panel focus on TV, PiP, audio output remain unverified on hardware.
+- Phone has no subtitle-language setting (the shared player supports it; only the TV sets it).
+- TV playlists: no rename, remove or reorder (phone only).
+- Test runs leave many "robolectric" device sessions on the test server (pre-existing; seen in the new
+  devices list).

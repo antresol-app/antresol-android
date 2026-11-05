@@ -830,6 +830,7 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
   the album's card instead of each song getting another colour.
 - Now Playing: Speed and Sleep toggles are plain like the panel toggles until active (they had a stray dark disc).
 - A bottom fade behind the mini player and tab bar, so content no longer shows through the bar edges.
+- Pill buttons use 14 dp side padding (was 18), so "Перемешать" fits a half-width pill on a 360 dp phone.
 
 ### TV
 - Search: title, field and scope pills start on the page gutter, aligned with the result rows (the centred

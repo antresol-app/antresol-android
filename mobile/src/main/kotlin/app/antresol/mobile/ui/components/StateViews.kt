@@ -52,3 +52,27 @@ fun EmptyView(text: String, modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 48.dp),
     )
 }
+
+/**
+ * The end of a paged list: a small spinner while the next page loads, "Try Again" when it failed.
+ */
+@Composable
+fun PagingFooter(loading: Boolean, error: Throwable?, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    when {
+        loading -> Box(modifier.fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = AntresolColors.LabelSecondary, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+        }
+        error != null -> Column(
+            modifier = modifier.fillMaxWidth().padding(vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                error.userMessage(LocalContext.current.resources),
+                style = Antresol.typography.caption.copy(color = AntresolColors.LabelSecondary),
+                textAlign = TextAlign.Center,
+            )
+            GlassPillButton(text = stringResource(R.string.action_retry), onClick = onRetry)
+        }
+    }
+}

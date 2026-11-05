@@ -22,6 +22,7 @@ import app.antresol.mobile.ui.components.CardStyle
 import app.antresol.mobile.ui.components.EmptyView
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.LoadingView
+import app.antresol.mobile.ui.components.RefreshBox
 import app.antresol.mobile.ui.components.Shelf
 import app.antresol.mobile.ui.components.TabHeader
 import app.antresol.ui.R
@@ -43,42 +44,42 @@ fun HomeScreen(
         onPauseOrDispose { }
     }
     val bottom = LocalBottomBarPadding.current
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AntresolColors.Background),
-        contentPadding = PaddingValues(bottom = bottom.calculateBottomPadding() + 16.dp),
-    ) {
-        when (val state = viewModel.state) {
-            LoadState.Loading -> {
-                item("top") { TabHeader() }
-                item("loading") { LoadingView() }
-            }
-            is LoadState.Failed -> {
-                item("top") { TabHeader() }
-                item("error") { ErrorView(state.error, onRetry = viewModel::reload) }
-            }
-            is LoadState.Ready -> {
-                val content = state.value
-                item("top") {
-                    if (content.hero.isEmpty()) {
-                        TabHeader()
-                    } else {
-                        Box {
-                            Hero(content.hero, content.heroSource, onPlay = onPlay, onDetails = onOpen)
-                            TabHeader(Modifier.align(Alignment.TopCenter))
+    RefreshBox(viewModel.refreshing, onRefresh = { viewModel.refresh(force = true) }, Modifier.fillMaxSize().background(AntresolColors.Background)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = bottom.calculateBottomPadding() + 16.dp),
+        ) {
+            when (val state = viewModel.state) {
+                LoadState.Loading -> {
+                    item("top") { TabHeader() }
+                    item("loading") { LoadingView() }
+                }
+                is LoadState.Failed -> {
+                    item("top") { TabHeader() }
+                    item("error") { ErrorView(state.error, onRetry = viewModel::reload) }
+                }
+                is LoadState.Ready -> {
+                    val content = state.value
+                    item("top") {
+                        if (content.hero.isEmpty()) {
+                            TabHeader()
+                        } else {
+                            Box {
+                                Hero(content.hero, content.heroSource, onPlay = onPlay, onDetails = onOpen)
+                                TabHeader(Modifier.align(Alignment.TopCenter))
+                            }
                         }
                     }
-                }
-                if (content.isEmpty) item("empty") { EmptyView(stringResource(R.string.home_empty)) }
-                items(content.shelves, key = { it.id }) { shelf ->
-                    Shelf(
-                        title = shelf.title,
-                        cards = shelf.cards,
-                        onOpen = onOpen,
-                        style = if (shelf.id == ShelfId.CONTINUE) CardStyle.Wide else null,
-                        onSeeAll = { onSeeAll(shelf) },
-                    )
+                    if (content.isEmpty) item("empty") { EmptyView(stringResource(R.string.home_empty)) }
+                    items(content.shelves, key = { it.id }) { shelf ->
+                        Shelf(
+                            title = shelf.title,
+                            cards = shelf.cards,
+                            onOpen = onOpen,
+                            style = if (shelf.id == ShelfId.CONTINUE) CardStyle.Wide else null,
+                            onSeeAll = { onSeeAll(shelf) },
+                        )
+                    }
                 }
             }
         }

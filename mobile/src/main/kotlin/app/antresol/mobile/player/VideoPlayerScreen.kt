@@ -366,7 +366,7 @@ private fun FailedPanel(error: Throwable, onRetry: () -> Unit, onBack: () -> Uni
     val message = if (error is PlaybackUnavailableException) {
         stringResource(UiR.string.error_playback)
     } else {
-        error.userMessage(LocalContext.current.resources)
+        error.userMessage(LocalContext.current.resources, streaming = true)
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.widthIn(max = 420.dp)) {
         Text(message, style = Antresol.typography.body, textAlign = TextAlign.Center)

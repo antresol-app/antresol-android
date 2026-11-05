@@ -1,10 +1,8 @@
 package app.antresol.mobile.ui.search
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,7 +60,9 @@ import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.SegmentedPills
 import app.antresol.mobile.ui.components.Shelf
 import app.antresol.mobile.ui.components.TabHeader
+import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.mobile.ui.shell.NavTab
+import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.format.Durations
@@ -70,7 +70,6 @@ import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolGradients
 import app.antresol.ui.theme.AntresolShapes
-import app.antresol.ui.R as UiR
 
 /**
  * Search: field, kind filter pills, then results; with an empty query the colourful Browse tiles.
@@ -193,7 +192,8 @@ private fun SongResults(songs: List<Track>, onPlay: (index: Int) -> Unit, onOpen
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .combinedClickable(
+                    .focusClickable(
+                        shape = AntresolShapes.control,
                         onLongClick = { onOpen(Card(id = song.albumId, kind = Kind.ALBUM, title = song.album, poster = song.cover)) },
                         onClick = { onPlay(index) },
                     )
@@ -267,7 +267,7 @@ private fun BrowseTileView(tile: BrowseTile, modifier: Modifier) {
             .height(112.dp)
             .clip(AntresolShapes.card)
             .background(AntresolGradients.avatar(tile.gradient))
-            .clickable(onClick = tile.onClick)
+            .focusClickable(AntresolShapes.card, onClick = tile.onClick)
             .padding(16.dp),
     ) {
         Text(

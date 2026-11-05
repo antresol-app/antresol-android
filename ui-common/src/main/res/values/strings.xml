@@ -140,4 +140,12 @@
     <string name="player_mode_transcode">Transcoding</string>
     <string name="player_back">Back</string>
     <string name="error_playback">This video can’t be played right now.</string>
+
+    <!-- Signed-in devices (settings) -->
+    <string name="settings_devices">Signed-in Devices</string>
+    <string name="settings_this_device">This device</string>
+    <string name="settings_revoke">Sign Out</string>
+    <string name="settings_revoke_title">Sign out “%1$s”?</string>
+    <string name="settings_revoke_body">That device will have to sign in to this profile again.</string>
+    <string name="settings_revoke_failed">Couldn’t sign that device out. Check the connection and try again.</string>
 </resources>

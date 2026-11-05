@@ -24,6 +24,7 @@ fun Modifier.focusClickable(
     shape: Shape,
     enabled: Boolean = true,
     role: Role? = Role.Button,
+    onClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ): Modifier = composed {
@@ -36,6 +37,7 @@ fun Modifier.focusClickable(
             indication = LocalIndication.current,
             enabled = enabled,
             role = role,
+            onClickLabel = onClickLabel,
             onLongClick = onLongClick,
             onClick = onClick,
         )

@@ -1,6 +1,5 @@
 package app.antresol.mobile.ui.shell
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,13 +27,14 @@ import app.antresol.core.model.Me
 import app.antresol.core.session.StoredSession
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.components.MobileIcons
+import app.antresol.mobile.ui.components.focusClickable
+import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import app.antresol.ui.R as UiR
 
 /** The avatar's sheet: who is signed in where, Settings, Switch Profile, Change Server and Sign Out. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,7 +88,7 @@ private fun SheetAction(icon: ImageVector, label: String, color: Color, onClick:
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .focusClickable(AntresolShapes.control, onClick = onClick)
             .testTag(tag)
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,

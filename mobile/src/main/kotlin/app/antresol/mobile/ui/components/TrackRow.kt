@@ -1,6 +1,5 @@
 package app.antresol.mobile.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,7 +43,7 @@ fun TrackRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .focusClickable(AntresolShapes.control, onClick = onClick)
             .testTag("track-${track.id}")
             .padding(horizontal = PageGutter, vertical = if (showCover) 6.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,

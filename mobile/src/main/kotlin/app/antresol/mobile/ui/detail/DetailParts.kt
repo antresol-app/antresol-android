@@ -1,7 +1,6 @@
 package app.antresol.mobile.ui.detail
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -27,9 +26,11 @@ import androidx.compose.ui.unit.dp
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.components.BackBar
 import app.antresol.mobile.ui.components.PageGutter
+import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.ui.image.rememberArtworkTint
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
+import app.antresol.ui.theme.AntresolShapes
 
 /**
  * The top of a detail page: an artwork-tinted glow fading to black behind [artwork], the back
@@ -76,7 +77,7 @@ fun ExpandableText(text: String, modifier: Modifier = Modifier, collapsedLines: 
         overflow = TextOverflow.Ellipsis,
         modifier = modifier
             .fillMaxWidth()
-            .clickable { expanded = !expanded }
+            .focusClickable(AntresolShapes.control, role = null) { expanded = !expanded }
             .padding(horizontal = PageGutter, vertical = 8.dp),
     )
 }

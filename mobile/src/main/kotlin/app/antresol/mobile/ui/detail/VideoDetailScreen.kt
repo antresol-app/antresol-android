@@ -1,7 +1,6 @@
 package app.antresol.mobile.ui.detail
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -259,7 +258,7 @@ private fun SeasonWatchedToggle(season: SeasonInfo, onToggle: () -> Unit) {
         modifier = Modifier
             .padding(horizontal = PageGutter - 8.dp)
             .clip(AntresolShapes.pill)
-            .clickable(onClick = onToggle)
+            .focusClickable(AntresolShapes.pill, onClick = onToggle)
             .padding(horizontal = 8.dp, vertical = 8.dp),
     )
 }
@@ -309,7 +308,7 @@ private fun EpisodeRow(episode: EpisodeCard, onOpen: () -> Unit, onPlay: () -> U
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen)
+            .focusClickable(AntresolShapes.control, onClick = onOpen)
             .padding(horizontal = PageGutter, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -322,7 +321,7 @@ private fun EpisodeRow(episode: EpisodeCard, onOpen: () -> Unit, onPlay: () -> U
                 .width(if (wide) 200.dp else 136.dp)
                 .aspectRatio(AntresolMotion.BACKDROP_ASPECT)
                 .clip(AntresolShapes.smallCard)
-                .clickable(onClick = onPlay)
+                .focusClickable(AntresolShapes.smallCard, onClick = onPlay)
                 .testTag("episode-play-${episode.id}"),
         ) {
             Box(
@@ -353,7 +352,7 @@ private fun EpisodeRow(episode: EpisodeCard, onOpen: () -> Unit, onPlay: () -> U
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .clickable(role = Role.Checkbox, onClick = onToggleWatched)
+                .focusClickable(CircleShape, role = Role.Checkbox, onClick = onToggleWatched)
                 .semantics { contentDescription = toggleLabel },
             contentAlignment = Alignment.Center,
         ) {

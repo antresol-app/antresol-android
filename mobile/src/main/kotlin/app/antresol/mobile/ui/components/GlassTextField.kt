@@ -2,7 +2,6 @@ package app.antresol.mobile.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -82,7 +81,7 @@ fun GlassTextField(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .clickable(onClick = onTrailingClick),
+                            .focusClickable(CircleShape, onClick = onTrailingClick),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(trailingIcon, contentDescription = trailingDescription, tint = AntresolColors.LabelSecondary, modifier = Modifier.size(20.dp))

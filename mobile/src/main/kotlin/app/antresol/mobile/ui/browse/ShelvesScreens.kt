@@ -2,7 +2,6 @@ package app.antresol.mobile.ui.browse
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -35,7 +34,6 @@ import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.components.EmptyView
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.LinkRow
-import app.antresol.mobile.ui.music.ShuffleAllButton
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PageTitle
@@ -43,12 +41,14 @@ import app.antresol.mobile.ui.components.RefreshBox
 import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.Shelf
 import app.antresol.mobile.ui.components.TabHeader
+import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.mobile.ui.detail.NoticeSnackbar
+import app.antresol.mobile.ui.music.ShuffleAllButton
 import app.antresol.mobile.ui.music.ShuffleAllViewModel
+import app.antresol.ui.R as UiR
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
-import app.antresol.ui.R as UiR
 
 /** The Music tab's data: `/api/music/home` shelves and the genre list. */
 data class MusicHome(val shelves: List<Shelf>, val genres: List<Genre>)
@@ -193,7 +193,7 @@ private fun GenreChips(genres: List<Genre>, onSelect: (Genre) -> Unit) {
                     .clip(AntresolShapes.pill)
                     .background(AntresolColors.Glass)
                     .border(1.dp, AntresolColors.GlassBorder, AntresolShapes.pill)
-                    .clickable { onSelect(genre) }
+                    .focusClickable(AntresolShapes.pill) { onSelect(genre) }
                     .padding(horizontal = 18.dp, vertical = 10.dp),
             )
         }

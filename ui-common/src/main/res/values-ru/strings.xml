@@ -140,4 +140,12 @@
     <string name="player_mode_transcode">Перекодирование</string>
     <string name="player_back">Назад</string>
     <string name="error_playback">Сейчас это видео не воспроизводится.</string>
+
+    <!-- Signed-in devices (settings) -->
+    <string name="settings_devices">Устройства с входом</string>
+    <string name="settings_this_device">Это устройство</string>
+    <string name="settings_revoke">Выйти</string>
+    <string name="settings_revoke_title">Выйти на «%1$s»?</string>
+    <string name="settings_revoke_body">На этом устройстве придётся снова войти в профиль.</string>
+    <string name="settings_revoke_failed">Не удалось выйти на этом устройстве. Проверьте подключение и попробуйте снова.</string>
 </resources>

@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -30,17 +30,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import app.antresol.core.model.Card
 import app.antresol.core.model.BookDetail
+import app.antresol.core.model.Card
 import app.antresol.core.model.Chapter
 import app.antresol.core.model.Kind
-import app.antresol.mobile.playback.PlaybackConnection
-import app.antresol.mobile.ui.components.PrimaryPillButton
-import app.antresol.mobile.ui.components.TrackRow
-import app.antresol.mobile.ui.music.PlayShuffleRow
-import app.antresol.ui.components.AntresolIcons
-import androidx.compose.foundation.clickable
 import app.antresol.mobile.R
+import app.antresol.mobile.playback.PlaybackConnection
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.LocalMediaUrls
@@ -50,9 +45,15 @@ import app.antresol.mobile.ui.components.GlassPillButton
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PageGutter
+import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.Shelf
+import app.antresol.mobile.ui.components.TrackRow
+import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.mobile.ui.components.kindLabel
+import app.antresol.mobile.ui.music.PlayShuffleRow
+import app.antresol.ui.R as UiR
+import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.format.Durations
 import app.antresol.ui.format.spokenDuration
@@ -61,7 +62,6 @@ import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 import java.util.Locale
-import app.antresol.ui.R as UiR
 
 /**
  * Album, artist, playlist, book, audiobook and comic detail: centred artwork on its own tint,
@@ -206,7 +206,7 @@ private fun ChapterRow(chapter: Chapter, current: Boolean, onClick: () -> Unit) 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .focusClickable(AntresolShapes.control, onClick = onClick)
             .testTag("chapter-${chapter.idx}")
             .padding(horizontal = PageGutter, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

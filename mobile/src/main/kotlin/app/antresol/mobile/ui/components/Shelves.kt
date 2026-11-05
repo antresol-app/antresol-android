@@ -1,6 +1,5 @@
 package app.antresol.mobile.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,6 +18,7 @@ import app.antresol.core.model.Card
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
+import app.antresol.ui.theme.AntresolShapes
 
 /** Horizontal margin of page content. */
 val PageGutter = 16.dp
@@ -28,7 +28,7 @@ val PageGutter = 16.dp
 fun SectionTitle(title: String, modifier: Modifier = Modifier, onSeeAll: (() -> Unit)? = null) {
     Row(
         modifier = modifier
-            .then(if (onSeeAll != null) Modifier.clickable(onClick = onSeeAll) else Modifier)
+            .then(if (onSeeAll != null) Modifier.focusClickable(AntresolShapes.control, onClick = onSeeAll) else Modifier)
             .padding(horizontal = PageGutter, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -89,7 +89,7 @@ fun LinkRow(links: List<Pair<String, () -> Unit>>, modifier: Modifier = Modifier
                 text = label,
                 style = Antresol.typography.bodyEmphasis.copy(color = AntresolColors.Accent),
                 modifier = Modifier
-                    .clickable(onClick = onClick)
+                    .focusClickable(AntresolShapes.control, onClick = onClick)
                     .padding(horizontal = 4.dp, vertical = 8.dp)
                     .padding(end = 20.dp),
             )

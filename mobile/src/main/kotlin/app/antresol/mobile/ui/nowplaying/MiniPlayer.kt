@@ -2,7 +2,6 @@ package app.antresol.mobile.ui.nowplaying
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,18 +21,20 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import app.antresol.mobile.R
 import app.antresol.mobile.playback.PlaybackConnection
 import app.antresol.mobile.playback.PlaybackService
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.RoundIconButton
 import app.antresol.mobile.ui.components.SkipSecondsButton
+import app.antresol.mobile.ui.components.focusClickable
+import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
-import app.antresol.ui.R as UiR
 
 /** Height the mini-player adds above the tab bar, including its gap. */
 val MiniPlayerSpace = 72.dp
@@ -57,7 +57,7 @@ fun MiniPlayer(playback: PlaybackConnection, onOpen: () -> Unit, modifier: Modif
             .clip(shape)
             .background(AntresolColors.BackgroundElevated.copy(alpha = 0.97f))
             .border(1.dp, AntresolColors.GlassBorder, shape)
-            .clickable(onClick = onOpen)
+            .focusClickable(shape, onClick = onOpen)
             .testTag("mini-player"),
     ) {
         Row(

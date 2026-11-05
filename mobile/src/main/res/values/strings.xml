@@ -93,11 +93,6 @@
     <string name="settings_autoplay_detail">Starts after a 10-second countdown</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_system">System</string>
-    <string name="settings_devices">Signed-in Devices</string>
-    <string name="settings_this_device">This device</string>
-    <string name="settings_revoke">Sign Out</string>
-    <string name="settings_revoke_title">Sign out “%1$s”?</string>
-    <string name="settings_revoke_body">That device will have to sign in to this profile again.</string>
     <string name="settings_about">About</string>
     <string name="settings_app_version">App Version</string>
     <string name="error_too_many_attempts">Too many attempts. Try again later.</string>
@@ -113,5 +108,4 @@
     <string name="confirm_change_server_body">You will go back to entering a server address. Your profiles stay signed in.</string>
     <string name="reader_page_failed">Page %1$d couldn’t be loaded.</string>
     <string name="detail_go_to_series">Go to Series</string>
-    <string name="settings_revoke_failed">Couldn’t sign that device out. Check the connection and try again.</string>
 </resources>

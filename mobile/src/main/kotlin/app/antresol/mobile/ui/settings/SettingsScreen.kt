@@ -1,7 +1,6 @@
 package app.antresol.mobile.ui.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -58,7 +58,9 @@ import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.SegmentedPills
+import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.mobile.ui.detail.NoticeSnackbar
+import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
@@ -67,7 +69,6 @@ import app.antresol.ui.theme.AntresolShapes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import app.antresol.ui.R as UiR
 
 /** What the settings page loads from the server: its version and this profile's signed-in devices. */
 data class ServerInfo(val health: Health?, val devices: List<DeviceSession>)
@@ -89,7 +90,7 @@ class SettingsViewModel(private val client: AntresolClient) : LoadViewModel<Serv
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                notice = R.string.settings_revoke_failed
+                notice = UiR.string.settings_revoke_failed
             }
             refresh(force = true)
         }
@@ -197,7 +198,7 @@ fun SettingsScreen(
                 )
             }
 
-            header(R.string.settings_devices)
+            header(UiR.string.settings_devices)
             when (val state = viewModel.state) {
                 LoadState.Loading -> item("devices-loading") { Text(stringResource(UiR.string.state_loading), style = Antresol.typography.caption, modifier = Modifier.padding(horizontal = PageGutter)) }
                 is LoadState.Failed -> item("devices-failed") { ErrorView(state.error, onRetry = viewModel::reload) }
@@ -223,11 +224,11 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { revoking = null },
             containerColor = AntresolColors.BackgroundElevated,
-            title = { Text(stringResource(R.string.settings_revoke_title, device.name.ifBlank { device.model })) },
-            text = { Text(stringResource(R.string.settings_revoke_body)) },
+            title = { Text(stringResource(UiR.string.settings_revoke_title, device.name.ifBlank { device.model })) },
+            text = { Text(stringResource(UiR.string.settings_revoke_body)) },
             confirmButton = {
                 TextButton(onClick = { viewModel.revoke(device); revoking = null }) {
-                    Text(stringResource(R.string.settings_revoke), color = AntresolColors.Red)
+                    Text(stringResource(UiR.string.settings_revoke), color = AntresolColors.Red)
                 }
             },
             dismissButton = { TextButton(onClick = { revoking = null }) { Text(stringResource(UiR.string.action_cancel)) } },
@@ -274,7 +275,7 @@ private fun ActionRow(icon: ImageVector, label: String, onClick: () -> Unit, tag
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick)
+            .focusClickable(AntresolShapes.control, onClick = onClick)
             .testTag(tag)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -290,7 +291,7 @@ private fun ValueRow(label: String, value: String, onClick: (() -> Unit)? = null
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.focusClickable(AntresolShapes.control, onClick = onClick) else Modifier)
             .then(if (tag != null) Modifier.testTag(tag) else Modifier)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -307,7 +308,7 @@ private fun SwitchRow(label: String, detail: String, checked: Boolean, onChange:
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Switch) { onChange(!checked) }
+            .focusClickable(AntresolShapes.control, role = Role.Switch) { onChange(!checked) }
             .testTag(tag)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -342,16 +343,16 @@ private fun DeviceRow(device: DeviceSession, onRevoke: () -> Unit) {
             if (detail.isNotBlank()) Text(detail, style = Antresol.typography.caption, maxLines = 1)
         }
         if (device.current) {
-            Text(stringResource(R.string.settings_this_device), style = Antresol.typography.caption.copy(color = AntresolColors.Green))
+            Text(stringResource(UiR.string.settings_this_device), style = Antresol.typography.caption.copy(color = AntresolColors.Green))
         } else {
             Box(
                 Modifier
                     .size(36.dp)
-                    .clickable(role = Role.Button, onClick = onRevoke)
+                    .focusClickable(CircleShape, onClick = onRevoke)
                     .testTag("revoke-${device.id}"),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(MobileIcons.Close, contentDescription = stringResource(R.string.settings_revoke), tint = AntresolColors.LabelTertiary, modifier = Modifier.size(18.dp))
+                Icon(MobileIcons.Close, contentDescription = stringResource(UiR.string.settings_revoke), tint = AntresolColors.LabelTertiary, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -369,7 +370,7 @@ private fun QualityDialog(selected: String, onSelect: (String) -> Unit, onDismis
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSelect(value) }
+                            .focusClickable(AntresolShapes.control, role = Role.RadioButton) { onSelect(value) }
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),

@@ -91,11 +91,6 @@
     <string name="settings_autoplay_detail">Через 10 секунд после конца серии</string>
     <string name="settings_language">Язык</string>
     <string name="settings_language_system">Системный</string>
-    <string name="settings_devices">Устройства с входом</string>
-    <string name="settings_this_device">Это устройство</string>
-    <string name="settings_revoke">Выйти</string>
-    <string name="settings_revoke_title">Выйти на «%1$s»?</string>
-    <string name="settings_revoke_body">На этом устройстве придётся снова войти в профиль.</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_app_version">Версия приложения</string>
     <string name="error_too_many_attempts">Слишком много попыток. Попробуйте позже.</string>
@@ -111,5 +106,4 @@
     <string name="confirm_change_server_body">Вы вернётесь к вводу адреса сервера. Вход в профили сохранится.</string>
     <string name="reader_page_failed">Не удалось загрузить страницу %1$d.</string>
     <string name="detail_go_to_series">К сериалу</string>
-    <string name="settings_revoke_failed">Не удалось выйти на этом устройстве. Проверьте подключение и попробуйте снова.</string>
 </resources>

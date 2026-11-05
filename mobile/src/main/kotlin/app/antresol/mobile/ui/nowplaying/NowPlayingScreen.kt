@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,6 +73,8 @@ import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.RoundIconButton
 import app.antresol.mobile.ui.components.SkipSecondsButton
 import app.antresol.mobile.ui.components.TimeSlider
+import app.antresol.mobile.ui.components.focusClickable
+import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.format.Durations
@@ -79,10 +82,9 @@ import app.antresol.ui.image.rememberArtworkTint
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import java.util.Locale
-import app.antresol.ui.R as UiR
 
 /** What the lower half of Now Playing shows instead of the large artwork. */
 private enum class Panel { Artwork, Lyrics, Queue, Chapters }
@@ -306,7 +308,7 @@ private fun PanelToggle(icon: androidx.compose.ui.graphics.vector.ImageVector, l
         Modifier
             .size(44.dp)
             .background(if (selected) AntresolColors.Label else androidx.compose.ui.graphics.Color.Transparent, AntresolShapes.pill)
-            .clickable(onClick = onClick)
+            .focusClickable(AntresolShapes.pill, role = Role.Tab, onClick = onClick)
             .testTag(tag),
         contentAlignment = Alignment.Center,
     ) {
@@ -321,7 +323,7 @@ private fun TextToggle(text: String, description: String, tag: String, onClick: 
         style = Antresol.typography.bodyEmphasis.copy(color = AntresolColors.LabelSecondary),
         modifier = Modifier
             .background(AntresolColors.Glass.copy(alpha = 0.5f), AntresolShapes.pill)
-            .clickable(onClickLabel = description, onClick = onClick)
+            .focusClickable(AntresolShapes.pill, onClickLabel = description, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp)
             .testTag(tag),
     )

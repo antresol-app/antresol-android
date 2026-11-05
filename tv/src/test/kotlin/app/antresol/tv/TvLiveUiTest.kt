@@ -403,7 +403,7 @@ class TvLiveUiTest {
         waitFor(isFocused() and hasAnyDescendant(hasText("Video Quality")))
         // Signed-in devices: this test device is listed as the current one (nothing is revoked here,
         // the other live tests may be signed in at the same time).
-        key(KeyEvent.KEYCODE_DPAD_DOWN, times = 2)
+        key(KeyEvent.KEYCODE_DPAD_DOWN, times = 4)
         waitFor(hasText("Signed-in Devices"))
         waitFor(hasText("This device"))
         shot("31-settings-devices")

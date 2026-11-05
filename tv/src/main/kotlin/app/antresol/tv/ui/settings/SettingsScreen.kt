@@ -122,10 +122,11 @@ private enum class SettingsMenu { Quality, Subtitles, Language, ConfirmSignOut, 
 
 /**
  * Settings, opened from the avatar: the profile (switch, sign out), playback defaults (video
- * quality, subtitle language), the app language, the server (address, version, library, change)
- * and about the app. Choices open a side panel (the shell hides its nav meanwhile, see
- * [onMenuOpenChanged]); a new language restarts the app's screens from Home, so text from the server
- * reloads in that language too. Sign Out and Change Server ask first, with Cancel focused.
+ * quality, subtitle language), the app language, the server (address, version, library, change),
+ * the profile's signed-in devices and about the app. Choices open a side panel (the shell hides its
+ * nav meanwhile, see [onMenuOpenChanged]); a new language restarts the app's screens from Home, so
+ * text from the server reloads in that language too. Sign Out, Change Server and signing out
+ * another device ask first, with Cancel focused.
  */
 @Composable
 fun SettingsScreen(
@@ -209,17 +210,6 @@ fun SettingsScreen(
                         modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Language)),
                     )
                 }
-                devicesSection(
-                    devices = viewModel.devices,
-                    revokeFailed = viewModel.revokeFailed,
-                    revoking = revoking,
-                    revokeOpener = openers.getValue(SettingsMenu.ConfirmRevoke),
-                    onRevoke = { device ->
-                        revoking = device
-                        menu = SettingsMenu.ConfirmRevoke
-                    },
-                    onRetry = viewModel::loadDevices,
-                )
                 item { Section(stringResource(TvR.string.settings_server)) }
                 item { InfoRow(stringResource(TvR.string.settings_server_address), viewModel.serverUrl) }
                 item {
@@ -246,6 +236,17 @@ fun SettingsScreen(
                         )
                     }
                 }
+                devicesSection(
+                    devices = viewModel.devices,
+                    revokeFailed = viewModel.revokeFailed,
+                    revoking = revoking,
+                    revokeOpener = openers.getValue(SettingsMenu.ConfirmRevoke),
+                    onRevoke = { device ->
+                        revoking = device
+                        menu = SettingsMenu.ConfirmRevoke
+                    },
+                    onRetry = viewModel::loadDevices,
+                )
             }
         }
         when (menu) {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,12 +39,16 @@ fun TrackRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     showCover: Boolean = false,
+    /** A long press (add to a playlist). */
+    onLongClick: (() -> Unit)? = null,
+    /** Replaces the duration (playlist editing controls); the row then does not play on tap. */
+    trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val urls = LocalMediaUrls.current
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .focusClickable(AntresolShapes.control, onClick = onClick)
+            .focusClickable(AntresolShapes.control, enabled = trailing == null, onLongClick = onLongClick, onClick = onClick)
             .testTag("track-${track.id}")
             .padding(horizontal = PageGutter, vertical = if (showCover) 6.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -71,7 +76,11 @@ fun TrackRow(
                 Text(track.artist, style = Antresol.typography.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        if (track.starred) Icon(MobileIcons.StarFilled, contentDescription = null, tint = AntresolColors.Orange, modifier = Modifier.size(14.dp))
-        Text(Durations.clock(track.durationMs), style = Antresol.typography.caption)
+        if (trailing != null) {
+            trailing()
+        } else {
+            if (track.starred) Icon(MobileIcons.StarFilled, contentDescription = null, tint = AntresolColors.Orange, modifier = Modifier.size(14.dp))
+            Text(Durations.clock(track.durationMs), style = Antresol.typography.caption)
+        }
     }
 }

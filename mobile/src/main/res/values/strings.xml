@@ -108,4 +108,13 @@
     <string name="confirm_change_server_body">You will go back to entering a server address. Your profiles stay signed in.</string>
     <string name="reader_page_failed">Page %1$d couldn’t be loaded.</string>
     <string name="detail_go_to_series">Go to Series</string>
+
+    <!-- Playlist editing -->
+    <string name="playlist_rename">Rename</string>
+    <string name="playlist_edit">Edit</string>
+    <string name="playlist_done">Done</string>
+    <string name="playlist_move_up">Move up</string>
+    <string name="playlist_move_down">Move down</string>
+    <string name="playlist_remove">Remove from playlist</string>
+    <string name="playlist_empty">This playlist is empty. Long press a song in an album or in Songs to add it.</string>
 </resources>

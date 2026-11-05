@@ -12,12 +12,15 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Chapter
 import app.antresol.core.model.Kind
 import app.antresol.core.model.PlaylistDetail
+import app.antresol.core.model.PlaylistPatch
 import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.Track
+import app.antresol.core.music.PlaylistEdits
 import app.antresol.core.playback.PendingWrites
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LoadViewModel
+import app.antresol.mobile.ui.playlists.PlaylistPicker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -50,6 +53,21 @@ data class MediaDetail(
 /** Loads the detail of a music or book card through the matching endpoint. */
 class MediaDetailViewModel(private val client: AntresolClient, kind: String, private val id: Long, pendingWrites: PendingWrites) :
     LoadViewModel<MediaDetail>(pendingWrites = pendingWrites, fetch = { fetchDetail(client, kind, id) }) {
+
+    /** "Add to Playlist" for the album or a song on this page. */
+    val playlistPicker = PlaylistPicker(client, viewModelScope)
+
+    /** Playlist pages: the songs show move and remove controls. */
+    var editing: Boolean by mutableStateOf(false)
+        private set
+
+    /** A playlist edit is being saved; edits wait for it, so positions always match the server. */
+    var savingPlaylist: Boolean by mutableStateOf(false)
+        private set
+
+    fun toggleEditing() {
+        editing = !editing
+    }
 
     /** A string resource to show once (a failed write or playback request); the screen calls [consumeNotice]. */
     var notice: Int? by mutableStateOf(null)
@@ -95,6 +113,77 @@ class MediaDetailViewModel(private val client: AntresolClient, kind: String, pri
         val starred = before.starred ?: return
         mutate(before, { it.copy(starred = !starred) }) {
             if (starred) client.unstar(id) else client.star(id)
+        }
+    }
+
+    /** Playlists: renames it (shown at once, undone if the server refuses). */
+    fun renamePlaylist(name: String) {
+        val before = (state as? LoadState.Ready)?.value ?: return
+        val patch = PlaylistEdits.rename(name)
+        val newName = patch.name
+        if (newName.isNullOrEmpty() || newName == before.card.title) return
+        editPlaylist(before, { it.copy(card = it.card.copy(title = newName)) }, patch)
+    }
+
+    /** Playlists: moves the song at [from] to [to]. */
+    fun moveTrack(from: Int, to: Int) {
+        val before = (state as? LoadState.Ready)?.value ?: return
+        if (from == to || to !in before.tracks.indices) return
+        editPlaylist(before, { it.copy(tracks = PlaylistEdits.moved(it.tracks, from, to)) }, PlaylistEdits.move(before.tracks.size, from, to))
+    }
+
+    /** Playlists: removes the song at [position]. */
+    fun removeTrack(position: Int) {
+        val before = (state as? LoadState.Ready)?.value ?: return
+        if (position !in before.tracks.indices) return
+        val removed = before.tracks[position]
+        editPlaylist(
+            before,
+            {
+                it.copy(
+                    tracks = PlaylistEdits.removed(it.tracks, position),
+                    songCount = it.songCount?.minus(1)?.coerceAtLeast(0),
+                    durationMs = it.durationMs?.minus(removed.durationMs)?.takeIf { ms -> ms > 0 },
+                )
+            },
+            PlaylistEdits.remove(position),
+        )
+    }
+
+    /** Playlists: deletes it, then calls [onDeleted] (the page closes). */
+    fun deletePlaylist(onDeleted: () -> Unit) {
+        if (savingPlaylist) return
+        savingPlaylist = true
+        viewModelScope.launch {
+            try {
+                client.deletePlaylist(id)
+                onDeleted()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                notice = R.string.detail_action_failed
+            } finally {
+                savingPlaylist = false
+            }
+        }
+    }
+
+    /** One playlist edit at a time: positions in the next edit refer to the list after this one. */
+    private fun editPlaylist(before: MediaDetail, change: (MediaDetail) -> MediaDetail, patch: PlaylistPatch) {
+        if (savingPlaylist) return
+        savingPlaylist = true
+        update(change)
+        viewModelScope.launch {
+            try {
+                client.updatePlaylist(id, patch)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                update { before }
+                notice = R.string.detail_action_failed
+            } finally {
+                savingPlaylist = false
+            }
         }
     }
 

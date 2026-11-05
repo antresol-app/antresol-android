@@ -148,4 +148,15 @@
     <string name="settings_revoke_title">Выйти на «%1$s»?</string>
     <string name="settings_revoke_body">На этом устройстве придётся снова войти в профиль.</string>
     <string name="settings_revoke_failed">Не удалось выйти на этом устройстве. Проверьте подключение и попробуйте снова.</string>
+
+    <!-- Playlists -->
+    <string name="playlist_add">Добавить в плейлист</string>
+    <string name="playlist_new">Новый плейлист</string>
+    <string name="playlist_name">Название плейлиста</string>
+    <string name="playlist_create">Создать</string>
+    <string name="playlist_delete">Удалить плейлист</string>
+    <string name="playlist_delete_title">Удалить «%1$s»?</string>
+    <string name="playlist_delete_body">Песни останутся в медиатеке.</string>
+    <string name="playlist_added">Добавлено в «%1$s».</string>
+    <string name="playlist_failed">Не удалось изменить плейлист. Попробуйте снова.</string>
 </resources>

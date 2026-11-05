@@ -2,6 +2,7 @@ package app.antresol.mobile.ui.music
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -9,8 +10,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -41,11 +45,13 @@ import app.antresol.mobile.ui.components.PageTitle
 import app.antresol.mobile.ui.components.PagingFooter
 import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.TrackRow
+import app.antresol.mobile.ui.playlists.PlaylistPicker
+import app.antresol.mobile.ui.playlists.PlaylistPickerHost
+import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.theme.AntresolColors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import app.antresol.ui.R as UiR
 
 /**
  * Every song (`/api/music/songs`), paged; [starred] lists the starred ones only. Playing from this
@@ -54,6 +60,9 @@ import app.antresol.ui.R as UiR
  */
 class SongsViewModel(private val client: AntresolClient, private val starred: Boolean) : PagedViewModel<Track>() {
     private var queueJob: Job? = null
+
+    /** A long press adds a song to a playlist. */
+    val playlistPicker = PlaylistPicker(client, viewModelScope)
 
     init {
         reload()
@@ -91,6 +100,17 @@ fun SongsScreen(viewModel: SongsViewModel, title: String, playback: PlaybackConn
     val list = rememberLazyListState()
     val nearEnd by remember { derivedStateOf { list.layoutInfo.visibleItemsInfo.lastOrNull()?.index?.let { it >= list.layoutInfo.totalItemsCount - 10 } == true } }
     LaunchedEffect(nearEnd, viewModel.state) { if (nearEnd) viewModel.loadMore() }
+    val snackbar = remember { SnackbarHostState() }
+    PlaylistPickerHost(viewModel.playlistPicker, snackbar)
+    Box(Modifier.fillMaxSize()) {
+        SongsList(viewModel, title, playback, onBack, list)
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom))
+    }
+}
+
+@Composable
+private fun SongsList(viewModel: SongsViewModel, title: String, playback: PlaybackConnection, onBack: () -> Unit, list: LazyListState) {
+    val bottom = LocalBottomBarPadding.current
     LazyColumn(
         state = list,
         modifier = Modifier.fillMaxSize().background(AntresolColors.Background).testTag("songs"),
@@ -117,6 +137,7 @@ fun SongsScreen(viewModel: SongsViewModel, title: String, playback: PlaybackConn
                             playing = playback.current?.trackId == track.id,
                             onClick = { viewModel.play(playback, index) },
                             showCover = true,
+                            onLongClick = { viewModel.playlistPicker.open(listOf(track.id)) },
                         )
                     }
                     item("footer") {

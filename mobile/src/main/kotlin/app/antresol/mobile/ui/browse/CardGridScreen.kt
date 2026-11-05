@@ -1,28 +1,37 @@
 package app.antresol.mobile.ui.browse
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.antresol.core.model.Card
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
@@ -30,16 +39,20 @@ import app.antresol.mobile.ui.components.CardSizes
 import app.antresol.mobile.ui.components.CardStyle
 import app.antresol.mobile.ui.components.EmptyView
 import app.antresol.mobile.ui.components.ErrorView
+import app.antresol.mobile.ui.components.GlassPillButton
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MediaCard
+import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PageTitle
-import app.antresol.mobile.ui.components.PagingFooter
 import app.antresol.mobile.ui.components.PageTop
+import app.antresol.mobile.ui.components.PagingFooter
 import app.antresol.mobile.ui.components.RefreshBox
 import app.antresol.mobile.ui.components.SegmentedPills
 import app.antresol.mobile.ui.components.defaultStyle
 import app.antresol.mobile.ui.components.fullBleed
+import app.antresol.mobile.ui.detail.NoticeSnackbar
+import app.antresol.mobile.ui.playlists.PlaylistNameSheet
 import app.antresol.ui.R
 import app.antresol.ui.theme.AntresolColors
 
@@ -71,6 +84,28 @@ fun CardGridScreen(
         if (nearEnd) viewModel.loadMore()
     }
 
+    val playlists = source == GridSource.Playlists
+    // Playlists change on their own pages (renamed, deleted): show that on return.
+    if (playlists) {
+        LifecycleResumeEffect(viewModel) {
+            viewModel.refresh(pulled = false)
+            onPauseOrDispose { }
+        }
+    }
+    var naming by rememberSaveable { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    NoticeSnackbar(viewModel.notice, snackbar, viewModel::consumeNotice)
+    if (naming) {
+        PlaylistNameSheet(
+            title = stringResource(R.string.playlist_new),
+            confirm = stringResource(R.string.playlist_create),
+            onConfirm = { name ->
+                naming = false
+                viewModel.createPlaylist(name, onOpen)
+            },
+            onDismiss = { naming = false },
+        )
+    }
     RefreshBox(viewModel.refreshing, onRefresh = viewModel::refresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(CardSizes.gridMinWidth(style ?: CardStyle.Poster)),
@@ -86,6 +121,18 @@ fun CardGridScreen(
         ) {
             fullWidth("top") { Box(Modifier.fullBleed(PageGutter)) { PageTop(onBack) } }
             fullWidth("title") { PageTitle(title, Modifier.fullBleed(PageGutter)) }
+            if (playlists) {
+                fullWidth("new-playlist") {
+                    Box(Modifier.fillMaxWidth()) {
+                        GlassPillButton(
+                            text = stringResource(R.string.playlist_new),
+                            icon = MobileIcons.Plus,
+                            onClick = { naming = true },
+                            modifier = Modifier.testTag("playlist-create"),
+                        )
+                    }
+                }
+            }
             val sorts = source.sorts
             val sort = viewModel.sort
             if (sorts.isNotEmpty() && sort != null) {
@@ -117,6 +164,9 @@ fun CardGridScreen(
                 }
             }
         }
+    }
+    Box(Modifier.fillMaxSize()) {
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom))
     }
 }
 

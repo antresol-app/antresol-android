@@ -106,4 +106,13 @@
     <string name="confirm_change_server_body">Вы вернётесь к вводу адреса сервера. Вход в профили сохранится.</string>
     <string name="reader_page_failed">Не удалось загрузить страницу %1$d.</string>
     <string name="detail_go_to_series">К сериалу</string>
+
+    <!-- Playlist editing -->
+    <string name="playlist_rename">Переименовать</string>
+    <string name="playlist_edit">Изменить</string>
+    <string name="playlist_done">Готово</string>
+    <string name="playlist_move_up">Выше</string>
+    <string name="playlist_move_down">Ниже</string>
+    <string name="playlist_remove">Убрать из плейлиста</string>
+    <string name="playlist_empty">Плейлист пуст. Удерживайте песню в альбоме или в списке песен, чтобы добавить её.</string>
 </resources>

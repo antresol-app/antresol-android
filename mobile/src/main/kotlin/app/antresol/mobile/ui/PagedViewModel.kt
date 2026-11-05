@@ -98,14 +98,14 @@ abstract class PagedViewModel<T> : ViewModel() {
     }
 
     /**
-     * Pull to refresh: fetches as many items as are shown again (bounded) without a spinner over
-     * the list; a failure keeps the current list. An error page reloads instead.
+     * Fetches as many items as are shown again (bounded) without a spinner over the list; a failure
+     * keeps the current list. [pulled]: pull to refresh (shows its indicator; an error page reloads).
      */
-    fun refresh() {
-        if (state is LoadState.Failed) return reload()
+    fun refresh(pulled: Boolean = true) {
+        if (pulled && state is LoadState.Failed) return reload()
         val shown = (state as? LoadState.Ready)?.value ?: return
         if (job?.isActive == true) return
-        refreshing = true
+        refreshing = pulled
         job = viewModelScope.launch {
             try {
                 val fresh = load {

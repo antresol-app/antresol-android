@@ -20,7 +20,11 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -39,6 +43,7 @@ import app.antresol.mobile.playback.PlaybackConnection
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.LocalMediaUrls
+import app.antresol.mobile.ui.components.EmptyView
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.GlassPillButton
@@ -52,6 +57,9 @@ import app.antresol.mobile.ui.components.TrackRow
 import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.mobile.ui.components.kindLabel
 import app.antresol.mobile.ui.music.PlayShuffleRow
+import app.antresol.mobile.ui.playlists.ConfirmSheet
+import app.antresol.mobile.ui.playlists.PlaylistNameSheet
+import app.antresol.mobile.ui.playlists.PlaylistPickerHost
 import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
@@ -82,15 +90,45 @@ fun MediaDetailScreen(
     }
     val snackbar = remember { SnackbarHostState() }
     NoticeSnackbar(viewModel.notice, snackbar, viewModel::consumeNotice)
+    PlaylistPickerHost(viewModel.playlistPicker, snackbar)
+    var dialog by rememberSaveable { mutableStateOf<PlaylistDialog?>(null) }
     Box(Modifier.fillMaxSize().background(AntresolColors.Background)) {
         when (val state = viewModel.state) {
             LoadState.Loading -> DetailStateBox(onBack) { LoadingView() }
             is LoadState.Failed -> DetailStateBox(onBack) { ErrorView(state.error, onRetry = viewModel::reload) }
-            is LoadState.Ready -> MediaDetailContent(state.value, viewModel, playback, onOpen, onBack, onRead)
+            is LoadState.Ready -> MediaDetailContent(state.value, viewModel, playback, onOpen, onBack, onRead, onPlaylistDialog = { dialog = it })
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(LocalBottomBarPadding.current))
     }
+    val title = (viewModel.state as? LoadState.Ready)?.value?.card?.title.orEmpty()
+    when (dialog) {
+        PlaylistDialog.Rename -> PlaylistNameSheet(
+            title = stringResource(R.string.playlist_rename),
+            confirm = stringResource(R.string.playlist_rename),
+            initial = title,
+            onConfirm = { name ->
+                dialog = null
+                viewModel.renamePlaylist(name)
+            },
+            onDismiss = { dialog = null },
+        )
+        PlaylistDialog.Delete -> ConfirmSheet(
+            title = stringResource(UiR.string.playlist_delete_title, title),
+            message = stringResource(UiR.string.playlist_delete_body),
+            confirm = stringResource(UiR.string.playlist_delete),
+            confirmTag = "playlist-delete-confirm",
+            onConfirm = {
+                dialog = null
+                viewModel.deletePlaylist(onDeleted = onBack)
+            },
+            onDismiss = { dialog = null },
+        )
+        null -> Unit
+    }
 }
+
+/** The playlist dialogs a detail page can show. */
+private enum class PlaylistDialog { Rename, Delete }
 
 @Composable
 private fun MediaDetailContent(
@@ -100,6 +138,7 @@ private fun MediaDetailContent(
     onOpen: (Card) -> Unit,
     onBack: () -> Unit,
     onRead: (BookAction) -> Unit,
+    onPlaylistDialog: (PlaylistDialog) -> Unit,
 ) {
     val urls = LocalMediaUrls.current
     val card = detail.card
@@ -150,9 +189,14 @@ private fun MediaDetailContent(
             }
         }
         item("actions") { MediaActions(detail, viewModel, playback, onRead) }
+        if (card.kind == Kind.PLAYLIST) {
+            item("playlist-actions") { PlaylistActions(viewModel, onPlaylistDialog) }
+            if (detail.tracks.isEmpty()) item("playlist-empty") { EmptyView(stringResource(R.string.playlist_empty)) }
+        }
         if (detail.description.isNotBlank()) item("description") { ExpandableText(detail.description) }
         if (detail.tracks.isNotEmpty()) {
             item("tracks-title") { SectionTitle(stringResource(UiR.string.detail_tracks), Modifier.padding(top = 16.dp)) }
+            val editing = card.kind == Kind.PLAYLIST && viewModel.editing
             itemsIndexed(detail.tracks, key = { index, track -> "track-$index-${track.id}" }) { index, track ->
                 TrackRow(
                     track = track,
@@ -160,6 +204,12 @@ private fun MediaDetailContent(
                     showArtist = detail.tracksShowArtist || card.kind == Kind.ARTIST,
                     playing = playback.current?.trackId == track.id,
                     onClick = { playback.playTracks(detail.tracks, index) },
+                    onLongClick = { viewModel.playlistPicker.open(listOf(track.id)) },
+                    trailing = if (editing) {
+                        { PlaylistTrackControls(index, detail.tracks.size, viewModel) }
+                    } else {
+                        null
+                    },
                 )
             }
         }
@@ -201,6 +251,58 @@ private fun RestartButton(action: BookAction?, book: BookDetail?, playback: Play
     )
 }
 
+/** Edit (or Done), Rename and Delete under a playlist's Play and Shuffle. */
+@Composable
+private fun PlaylistActions(viewModel: MediaDetailViewModel, onDialog: (PlaylistDialog) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+    ) {
+        GlassPillButton(
+            text = stringResource(if (viewModel.editing) R.string.playlist_done else R.string.playlist_edit),
+            icon = if (viewModel.editing) MobileIcons.Check else null,
+            onClick = viewModel::toggleEditing,
+            modifier = Modifier.testTag("playlist-edit"),
+        )
+        GlassPillButton(text = stringResource(R.string.playlist_rename), onClick = { onDialog(PlaylistDialog.Rename) }, modifier = Modifier.testTag("playlist-rename"))
+        GlassPillButton(
+            text = stringResource(UiR.string.playlist_delete),
+            onClick = { onDialog(PlaylistDialog.Delete) },
+            enabled = !viewModel.savingPlaylist,
+            modifier = Modifier.testTag("playlist-delete"),
+        )
+    }
+}
+
+/** Move up, move down and remove for the song at [index] while a playlist is edited. */
+@Composable
+private fun PlaylistTrackControls(index: Int, count: Int, viewModel: MediaDetailViewModel) {
+    val enabled = !viewModel.savingPlaylist
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+        GlassIconButton(
+            icon = MobileIcons.ChevronUp,
+            contentDescription = stringResource(R.string.playlist_move_up),
+            onClick = { if (enabled && index > 0) viewModel.moveTrack(index, index - 1) },
+            tint = if (index > 0) AntresolColors.Label else AntresolColors.LabelTertiary,
+            modifier = Modifier.testTag("playlist-up-$index"),
+        )
+        GlassIconButton(
+            icon = MobileIcons.ChevronDown,
+            contentDescription = stringResource(R.string.playlist_move_down),
+            onClick = { if (enabled && index < count - 1) viewModel.moveTrack(index, index + 1) },
+            tint = if (index < count - 1) AntresolColors.Label else AntresolColors.LabelTertiary,
+            modifier = Modifier.testTag("playlist-down-$index"),
+        )
+        GlassIconButton(
+            icon = MobileIcons.MinusCircle,
+            contentDescription = stringResource(R.string.playlist_remove),
+            onClick = { if (enabled) viewModel.removeTrack(index) },
+            tint = AntresolColors.Red,
+            modifier = Modifier.testTag("playlist-remove-$index"),
+        )
+    }
+}
+
 @Composable
 private fun ChapterRow(chapter: Chapter, current: Boolean, onClick: () -> Unit) {
     Row(
@@ -233,6 +335,14 @@ private fun MediaActions(detail: MediaDetail, viewModel: MediaDetailViewModel, p
                 onPlay = { playback.playTracks(detail.tracks) },
                 onShuffle = { playback.playTracks(detail.tracks, shuffled = true) },
             ) {
+                if (card.kind == Kind.ALBUM) {
+                    GlassIconButton(
+                        icon = MobileIcons.PlaylistAdd,
+                        contentDescription = stringResource(UiR.string.playlist_add),
+                        onClick = { viewModel.playlistPicker.open(detail.tracks.map { it.id }) },
+                        modifier = Modifier.size(50.dp).testTag("album-add-to-playlist"),
+                    )
+                }
                 detail.starred?.let { starred ->
                     GlassIconButton(
                         icon = if (starred) MobileIcons.StarFilled else MobileIcons.Star,

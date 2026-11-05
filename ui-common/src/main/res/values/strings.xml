@@ -148,4 +148,15 @@
     <string name="settings_revoke_title">Sign out “%1$s”?</string>
     <string name="settings_revoke_body">That device will have to sign in to this profile again.</string>
     <string name="settings_revoke_failed">Couldn’t sign that device out. Check the connection and try again.</string>
+
+    <!-- Playlists -->
+    <string name="playlist_add">Add to Playlist</string>
+    <string name="playlist_new">New Playlist</string>
+    <string name="playlist_name">Playlist name</string>
+    <string name="playlist_create">Create</string>
+    <string name="playlist_delete">Delete Playlist</string>
+    <string name="playlist_delete_title">Delete “%1$s”?</string>
+    <string name="playlist_delete_body">The songs stay in your library.</string>
+    <string name="playlist_added">Added to “%1$s”.</string>
+    <string name="playlist_failed">Couldn’t update the playlist. Try again.</string>
 </resources>

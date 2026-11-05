@@ -142,6 +142,36 @@ object MobileIcons {
         lineTo(18.5f, 9.5f)
     }
 
+    val ChevronUp: ImageVector = lineIcon("ChevronUp") {
+        moveTo(5.5f, 14.5f)
+        lineTo(12f, 8f)
+        lineTo(18.5f, 14.5f)
+    }
+
+    /** A circled minus: "remove from the list". */
+    val MinusCircle: ImageVector = lineIcon("MinusCircle") {
+        moveTo(12f, 3f)
+        arcToRelative(9f, 9f, 0f, true, true, 0f, 18f)
+        arcToRelative(9f, 9f, 0f, true, true, 0f, -18f)
+        close()
+        moveTo(8f, 12f)
+        lineTo(16f, 12f)
+    }
+
+    /** Three lines with a plus: "add to playlist". */
+    val PlaylistAdd: ImageVector = lineIcon("PlaylistAdd") {
+        moveTo(4f, 6f)
+        lineTo(16f, 6f)
+        moveTo(4f, 11f)
+        lineTo(16f, 11f)
+        moveTo(4f, 16f)
+        lineTo(11f, 16f)
+        moveTo(17f, 13f)
+        lineTo(17f, 21f)
+        moveTo(13f, 17f)
+        lineTo(21f, 17f)
+    }
+
     val Close: ImageVector = lineIcon("Close") {
         moveTo(6f, 6f)
         lineTo(18f, 18f)

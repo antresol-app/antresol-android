@@ -24,6 +24,7 @@ import app.antresol.core.session.AuthState
 import app.antresol.mobile.ui.root.AntresolMobileRoot
 import app.antresol.ui.theme.AntresolTheme
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -179,6 +180,91 @@ class MobileLiveUiTest {
         Thread.sleep(1500)
         shot("tablet-03-detail")
         runBlocking { session.switchProfile() }
+    }
+
+    /**
+     * Playlists: create one from the Playlists page, add an album to it, move and remove a song,
+     * rename it and delete it. Every step is checked on the server; the playlist is deleted at the
+     * end (also when a step fails).
+     */
+    @Test
+    @Config(sdk = [34], qualifiers = "en-w393dp-h852dp-port-xxhdpi")
+    fun phonePlaylists() {
+        val session = app.session
+        val name = "UI Test Mix"
+        val client = runBlocking {
+            session.restore()
+            if (session.state.value is AuthState.SignedIn) session.switchProfile()
+            session.connect(serverUrl!!)
+            session.signIn(Profile(id = 1, name = "Admin", hasPassword = true), password)
+            session.requireClient()
+        }
+        fun created() = runBlocking { client.playlists().items.filter { it.name == name || it.name == "$name 2" } }
+        try {
+            compose.setContent { AntresolTheme { AntresolMobileRoot(session) } }
+            waitFor(hasText("Details"))
+            tab("Music")
+            waitFor(hasText("Playlists"))
+            compose.onAllNodes(hasText("Playlists") and hasClickAction()).onFirst().performClick()
+            waitFor(hasTestTag("playlist-create"))
+            compose.onNode(hasTestTag("playlist-create")).performClick()
+            waitFor(hasTestTag("playlist-name"))
+            compose.onNode(hasTestTag("playlist-name")).performTextReplacement(name)
+            compose.onNode(hasTestTag("playlist-name-confirm")).performClick()
+            // The new, empty playlist opens.
+            waitFor(hasTestTag("playlist-edit"))
+            val playlistId = created().single().id
+            shot("phone-20-playlist-new")
+            compose.onNode(hasContentDescription("Back")).performClick()
+            compose.onNode(hasContentDescription("Back")).performClick()
+
+            // Album → Add to Playlist → the new playlist.
+            compose.onNode(hasText("All Albums")).performClick()
+            waitFor(hasText("Test Album"))
+            compose.onAllNodes(hasText("Test Album"), useUnmergedTree = true).onFirst().performClick()
+            waitFor(hasTestTag("album-add-to-playlist"))
+            compose.onNode(hasTestTag("album-add-to-playlist")).performClick()
+            waitFor(hasTestTag("playlist-$playlistId"))
+            shot("phone-21-add-to-playlist")
+            compose.onNode(hasTestTag("playlist-$playlistId")).performClick()
+            compose.waitUntil(10_000) { runBlocking { client.playlist(playlistId).tracks.isNotEmpty() } }
+            val tracks = runBlocking { client.playlist(playlistId).tracks.map { it.id } }
+            assertTrue("album tracks added", tracks.size >= 2)
+            compose.onNode(hasContentDescription("Back")).performClick()
+            compose.onNode(hasContentDescription("Back")).performClick()
+
+            // The playlist: move the first song down, remove the new first one, rename.
+            compose.onAllNodes(hasText("Playlists") and hasClickAction()).onFirst().performClick()
+            waitFor(hasText(name))
+            compose.onAllNodes(hasText(name), useUnmergedTree = true).onFirst().performClick()
+            waitFor(hasTestTag("playlist-edit"))
+            compose.onNode(hasTestTag("playlist-edit")).performClick()
+            waitFor(hasTestTag("playlist-down-0"))
+            shot("phone-22-playlist-editing")
+            compose.onNode(hasTestTag("playlist-down-0")).performClick()
+            val moved = listOf(tracks[1], tracks[0]) + tracks.drop(2)
+            compose.waitUntil(10_000) { runBlocking { client.playlist(playlistId).tracks.map { it.id } } == moved }
+            compose.onNode(hasTestTag("playlist-remove-0")).performClick()
+            compose.waitUntil(10_000) { runBlocking { client.playlist(playlistId).tracks.map { it.id } } == moved.drop(1) }
+            compose.onNode(hasTestTag("playlist-rename")).performClick()
+            waitFor(hasTestTag("playlist-name"))
+            compose.onNode(hasTestTag("playlist-name")).performTextReplacement("$name 2")
+            compose.onNode(hasTestTag("playlist-name-confirm")).performClick()
+            compose.waitUntil(10_000) { runBlocking { client.playlist(playlistId).playlist.name } == "$name 2" }
+
+            // Delete (after the confirmation) closes the page.
+            compose.onNode(hasTestTag("playlist-delete")).performClick()
+            waitFor(hasTestTag("playlist-delete-confirm"))
+            compose.onNode(hasTestTag("playlist-delete-confirm")).performClick()
+            waitFor(hasTestTag("playlist-create"))
+            compose.waitUntil(10_000) { created().isEmpty() }
+            shot("phone-23-playlists-after-delete")
+        } finally {
+            runBlocking {
+                created().forEach { runCatching { client.deletePlaylist(it.id) } }
+                session.switchProfile()
+            }
+        }
     }
 
     private fun tab(label: String) {

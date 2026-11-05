@@ -1,0 +1,30 @@
+Antresol is the player app for Antresol, a self-hosted home media server. It plays the films, TV shows, music, audiobooks and comics you keep on your own computer or NAS, in one clean library.
+
+The app needs your own Antresol server (free, runs on Linux, macOS or Docker). No content is provided: you add only media you have the rights to.
+
+Films and TV shows
+• Pick up where you left off on any device
+• Audio tracks, subtitles and quality you choose; direct play when the phone can decode the file, a converted stream when it can't
+• Picture in picture, double tap to skip, the next episode after a countdown
+• Watchlist and watched marks for films, seasons and episodes
+
+Music
+• Albums, artists, songs, genres and playlists; create and edit playlists
+• Background playback with notification and lock-screen controls
+• Synced lyrics, queue, shuffle, repeat, favourites and a sleep timer
+
+Audiobooks
+• Chapters, 15/30 second skips, speeds from 0.75× to 3×, sleep timer
+• The position syncs with the server, so you can continue on the TV or in the browser
+
+Comics, manga and PDF
+• A reader that turns pages in the right direction for manga, with pinch and double-tap zoom
+• The page you stopped at is saved to the server
+
+Family
+• Profiles with gradient avatars, passwords and kid profiles with age limits set on the server
+
+Privacy
+The developer collects no data. The app talks only to the server address you enter; the server runs on your hardware and is controlled by you.
+
+Set up the server: https://sidun-av.github.io/antresol/install.html

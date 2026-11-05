@@ -1,0 +1,1 @@
+First release of Antresol for Android TV: home, films and TV shows with resume, audio, subtitle and quality menus; music and audiobooks in the background with lyrics, chapters, speed and a sleep timer; comic and manga reader; playlists; profiles; English and Russian.

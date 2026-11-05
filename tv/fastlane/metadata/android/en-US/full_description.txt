@@ -1,0 +1,29 @@
+Antresol for Android TV is the big-screen app for Antresol, a self-hosted home media server. It plays the films, TV shows, music, audiobooks and comics you keep on your own computer or NAS, made for the remote control.
+
+The app needs your own Antresol server (free, runs on Linux, macOS or Docker). No content is provided: you add only media you have the rights to.
+
+Films and TV shows
+• A home screen with the newest additions, Continue Watching and every shelf of your library
+• Resume where you stopped on the phone or in the browser
+• Audio track, subtitle and quality menus; direct play when the TV can decode the file, including Dolby audio passthrough, a converted stream when it can't
+• Seasons and episodes, watchlist and watched marks, the next episode after a countdown
+
+Music
+• Albums, artists, songs, genres and playlists, Shuffle All
+• Keeps playing while you browse, with the system's now-playing card
+• Synced lyrics, Up Next, shuffle, repeat, favourites and a sleep timer
+
+Audiobooks
+• Chapters, back 15 s / forward 30 s, speeds from 0.75× to 3×, sleep timer
+• The position syncs with the server
+
+Comics and manga
+• Full-screen pages turned with the remote, right to left for manga
+
+Family
+• A profile picker with gradient avatars, password-protected and kid profiles
+
+Privacy
+The developer collects no data. The app talks only to the server address you enter; the server runs on your hardware and is controlled by you.
+
+Set up the server: https://sidun-av.github.io/antresol/install.html

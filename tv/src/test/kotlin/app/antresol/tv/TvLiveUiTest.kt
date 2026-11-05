@@ -213,9 +213,9 @@ class TvLiveUiTest {
         waitFor(hasText("Movies & TV Shows"))
         shot("10-search")
 
-        // Focus is still on the search pill: Down to the field, Down to the result, OK opens a movie
-        // page with Play focused, track facts and the actions.
-        key(KeyEvent.KEYCODE_DPAD_DOWN, times = 2)
+        // Focus is still on the search pill: Down to the field, Down to the scope pills, Down to the
+        // result, OK opens a movie page with Play focused, track facts and the actions.
+        key(KeyEvent.KEYCODE_DPAD_DOWN, times = 3)
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         waitFor(isFocused() and (hasText("Play") or hasText("Resume") or hasAnyDescendant(hasText("Play") or hasText("Resume"))))
         waitFor(hasText("Audio:", substring = true))
@@ -259,7 +259,8 @@ class TvLiveUiTest {
             ShadowLooper.idleMainLooper(50, TimeUnit.MILLISECONDS)
             compose.onAllNodes(hasText("Big Buck Demo"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
         }
-        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        // From the field: the scope pills, then the result.
+        key(KeyEvent.KEYCODE_DPAD_DOWN, times = 2)
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         waitFor(hasText("Play S1 E", substring = true) or hasText("Resume S1 E", substring = true))
         waitFor(hasText("1. ", substring = true))

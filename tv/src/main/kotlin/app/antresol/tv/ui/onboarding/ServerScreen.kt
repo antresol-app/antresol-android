@@ -39,7 +39,7 @@ import app.antresol.tv.ui.components.TvTextField
 import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
-import app.antresol.ui.components.LogoMark
+import app.antresol.ui.components.LogoTile
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import kotlinx.coroutines.CancellationException
@@ -106,7 +106,7 @@ fun ServerScreen(session: SessionManager) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            LogoMark(size = 72.dp)
+            LogoTile(size = 72.dp)
             Text(stringResource(R.string.server_title), style = Antresol.typography.pageTitle, textAlign = TextAlign.Center)
             Text(
                 stringResource(R.string.server_subtitle),

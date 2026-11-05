@@ -1,6 +1,7 @@
 package app.antresol.tv.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -60,7 +62,13 @@ fun OptionsPanel(
     focusIndex: Int = options.indexOfFirst { it.selected }.coerceAtLeast(0),
 ) {
     val focus = remember(title) { FocusRequester() }
-    LaunchedEffect(title) { focus.tryRequestFocus() }
+    val panelFocus = remember(title) { FocusRequester() }
+    // Scrolled so the row to focus is composed (a lazy row below the fold cannot take focus).
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (focusIndex - 2).coerceAtLeast(0))
+    LaunchedEffect(title) {
+        // Never leave focus behind the scrim: fall back to the panel's first row.
+        if (!focus.tryRequestFocus()) panelFocus.tryRequestFocus()
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -73,14 +81,16 @@ fun OptionsPanel(
                 .width(width)
                 .background(AntresolColors.BackgroundElevated)
                 .padding(horizontal = 20.dp, vertical = 36.dp)
-                .focusProperties { exit = { FocusRequester.Cancel } },
+                .focusRequester(panelFocus)
+                .focusProperties { exit = { FocusRequester.Cancel } }
+                .focusGroup(),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(title, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(horizontal = 12.dp))
             if (note != null) {
                 Text(note, style = Antresol.typography.caption, modifier = Modifier.padding(horizontal = 12.dp), maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 itemsIndexed(options) { index, option ->
                     MenuRow(
                         option = option,

@@ -546,3 +546,63 @@ Applied the "Phone chain" items from the TV review fixes and the TV player harde
   playback resumption, no EPUB/FB2 reader).
 - Verified: `ANTRESOL_TEST_SERVER=1 ./gradlew --no-daemon :core:test :mobile:testDebugUnitTest assembleDebug`
   passes with these changes (local build is authoritative).
+
+## TV review fixes, round 2
+
+### Repo housekeeping
+- This clone held an unpushed phone commit ("Harden phone video sessions and audio playback
+  shutdown") that conflicted with the phone chain's pushed `35c66fb`, plus stray uncommitted
+  `mobile/` edits. Both are kept locally only: branch `stray/phone-hardening-unpushed` and
+  `git stash` "stray uncommitted mobile edits found in TV clone". Their shared parts were taken over:
+  `TranscodeSeekingPlayer` now lives in `ui-common` (app.antresol.ui.playback), `DeviceCaps.current`
+  takes `limitToDisplay`, `Episodes.toPlay` picks the first unfinished episode when the server sends no
+  `next`. **Phone chain:** `mobile/.../playback/TranscodeSeekingPlayer.kt` is a copy of the old one
+  (without the duplicate-track fix below); switch to the ui-common class and delete the copy.
+
+### Core / ui-common (affects the phone app too)
+- `VideoSession.open`: a failed media key stops the session `/api/play` just created; `session` is set
+  as soon as `/api/play` answers. `VideoSession.caps` is mutable (lowered after decoder failures).
+- `CodecSupport.withoutFailingVideo/withoutFailingAudio`: H.264 ≤ 1080p, or decoded audio only.
+- `AntresolClient` sends the Bearer token only to the server's origin (a foreign subtitle URL gets none).
+- `AudiobookTimeline.isComplete`; unknown part lengths start at part 0 (a single part uses the book
+  length). The TV writes no progress for such a book.
+- `PendingWrites`: final progress writes of closed players; Home and detail refresh after them.
+- `DeviceCaps`: decoder height from `isSizeSupported` (2160/1080/720 landscape), cached including
+  "unknown"; Dolby passthrough from media3 `AudioCapabilities` (what the audio sink will bitstream).
+  It enumerates codecs: call it off the main thread (the phone still calls it on Main).
+- `Badge`: every badge is the dark outlined chip (quality first). `LogoTile`: the mark on the brand tile.
+- `error_retry_after` string.
+
+### TV
+- Player: one client pinned to the starting profile for sessions, keepalives, progress, media key and
+  subtitles. Keepalive 404s only count for the session still held; the replaced session gets no
+  keepalives during a reopen. HLS stops are chained and every `/api/play` waits for them (no transient
+  third session → no false 429). Background suspends the stream during Up Next (countdown restarts on
+  return), errors and in-flight reopens. Giving up after errors stops the session. Decoder / audio
+  output errors reopen with smaller caps before counting as a failure. Direct play selects the audio
+  track the server reports. `playNext` only from Playing/Up Next, once. Resume falls back to the
+  item's watched fraction when `/api/progress` fails. `/api/play` 429 → `StreamLimitException`.
+- Shell: per-profile ViewModel stores live in an Activity-retained `ShellStores` (survive recreation);
+  `configChanges` adds density, fontScale, layoutDirection, uiMode. NavHost fades are 160 ms; the nav
+  enters only the current page (a focus requester per back stack entry). On detail/grid pages the tab
+  they came from keeps a grey pill and Up lands on it. No backup or device transfer
+  (`data_extraction_rules.xml`).
+- Focus: OptionsPanel scrolls to the selected row and falls back to its first row; Settings, Now
+  Playing and player menus give focus back to the control that opened them; Up Next keeps focus in
+  the panel; detail pages without Play focus their first action or row; Music/Books fall back to the
+  first genre or header link.
+- Design: grid header pills flush right; logo on the brand tile; Search has the page title, search
+  icon, scope pills (All/Movies/TV Shows/Music/Books, filtered on the device) and Browse tiles;
+  shelves with a full list show the title chevron and end with a "See All" tile (decision: a tile
+  instead of a focusable title, so Up/Down between shelves stays one press). Hero Left on Play /
+  Right on Details steps through the hero items. Long press OK on an episode opens its page (hint
+  line under the seasons). Comic pages show a spinner while loading.
+
+### Verified
+`ANTRESOL_TEST_SERVER=1 ./gradlew :core:test :tv:testDebugUnitTest assembleDebug` green (live UI test
+updated for the scope pills on Search).
+
+### Known gaps
+- Device tokens are still plain JSON in DataStore (now excluded from backup and device transfer);
+  Keystore wrapping needs real-device testing.
+- A "See All" tile is not a focusable shelf title as on the web; Search scope is client-side.

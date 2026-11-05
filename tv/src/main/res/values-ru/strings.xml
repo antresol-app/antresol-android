@@ -78,4 +78,8 @@
     <string name="settings_change_server_confirm">Отключиться от %1$s?</string>
     <string name="comic_retry_hint">Нажмите OK, чтобы повторить.</string>
     <string name="lyrics_loading">Загрузка текста…</string>
+    <string name="detail_episode_hold_hint">Удерживайте OK на серии, чтобы открыть её описание.</string>
+    <string name="search_browse">Обзор</string>
+    <string name="search_scope_all">Все</string>
+    <string name="shelf_see_all">Показать все</string>
 </resources>

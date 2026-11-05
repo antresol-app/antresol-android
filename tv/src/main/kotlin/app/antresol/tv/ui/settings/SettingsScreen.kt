@@ -102,6 +102,13 @@ fun SettingsScreen(
     val preferences by settings.preferences.collectAsStateWithLifecycle()
     var menu by remember { mutableStateOf<SettingsMenu?>(null) }
     LaunchedEffect(menu != null) { onMenuOpenChanged(menu != null) }
+    // The control that opened each panel gets focus back when the panel closes.
+    val openers = remember { SettingsMenu.entries.associateWith { FocusRequester() } }
+    var lastMenu by remember { mutableStateOf<SettingsMenu?>(null) }
+    LaunchedEffect(menu) {
+        val current = menu
+        if (current != null) lastMenu = current else lastMenu?.let { openers.getValue(it).tryRequestFocus() }
+    }
     val first = remember { FocusRequester() }
     val activity = LocalContext.current as? Activity
     BackHandler(enabled = menu != null) { menu = null }
@@ -122,6 +129,7 @@ fun SettingsScreen(
                 onSwitchProfile = onSwitchProfile,
                 onSignOut = { menu = SettingsMenu.ConfirmSignOut },
                 switchModifier = Modifier.focusRequester(first),
+                signOutModifier = Modifier.focusRequester(openers.getValue(SettingsMenu.ConfirmSignOut)),
             )
             LazyColumn(
                 contentPadding = PaddingValues(bottom = 48.dp),
@@ -136,6 +144,7 @@ fun SettingsScreen(
                         label = stringResource(TvR.string.settings_default_quality),
                         value = qualityLabel(preferences.defaultQuality),
                         onClick = { menu = SettingsMenu.Quality },
+                        modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Quality)),
                     )
                 }
                 item {
@@ -143,6 +152,7 @@ fun SettingsScreen(
                         label = stringResource(TvR.string.settings_subtitles),
                         value = subtitleLabel(preferences.subtitleLanguage),
                         onClick = { menu = SettingsMenu.Subtitles },
+                        modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Subtitles)),
                     )
                 }
                 item { Section(stringResource(TvR.string.settings_language)) }
@@ -151,6 +161,7 @@ fun SettingsScreen(
                         label = stringResource(TvR.string.settings_app_language),
                         value = languageLabel(preferences.language),
                         onClick = { menu = SettingsMenu.Language },
+                        modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Language)),
                     )
                 }
                 item { Section(stringResource(TvR.string.settings_server)) }
@@ -175,6 +186,7 @@ fun SettingsScreen(
                             stringResource(R.string.server_change),
                             onClick = { menu = SettingsMenu.ConfirmChangeServer },
                             icon = AntresolIcons.Server,
+                            modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.ConfirmChangeServer)),
                         )
                     }
                 }
@@ -232,6 +244,7 @@ private fun ProfileColumn(
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
     @Suppress("ModifierParameter") switchModifier: Modifier,
+    signOutModifier: Modifier,
 ) {
     val session = state.session
     Column(
@@ -259,7 +272,7 @@ private fun ProfileColumn(
             style = PillStyle.Primary,
             modifier = switchModifier,
         )
-        PillButton(text = stringResource(R.string.profile_sign_out), onClick = onSignOut, icon = AntresolIcons.SignOut)
+        PillButton(text = stringResource(R.string.profile_sign_out), onClick = onSignOut, icon = AntresolIcons.SignOut, modifier = signOutModifier)
         Spacer(Modifier.weight(1f))
         // About
         Text(
@@ -296,10 +309,10 @@ private fun Section(title: String) {
 
 /** A focusable setting with its current value; OK opens its choices. */
 @Composable
-private fun SettingRow(label: String, value: String, onClick: () -> Unit) {
+private fun SettingRow(label: String, value: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = ClickableSurfaceDefaults.shape(AntresolShapes.control),
         colors = listRowColors(),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f),

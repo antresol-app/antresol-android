@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
-/** Line icons of the TV app's music, audiobook and reader screens (same 24-grid style as `AntresolIcons`). */
+/** Line icons of the TV app's music, audiobook, reader and browse screens (same 24-grid style as `AntresolIcons`). */
 object TvIcons {
     val Shuffle: ImageVector = lineIcon("Shuffle") {
         moveTo(3f, 7f); lineTo(7f, 7f); curveTo(11f, 7f, 13f, 17f, 17f, 17f); lineTo(21f, 17f)
@@ -107,6 +107,29 @@ object TvIcons {
         moveTo(12f, 6.5f); quadTo(8.5f, 4f, 4f, 4.5f); lineTo(4f, 18f); quadTo(8.5f, 17.5f, 12f, 20f)
         quadTo(15.5f, 17.5f, 20f, 18f); lineTo(20f, 4.5f); quadTo(15.5f, 4f, 12f, 6.5f); close()
         moveTo(12f, 6.5f); lineTo(12f, 20f)
+    }
+
+    val Film: ImageVector = lineIcon("Film") {
+        moveTo(5f, 4f); lineTo(19f, 4f); quadTo(20f, 4f, 20f, 5f); lineTo(20f, 19f); quadTo(20f, 20f, 19f, 20f)
+        lineTo(5f, 20f); quadTo(4f, 20f, 4f, 19f); lineTo(4f, 5f); quadTo(4f, 4f, 5f, 4f); close()
+        moveTo(8f, 4f); lineTo(8f, 20f)
+        moveTo(16f, 4f); lineTo(16f, 20f)
+        moveTo(4f, 9f); lineTo(8f, 9f); moveTo(4f, 15f); lineTo(8f, 15f)
+        moveTo(16f, 9f); lineTo(20f, 9f); moveTo(16f, 15f); lineTo(20f, 15f)
+    }
+
+    val Tv: ImageVector = lineIcon("Tv") {
+        moveTo(4.5f, 5f); lineTo(19.5f, 5f); quadTo(21f, 5f, 21f, 6.5f); lineTo(21f, 15.5f); quadTo(21f, 17f, 19.5f, 17f)
+        lineTo(4.5f, 17f); quadTo(3f, 17f, 3f, 15.5f); lineTo(3f, 6.5f); quadTo(3f, 5f, 4.5f, 5f); close()
+        moveTo(8f, 20.5f); lineTo(16f, 20.5f)
+    }
+
+    val Headphones: ImageVector = lineIcon("Headphones") {
+        moveTo(4f, 17f); lineTo(4f, 12f)
+        arcTo(8f, 8f, 0f, false, true, 20f, 12f)
+        lineTo(20f, 17f)
+        moveTo(4f, 14f); lineTo(7f, 14f); lineTo(7f, 20f); lineTo(5f, 20f); quadTo(4f, 20f, 4f, 19f); close()
+        moveTo(20f, 14f); lineTo(17f, 14f); lineTo(17f, 20f); lineTo(19f, 20f); quadTo(20f, 20f, 20f, 19f); close()
     }
 
     private fun PathBuilder.heart() {

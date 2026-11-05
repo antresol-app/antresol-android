@@ -200,12 +200,23 @@ private fun PlayingOverlay(viewModel: PlayerViewModel) {
     var interactions by remember { mutableIntStateOf(0) }
     val rootFocus = remember { FocusRequester() }
     val seekFocus = remember { FocusRequester() }
+    // A closed menu gives focus back to its pill, not to the seek bar (where OK would pause).
+    val menuFocus = remember { PlayerMenu.entries.associateWith { FocusRequester() } }
+    var lastMenu by remember { mutableStateOf<PlayerMenu?>(null) }
 
     LaunchedEffect(controlsVisible, menu) {
+        val opener = lastMenu
         when {
-            menu != null -> Unit
+            menu != null -> lastMenu = menu
+            controlsVisible && opener != null -> {
+                lastMenu = null
+                if (!menuFocus.getValue(opener).tryRequestFocus()) seekFocus.tryRequestFocus()
+            }
             controlsVisible -> seekFocus.tryRequestFocus()
-            else -> rootFocus.tryRequestFocus()
+            else -> {
+                lastMenu = null
+                rootFocus.tryRequestFocus()
+            }
         }
     }
     LaunchedEffect(controlsVisible, interactions, viewModel.isPlaying, menu) {
@@ -236,6 +247,7 @@ private fun PlayingOverlay(viewModel: PlayerViewModel) {
             TransportControls(
                 viewModel = viewModel,
                 seekFocus = seekFocus,
+                menuFocus = menuFocus,
                 onOpenMenu = { menu = it },
             )
         }
@@ -307,6 +319,7 @@ private fun handleHiddenKey(event: KeyEvent, viewModel: PlayerViewModel, show: (
 private fun TransportControls(
     viewModel: PlayerViewModel,
     seekFocus: FocusRequester,
+    menuFocus: Map<PlayerMenu, FocusRequester>,
     onOpenMenu: (PlayerMenu) -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
@@ -347,12 +360,12 @@ private fun TransportControls(
                     style = PillStyle.Primary,
                 )
                 if (viewModel.audioTracks.size > 1) {
-                    PillButton(stringResource(R.string.detail_audio), onClick = { onOpenMenu(PlayerMenu.Audio) }, icon = AntresolIcons.Audio)
+                    PillButton(stringResource(R.string.detail_audio), onClick = { onOpenMenu(PlayerMenu.Audio) }, icon = AntresolIcons.Audio, modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Audio)))
                 }
                 if (viewModel.subtitleTracks.isNotEmpty()) {
-                    PillButton(stringResource(R.string.detail_subtitles), onClick = { onOpenMenu(PlayerMenu.Subtitles) }, icon = AntresolIcons.Subtitles)
+                    PillButton(stringResource(R.string.detail_subtitles), onClick = { onOpenMenu(PlayerMenu.Subtitles) }, icon = AntresolIcons.Subtitles, modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Subtitles)))
                 }
-                PillButton(stringResource(R.string.detail_quality), onClick = { onOpenMenu(PlayerMenu.Quality) }, icon = AntresolIcons.Sliders)
+                PillButton(stringResource(R.string.detail_quality), onClick = { onOpenMenu(PlayerMenu.Quality) }, icon = AntresolIcons.Sliders, modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Quality)))
                 Spacer(Modifier.weight(1f))
                 if (viewModel.nextEpisode != null) {
                     PillButton(stringResource(R.string.player_next_episode), onClick = viewModel::playNext, icon = AntresolIcons.SkipNext)

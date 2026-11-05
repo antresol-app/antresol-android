@@ -41,6 +41,7 @@ import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.tv.ui.components.SegmentedPills
 import app.antresol.tv.ui.components.remembersFocus
 import app.antresol.tv.ui.components.trapHorizontalFocus
+import app.antresol.tv.R as TvR
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
@@ -65,6 +66,7 @@ fun SeasonsSection(
     initialEpisodeId: Long?,
     focus: FocusMemory,
     onPlayEpisode: (EpisodeCard) -> Unit,
+    onOpenEpisode: (EpisodeCard) -> Unit,
 ) {
     var selected by rememberSaveable {
         mutableIntStateOf(seasons.indexOfFirst { season -> season.episodes.any { it.id == initialEpisodeId } }.coerceAtLeast(0))
@@ -81,14 +83,25 @@ fun SeasonsSection(
         }
         // Each season gets its own scroll state and focus restorer, starting at the episode to watch.
         key(season.number) {
-            SeasonRow(season, initialEpisodeId, focus, onPlayEpisode)
+            SeasonRow(season, initialEpisodeId, focus, onPlayEpisode, onOpenEpisode)
         }
+        Text(
+            stringResource(TvR.string.detail_episode_hold_hint),
+            style = Antresol.typography.caption,
+            modifier = Modifier.padding(horizontal = ScreenPaddingH),
+        )
     }
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun SeasonRow(season: SeasonInfo, initialEpisodeId: Long?, focus: FocusMemory, onPlayEpisode: (EpisodeCard) -> Unit) {
+private fun SeasonRow(
+    season: SeasonInfo,
+    initialEpisodeId: Long?,
+    focus: FocusMemory,
+    onPlayEpisode: (EpisodeCard) -> Unit,
+    onOpenEpisode: (EpisodeCard) -> Unit,
+) {
     val start = season.episodes.indexOfFirst { it.id == initialEpisodeId }
         .takeIf { it >= 0 }
         ?: season.episodes.indexOfFirst { it.progress > 0.0 && !it.watched }.coerceAtLeast(0)
@@ -105,6 +118,7 @@ private fun SeasonRow(season: SeasonInfo, initialEpisodeId: Long?, focus: FocusM
                 EpisodeTile(
                     episode = episode,
                     onClick = { onPlayEpisode(episode) },
+                    onLongClick = { onOpenEpisode(episode) },
                     surfaceModifier = Modifier.remembersFocus(focus, episodeFocusKey(episode)),
                 )
             }
@@ -113,12 +127,13 @@ private fun SeasonRow(season: SeasonInfo, initialEpisodeId: Long?, focus: FocusM
 }
 
 @Composable
-private fun EpisodeTile(episode: EpisodeCard, onClick: () -> Unit, surfaceModifier: Modifier) {
+private fun EpisodeTile(episode: EpisodeCard, onClick: () -> Unit, onLongClick: () -> Unit, surfaceModifier: Modifier) {
     val urls = LocalMediaUrls.current
     val outline = AntresolShapes.card
     Column(Modifier.width(CardSizes.wideWidth), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CardSurface(
             onClick = onClick,
+            onLongClick = onLongClick,
             outline = outline,
             modifier = surfaceModifier
                 .fillMaxWidth()

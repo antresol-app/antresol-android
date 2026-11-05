@@ -68,6 +68,7 @@ fun HomeScreen(
     onPlay: (Card) -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
+    seeAll: (shelfId: String) -> (() -> Unit)? = { null },
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
     when (val state = viewModel.state) {
@@ -78,7 +79,7 @@ fun HomeScreen(
                 LaunchedEffect(Unit) { onScrolledToTop(true) }
                 MessageView(stringResource(R.string.home_empty))
             } else {
-                HomeContentView(state.value, onOpen, onPlay, onScrolledToTop, canTakeFocus)
+                HomeContentView(state.value, onOpen, onPlay, onScrolledToTop, canTakeFocus, seeAll)
             }
     }
 }
@@ -90,6 +91,7 @@ private fun HomeContentView(
     onPlay: (Card) -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
+    seeAll: (shelfId: String) -> (() -> Unit)?,
 ) {
     val focus = rememberFocusMemory()
     val listState = rememberLazyListState()
@@ -180,6 +182,7 @@ private fun HomeContentView(
                                 detailsButton = {
                                     HeroDetailsButton(onClick = { onOpen(heroCard) }, modifier = Modifier.remembersFocus(focus, DETAILS_KEY))
                                 },
+                                onStep = { step -> heroIndex = Math.floorMod(heroIndex + step, content.hero.size) },
                                 modifier = Modifier.onFocusChanged {
                                     heroFocused = it.hasFocus
                                     // The hero is taller than the focus zone; show all of it again.
@@ -204,6 +207,7 @@ private fun HomeContentView(
                         shapeOf = if (shelf.id == ShelfId.CONTINUE) { _ -> CardShape.Wide } else { card -> card.defaultShape() },
                         // A long press on a Continue card opens its page (Play from Beginning, the series).
                         onLongPress = if (shelf.id == ShelfId.CONTINUE) onOpen else null,
+                        onSeeAll = seeAll(shelf.id),
                     )
                 }
             }

@@ -96,6 +96,8 @@ fun ShelvesScreen(
     canTakeFocus: () -> Boolean,
     actions: @Composable RowScope.(remembered: Modifier.(key: String) -> Modifier) -> Unit = {},
     onGenre: (Genre) -> Unit = {},
+    /** The full list behind a shelf id, or null when there is none. */
+    seeAll: (shelfId: String) -> (() -> Unit)? = { null },
 ) {
     val focus = rememberFocusMemory()
     val listState = rememberLazyListState()
@@ -104,9 +106,16 @@ fun ShelvesScreen(
 
     val state = viewModel.state
     val page = (state as? LoadState.Ready)?.value
+    // The header links, in order; the last fallback for the first focus.
+    val linkKeys = remember { LinkedHashSet<String>() }
     LaunchedEffect(page) {
-        val first = page?.shelves?.firstOrNull() ?: return@LaunchedEffect
-        if (canTakeFocus()) focus.restore(cardFocusKey(first.id, first.cards.first()))
+        if (page == null) return@LaunchedEffect
+        // First shelf card, else the first genre, else the first header link (an empty library).
+        val first = page.shelves.firstOrNull()?.let { cardFocusKey(it.id, it.cards.first()) }
+            ?: page.genres.firstOrNull()?.let { "genre/${it.name}" }
+            ?: linkKeys.firstOrNull()?.let { "link/$it" }
+            ?: return@LaunchedEffect
+        if (canTakeFocus()) focus.restore(first)
     }
     VerticalShelfScrolling {
         LazyColumn(
@@ -129,7 +138,10 @@ fun ShelvesScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.trapHorizontalFocus(),
                     ) {
-                        actions { key -> remembersFocus(focus, "link/$key") }
+                        actions { key ->
+                            linkKeys += key
+                            remembersFocus(focus, "link/$key")
+                        }
                     }
                 }
             }
@@ -168,7 +180,7 @@ fun ShelvesScreen(
                         item(key = "empty") { MessageView(stringResource(R.string.state_empty), Modifier.padding(top = 120.dp)) }
                     }
                     items(state.value.shelves, key = { it.id }) { shelf ->
-                        ShelfRow(shelfId = shelf.id, title = shelf.title, cards = shelf.cards, onOpen = onOpen, focus = focus)
+                        ShelfRow(shelfId = shelf.id, title = shelf.title, cards = shelf.cards, onOpen = onOpen, focus = focus, onSeeAll = seeAll(shelf.id))
                     }
                 }
             }

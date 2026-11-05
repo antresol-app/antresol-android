@@ -59,7 +59,7 @@ import app.antresol.tv.R as TvR
 import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
-import app.antresol.ui.components.LogoMark
+import app.antresol.ui.components.LogoTile
 import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
@@ -74,6 +74,8 @@ import app.antresol.ui.theme.AntresolShapes
 @Composable
 fun TopNav(
     selected: NavTab?,
+    /** The tab the current page was reached from (detail, grid, Songs), shown dimmed; Up lands there. */
+    contextTab: NavTab?,
     userName: String,
     avatar: String,
     nowPlaying: String?,
@@ -82,7 +84,8 @@ fun TopNav(
     onNowPlaying: () -> Unit,
     onSettings: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
-    contentFocus: FocusRequester,
+    /** The current page's focus requester, if a page is attached. */
+    contentFocus: () -> FocusRequester?,
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
@@ -99,8 +102,11 @@ fun TopNav(
                 if (event.key != Key.DirectionDown) return@onPreviewKeyEvent false
                 if (event.type == KeyEventType.KeyDown) {
                     try {
-                        contentFocus.requestFocus()
-                        focusManager.moveFocus(FocusDirection.Enter)
+                        val page = contentFocus()
+                        if (page != null) {
+                            page.requestFocus()
+                            focusManager.moveFocus(FocusDirection.Enter)
+                        }
                     } catch (_: IllegalStateException) {
                         // No page attached yet.
                     }
@@ -113,7 +119,7 @@ fun TopNav(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            LogoMark(size = 22.dp)
+            LogoTile(size = 30.dp)
             Text(stringResource(R.string.brand_name), style = Antresol.typography.title.copy(fontSize = 17.sp))
         }
         Row(
@@ -124,7 +130,7 @@ fun TopNav(
                 .padding(4.dp)
                 .onFocusChanged { pillFocused = it.hasFocus }
                 // Coming from the content, land on the current tab (not the nearest pill).
-                .focusProperties { enter = { requesters.getValue(selected ?: NavTab.Home) } }
+                .focusProperties { enter = { requesters.getValue(selected ?: contextTab ?: NavTab.Home) } }
                 .focusGroup(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -133,6 +139,7 @@ fun TopNav(
                 NavPill(
                     tab = tab,
                     selected = tab == selected,
+                    context = selected == null && tab == contextTab,
                     rowFocused = pillFocused,
                     onClick = { onSelect(tab) },
                     modifier = Modifier.focusRequester(requesters.getValue(tab)),
@@ -243,20 +250,22 @@ private fun AvatarButton(userName: String, avatar: String, onClick: () -> Unit) 
 private fun NavPill(
     tab: NavTab,
     selected: Boolean,
+    context: Boolean,
     rowFocused: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Outside the pill the current tab is white; while the pill has focus the focused tab is white
-    // and the current one keeps a grey fill so the user still sees where they are.
+    // and the current one keeps a grey fill so the user still sees where they are. On a page below a
+    // tab (detail, grid) that tab keeps the grey fill.
     val restContainer = when {
         selected && !rowFocused -> AntresolColors.Label
-        selected -> AntresolColors.FillPrimary
+        selected || context -> AntresolColors.FillPrimary
         else -> Color.Transparent
     }
     val restContent = when {
         selected && !rowFocused -> AntresolColors.LabelInverse
-        selected -> AntresolColors.Label
+        selected || context -> AntresolColors.Label
         else -> AntresolColors.LabelSecondary
     }
     Surface(

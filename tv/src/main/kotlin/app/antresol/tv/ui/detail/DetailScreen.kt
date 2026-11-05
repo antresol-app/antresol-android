@@ -77,6 +77,8 @@ private const val PLAY_KEY = "action/play"
 
 /** Focus key of the Want to Read button of a book page. */
 private const val WANT_KEY = "action/want"
+private const val WATCHLIST_KEY = "action/watchlist"
+private const val WATCHED_KEY = "action/watched"
 
 /**
  * The detail page of any card: tinted backdrop, artwork, title, meta and overview. Movies,
@@ -145,8 +147,10 @@ private fun DetailContent(
         !music?.tracks.isNullOrEmpty() -> PLAY_KEY
         book != null && (book.isAudiobook || book.comic != null) -> PLAY_KEY
         book != null && book.detail.kind != Kind.COMIC_VOLUME -> WANT_KEY
-        // A comic volume without a readable file has no buttons: start on its rows.
-        else -> model.rows.firstOrNull()?.let { cardFocusKey(it.id, it.cards.first()) }
+        // Nothing to play: the first action shown (a video always has Mark as Watched).
+        video != null -> if (video.canWatchlist) WATCHLIST_KEY else WATCHED_KEY
+        // An empty album or a comic volume without a readable file has no buttons: start on its rows.
+        else -> model.rows.firstOrNull { it.cards.isNotEmpty() }?.let { cardFocusKey(it.id, it.cards.first()) }
     }
     val onOpen = actions.open
     val onPlay = actions.play
@@ -241,6 +245,7 @@ private fun DetailContent(
                             initialEpisodeId = video.playTarget?.itemId,
                             focus = focus,
                             onPlayEpisode = { onPlay(it.id, ResumeMode.Ask) },
+                            onOpenEpisode = { onOpen(it.toCard()) },
                         )
                     }
                 }
@@ -390,14 +395,14 @@ private fun VideoActions(
                 text = stringResource(if (video.inWatchlist) R.string.detail_in_watchlist else R.string.action_add_watchlist),
                 onClick = onToggleWatchlist,
                 icon = if (video.inWatchlist) AntresolIcons.Check else AntresolIcons.Plus,
-                modifier = Modifier.remembersFocus(focus, "action/watchlist"),
+                modifier = Modifier.remembersFocus(focus, WATCHLIST_KEY),
             )
         }
         PillButton(
             text = stringResource(if (video.watched) R.string.action_mark_unwatched else R.string.action_mark_watched),
             onClick = onToggleWatched,
             icon = AntresolIcons.CheckCircle,
-            modifier = Modifier.remembersFocus(focus, "action/watched"),
+            modifier = Modifier.remembersFocus(focus, WATCHED_KEY),
         )
     }
 }

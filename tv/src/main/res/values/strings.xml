@@ -84,4 +84,8 @@
     <string name="settings_change_server_confirm">Disconnect from %1$s?</string>
     <string name="comic_retry_hint">Press OK to try again.</string>
     <string name="lyrics_loading">Loading lyrics…</string>
+    <string name="detail_episode_hold_hint">Hold OK on an episode for its details.</string>
+    <string name="search_browse">Browse</string>
+    <string name="search_scope_all">All</string>
+    <string name="shelf_see_all">See All</string>
 </resources>

@@ -17,12 +17,21 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -115,8 +124,12 @@ fun HeroInfo(
     playButton: @Composable () -> Unit,
     detailsButton: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    /** Left on Play / Right on Details: the previous or next hero item (-1 / +1). */
+    onStep: (Int) -> Unit = {},
 ) {
     val typography = Antresol.typography
+    var playFocused by remember { mutableStateOf(false) }
+    var detailsFocused by remember { mutableStateOf(false) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Crossfade(targetState = card, animationSpec = tween(AntresolMotion.MEDIUM_MS), label = "hero-text") { current ->
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -142,11 +155,22 @@ fun HeroInfo(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
+                // The dots are a control: Left/Right past the buttons step through the hero items.
+                .onPreviewKeyEvent { event ->
+                    if (count < 2) return@onPreviewKeyEvent false
+                    val step = when {
+                        event.key == Key.DirectionLeft && playFocused -> -1
+                        event.key == Key.DirectionRight && detailsFocused -> 1
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    if (event.type == KeyEventType.KeyDown) onStep(step)
+                    true
+                }
                 .trapHorizontalFocus()
                 .focusGroup(),
         ) {
-            playButton()
-            detailsButton()
+            Box(Modifier.onFocusChanged { playFocused = it.hasFocus }) { playButton() }
+            Box(Modifier.onFocusChanged { detailsFocused = it.hasFocus }) { detailsButton() }
             if (count > 1) {
                 Spacer(Modifier.size(8.dp))
                 HeroDots(count, index)

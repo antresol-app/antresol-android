@@ -3,13 +3,16 @@ package app.antresol.ui.components
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +52,24 @@ fun LogoMark(modifier: Modifier = Modifier, size: Dp = 32.dp) {
         modifier = modifier.size(size),
     )
 }
+
+/** The logo mark on the purple brand tile (rounded square, 160° gradient), as in the app icon and top bars. */
+@Composable
+fun LogoTile(modifier: Modifier = Modifier, size: Dp = 30.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(size * TILE_RADIUS_FRACTION))
+            .background(AntresolGradients.brand),
+        contentAlignment = Alignment.Center,
+    ) {
+        LogoMark(size = size * MARK_FRACTION)
+    }
+}
+
+/** 7 dp corners on a 30 dp tile. */
+private const val TILE_RADIUS_FRACTION = 7f / 30f
+private const val MARK_FRACTION = 0.74f
 
 @Preview(widthDp = 960, heightDp = 540)
 @Composable

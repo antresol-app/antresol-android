@@ -28,6 +28,14 @@ class SearchViewModel(private val client: AntresolClient, private val audio: Aud
     var results: LoadState<List<DetailRow>>? by mutableStateOf(null)
         private set
 
+    /** Which kinds of results to show (filtered here: `/api/search` has no kind parameter). */
+    var scope: SearchScope by mutableStateOf(SearchScope.All)
+        private set
+
+    fun selectScope(value: SearchScope) {
+        scope = value
+    }
+
     /** The songs of the shown results, in row order (the songs row's card ids are track ids). */
     private var songs: List<Track> = emptyList()
 
@@ -70,9 +78,31 @@ class SearchViewModel(private val client: AntresolClient, private val audio: Aud
 
 const val SONGS_ROW = "songs"
 
+/** The scope pills of the Search page. */
+enum class SearchScope {
+    All, Movies, Shows, Music, Books;
+
+    /** The rows (and, for Movies / TV Shows, the cards of the library row) this scope shows. */
+    fun filter(rows: List<DetailRow>): List<DetailRow> = when (this) {
+        All -> rows
+        Movies -> rows.filter { it.id == LIBRARY_ROW }.map { row -> row.copy(cards = row.cards.filter { it.kind == Kind.MOVIE }) }
+        Shows -> rows.filter { it.id == LIBRARY_ROW }.map { row -> row.copy(cards = row.cards.filter { it.kind in SHOW_KINDS }) }
+        Music -> rows.filter { it.id in MUSIC_ROWS }
+        Books -> rows.filter { it.id in BOOK_ROWS }
+    }.filter { it.cards.isNotEmpty() }
+
+    private companion object {
+        val SHOW_KINDS = setOf(Kind.SERIES, Kind.SEASON, Kind.EPISODE)
+        val MUSIC_ROWS = setOf("artists", "albums", SONGS_ROW)
+        val BOOK_ROWS = setOf("audiobooks", "books", "comics")
+    }
+}
+
+private const val LIBRARY_ROW = "library"
+
 /** Result sections in the web app's order. */
 private fun SearchResults.toRows(): List<DetailRow> = listOf(
-    DetailRow("library", titleRes = R.string.search_section_library, cards = library),
+    DetailRow(LIBRARY_ROW, titleRes = R.string.search_section_library, cards = library),
     DetailRow("artists", titleRes = R.string.search_section_artists, cards = artists),
     DetailRow("albums", titleRes = R.string.search_section_albums, cards = albums),
     DetailRow(SONGS_ROW, titleRes = R.string.search_section_songs, cards = songs.map { it.asSongCard() }),

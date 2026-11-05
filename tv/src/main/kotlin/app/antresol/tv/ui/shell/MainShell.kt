@@ -1,12 +1,18 @@
 package app.antresol.tv.ui.shell
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -79,6 +85,7 @@ import app.antresol.tv.ui.nowplaying.NowPlayingViewModel
 import app.antresol.tv.ui.player.PlayerScreen
 import app.antresol.tv.ui.player.PlayerViewModel
 import app.antresol.tv.ui.player.ResumeMode
+import app.antresol.tv.ui.search.BrowseTarget
 import app.antresol.tv.ui.search.SearchScreen
 import app.antresol.tv.ui.search.SearchViewModel
 import app.antresol.tv.ui.settings.SettingsScreen
@@ -95,17 +102,45 @@ import kotlinx.coroutines.launch
 @Composable
 fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
     // The shell's own ViewModel store: its back stack ViewModels (a playing video, a comic's final
-    // save) are cleared when the profile changes or the session expires, not when the Activity dies.
-    // Remembered first, so it is cleared after the NavHost left composition.
-    val viewModelStoreOwner = remember {
+    // save) are cleared when the profile changes or the session expires. It lives in an
+    // Activity-retained holder, so a configuration change that recreates the Activity (a locale
+    // change) keeps playback and page state. Taken first, so it is cleared after the NavHost left.
+    val stores: ShellStores = viewModel()
+    val key = state.session.serverId to state.session.userId
+    val viewModelStoreOwner = remember(key) {
         object : ViewModelStoreOwner {
-            override val viewModelStore = ViewModelStore()
+            override val viewModelStore = stores.storeFor(key)
         }
     }
-    DisposableEffect(viewModelStoreOwner) { onDispose { viewModelStoreOwner.viewModelStore.clear() } }
+    val activity = LocalContext.current.findActivity()
+    DisposableEffect(viewModelStoreOwner) {
+        onDispose { if (activity?.isChangingConfigurations != true) stores.release(key) }
+    }
     CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
         ShellContent(session, state)
     }
+}
+
+/** Per-profile ViewModel stores of the shell, retained across Activity recreation. */
+class ShellStores : ViewModel() {
+    private val stores = HashMap<Pair<String, Long>, ViewModelStore>()
+
+    fun storeFor(key: Pair<String, Long>): ViewModelStore = stores.getOrPut(key) { ViewModelStore() }
+
+    fun release(key: Pair<String, Long>) {
+        stores.remove(key)?.clear()
+    }
+
+    override fun onCleared() {
+        stores.values.forEach(ViewModelStore::clear)
+        stores.clear()
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @Composable
@@ -118,6 +153,11 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val backStack by navController.currentBackStackEntryAsState()
     val selectedTab = NavTab.entries.firstOrNull { tab ->
         backStack?.destination?.hierarchy?.any { it.hasRoute(tab.route::class) } == true
+    }
+    // The nearest tab below the current page in the back stack: the section a detail page belongs to.
+    val stack by navController.currentBackStack.collectAsStateWithLifecycle()
+    val contextTab = stack.asReversed().firstNotNullOfOrNull { entry ->
+        NavTab.entries.firstOrNull { tab -> entry.destination.hasRoute(tab.route::class) }
     }
     // Full-screen experiences hide the nav; detail, grid and settings pages keep it (no tab selected).
     val fullScreen = backStack?.destination?.let { destination ->
@@ -149,6 +189,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     }
     val nowPlaying: () -> Unit = { navController.navigate(NowPlayingRoute) { launchSingleTop = true } }
     val openGrid: (GridKind, String?) -> Unit = { kind, genre -> navController.navigate(GridRoute(kind.name, genre.orEmpty())) }
+    // Shelf titles with a full list behind them link to it.
+    val seeAll: (String) -> (() -> Unit)? = { shelfId -> SHELF_GRIDS[shelfId]?.let { kind -> { openGrid(kind, null) } } }
     val shuffle: (ShuffleSource) -> Unit = { source ->
         scope.launch {
             when (val queue = load { client.shuffle(source).tracks }) {
@@ -163,8 +205,9 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
             }
         }
     }
-    // Down from the nav enters the page (see [Page]).
-    val contentFocus = remember { FocusRequester() }
+    // Down from the nav enters the current page (see [page]).
+    val contentFocus = remember { PageFocus() }
+    contentFocus.currentEntryId = backStack?.id
     val canTakeFocus = { !navFocused }
     val onScrolledToTop: (Boolean) -> Unit = { contentAtTop = it }
 
@@ -187,14 +230,20 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 navController = navController,
                 startDestination = HomeRoute,
                 modifier = Modifier.fillMaxSize(),
+                // Short fades: the default 700 ms feels slow on a TV and keeps both pages composed.
+                enterTransition = { fadeIn(tween(AntresolMotion.FAST_MS)) },
+                exitTransition = { fadeOut(tween(AntresolMotion.FAST_MS)) },
+                popEnterTransition = { fadeIn(tween(AntresolMotion.FAST_MS)) },
+                popExitTransition = { fadeOut(tween(AntresolMotion.FAST_MS)) },
             ) {
                 page<HomeRoute>(contentFocus) {
                     HomeScreen(
-                        viewModel = viewModel { HomeViewModel(client) },
+                        viewModel = viewModel { HomeViewModel(client, app.pendingWrites) },
                         onOpen = open,
                         onPlay = playCard,
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
+                        seeAll = seeAll,
                     )
                 }
                 page<MoviesRoute>(contentFocus) {
@@ -211,6 +260,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
                         onGenre = { genre -> openGrid(GridKind.Albums, genre.name) },
+                        seeAll = seeAll,
                         actions = { link ->
                             LinkButton(stringResource(TvR.string.music_all_albums), { openGrid(GridKind.Albums, null) }, Modifier.link("albums"))
                             LinkButton(stringResource(TvR.string.music_artists), { openGrid(GridKind.Artists, null) }, Modifier.link("artists"))
@@ -230,6 +280,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         title = stringResource(R.string.nav_books),
                         viewModel = viewModel { ShelvesViewModel({ client.booksHome().shelves }) },
                         onOpen = open,
+                        seeAll = seeAll,
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
                         actions = { link ->
@@ -244,6 +295,16 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         viewModel = viewModel { SearchViewModel(client, audio) },
                         onOpen = open,
                         onNowPlaying = nowPlaying,
+                        onBrowse = { target ->
+                            when (target) {
+                                BrowseTarget.Movies -> navController.navigateToTab(NavTab.Movies)
+                                BrowseTarget.Shows -> navController.navigateToTab(NavTab.Shows)
+                                BrowseTarget.Music -> navController.navigateToTab(NavTab.Music)
+                                BrowseTarget.Books -> openGrid(GridKind.Books, null)
+                                BrowseTarget.Audiobooks -> openGrid(GridKind.Audiobooks, null)
+                                BrowseTarget.Comics -> openGrid(GridKind.Comics, null)
+                            }
+                        },
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
                     )
@@ -286,7 +347,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 page<DetailRoute>(contentFocus) { entry ->
                     val route = entry.toRoute<DetailRoute>()
                     DetailScreen(
-                        viewModel = viewModel { DetailViewModel(client, audio, route.kind, route.id) },
+                        viewModel = viewModel { DetailViewModel(client, audio, route.kind, route.id, app.pendingWrites) },
                         audio = audio,
                         onOpen = open,
                         onPlay = play,
@@ -312,7 +373,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                     val route = entry.toRoute<PlayerRoute>()
                     PlayerScreen(
                         viewModel = viewModel {
-                            PlayerViewModel(app, client, app.appScope, route.itemId, ResumeMode.valueOf(route.resume), app.settings.current)
+                            PlayerViewModel(app, client, app.appScope, route.itemId, ResumeMode.valueOf(route.resume), app.settings.current, app.pendingWrites)
                         },
                         onExit = { navController.popBackStack() },
                     )
@@ -328,6 +389,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 )
                 TopNav(
                     selected = selectedTab,
+                    contextTab = contextTab,
                     userName = state.session.userName,
                     avatar = state.session.avatar,
                     nowPlaying = audio.currentTrack?.title ?: (audio.content as? AudioContent.Audiobook)?.book?.card?.title,
@@ -336,7 +398,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                     onNowPlaying = nowPlaying,
                     onSettings = { navController.navigate(SettingsRoute) { launchSingleTop = true } },
                     onFocusChanged = { navFocused = it },
-                    contentFocus = contentFocus,
+                    contentFocus = contentFocus::current,
                     modifier = Modifier.graphicsLayer { alpha = navAlpha },
                 )
             }
@@ -354,20 +416,40 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
 private const val NOTICE_MS = 3_500L
 
 /**
+ * One focus requester per back stack entry. During a page transition both pages are composed; the
+ * nav must enter only the current one, never the page that is leaving.
+ */
+private class PageFocus {
+    private val requesters = HashMap<String, FocusRequester>()
+
+    var currentEntryId: String? = null
+
+    fun requesterFor(entryId: String): FocusRequester = requesters.getOrPut(entryId) { FocusRequester() }
+
+    fun release(entryId: String) {
+        requesters.remove(entryId)
+    }
+
+    fun current(): FocusRequester? = currentEntryId?.let(requesters::get)
+}
+
+/**
  * A destination whose page can be entered from the nav with Down. The page spans the whole screen
  * behind the nav, so geometric focus search never finds it below the pills; the nav instead
  * focuses this group, which restores the element focused last on this page.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 private inline fun <reified T : Any> NavGraphBuilder.page(
-    contentFocus: FocusRequester,
+    contentFocus: PageFocus,
     noinline content: @Composable (NavBackStackEntry) -> Unit,
 ) {
     composable<T> { entry ->
+        val requester = remember(entry.id) { contentFocus.requesterFor(entry.id) }
+        DisposableEffect(entry.id) { onDispose { contentFocus.release(entry.id) } }
         Box(
             Modifier
                 .fillMaxSize()
-                .focusRequester(contentFocus)
+                .focusRequester(requester)
                 .focusRestorer(),
         ) {
             content(entry)
@@ -410,6 +492,17 @@ private fun gridTitle(kind: GridKind): Int = when (kind) {
 }
 
 private val PLAYABLE_KINDS = setOf(Kind.MOVIE, Kind.EPISODE, Kind.SERIES, Kind.SEASON)
+
+/** Server shelf ids (Home, Music, Books) and the grid that lists all of it. */
+private val SHELF_GRIDS = mapOf(
+    "recent-movies" to GridKind.Movies,
+    "recent-series" to GridKind.Shows,
+    "recent-albums" to GridKind.Albums,
+    "artists" to GridKind.Artists,
+    "playlists" to GridKind.Playlists,
+    "audiobooks" to GridKind.Audiobooks,
+    "comics" to GridKind.Comics,
+)
 
 /** Switches tabs the TV way: one entry per tab, each keeping its own scroll and focus state. */
 private fun NavHostController.navigateToTab(tab: NavTab) {

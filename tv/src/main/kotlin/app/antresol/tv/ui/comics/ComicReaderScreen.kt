@@ -95,6 +95,8 @@ private fun Reader(volume: ComicVolume, viewModel: ComicReaderViewModel, onOpenV
     var overlayToken by remember { mutableIntStateOf(1) }
     var overlay by remember { mutableStateOf(true) }
     var failed by remember(page) { mutableStateOf(false) }
+    // A page can be several MB: show a spinner while it downloads, so a slow network never looks like a hang.
+    var loading by remember(page) { mutableStateOf(true) }
     var attempt by remember(page) { mutableIntStateOf(0) }
 
     LaunchedEffect(viewModel.atEnd) { if (!viewModel.atEnd) focus.tryRequestFocus() }
@@ -155,9 +157,13 @@ private fun Reader(volume: ComicVolume, viewModel: ComicReaderViewModel, onOpenV
                 .build(),
             contentDescription = stringResource(TvR.string.comic_page_of, page + 1, volume.count),
             contentScale = ContentScale.Fit,
-            onState = { failed = it is AsyncImagePainter.State.Error },
+            onState = {
+                failed = it is AsyncImagePainter.State.Error
+                loading = it is AsyncImagePainter.State.Loading
+            },
             modifier = Modifier.fillMaxSize(),
         )
+        if (loading) LoadingView()
         if (failed) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(TvR.string.comic_page_failed), style = Antresol.typography.body, color = AntresolColors.LabelSecondary)

@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -86,6 +87,13 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
     var menu by remember { mutableStateOf<NowPlayingMenu?>(null) }
     var panel by rememberSaveable { mutableStateOf(MusicPanel.Lyrics) }
     BackHandler(enabled = menu != null) { menu = null }
+    // The pill that opened a menu gets focus back when it closes.
+    val openers = remember { NowPlayingMenu.entries.associateWith { FocusRequester() } }
+    var lastMenu by remember { mutableStateOf<NowPlayingMenu?>(null) }
+    LaunchedEffect(menu) {
+        val current = menu
+        if (current != null) lastMenu = current else lastMenu?.let { openers.getValue(it).tryRequestFocus() }
+    }
 
     val urls = LocalMediaUrls.current
     val track = audio.currentTrack
@@ -138,8 +146,8 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
                     forwardStepMs = if (book != null) AudioEngine.FORWARD_STEP_MS else MUSIC_STEP_MS,
                 )
                 when (content) {
-                    is AudioContent.Music -> MusicControls(viewModel, panel, onPanel = { panel = it }, onMenu = { menu = it })
-                    is AudioContent.Audiobook -> AudiobookControls(audio, onMenu = { menu = it })
+                    is AudioContent.Music -> MusicControls(viewModel, panel, openers, onPanel = { panel = it }, onMenu = { menu = it })
+                    is AudioContent.Audiobook -> AudiobookControls(audio, openers, onMenu = { menu = it })
                 }
             }
             Column(
@@ -188,6 +196,7 @@ private fun ChapterLine(content: AudioContent.Audiobook, positionMs: Long) {
 private fun MusicControls(
     viewModel: NowPlayingViewModel,
     panel: MusicPanel,
+    openers: Map<NowPlayingMenu, FocusRequester>,
     onPanel: (MusicPanel) -> Unit,
     onMenu: (NowPlayingMenu) -> Unit,
 ) {
@@ -223,12 +232,12 @@ private fun MusicControls(
                 icon = if (track.starred) TvIcons.HeartFilled else TvIcons.Heart,
             )
         }
-        SleepButton(audio, isBook = false, onMenu = onMenu)
+        SleepButton(audio, isBook = false, onMenu = onMenu, modifier = Modifier.focusRequester(openers.getValue(NowPlayingMenu.Sleep)))
     }
 }
 
 @Composable
-private fun AudiobookControls(audio: AudioEngine, onMenu: (NowPlayingMenu) -> Unit) {
+private fun AudiobookControls(audio: AudioEngine, openers: Map<NowPlayingMenu, FocusRequester>, onMenu: (NowPlayingMenu) -> Unit) {
     val play = remember { FocusRequester() }
     LaunchedEffect(Unit) { play.tryRequestFocus() }
     Row(
@@ -246,8 +255,9 @@ private fun AudiobookControls(audio: AudioEngine, onMenu: (NowPlayingMenu) -> Un
             text = stringResource(TvR.string.now_playing_speed) + " · " + speedLabel(audio.speed),
             onClick = { onMenu(NowPlayingMenu.Speed) },
             icon = TvIcons.Speed,
+            modifier = Modifier.focusRequester(openers.getValue(NowPlayingMenu.Speed)),
         )
-        SleepButton(audio, isBook = true, onMenu = onMenu)
+        SleepButton(audio, isBook = true, onMenu = onMenu, modifier = Modifier.focusRequester(openers.getValue(NowPlayingMenu.Sleep)))
     }
 }
 
@@ -264,7 +274,7 @@ private fun PlayPauseButton(audio: AudioEngine, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SleepButton(audio: AudioEngine, isBook: Boolean, onMenu: (NowPlayingMenu) -> Unit) {
+private fun SleepButton(audio: AudioEngine, isBook: Boolean, onMenu: (NowPlayingMenu) -> Unit, modifier: Modifier = Modifier) {
     val state = when (audio.sleepTimer) {
         SleepTimer.Off -> null
         SleepTimer.EndOfItem -> sleepLabel(SleepTimer.EndOfItem, isBook)
@@ -274,6 +284,7 @@ private fun SleepButton(audio: AudioEngine, isBook: Boolean, onMenu: (NowPlaying
         text = listOfNotNull(stringResource(TvR.string.now_playing_sleep), state).joinToString(" · "),
         onClick = { onMenu(NowPlayingMenu.Sleep) },
         icon = TvIcons.Moon,
+        modifier = modifier,
     )
 }
 
@@ -330,13 +341,22 @@ private fun UpNextPanel(audio: AudioEngine) {
         PanelMessage(stringResource(TvR.string.now_playing_queue_end))
         return
     }
+    // Playing a row (or the song ending) removes the focused row from the list: keep focus in the
+    // panel on the new first row. Read at the composition that changed the list, before focus moved.
+    var panelHasFocus by remember { mutableStateOf(false) }
+    val focusedWhenChanged = panelHasFocus
+    val firstRow = remember { FocusRequester() }
+    LaunchedEffect(upNext) { if (focusedWhenChanged) firstRow.tryRequestFocus() }
     LazyColumn(
         contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .onFocusChanged { panelHasFocus = it.hasFocus },
     ) {
         itemsIndexed(upNext, key = { _, (index, track) -> "$index/${track.id}" }) { position, (index, track) ->
             TrackRow(
+                modifier = if (position == 0) Modifier.focusRequester(firstRow) else Modifier,
                 leading = (position + 1).toString(),
                 title = track.title,
                 subtitle = track.artist,

@@ -241,8 +241,9 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 page<SearchRoute>(contentFocus) {
                     SearchScreen(
-                        viewModel = viewModel { SearchViewModel(client) },
+                        viewModel = viewModel { SearchViewModel(client, audio) },
                         onOpen = open,
+                        onNowPlaying = nowPlaying,
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
                     )

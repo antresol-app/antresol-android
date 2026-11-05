@@ -430,7 +430,8 @@ Running log between milestones. Newest entries at the bottom.
 - No queue editing, playlist editing or per-track favorite in lists (favorite is on Now Playing and albums).
 - Comics show one page at a time (no two-page spreads, no zoom).
 - E-books are not readable on TV (by design for this milestone).
-- Search results for songs still open the album instead of playing the song.
+- ~~Search results for songs still open the album instead of playing the song.~~ Fixed in the TV
+  milestone 3 follow-up below.
 
 ## TV review fixes (after milestone 3)
 
@@ -496,3 +497,15 @@ Reviewer findings for `:core`, `:ui-common` and `:tv`, verified against the code
 - Device tokens are stored as plain JSON in DataStore (app backup is off). Keystore encryption needs
   real-device testing (Robolectric has no AndroidKeyStore), so it is left for a later milestone.
 - The scrub preview shows the target time on the seek bar only (no thumbnails).
+
+## TV milestone 3 follow-up (re-verification)
+
+- Re-ran the milestone on a clean checkout of `origin/main`: music, audiobooks, comics, settings
+  and polish were already complete (see the two sections above).
+- Search: OK on a song now plays the found songs from that one and opens Now Playing; long press
+  opens the song's album. Song cards use the track id, so several songs from one album all show
+  (they used to be collapsed into one album card).
+- Verified: `ANTRESOL_TEST_SERVER=1 ./gradlew :core:test :tv:testDebugUnitTest :tv:assembleDebug`
+  (live UI tests against 127.0.0.1:8420 pass).
+- Known gaps are unchanged from the sections above (never run on hardware; no video MediaSession;
+  tokens not Keystore-encrypted; single-page comics; e-books not readable on TV).

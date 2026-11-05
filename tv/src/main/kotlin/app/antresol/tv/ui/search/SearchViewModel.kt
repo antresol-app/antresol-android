@@ -10,6 +10,7 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
 import app.antresol.core.model.SearchResults
 import app.antresol.core.model.Track
+import app.antresol.tv.playback.AudioEngine
 import app.antresol.tv.ui.LoadState
 import app.antresol.tv.ui.detail.DetailRow
 import app.antresol.tv.ui.load
@@ -18,14 +19,17 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Search-as-you-type over `/api/search`, debounced. */
-class SearchViewModel(private val client: AntresolClient) : ViewModel() {
+/** Search-as-you-type over `/api/search`, debounced. Songs play in place; the other results open their pages. */
+class SearchViewModel(private val client: AntresolClient, private val audio: AudioEngine) : ViewModel() {
     var query: String by mutableStateOf("")
         private set
 
     /** Null while the query is blank. */
     var results: LoadState<List<DetailRow>>? by mutableStateOf(null)
         private set
+
+    /** The songs of the shown results, in row order (the songs row's card ids are track ids). */
+    private var songs: List<Track> = emptyList()
 
     private var job: Job? = null
 
@@ -39,8 +43,22 @@ class SearchViewModel(private val client: AntresolClient) : ViewModel() {
         job = viewModelScope.launch {
             delay(DEBOUNCE_MS)
             if (results == null) results = LoadState.Loading
-            results = load { client.search(text.trim()).toRows() }
+            results = load {
+                client.search(text.trim()).also { songs = it.songs }.toRows()
+            }
         }
+    }
+
+    /** Plays the found songs starting at [card]'s track. */
+    fun playSong(card: Card, onStarted: () -> Unit) {
+        val index = songs.indexOfFirst { it.id == card.id }
+        if (index < 0) return
+        if (audio.playTracks(songs, index) != null) onStarted()
+    }
+
+    /** The album page of [card]'s track (long press on a song). */
+    fun songAlbum(card: Card): Card? = songs.firstOrNull { it.id == card.id }?.let {
+        Card(id = it.albumId, kind = Kind.ALBUM, title = it.album, subtitle = it.artist, poster = it.cover)
     }
 
     fun retry() = onQueryChange(query)
@@ -50,15 +68,18 @@ class SearchViewModel(private val client: AntresolClient) : ViewModel() {
     }
 }
 
-/** Result sections in the web app's order; songs open their album. */
+const val SONGS_ROW = "songs"
+
+/** Result sections in the web app's order. */
 private fun SearchResults.toRows(): List<DetailRow> = listOf(
     DetailRow("library", titleRes = R.string.search_section_library, cards = library),
     DetailRow("artists", titleRes = R.string.search_section_artists, cards = artists),
     DetailRow("albums", titleRes = R.string.search_section_albums, cards = albums),
-    DetailRow("songs", titleRes = R.string.search_section_songs, cards = songs.map { it.asAlbumCard() }.distinctBy { it.id }),
+    DetailRow(SONGS_ROW, titleRes = R.string.search_section_songs, cards = songs.map { it.asSongCard() }),
     DetailRow("audiobooks", titleRes = R.string.search_section_audiobooks, cards = audiobooks),
     DetailRow("books", titleRes = R.string.search_section_books, cards = books),
     DetailRow("comics", titleRes = R.string.search_section_comics, cards = comics),
 ).filter { it.cards.isNotEmpty() }
 
-private fun Track.asAlbumCard() = Card(id = albumId, kind = Kind.ALBUM, title = title, subtitle = artist, poster = cover)
+/** A square card for a song: its own id, album artwork. */
+private fun Track.asSongCard() = Card(id = id, kind = Kind.ALBUM, title = title, subtitle = artist, poster = cover)

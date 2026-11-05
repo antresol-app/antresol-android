@@ -36,11 +36,12 @@ import app.antresol.ui.R
 
 private const val FIELD_KEY = "search/field"
 
-/** Search: a text field (OK opens the keyboard) and result rows by section. */
+/** Search: a text field (OK opens the keyboard) and result rows by section. OK on a song plays it, long press opens its album. */
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel,
     onOpen: (Card) -> Unit,
+    onNowPlaying: () -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
 ) {
@@ -80,12 +81,14 @@ fun SearchScreen(
                         item(key = "empty") { Placeholder { MessageView(stringResource(R.string.search_no_results, viewModel.query)) } }
                     } else {
                         items(results.value, key = { it.id }) { row ->
+                            val songs = row.id == SONGS_ROW
                             ShelfRow(
                                 shelfId = row.id,
                                 title = row.titleRes?.let { stringResource(it) } ?: row.title,
                                 cards = row.cards,
-                                onOpen = onOpen,
+                                onOpen = if (songs) { card -> viewModel.playSong(card, onNowPlaying) } else onOpen,
                                 focus = focus,
+                                onLongPress = if (songs) { card -> viewModel.songAlbum(card)?.let(onOpen) } else null,
                             )
                         }
                     }

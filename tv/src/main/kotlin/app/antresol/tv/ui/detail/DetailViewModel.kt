@@ -16,6 +16,7 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.CastMember
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
+import app.antresol.core.model.Playlist
 import app.antresol.core.model.PlaylistDetail
 import app.antresol.core.model.Progress
 import app.antresol.core.model.SeasonInfo
@@ -24,6 +25,7 @@ import app.antresol.core.model.SubTrack
 import app.antresol.core.model.Track
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.Resume
+import app.antresol.core.music.PlaylistEdits
 import app.antresol.core.reading.ComicProgress
 import app.antresol.tv.R as TvR
 import app.antresol.tv.playback.AudioContent
@@ -225,6 +227,49 @@ class DetailViewModel(
         state = LoadState.Ready(model.copy(book = book.copy(want = want)))
         toggleJob = act(onFailure = { state = LoadState.Ready(model) }) {
             if (want) client.addToWatchlist(model.card.id) else client.removeFromWatchlist(model.card.id)
+        }
+    }
+
+    /** The profile's playlists for "Add to Playlist"; null until asked for. */
+    var playlists: LoadState<List<Playlist>>? by mutableStateOf(null)
+        private set
+
+    /** The playlist the page's songs were last added to, shown under the buttons. */
+    var addedTo: String? by mutableStateOf(null)
+        private set
+
+    fun loadPlaylists() {
+        playlists = LoadState.Loading
+        viewModelScope.launch { playlists = load { client.playlists().items } }
+    }
+
+    /** Albums: appends every song of the page to [playlist]. */
+    fun addToPlaylist(playlist: Playlist) = writePlaylist(playlist.name) { tracks ->
+        client.updatePlaylist(playlist.id, PlaylistEdits.append(tracks))
+    }
+
+    /** Albums: creates a playlist named [name] holding the page's songs. */
+    fun createPlaylist(name: String) = writePlaylist(name.trim()) { tracks ->
+        client.createPlaylist(name.trim(), tracks)
+    }
+
+    /** Playlists: deletes this one, then [onDeleted] (the page closes). */
+    fun deletePlaylist(onDeleted: () -> Unit) {
+        if (toggleJob?.isActive == true) return
+        toggleJob = act(onFailure = {}) {
+            client.deletePlaylist(id)
+            onDeleted()
+        }
+    }
+
+    private fun writePlaylist(name: String, write: suspend (List<Long>) -> Unit) {
+        if (toggleJob?.isActive == true || name.isEmpty()) return
+        val tracks = (state as? LoadState.Ready)?.value?.music?.tracks?.map { it.id }.orEmpty()
+        if (tracks.isEmpty()) return
+        addedTo = null
+        toggleJob = act(onFailure = {}) {
+            write(tracks)
+            addedTo = name
         }
     }
 

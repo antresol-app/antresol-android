@@ -1,11 +1,15 @@
 package app.antresol.tv.ui.detail
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -22,11 +26,16 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,18 +54,22 @@ import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.FocusMemory
 import app.antresol.tv.ui.components.LoadingView
+import app.antresol.tv.ui.components.MenuOption
+import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.tv.ui.components.ShelfRow
 import app.antresol.tv.ui.components.TrackRow
 import app.antresol.tv.ui.components.TvIcons
+import app.antresol.tv.ui.components.TvTextField
 import app.antresol.tv.ui.components.VerticalShelfScrolling
 import app.antresol.tv.ui.components.cardFocusKey
 import app.antresol.tv.ui.components.kindLabel
 import app.antresol.tv.ui.components.rememberFocusMemory
 import app.antresol.tv.ui.components.remembersFocus
 import app.antresol.tv.ui.components.trapHorizontalFocus
+import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.tv.ui.home.HeroBackground
 import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
@@ -80,6 +93,9 @@ private const val WANT_KEY = "action/want"
 private const val WATCHLIST_KEY = "action/watchlist"
 private const val WATCHED_KEY = "action/watched"
 
+/** Focus key of Add to Playlist (albums) or Delete Playlist (playlists). */
+private const val PLAYLIST_KEY = "action/playlist"
+
 /**
  * The detail page of any card: tinted backdrop, artwork, title, meta and overview. Movies,
  * episodes and series add Play/Resume, watchlist and watched actions, track and cast lines, and
@@ -95,6 +111,10 @@ fun DetailScreen(
     onRead: (volumeId: Long, fromStart: Boolean) -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
+    /** A side panel (add to playlist, delete) opened or closed: the shell hides its nav meanwhile. */
+    onPanelOpenChanged: (Boolean) -> Unit,
+    /** The page's item is gone (a deleted playlist): leave the page. */
+    onClose: () -> Unit,
 ) {
     // Back from the player: progress, watched marks and the next episode changed.
     var resumedOnce by remember { mutableStateOf(false) }
@@ -108,9 +128,10 @@ fun DetailScreen(
             model = state.value,
             viewModel = viewModel,
             audio = audio,
-            actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead),
+            actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead, onClose),
             onScrolledToTop = onScrolledToTop,
             canTakeFocus = canTakeFocus,
+            onPanelOpenChanged = onPanelOpenChanged,
         )
     }
 }
@@ -121,7 +142,11 @@ private class DetailActions(
     val play: (Long, ResumeMode) -> Unit,
     val nowPlaying: () -> Unit,
     val read: (Long, Boolean) -> Unit,
+    val close: () -> Unit,
 )
+
+/** The playlist panels of a music page. */
+private enum class PlaylistPanel { AddTo, Name, ConfirmDelete }
 
 @Composable
 private fun DetailContent(
@@ -131,8 +156,17 @@ private fun DetailContent(
     actions: DetailActions,
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
+    onPanelOpenChanged: (Boolean) -> Unit,
 ) {
     val focus = rememberFocusMemory()
+    var panel by remember { mutableStateOf<PlaylistPanel?>(null) }
+    var hadPanel by remember { mutableStateOf(false) }
+    LaunchedEffect(panel) {
+        onPanelOpenChanged(panel != null)
+        // The pill that opened the panel gets focus back.
+        if (panel != null) hadPanel = true else if (hadPanel) focus.restore(PLAYLIST_KEY)
+    }
+    BackHandler(enabled = panel != null) { panel = null }
     val listState = rememberLazyListState()
     val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 80 } }
     LaunchedEffect(atTop) { onScrolledToTop(atTop) }
@@ -145,6 +179,7 @@ private fun DetailContent(
     val firstKey = when {
         video?.playTarget != null -> PLAY_KEY
         !music?.tracks.isNullOrEmpty() -> PLAY_KEY
+        model.card.kind == Kind.PLAYLIST -> PLAYLIST_KEY
         book != null && (book.isAudiobook || book.comic != null) -> PLAY_KEY
         book != null && book.detail.kind != Kind.COMIC_VOLUME -> WANT_KEY
         // Nothing to play: the first action shown (a video always has Mark as Watched).
@@ -186,8 +221,19 @@ private fun DetailContent(
                                     onToggleWatched = viewModel::toggleWatched,
                                 )
                             }
-                            if (music != null && music.tracks.isNotEmpty()) {
-                                MusicActions(music, focus, viewModel, actions.nowPlaying)
+                            if (music != null && (music.tracks.isNotEmpty() || model.card.kind == Kind.PLAYLIST)) {
+                                MusicActions(
+                                    music = music,
+                                    kind = model.card.kind,
+                                    focus = focus,
+                                    viewModel = viewModel,
+                                    onNowPlaying = actions.nowPlaying,
+                                    onAddToPlaylist = {
+                                        viewModel.loadPlaylists()
+                                        panel = PlaylistPanel.AddTo
+                                    },
+                                    onDelete = { panel = PlaylistPanel.ConfirmDelete },
+                                )
                             }
                             if (book != null) {
                                 BookActions(book, focus, viewModel, actions)
@@ -259,6 +305,93 @@ private fun DetailContent(
                     )
                 }
             }
+        }
+        PlaylistPanels(panel, model, viewModel, onPanel = { panel = it }, onDeleted = actions.close)
+    }
+}
+
+/** Add to Playlist (with "New Playlist"), the name of a new playlist, and the delete confirmation. */
+@Composable
+private fun PlaylistPanels(
+    panel: PlaylistPanel?,
+    model: DetailModel,
+    viewModel: DetailViewModel,
+    onPanel: (PlaylistPanel?) -> Unit,
+    onDeleted: () -> Unit,
+) {
+    when (panel) {
+        PlaylistPanel.AddTo -> {
+            val playlists = viewModel.playlists
+            val error = (playlists as? LoadState.Failed)?.error?.userMessage(LocalContext.current.resources)
+            // The panel closes after any choice; "New Playlist" then opens the name panel instead.
+            var next by remember { mutableStateOf<PlaylistPanel?>(null) }
+            OptionsPanel(
+                title = stringResource(R.string.playlist_add),
+                note = error ?: stringResource(R.string.state_loading).takeIf { playlists !is LoadState.Ready },
+                options = listOf(MenuOption(stringResource(R.string.playlist_new), selected = false) { next = PlaylistPanel.Name }) +
+                    ((playlists as? LoadState.Ready)?.value.orEmpty()).map { playlist ->
+                        MenuOption(playlist.name, selected = false) { viewModel.addToPlaylist(playlist) }
+                    },
+                onDismiss = { onPanel(next) },
+                focusIndex = 0,
+            )
+        }
+        PlaylistPanel.Name -> PlaylistNamePanel(
+            onCreate = { name ->
+                viewModel.createPlaylist(name)
+                onPanel(null)
+            },
+        )
+        PlaylistPanel.ConfirmDelete -> OptionsPanel(
+            title = stringResource(R.string.playlist_delete_title, model.card.title),
+            note = stringResource(R.string.playlist_delete_body),
+            options = listOf(
+                MenuOption(stringResource(R.string.action_cancel), selected = false) {},
+                MenuOption(stringResource(R.string.playlist_delete), selected = false) { viewModel.deletePlaylist(onDeleted) },
+            ),
+            onDismiss = { onPanel(null) },
+            focusIndex = 0,
+        )
+        null -> Unit
+    }
+}
+
+/** The name of a new playlist: a text field (OK opens the keyboard) and Create. */
+@Composable
+private fun PlaylistNamePanel(onCreate: (String) -> Unit) {
+    var name by rememberSaveable { mutableStateOf("") }
+    val field = remember { FocusRequester() }
+    LaunchedEffect(Unit) { field.tryRequestFocus() }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f)),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(380.dp)
+                .background(AntresolColors.BackgroundElevated)
+                .padding(horizontal = 32.dp, vertical = 36.dp)
+                .focusGroup(),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Text(stringResource(R.string.playlist_new), style = Antresol.typography.sectionTitle)
+            TvTextField(
+                value = name,
+                onValueChange = { name = it },
+                placeholder = stringResource(R.string.playlist_name),
+                onSubmit = { if (name.isNotBlank()) onCreate(name) },
+                modifier = Modifier.focusRequester(field).testTag("playlist-name"),
+            )
+            PillButton(
+                text = stringResource(R.string.playlist_create),
+                onClick = { if (name.isNotBlank()) onCreate(name) },
+                icon = AntresolIcons.Plus,
+                style = PillStyle.Primary,
+                modifier = Modifier.testTag("playlist-name-confirm"),
+            )
         }
     }
 }
@@ -412,28 +545,38 @@ private fun SectionTitle(text: String) {
     Text(text, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(start = ScreenPaddingH, end = ScreenPaddingH, top = 4.dp, bottom = 4.dp))
 }
 
-/** Play, Shuffle and Favorite of an album, playlist or artist. */
+/** Play, Shuffle and Favorite of an album, playlist or artist; Add to Playlist (albums) or Delete (playlists). */
 @Composable
-private fun MusicActions(music: MusicInfo, focus: FocusMemory, viewModel: DetailViewModel, onNowPlaying: () -> Unit) {
+private fun MusicActions(
+    music: MusicInfo,
+    kind: String,
+    focus: FocusMemory,
+    viewModel: DetailViewModel,
+    onNowPlaying: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    onDelete: () -> Unit,
+) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier
             .padding(top = 8.dp)
             .trapHorizontalFocus(),
     ) {
-        PillButton(
-            text = stringResource(R.string.action_play),
-            onClick = { viewModel.playTracks(0, onStarted = onNowPlaying) },
-            icon = AntresolIcons.Play,
-            style = PillStyle.Primary,
-            modifier = Modifier.remembersFocus(focus, PLAY_KEY),
-        )
-        PillButton(
-            text = stringResource(R.string.action_shuffle),
-            onClick = { viewModel.playTracks(0, shuffled = true, onStarted = onNowPlaying) },
-            icon = TvIcons.Shuffle,
-            modifier = Modifier.remembersFocus(focus, "action/shuffle"),
-        )
+        if (music.tracks.isNotEmpty()) {
+            PillButton(
+                text = stringResource(R.string.action_play),
+                onClick = { viewModel.playTracks(0, onStarted = onNowPlaying) },
+                icon = AntresolIcons.Play,
+                style = PillStyle.Primary,
+                modifier = Modifier.remembersFocus(focus, PLAY_KEY),
+            )
+            PillButton(
+                text = stringResource(R.string.action_shuffle),
+                onClick = { viewModel.playTracks(0, shuffled = true, onStarted = onNowPlaying) },
+                icon = TvIcons.Shuffle,
+                modifier = Modifier.remembersFocus(focus, "action/shuffle"),
+            )
+        }
         if (music.canStar) {
             PillButton(
                 text = stringResource(if (music.starred) TvR.string.music_in_favorites else TvR.string.music_favorite),
@@ -442,6 +585,22 @@ private fun MusicActions(music: MusicInfo, focus: FocusMemory, viewModel: Detail
                 modifier = Modifier.remembersFocus(focus, "action/star"),
             )
         }
+        when (kind) {
+            Kind.ALBUM -> PillButton(
+                text = stringResource(R.string.playlist_add),
+                onClick = onAddToPlaylist,
+                icon = AntresolIcons.Plus,
+                modifier = Modifier.remembersFocus(focus, PLAYLIST_KEY).testTag("album-add-to-playlist"),
+            )
+            Kind.PLAYLIST -> PillButton(
+                text = stringResource(R.string.playlist_delete),
+                onClick = onDelete,
+                modifier = Modifier.remembersFocus(focus, PLAYLIST_KEY).testTag("playlist-delete"),
+            )
+        }
+    }
+    viewModel.addedTo?.let { name ->
+        Text(stringResource(R.string.playlist_added, name), style = Antresol.typography.caption, color = AntresolColors.Green)
     }
 }
 

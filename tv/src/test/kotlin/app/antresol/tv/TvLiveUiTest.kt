@@ -4,11 +4,16 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -409,6 +414,70 @@ class TvLiveUiTest {
         shot("31-settings-devices")
 
         compose.runOnUiThread { app.audio.stop() }
+    }
+
+    /**
+     * Playlists: an album is added to a new playlist ("Add to Playlist" → "New Playlist" → name →
+     * Create), then that playlist is deleted from its page. Checked on the server; leftovers are
+     * deleted at the end.
+     */
+    @Test
+    fun playlistsCreateAddDelete() {
+        val session = app.session
+        val name = "TV Test Mix"
+        val client = runBlocking {
+            signIn(session)
+            session.requireClient()
+        }
+        fun created() = runBlocking { client.playlists().items.filter { it.name == name } }
+        try {
+            compose.setContent { AntresolTvTheme { AntresolTvRoot(session) } }
+            waitFor(isFocused() and (hasText("Play") or hasText("Resume") or hasAnyDescendant(hasText("Play") or hasText("Resume"))))
+            key(KeyEvent.KEYCODE_DPAD_UP)
+            key(KeyEvent.KEYCODE_DPAD_RIGHT, times = 3)
+            waitFor(isFocused() and hasAnyDescendant(hasText("Music")))
+            key(KeyEvent.KEYCODE_DPAD_CENTER)
+            waitFor(hasText("All Albums"))
+            moveUntilFocused(KeyEvent.KEYCODE_DPAD_DOWN, "Sample Record")
+            key(KeyEvent.KEYCODE_DPAD_CENTER)
+            waitFor(isFocused() and hasAnyDescendant(hasText("Play")))
+            val album = runBlocking { client.album(client.albums().items.first { it.title == "Sample Record" }.id) }
+
+            moveUntilFocused(KeyEvent.KEYCODE_DPAD_RIGHT, "Add to Playlist")
+            key(KeyEvent.KEYCODE_DPAD_CENTER)
+            waitFor(hasText("New Playlist"))
+            shot("40-add-to-playlist")
+            // Robolectric does not move focus into side panels (the Settings panels behave the same),
+            // so the panel rows are pressed through their click action (tv Surfaces take no touch input).
+            compose.onNode(hasText("New Playlist") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+            waitFor(hasTestTag("playlist-name"))
+            compose.onNode(hasSetTextAction()).performTextReplacement(name)
+            compose.onNode(hasTestTag("playlist-name-confirm")).performSemanticsAction(SemanticsActions.OnClick)
+            compose.waitUntil(10_000) { created().isNotEmpty() }
+            val playlist = created().single()
+            check(runBlocking { client.playlist(playlist.id).tracks.map { it.id } } == album.tracks.map { it.id }) { "Album not added" }
+            waitFor(hasText("Added to “$name”."))
+            shot("41-added-to-playlist")
+
+            // Its page: Delete Playlist asks first, then closes the page.
+            key(KeyEvent.KEYCODE_BACK)
+            moveUntilFocused(KeyEvent.KEYCODE_DPAD_UP, "All Albums")
+            moveUntilFocused(KeyEvent.KEYCODE_DPAD_RIGHT, "Playlists")
+            key(KeyEvent.KEYCODE_DPAD_CENTER)
+            waitFor(hasText(name))
+            moveUntilFocused(KeyEvent.KEYCODE_DPAD_DOWN, name, maxPresses = 2)
+            key(KeyEvent.KEYCODE_DPAD_CENTER)
+            waitFor(isFocused() and hasAnyDescendant(hasText("Play")))
+            moveUntilFocused(KeyEvent.KEYCODE_DPAD_RIGHT, "Delete Playlist")
+            key(KeyEvent.KEYCODE_DPAD_CENTER)
+            waitFor(hasText("Delete “$name”?"))
+            shot("42-delete-playlist")
+            compose.onAllNodes(hasText("Delete Playlist") and hasClickAction()).onLast().performSemanticsAction(SemanticsActions.OnClick)
+            compose.waitUntil(10_000) { created().isEmpty() }
+            waitFor(hasText("Playlists"))
+        } finally {
+            created().forEach { runBlocking { runCatching { client.deletePlaylist(it.id) } } }
+        }
     }
 
     /** Moves Left, then Right, along the focused row until the card titled [title] has focus. */

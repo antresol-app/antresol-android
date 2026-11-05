@@ -164,12 +164,12 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         destination.hasRoute(PlayerRoute::class) || destination.hasRoute(ComicReaderRoute::class) ||
             destination.hasRoute(NowPlayingRoute::class)
     } ?: true
-    var settingsMenuOpen by remember { mutableStateOf(false) }
-    val navVisible = !fullScreen && !settingsMenuOpen
+    var panelOpen by remember { mutableStateOf(false) }
+    val navVisible = !fullScreen && !panelOpen
     var contentAtTop by remember { mutableStateOf(true) }
     LaunchedEffect(backStack?.id) {
         contentAtTop = true
-        settingsMenuOpen = false
+        panelOpen = false
     }
     var notice by remember { mutableStateOf<String?>(null) }
     val resources = LocalContext.current.resources
@@ -318,7 +318,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onSignOut = { scope.launch { session.signOut() } },
                         onChangeServer = { scope.launch { session.changeServer() } },
                         onScrolledToTop = onScrolledToTop,
-                        onMenuOpenChanged = { settingsMenuOpen = it },
+                        onMenuOpenChanged = { panelOpen = it },
                     )
                 }
                 page<GridRoute>(contentFocus) { entry ->
@@ -355,6 +355,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onRead = { volumeId, fromStart -> navController.navigate(ComicReaderRoute(volumeId, fromStart)) },
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
+                        onPanelOpenChanged = { panelOpen = it },
+                        onClose = { navController.popBackStack() },
                     )
                 }
                 composable<ComicReaderRoute> { entry ->

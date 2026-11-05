@@ -14,6 +14,8 @@ import app.antresol.core.model.Kind
 import app.antresol.core.model.PlaylistDetail
 import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.Track
+import app.antresol.core.playback.PendingWrites
+import app.antresol.mobile.R
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LoadViewModel
 import kotlinx.coroutines.CancellationException
@@ -41,28 +43,40 @@ data class MediaDetail(
     val want: Boolean? = null,
     /** The book behind a book, audiobook or comic page (files, progress, volumes). */
     val book: BookDetail? = null,
+    /** Albums: the favorite flag; null = not offered. */
+    val starred: Boolean? = null,
 )
 
 /** Loads the detail of a music or book card through the matching endpoint. */
-class MediaDetailViewModel(private val client: AntresolClient, kind: String, private val id: Long) :
-    LoadViewModel<MediaDetail>(fetch = { fetchDetail(client, kind, id) }) {
+class MediaDetailViewModel(private val client: AntresolClient, kind: String, private val id: Long, pendingWrites: PendingWrites) :
+    LoadViewModel<MediaDetail>(pendingWrites = pendingWrites, fetch = { fetchDetail(client, kind, id) }) {
 
-    var failed: Boolean by mutableStateOf(false)
+    /** A string resource to show once (a failed write or playback request); the screen calls [consumeNotice]. */
+    var notice: Int? by mutableStateOf(null)
         private set
 
-    fun consumeFailure() {
-        failed = false
+    /** An artist shuffle is being fetched (repeated taps are ignored). */
+    var shuffling: Boolean by mutableStateOf(false)
+        private set
+
+    fun consumeNotice() {
+        notice = null
     }
 
     /** Artist pages: shuffle everything by the artist (`/api/music/shuffle?artistId=`). */
     fun shuffleArtist(play: (List<Track>) -> Unit) {
+        if (shuffling) return
+        shuffling = true
         viewModelScope.launch {
             try {
-                play(client.shuffle(ShuffleSource.Artist(id)).tracks)
+                val tracks = client.shuffle(ShuffleSource.Artist(id)).tracks
+                if (tracks.isEmpty()) notice = R.string.music_nothing_to_play else play(tracks)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                failed = true
+                notice = R.string.music_playback_failed
+            } finally {
+                shuffling = false
             }
         }
     }
@@ -70,15 +84,30 @@ class MediaDetailViewModel(private val client: AntresolClient, kind: String, pri
     fun toggleWant() {
         val before = (state as? LoadState.Ready)?.value ?: return
         val want = before.want ?: return
-        update { it.copy(want = !want) }
+        mutate(before, { it.copy(want = !want) }) {
+            if (want) client.removeFromWatchlist(id) else client.addToWatchlist(id)
+        }
+    }
+
+    /** Albums: favorite or unfavorite (`/api/music/star/{albumId}`). */
+    fun toggleStar() {
+        val before = (state as? LoadState.Ready)?.value ?: return
+        val starred = before.starred ?: return
+        mutate(before, { it.copy(starred = !starred) }) {
+            if (starred) client.unstar(id) else client.star(id)
+        }
+    }
+
+    private fun mutate(before: MediaDetail, change: (MediaDetail) -> MediaDetail, write: suspend () -> Unit) {
+        update(change)
         viewModelScope.launch {
             try {
-                if (want) client.removeFromWatchlist(id) else client.addToWatchlist(id)
+                write()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 update { before }
-                failed = true
+                notice = R.string.detail_action_failed
             }
         }
     }
@@ -101,6 +130,7 @@ private fun AlbumDetail.toDetail() = MediaDetail(
     songCount = trackCount.takeIf { it > 0 } ?: tracks.size,
     durationMs = durationMs.takeIf { it > 0 },
     tracks = tracks,
+    starred = starred,
 )
 
 private fun ArtistDetail.toDetail() = MediaDetail(

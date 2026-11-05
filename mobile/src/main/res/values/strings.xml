@@ -100,4 +100,15 @@
     <string name="settings_revoke_body">That device will have to sign in to this profile again.</string>
     <string name="settings_about">About</string>
     <string name="settings_app_version">App Version</string>
+    <string name="error_too_many_attempts">Too many attempts. Try again later.</string>
+    <string name="account_open">Account: %1$s</string>
+    <string name="music_nothing_to_play">Nothing to play.</string>
+    <string name="music_playback_failed">Couldn’t start playback. Check the connection and try again.</string>
+    <string name="music_nothing_to_shuffle">Nothing to shuffle.</string>
+    <string name="detail_listen_from_start">Listen from Beginning</string>
+    <string name="detail_read_from_start">Read from Beginning</string>
+    <string name="confirm_sign_out_title">Sign out of this profile?</string>
+    <string name="confirm_sign_out_body">This device forgets the profile. You will have to choose it (and enter its password) again.</string>
+    <string name="confirm_change_server_title">Change server?</string>
+    <string name="confirm_change_server_body">You will go back to entering a server address. Your profiles stay signed in.</string>
 </resources>

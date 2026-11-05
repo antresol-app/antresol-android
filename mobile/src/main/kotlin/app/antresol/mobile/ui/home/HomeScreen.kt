@@ -35,6 +35,8 @@ import app.antresol.ui.theme.AntresolColors
 fun HomeScreen(
     viewModel: LoadViewModel<HomeContent>,
     onOpen: (Card) -> Unit,
+    /** A Continue Watching tile: carry on playing or reading (a long press opens its page). */
+    onContinue: (Card) -> Unit,
     onPlay: (Card) -> Unit,
     onSeeAll: (Shelf) -> Unit,
 ) {
@@ -72,11 +74,13 @@ fun HomeScreen(
                 }
                 if (content.isEmpty) item("empty") { EmptyView(stringResource(R.string.home_empty)) }
                 items(content.shelves, key = { it.id }) { shelf ->
+                    val continuing = shelf.id == ShelfId.CONTINUE
                     Shelf(
                         title = shelf.title,
                         cards = shelf.cards,
-                        onOpen = onOpen,
-                        style = if (shelf.id == ShelfId.CONTINUE) CardStyle.Wide else null,
+                        onOpen = if (continuing) onContinue else onOpen,
+                        onLongPress = if (continuing) onOpen else null,
+                        style = if (continuing) CardStyle.Wide else null,
                         onSeeAll = { onSeeAll(shelf) },
                     )
                 }

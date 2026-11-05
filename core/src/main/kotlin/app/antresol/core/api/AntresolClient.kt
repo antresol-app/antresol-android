@@ -51,6 +51,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -172,6 +174,24 @@ class AntresolClient(
     suspend fun hlsKeepalive(session: String): HlsStatus = send("PUT", url("api/hls/$session"), null)
 
     suspend fun hlsStop(session: String) = delete("api/hls/$session")
+
+    /**
+     * Downloads file [fileId] (`/api/stream/{fileId}`, Bearer header) into [target], blocking an
+     * OkHttp thread while it copies. Errors are reported like any call (401 → [onUnauthorized],
+     * the server's localized `error` in [ApiException]).
+     */
+    suspend fun download(fileId: Long, target: File) {
+        val request = Request.Builder().url(urls.stream(fileId)).get().build()
+        val sentToken = token
+        val authorized = if (sentToken == null) request else request.newBuilder().header("Authorization", "Bearer $sentToken").build()
+        val failure = httpClient.newCall(authorized).awaitStreamed { response ->
+            val body = response.body ?: throw IOException("Empty response")
+            target.outputStream().use { out -> body.byteStream().copyTo(out) }
+        } ?: return
+        val error = errorFrom(failure)
+        if (error.isUnauthorized && sentToken != null) onUnauthorized(sentToken)
+        throw error
+    }
 
     /** Downloads a WebVTT subtitle (`SubTrack.url`); subtitles need the Bearer header, not `mk`. */
     suspend fun subtitleVtt(url: String): String =

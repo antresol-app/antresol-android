@@ -1,6 +1,5 @@
 package app.antresol.mobile.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,11 +16,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.antresol.mobile.R as MobileR
 import app.antresol.ui.R
-import app.antresol.ui.components.LogoMark
+import app.antresol.ui.components.LogoTile
 import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
 
@@ -42,20 +43,22 @@ fun TabHeader(modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        LogoMark(size = 30.dp)
+        LogoTile(size = 30.dp)
         Text(
             text = stringResource(R.string.brand_name),
             style = Antresol.typography.sectionTitle.copy(fontSize = 21.sp),
         )
         Spacer(Modifier.weight(1f))
         if (profile != null) {
+            val description = stringResource(MobileR.string.account_open, profile.name)
             ProfileAvatar(
                 name = profile.name,
                 avatar = profile.avatar,
                 size = 38.dp,
                 modifier = Modifier
                     .clip(CircleShape)
-                    .clickable(role = Role.Button, onClick = profile.onClick),
+                    .focusClickable(CircleShape, onClick = profile.onClick)
+                    .semantics { contentDescription = description },
             )
         }
     }

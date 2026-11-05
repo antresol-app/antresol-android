@@ -1,7 +1,6 @@
 package app.antresol.mobile.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,7 +26,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +47,8 @@ fun TimeSlider(
     durationMs: Long,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    /** True while the thumb is dragged, false when it is released. */
+    onScrubbing: (Boolean) -> Unit = {},
 ) {
     var dragging by remember { mutableStateOf<Float?>(null) }
     val duration = durationMs.coerceAtLeast(1)
@@ -56,10 +56,14 @@ fun TimeSlider(
     Column(modifier.fillMaxWidth()) {
         Slider(
             value = dragging ?: (positionMs.toFloat() / duration).coerceIn(0f, 1f),
-            onValueChange = { dragging = it },
+            onValueChange = {
+                if (dragging == null) onScrubbing(true)
+                dragging = it
+            },
             onValueChangeFinished = {
                 dragging?.let { onSeek((it * duration).toLong()) }
                 dragging = null
+                onScrubbing(false)
             },
             enabled = durationMs > 0,
             colors = SliderDefaults.colors(
@@ -118,7 +122,7 @@ fun RoundIconButton(
                     else -> Color.Transparent
                 },
             )
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .focusClickable(CircleShape, enabled = enabled, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
@@ -142,7 +146,7 @@ fun SkipSecondsButton(
             .size(size)
             .clip(CircleShape)
             .background(if (glass) AntresolColors.Glass.copy(alpha = 0.6f) else Color.Transparent)
-            .clickable(role = Role.Button, onClick = onClick)
+            .focusClickable(CircleShape, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {

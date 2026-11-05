@@ -1,6 +1,5 @@
 package app.antresol.mobile.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
@@ -74,6 +73,8 @@ fun MediaCard(
     style: CardStyle = card.defaultStyle(),
     width: Dp? = null,
     showBadges: Boolean = true,
+    /** A long press (e.g. open the page of a Continue Watching tile that plays on tap). */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val urls = LocalMediaUrls.current
     val sized = if (width != null) modifier.width(width) else modifier.fillMaxWidth()
@@ -81,7 +82,7 @@ fun MediaCard(
     Column(
         modifier = sized
             .clip(AntresolShapes.smallCard)
-            .clickable(onClick = onClick),
+            .focusClickable(AntresolShapes.smallCard, role = null, onLongClick = onLongClick, onClick = onClick),
         horizontalAlignment = if (circle) Alignment.CenterHorizontally else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {

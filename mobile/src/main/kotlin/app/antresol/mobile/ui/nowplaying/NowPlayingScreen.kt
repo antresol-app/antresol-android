@@ -36,6 +36,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -64,6 +65,7 @@ import app.antresol.mobile.playback.PlaybackConnection
 import app.antresol.mobile.playback.PlaybackService
 import app.antresol.mobile.playback.SleepTimer
 import app.antresol.mobile.ui.components.EmptyView
+import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
@@ -97,7 +99,17 @@ fun NowPlayingScreen(playback: PlaybackConnection, client: AntresolClient, onClo
     LaunchedEffect(playing == null) { if (playing == null) onClose() }
     playing ?: return
     BackHandler(onBack = onClose)
-    var panel by rememberSaveable { mutableStateOf(Panel.Artwork) }
+    PositionUpdates(playback)
+    var chosenPanel by rememberSaveable { mutableStateOf(Panel.Artwork) }
+    // A panel the current entry does not offer (no lyrics, no chapters) falls back to the artwork.
+    val offered = when (chosenPanel) {
+        Panel.Artwork -> true
+        Panel.Lyrics -> !playing.isAudiobook && playing.hasLyrics
+        Panel.Queue -> !playing.isAudiobook
+        Panel.Chapters -> playing.isAudiobook && !playback.book?.chapters.isNullOrEmpty()
+    }
+    val panel = if (offered) chosenPanel else Panel.Artwork
+    LaunchedEffect(offered) { if (!offered) chosenPanel = Panel.Artwork }
     var sheet by remember { mutableStateOf<NowPlayingSheet?>(null) }
     val tint by rememberArtworkTint(playing.artworkUrl, AntresolColors.BrandStart)
 
@@ -118,14 +130,14 @@ fun NowPlayingScreen(playback: PlaybackConnection, client: AntresolClient, onClo
                         PanelContent(panel, playback, client, playing)
                     }
                     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
-                        Details(playback, playing, panel, onPanel = { panel = if (panel == it) Panel.Artwork else it }, onSheet = { sheet = it })
+                        Details(playback, playing, panel, onPanel = { chosenPanel = if (panel == it) Panel.Artwork else it }, onSheet = { sheet = it })
                     }
                 }
             } else {
                 Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
                     PanelContent(panel, playback, client, playing)
                 }
-                Details(playback, playing, panel, onPanel = { panel = if (panel == it) Panel.Artwork else it }, onSheet = { sheet = it })
+                Details(playback, playing, panel, onPanel = { chosenPanel = if (panel == it) Panel.Artwork else it }, onSheet = { sheet = it })
                 Spacer(Modifier.height(12.dp))
             }
         }
@@ -354,7 +366,9 @@ private fun speedLabel(speed: Float): String {
 
 @Composable
 private fun LyricsPanel(trackId: Long, playback: PlaybackConnection, client: AntresolClient) {
-    val lyrics by produceState<Result<Lyrics?>?>(null, trackId) {
+    var attempt by remember(trackId) { mutableIntStateOf(0) }
+    val lyrics by produceState<Result<Lyrics?>?>(null, trackId, attempt) {
+        value = null
         value = try {
             Result.success(client.lyrics(trackId))
         } catch (e: CancellationException) {
@@ -364,6 +378,9 @@ private fun LyricsPanel(trackId: Long, playback: PlaybackConnection, client: Ant
         }
     }
     val result = lyrics ?: return LoadingView()
+    result.exceptionOrNull()?.let { error ->
+        return ErrorView(error, onRetry = { attempt++ })
+    }
     val loaded = result.getOrNull()
     if (loaded == null || (loaded.lines.isEmpty() && loaded.lyrics.isBlank())) {
         return EmptyView(stringResource(R.string.now_playing_no_lyrics))

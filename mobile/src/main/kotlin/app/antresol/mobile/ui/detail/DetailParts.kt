@@ -93,14 +93,14 @@ fun InfoLine(label: String, value: String) {
     }
 }
 
-/** Shows a failed watchlist/watched write once as a snackbar. */
+/** Shows [notice] (a string resource: a failed write, a playback request that failed) once as a snackbar. */
 @Composable
-fun FailureSnackbar(failed: Boolean, host: SnackbarHostState, onShown: () -> Unit) {
-    val message = LocalContext.current.getString(R.string.detail_action_failed)
-    LaunchedEffect(failed) {
-        if (failed) {
+fun NoticeSnackbar(notice: Int?, host: SnackbarHostState, onShown: () -> Unit) {
+    val resources = LocalContext.current.resources
+    LaunchedEffect(notice) {
+        if (notice != null) {
             onShown()
-            host.showSnackbar(message)
+            host.showSnackbar(resources.getString(notice))
         }
     }
 }

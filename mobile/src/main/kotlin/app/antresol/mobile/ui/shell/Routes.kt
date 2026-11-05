@@ -46,13 +46,13 @@ data class SongsRoute(val title: String)
 @Serializable
 data object SettingsRoute
 
-/** The comic reader for volume [volumeId]; full screen without the tab bar. */
+/** The comic reader for volume [volumeId] ([fromStart]: page 1, not the saved page); full screen without the tab bar. */
 @Serializable
-data class ComicReaderRoute(val volumeId: Long)
+data class ComicReaderRoute(val volumeId: Long, val fromStart: Boolean = false)
 
-/** The PDF reader for book [bookId]; full screen without the tab bar. */
+/** The PDF reader for book [bookId] ([fromStart]: page 1, not the saved page); full screen without the tab bar. */
 @Serializable
-data class PdfReaderRoute(val bookId: Long)
+data class PdfReaderRoute(val bookId: Long, val fromStart: Boolean = false)
 
 /** The bottom bar tabs in display order; Search sits in its own round button next to the pill. */
 enum class NavTab(val route: Any, @StringRes val label: Int, val icon: ImageVector) {

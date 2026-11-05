@@ -24,6 +24,13 @@ class CardGridViewModel(private val client: AntresolClient, val source: GridSour
     var state: LoadState<Grid> by mutableStateOf(LoadState.Loading)
         private set
 
+    /** The last page failed to load; the grid shows "Try Again" at its end. */
+    var pageError: Throwable? by mutableStateOf(null)
+        private set
+
+    var loadingMore: Boolean by mutableStateOf(false)
+        private set
+
     private var job: Job? = null
 
     init {
@@ -38,25 +45,34 @@ class CardGridViewModel(private val client: AntresolClient, val source: GridSour
 
     fun reload() {
         job?.cancel()
+        pageError = null
+        loadingMore = false
         state = LoadState.Loading
         job = viewModelScope.launch {
             state = load { source.page(client, sort, 0).let { Grid(it.items, it.total) } }
         }
     }
 
-    /** Fetches the next page when the user nears the end of what is loaded. */
-    fun loadMore() {
+    /** Fetches the next page when the user nears the end of what is loaded; [retry] after a failed page. */
+    fun loadMore(retry: Boolean = false) {
+        if (pageError != null && !retry) return
         val grid = (state as? LoadState.Ready)?.value ?: return
         if (!grid.hasMore || job?.isActive == true) return
+        pageError = null
+        loadingMore = true
         job = viewModelScope.launch {
-            val next = load { source.page(client, sort, grid.cards.size) }
-            if (next is LoadState.Ready) {
-                val known = grid.cards.mapTo(HashSet()) { "${it.kind}:${it.id}" }
-                val fresh = next.value.items.filter { "${it.kind}:${it.id}" !in known }
-                // A page without new cards means the total was stale: stop paging.
-                val total = if (fresh.isEmpty()) grid.cards.size else next.value.total
-                state = LoadState.Ready(Grid(grid.cards + fresh, total))
+            when (val next = load { source.page(client, sort, grid.cards.size) }) {
+                is LoadState.Ready -> {
+                    val known = grid.cards.mapTo(HashSet()) { "${it.kind}:${it.id}" }
+                    val fresh = next.value.items.filter { "${it.kind}:${it.id}" !in known }
+                    // A page without new cards means the total was stale: stop paging.
+                    val total = if (fresh.isEmpty()) grid.cards.size else next.value.total
+                    state = LoadState.Ready(Grid(grid.cards + fresh, total))
+                }
+                is LoadState.Failed -> pageError = next.error
+                LoadState.Loading -> Unit
             }
+            loadingMore = false
         }
     }
 }

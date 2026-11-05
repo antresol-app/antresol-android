@@ -19,6 +19,12 @@ object QueueExtras {
     /** Audiobook parts: where the part starts on the whole-book timeline, and the book's length. */
     const val PART_START_MS = "antresol.partStartMs"
     const val BOOK_DURATION_MS = "antresol.bookDurationMs"
+
+    /**
+     * Audiobook parts: false when some part length is unknown (files not probed yet). The whole-book
+     * positions are then wrong, so no progress is written for the book.
+     */
+    const val REPORTS_PROGRESS = "antresol.reportsProgress"
 }
 
 /** Builds Media3 queue entries for tracks and audiobook parts, and their stream URIs. */
@@ -49,7 +55,7 @@ object QueueItems {
 
     /** One entry per part, in order, all carrying the book's title, author and cover. */
     fun audiobook(book: BookDetail, urls: MediaUrls): List<MediaItem> {
-        val timeline = AudiobookTimeline.of(book.files)
+        val timeline = AudiobookTimeline.of(book.files, book.durationMs)
         val total = book.durationMs.takeIf { it > 0 } ?: timeline.totalMs
         val author = book.authors.joinToString(", ")
         val artwork = urls.image(book.card.poster)?.let(Uri::parse)
@@ -58,6 +64,7 @@ object QueueItems {
                 putLong(QueueExtras.DURATION_MS, file.durationMs)
                 putLong(QueueExtras.PART_START_MS, timeline.partStartMs(index))
                 putLong(QueueExtras.BOOK_DURATION_MS, total)
+                putBoolean(QueueExtras.REPORTS_PROGRESS, timeline.isComplete)
             }
             val metadata = MediaMetadata.Builder()
                 .setTitle(book.card.title)

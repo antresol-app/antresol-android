@@ -3,6 +3,8 @@ package app.antresol.mobile.ui.search
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,17 +18,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -36,6 +45,7 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
 import app.antresol.core.model.Track
 import app.antresol.mobile.R
+import app.antresol.mobile.playback.PlaybackConnection
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.LocalMediaUrls
@@ -62,17 +72,35 @@ import app.antresol.ui.theme.AntresolGradients
 import app.antresol.ui.theme.AntresolShapes
 import app.antresol.ui.R as UiR
 
-/** Search: field, kind filter pills, then results; with an empty query the colourful Browse tiles. */
+/**
+ * Search: field, kind filter pills, then results; with an empty query the colourful Browse tiles.
+ * Opening the tab with an empty query focuses the field (keyboard up); scrolling hides the keyboard.
+ */
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel,
+    playback: PlaybackConnection,
     onOpen: (Card) -> Unit,
     onTab: (NavTab) -> Unit,
     onGrid: OpenGrid,
+    onNowPlaying: () -> Unit,
 ) {
     val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val bottom = LocalBottomBarPadding.current
+    val listState = rememberLazyListState()
+    val fieldFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        if (viewModel.query.isEmpty()) {
+            runCatching { fieldFocus.requestFocus() }
+            keyboard?.show()
+        }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling -> if (scrolling) focus.clearFocus() }
+    }
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .background(AntresolColors.Background),
@@ -93,6 +121,7 @@ fun SearchScreen(
                 keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
                 modifier = Modifier
                     .padding(horizontal = PageGutter, vertical = 8.dp)
+                    .focusRequester(fieldFocus)
                     .testTag("search-field"),
             )
         }
@@ -116,7 +145,13 @@ fun SearchScreen(
                 }
                 items(sections, key = { it.id }) { section ->
                     if (section.songs.isNotEmpty()) {
-                        SongResults(section.songs, onOpen)
+                        SongResults(
+                            songs = section.songs,
+                            onPlay = { index ->
+                                if (playback.playTracks(section.songs, index) != null) onNowPlaying()
+                            },
+                            onOpen = onOpen,
+                        )
                     } else {
                         Shelf(title = stringResource(section.titleRes()), cards = section.cards, onOpen = onOpen)
                     }
@@ -147,17 +182,22 @@ private fun SearchSection.titleRes(): Int = when (id) {
     else -> UiR.string.search_section_library
 }
 
-/** Songs as compact rows; a song opens its album. */
+/** Songs as compact rows; a tap plays the found songs from that one, a long press opens its album. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SongResults(songs: List<Track>, onOpen: (Card) -> Unit) {
+private fun SongResults(songs: List<Track>, onPlay: (index: Int) -> Unit, onOpen: (Card) -> Unit) {
     val urls = LocalMediaUrls.current
     Column(Modifier.padding(top = 20.dp)) {
         SectionTitle(stringResource(UiR.string.search_section_songs))
-        songs.forEach { song ->
+        songs.forEachIndexed { index, song ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onOpen(Card(id = song.albumId, kind = Kind.ALBUM, title = song.album, poster = song.cover)) }
+                    .combinedClickable(
+                        onLongClick = { onOpen(Card(id = song.albumId, kind = Kind.ALBUM, title = song.album, poster = song.cover)) },
+                        onClick = { onPlay(index) },
+                    )
+                    .testTag("search-song-${song.id}")
                     .padding(horizontal = PageGutter, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),

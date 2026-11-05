@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import app.antresol.core.api.ServerLanguage
 import app.antresol.core.model.DeviceInfo
+import app.antresol.core.playback.PendingWrites
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
 import app.antresol.mobile.playback.PlaybackConnection
@@ -30,6 +31,9 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
 
     lateinit var settings: AppSettings
         private set
+
+    /** Final progress writes of closed players and readers, awaited by screens that show progress. */
+    val pendingWrites = PendingWrites()
 
     /** Music and audiobook playback (the Media3 service behind a controller). */
     lateinit var playback: PlaybackConnection

@@ -1,6 +1,9 @@
 package app.antresol.mobile.ui.shell
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.ComponentActivity
@@ -23,6 +26,7 @@ import app.antresol.mobile.reader.PdfReaderViewModel
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.mobile.ui.detail.BookAction
 import app.antresol.mobile.ui.music.SongsScreen
+import app.antresol.mobile.ui.music.ShuffleAllViewModel
 import app.antresol.mobile.ui.music.SongsViewModel
 import app.antresol.mobile.ui.nowplaying.MiniPlayer
 import app.antresol.mobile.ui.nowplaying.MiniPlayerSpace
@@ -40,17 +44,27 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -62,6 +76,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.core.model.ShelfId
+import app.antresol.core.playback.Resume
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
 import app.antresol.mobile.ui.LoadViewModel
@@ -87,9 +103,14 @@ import app.antresol.mobile.ui.search.SearchScreen
 import app.antresol.mobile.ui.search.SearchViewModel
 import app.antresol.ui.R
 import app.antresol.ui.theme.AntresolColors
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import app.antresol.mobile.R as MobileR
 
 private val VIDEO_KINDS = setOf(Kind.MOVIE, Kind.SERIES, Kind.SEASON, Kind.EPISODE)
+
+/** Session actions that ask first: one mis-tap must not revoke the token or drop the server. */
+private enum class SessionAction { SignOut, ChangeServer }
 
 /**
  * The signed-in app: a NavHost of tab roots and pushed pages under the floating tab bar. Each tab
@@ -98,11 +119,55 @@ private val VIDEO_KINDS = setOf(Kind.MOVIE, Kind.SERIES, Kind.SEASON, Kind.EPISO
  */
 @Composable
 fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
+    // The shell's own ViewModel store: its back stack ViewModels (a reader's final save, an open
+    // PDF) are cleared when the profile changes or the session ends. It lives in an Activity-retained
+    // holder, so a configuration change that recreates the Activity keeps page state.
+    val stores: ShellStores = viewModel()
+    val key = state.session.serverId to state.session.userId
+    val owner = remember(key) {
+        object : ViewModelStoreOwner {
+            override val viewModelStore = stores.storeFor(key)
+        }
+    }
+    val activity = LocalContext.current.findActivity()
+    DisposableEffect(owner) {
+        onDispose { if (activity?.isChangingConfigurations != true) stores.release(key) }
+    }
+    CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+        ShellContent(session, state)
+    }
+}
+
+/** Per-profile ViewModel stores of the shell, retained across Activity recreation. */
+class ShellStores : ViewModel() {
+    private val stores = HashMap<Pair<String, Long>, ViewModelStore>()
+
+    fun storeFor(key: Pair<String, Long>): ViewModelStore = stores.getOrPut(key) { ViewModelStore() }
+
+    fun release(key: Pair<String, Long>) {
+        stores.remove(key)?.clear()
+    }
+
+    override fun onCleared() {
+        stores.values.forEach(ViewModelStore::clear)
+        stores.clear()
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+@Composable
+private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val client = session.requireClient()
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var showAccount by rememberSaveable { mutableStateOf(false) }
+    var confirm by rememberSaveable { mutableStateOf<SessionAction?>(null) }
     var currentTab by rememberSaveable { mutableStateOf(NavTab.Home) }
 
     val backStack by navController.currentBackStackEntryAsState()
@@ -113,6 +178,16 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
 
     val app = context.applicationContext as AntresolMobileApp
     val playback = app.playback
+    // Session changes run in the app scope: a rotation must not cancel a sign-out halfway.
+    val switchProfile: () -> Unit = { app.appScope.launch { session.switchProfile() } }
+    val runSessionAction: (SessionAction) -> Unit = { action ->
+        app.appScope.launch {
+            when (action) {
+                SessionAction.SignOut -> session.signOut()
+                SessionAction.ChangeServer -> session.changeServer()
+            }
+        }
+    }
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(playback.nowPlayingRequested) {
         if (playback.nowPlayingRequested) {
@@ -126,9 +201,33 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
     val playVideo: (Long, ResumeMode) -> Unit = { id, mode -> VideoPlayerActivity.start(context, id, mode) }
     val read: (BookAction) -> Unit = { action ->
         when (action) {
-            is BookAction.ReadComic -> navController.navigate(ComicReaderRoute(action.volumeId))
-            is BookAction.ReadPdf -> navController.navigate(PdfReaderRoute(action.bookId))
+            is BookAction.ReadComic -> navController.navigate(ComicReaderRoute(action.volumeId, action.fromStart))
+            is BookAction.ReadPdf -> navController.navigate(PdfReaderRoute(action.bookId, action.fromStart))
             else -> Unit
+        }
+    }
+    // Continue Watching: a tap carries on (video, audiobook, reader); a long press opens the page.
+    val continueCard: (Card) -> Unit = { card ->
+        when (card.kind) {
+            in VIDEO_KINDS -> playVideo(card.id, ResumeMode.Resume)
+            Kind.AUDIOBOOK, Kind.BOOK, Kind.COMIC, Kind.COMIC_VOLUME -> scope.launch {
+                val book = try {
+                    client.book(card.id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+                when (val action = book?.let { BookAction.of(it) }) {
+                    is BookAction.Listen -> {
+                        playback.resumeAudiobook(book, Resume.audiobookStartMs(book.progress, book.durationMs))
+                        showNowPlaying = true
+                    }
+                    is BookAction.ReadComic, is BookAction.ReadPdf -> read(action)
+                    is BookAction.Unsupported, null -> open(card)
+                }
+            }
+            else -> open(card)
         }
     }
     val openGrid: OpenGrid = { source, title -> navController.navigate(GridRoute(source.encode(), title)) }
@@ -160,8 +259,9 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
             ) {
                 composable<HomeRoute> {
                     HomeScreen(
-                        viewModel = viewModel { LoadViewModel { HomeContent.from(client.home()) } },
+                        viewModel = viewModel { LoadViewModel(pendingWrites = app.pendingWrites) { HomeContent.from(client.home()) } },
                         onOpen = open,
+                        onContinue = continueCard,
                         // Videos play (resuming); a hero album or book opens its page.
                         onPlay = { card -> if (card.kind in VIDEO_KINDS) playVideo(card.id, ResumeMode.Resume) else open(card) },
                         onSeeAll = { shelf -> openGrid(GridSource.forShelf(ShelfPage.Home, shelf.id), shelf.title) },
@@ -187,11 +287,8 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         onOpen = open,
                         onGrid = openGrid,
                         onSongs = { title -> navController.navigate(SongsRoute(title)) },
-                        onShuffleAll = {
-                            scope.launch {
-                                runCatching { client.shuffle().tracks }.onSuccess { playback.playTracks(it) }
-                            }
-                        },
+                        shuffleAll = viewModel { ShuffleAllViewModel(client) },
+                        onPlayTracks = { tracks -> playback.playTracks(tracks) },
                     )
                 }
                 composable<BooksRoute> {
@@ -204,9 +301,11 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                 composable<SearchRoute> {
                     SearchScreen(
                         viewModel = viewModel { SearchViewModel(client) },
+                        playback = playback,
                         onOpen = open,
                         onTab = selectTab,
                         onGrid = openGrid,
+                        onNowPlaying = { showNowPlaying = true },
                     )
                 }
                 composable<GridRoute> { entry ->
@@ -222,14 +321,14 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                     val route = entry.toRoute<DetailRoute>()
                     if (route.kind in VIDEO_KINDS) {
                         VideoDetailScreen(
-                            viewModel = viewModel { ItemDetailViewModel(client, route.id) },
+                            viewModel = viewModel { ItemDetailViewModel(client, route.id, app.pendingWrites) },
                             onOpen = open,
                             onBack = back,
                             onPlay = playVideo,
                         )
                     } else {
                         MediaDetailScreen(
-                            viewModel = viewModel { MediaDetailViewModel(client, route.kind, route.id) },
+                            viewModel = viewModel { MediaDetailViewModel(client, route.kind, route.id, app.pendingWrites) },
                             playback = playback,
                             onOpen = open,
                             onBack = back,
@@ -248,7 +347,9 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                 composable<ComicReaderRoute> { entry ->
                     val route = entry.toRoute<ComicReaderRoute>()
                     ComicReaderScreen(
-                        viewModel = viewModel { ComicReaderViewModel(client, app.appScope, route.volumeId) },
+                        viewModel = viewModel {
+                            ComicReaderViewModel(client.pinned(), app.appScope, app.pendingWrites, route.volumeId, route.fromStart)
+                        },
                         onBack = back,
                         onOpenVolume = { next ->
                             navController.navigate(ComicReaderRoute(next)) {
@@ -260,7 +361,9 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                 composable<PdfReaderRoute> { entry ->
                     val route = entry.toRoute<PdfReaderRoute>()
                     PdfReaderScreen(
-                        viewModel = viewModel { PdfReaderViewModel(client, app.appScope, context.cacheDir, route.bookId) },
+                        viewModel = viewModel {
+                            PdfReaderViewModel(client.pinned(), app.appScope, app.pendingWrites, context.cacheDir, route.bookId, route.fromStart)
+                        },
                         onBack = back,
                     )
                 }
@@ -272,9 +375,9 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                         session = state.session,
                         user = user,
                         onBack = back,
-                        onSwitchProfile = { scope.launch { session.switchProfile() } },
-                        onSignOut = { scope.launch { session.signOut() } },
-                        onChangeServer = { scope.launch { session.changeServer() } },
+                        onSwitchProfile = switchProfile,
+                        onSignOut = { confirm = SessionAction.SignOut },
+                        onChangeServer = { confirm = SessionAction.ChangeServer },
                         onLanguageChanged = { activity?.let(MainActivity::restart) },
                     )
                 }
@@ -300,15 +403,15 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                 onDismiss = { showAccount = false },
                 onSwitchProfile = {
                     showAccount = false
-                    scope.launch { session.switchProfile() }
+                    switchProfile()
                 },
                 onSignOut = {
                     showAccount = false
-                    scope.launch { session.signOut() }
+                    confirm = SessionAction.SignOut
                 },
                 onChangeServer = {
                     showAccount = false
-                    scope.launch { session.changeServer() }
+                    confirm = SessionAction.ChangeServer
                 },
                 onSettings = {
                     showAccount = false
@@ -316,7 +419,36 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
                 },
             )
         }
+        confirm?.let { action ->
+            SessionActionDialog(
+                action = action,
+                onConfirm = {
+                    confirm = null
+                    runSessionAction(action)
+                },
+                onDismiss = { confirm = null },
+            )
+        }
     }
+}
+
+/** Confirms Sign Out or Change Server; Cancel is the safe default. */
+@Composable
+private fun SessionActionDialog(action: SessionAction, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val (title, body, confirmLabel) = when (action) {
+        SessionAction.SignOut -> Triple(MobileR.string.confirm_sign_out_title, MobileR.string.confirm_sign_out_body, R.string.profile_sign_out)
+        SessionAction.ChangeServer -> Triple(MobileR.string.confirm_change_server_title, MobileR.string.confirm_change_server_body, R.string.server_change)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = AntresolColors.BackgroundElevated,
+        title = { Text(stringResource(title)) },
+        text = { Text(stringResource(body)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(confirmLabel), color = AntresolColors.Red) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
 }
 
 /** Asks once (Android 13+) for the notification permission the media controls need, when something first plays. */

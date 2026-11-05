@@ -54,6 +54,7 @@ fun Shelf(
     modifier: Modifier = Modifier,
     style: CardStyle? = null,
     onSeeAll: (() -> Unit)? = null,
+    onLongPress: ((Card) -> Unit)? = null,
 ) {
     Column(modifier = modifier.padding(top = 20.dp)) {
         SectionTitle(title, onSeeAll = onSeeAll)
@@ -64,7 +65,13 @@ fun Shelf(
         ) {
             items(cards, key = { "${it.kind}:${it.id}" }) { card ->
                 val cardStyle = style ?: card.defaultStyle()
-                MediaCard(card = card, onClick = { onOpen(card) }, style = cardStyle, width = CardSizes.width(cardStyle))
+                MediaCard(
+                    card = card,
+                    onClick = { onOpen(card) },
+                    style = cardStyle,
+                    width = CardSizes.width(cardStyle),
+                    onLongClick = onLongPress?.let { { it(card) } },
+                )
             }
         }
     }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +46,7 @@ val MiniPlayerSpace = 72.dp
 @Composable
 fun MiniPlayer(playback: PlaybackConnection, onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val playing = playback.current ?: return
+    PositionUpdates(playback)
     val shape = AntresolShapes.control
     Box(
         modifier
@@ -117,5 +119,14 @@ fun MiniPlayer(playback: PlaybackConnection, onOpen: () -> Unit, modifier: Modif
                 .height(2.dp)
                 .background(AntresolColors.Label.copy(alpha = 0.8f)),
         )
+    }
+}
+
+/** Keeps the playback position updating while the calling screen is started (visible). */
+@Composable
+fun PositionUpdates(playback: PlaybackConnection) {
+    LifecycleStartEffect(playback) {
+        val release = playback.watchPosition()
+        onStopOrDispose { release() }
     }
 }

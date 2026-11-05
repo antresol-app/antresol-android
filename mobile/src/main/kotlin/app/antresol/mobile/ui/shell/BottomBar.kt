@@ -3,7 +3,7 @@ package app.antresol.mobile.ui.shell
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import app.antresol.mobile.ui.components.focusClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,7 +78,7 @@ fun BottomBar(selected: NavTab?, onSelect: (NavTab) -> Unit, modifier: Modifier 
             modifier = Modifier
                 .size(BottomBarHeight)
                 .glass(CircleShape)
-                .clickable(role = Role.Tab) { onSelect(NavTab.Search) }
+                .focusClickable(CircleShape, role = Role.Tab) { onSelect(NavTab.Search) }
                 .semantics { this.selected = searchSelected }
                 .testTag("tab-${NavTab.Search.name}"),
             contentAlignment = Alignment.Center,
@@ -102,7 +102,7 @@ private fun TabItem(tab: NavTab, selected: Boolean, onClick: () -> Unit, modifie
             .fillMaxHeight()
             .clip(AntresolShapes.pill)
             .background(disc)
-            .clickable(role = Role.Tab, onClick = onClick)
+            .focusClickable(AntresolShapes.pill, role = Role.Tab, onClick = onClick)
             .semantics { this.selected = selected }
             .testTag("tab-${tab.name}"),
         horizontalAlignment = Alignment.CenterHorizontally,

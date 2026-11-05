@@ -16,10 +16,12 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
@@ -29,9 +31,12 @@ import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.FileInfo
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
+import app.antresol.core.model.PlaybackCaps
 import app.antresol.core.model.Quality
 import app.antresol.core.model.SubTrack
+import app.antresol.core.playback.CodecSupport
 import app.antresol.core.playback.Episodes
+import app.antresol.core.playback.PendingWrites
 import app.antresol.core.playback.PlaybackReporter
 import app.antresol.core.playback.Resume
 import app.antresol.core.playback.VideoSession
@@ -81,6 +86,9 @@ sealed interface PlayerPhase {
 /** The item has no playable file, or the player gave up on the stream. */
 class PlaybackUnavailableException(cause: Throwable? = null) : Exception(cause)
 
+/** `/api/play` answered 429: the profile already streams on as many devices as it may. */
+class StreamLimitException(cause: ApiException) : Exception(cause)
+
 /**
  * Plays one movie or episode (and the following episodes) with ExoPlayer, following the spec's
  * video flow: `/api/play` with the device caps, direct or HLS via `?mk=`, HLS keepalive and stop,
@@ -88,9 +96,10 @@ class PlaybackUnavailableException(cause: Throwable? = null) : Exception(cause)
  * track and quality changes, side-loaded WebVTT subtitles shifted to the HLS start, and recovery
  * when the server drops the session. ExoPlayer lives here so it survives recomposition.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class VideoPlayerViewModel(
     private val context: Context,
-    private val client: AntresolClient,
+    client: AntresolClient,
     private val appScope: CoroutineScope,
     itemId: Long,
     resume: ResumeMode,
@@ -98,7 +107,15 @@ class VideoPlayerViewModel(
     private val defaultQuality: String,
     /** Start the next episode after the countdown. */
     private val autoplayNext: () -> Boolean,
+    /** Final writes and session stops, awaited by screens that show progress. */
+    private val pendingWrites: PendingWrites,
 ) : ViewModel() {
+    /**
+     * The client for every call of this player (sessions, keepalives, progress, media key, subtitles),
+     * pinned to the profile that started it: stops and final writes after a profile switch still count.
+     */
+    private val client: AntresolClient = client.pinned()
+
     val player: ExoPlayer = buildPlayer()
 
     var phase: PlayerPhase by mutableStateOf(PlayerPhase.Loading)
@@ -170,6 +187,13 @@ class VideoPlayerViewModel(
     private var seekJob: Job? = null
     private var subtitleJob: Job? = null
     private var upNextJob: Job? = null
+    private var healthyJob: Job? = null
+
+    /** HLS stops in flight; a new `/api/play` waits for them, so the profile never briefly holds three sessions. */
+    private var stopping: Job? = null
+
+    /** The final write and stop for this player started (the activity is finishing). */
+    private var closed = false
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
@@ -179,16 +203,16 @@ class VideoPlayerViewModel(
         override fun onPlaybackStateChanged(state: Int) {
             isBuffering = state == Player.STATE_BUFFERING
             when (state) {
-                Player.STATE_READY -> recoveries = 0
+                Player.STATE_READY -> markHealthyLater()
                 Player.STATE_ENDED -> onEnded()
+                else -> Unit
             }
         }
 
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             this@VideoPlayerViewModel.playWhenReady = playWhenReady
-            if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
-                viewModelScope.launch { reporter?.flush() }
-            }
+            // Every pause saves: the user's, headphones unplugged, audio focus lost to a call.
+            if (!playWhenReady) viewModelScope.launch { reporter?.flush() }
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -228,7 +252,7 @@ class VideoPlayerViewModel(
                 item = detail
                 currentItemId = detail.id
                 findNextEpisode(detail)
-                val saved = if (mode == ResumeMode.FromStart) 0L else savedPositionMs(detail.id)
+                val saved = if (mode == ResumeMode.FromStart) 0L else savedPositionMs(detail, file)
                 if (mode == ResumeMode.Ask && saved >= RESUME_PROMPT_MIN_MS) {
                     pendingFile = file
                     phase = PlayerPhase.AskResume(saved)
@@ -260,12 +284,17 @@ class VideoPlayerViewModel(
         }
     }
 
-    private suspend fun savedPositionMs(itemId: Long): Long = try {
-        (Resume.videoStartSec(client.progress(itemId)) * 1000).toLong()
+    /**
+     * The resume point from `/api/progress`; if that fails, the watched fraction the item came with.
+     * Starting at 0 instead would overwrite the server's resume point with the first progress write.
+     */
+    private suspend fun savedPositionMs(detail: ItemDetail, file: FileInfo): Long = try {
+        (Resume.videoStartSec(client.progress(detail.id)) * 1000).toLong()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        0L
+        val fraction = detail.progress.takeIf { it > 0.0 && it < 1.0 } ?: 0.0
+        (fraction * (file.durationMs ?: 0L)).toLong()
     }
 
     private fun findNextEpisode(detail: ItemDetail) {
@@ -285,7 +314,10 @@ class VideoPlayerViewModel(
 
     private suspend fun begin(file: FileInfo, startMs: Long) {
         releaseStream()
-        val newSession = VideoSession(client.videoApi(), file.id, DeviceCaps.current(context), quality = defaultQuality)
+        // Enumerating codecs is slow: keep it off the main thread. A phone scales any decodable video
+        // to its screen, so only the decoder limits the height (not the display).
+        val caps = withContext(Dispatchers.Default) { DeviceCaps.current(context, limitToDisplay = false) }
+        val newSession = VideoSession(client.videoApi(), file.id, caps, quality = defaultQuality)
         session = newSession
         selectedSubtitle = null
         rawSubtitles.clear()
@@ -299,12 +331,12 @@ class VideoPlayerViewModel(
             durationMs = duration,
             positionMs = ::reportedPositionMs,
             isPlaying = { !released && player.isPlaying },
-            onSessionLost = { onSessionLost() },
+            onSessionLost = ::onSessionLost,
         ).also { it.start(opened.session) }
         load(opened, opened.timeline.initialPlayerSeekMs, playWhenReady = !backgrounded)
         phase = PlayerPhase.Playing
         // Opened while in the background: give the HLS slot back until the app returns.
-        if (backgrounded) onBackground()
+        if (backgrounded) suspendStream(resumeAtMs = startMs)
     }
 
     /** Stops the reporter and HLS session of a previous attempt (retry after a failed start). */
@@ -316,10 +348,24 @@ class VideoPlayerViewModel(
         source = null
         val orphan = oldSession?.detachSession()?.takeIf { it != oldReporter?.hlsSession }
         if (oldReporter == null && orphan == null) return
-        appScope.launch {
+        stopInBackground {
             oldReporter?.stop()
             if (orphan != null && oldSession != null) oldSession.stopSession(orphan)
         }
+    }
+
+    /**
+     * Runs a session stop (or a final write plus stop) on the app scope, so it survives the player,
+     * and registers it: the next `/api/play` waits for it and screens refresh after it.
+     */
+    private fun stopInBackground(block: suspend () -> Unit) {
+        val previous = stopping
+        val job = appScope.launch {
+            previous?.join()
+            block()
+        }
+        stopping = job
+        pendingWrites.track(job)
     }
 
     /**
@@ -328,9 +374,16 @@ class VideoPlayerViewModel(
      * it does not hold one of the profile's two slots.
      */
     private suspend fun openOrStop(target: VideoSession, open: suspend () -> VideoSource): VideoSource {
-        val opened = withContext(NonCancellable) { open() }
-        if (!currentCoroutineContext().isActive || released || session !== target) {
-            target.detachSession()?.let { id -> appScope.launch { target.stopSession(id) } }
+        val opened = withContext(NonCancellable) {
+            stopping?.join()
+            try {
+                open()
+            } catch (e: ApiException) {
+                throw if (e.isTooManySessions) StreamLimitException(e) else e
+            }
+        }
+        if (!currentCoroutineContext().isActive || released || closed || session !== target) {
+            target.detachSession()?.let { id -> stopInBackground { target.stopSession(id) } }
             throw CancellationException("Stream no longer wanted")
         }
         return opened
@@ -428,15 +481,15 @@ class VideoPlayerViewModel(
 
     // region Episodes
 
+    /** "Play Now", "Next Episode" and the end of the Up Next countdown; a second call is ignored. */
     fun playNext() {
+        if (phase != PlayerPhase.Playing && phase !is PlayerPhase.UpNext) return
         val next = nextEpisode ?: return
+        nextEpisode = null
         upNextJob?.cancel()
         upNextJob = null
-        phase = PlayerPhase.Loading
-        viewModelScope.launch {
-            finishCurrent()
-            start(next.id, ResumeMode.Resume)
-        }
+        finishCurrent()
+        start(next.id, ResumeMode.Resume)
     }
 
     private fun onEnded() {
@@ -460,8 +513,8 @@ class VideoPlayerViewModel(
         }
     }
 
-    /** Final progress write and session stop for the item that is ending. */
-    private suspend fun finishCurrent() {
+    /** Final progress write and session stop for the item that is ending (the next `/api/play` waits for it). */
+    private fun finishCurrent() {
         lastFileMs = currentFileMs()
         val ending = reporter
         reporter = null
@@ -470,26 +523,34 @@ class VideoPlayerViewModel(
         pendingReopen = null
         player.stop()
         player.clearMediaItems()
-        ending?.stop()
+        if (ending != null) stopInBackground { ending.stop() }
     }
 
     // endregion
 
     // region Lifecycle
 
-    /** The app went to background: pause, save, and give the HLS slot back to the profile. */
+    /**
+     * The app went to background: pause, save, and give the HLS slot back to the profile. A reopen
+     * in flight suspends its stream once loaded.
+     */
     fun onBackground() {
         backgrounded = true
-        if (released) return
+        if (released || closed) return
         player.pause()
         if (source == null || phase != PlayerPhase.Playing || isSwitching) return
+        suspendStream(resumeAtMs = currentFileMs())
+    }
+
+    /** Stops keepalives and the HLS session; [onForeground] reopens at [resumeAtMs]. */
+    private fun suspendStream(resumeAtMs: Long) {
         val current = session ?: return
         // Detach now, so a quick return (which opens a new session) is never stopped by this.
         val toStop = current.detachSession() ?: return
-        suspendedAtMs = currentFileMs()
+        suspendedAtMs = resumeAtMs
         val active = reporter
         active?.attachSession(null)
-        appScope.launch {
+        stopInBackground {
             active?.flush()
             current.stopSession(toStop)
         }
@@ -503,20 +564,38 @@ class VideoPlayerViewModel(
         reopen(at, playWhenReady = false)
     }
 
-    override fun onCleared() {
+    /**
+     * The player is closing (the activity finishes): the final progress write and the session stop
+     * start now, before the previous screen resumes and refreshes, and are tracked in [pendingWrites].
+     */
+    fun close() {
+        if (closed || released) return
+        closed = true
         lastFileMs = currentFileMs()
-        released = true
-        player.removeListener(listener)
-        player.release()
+        player.pause()
+        startJob?.cancel()
+        reopenJob?.cancel()
+        upNextJob?.cancel()
+        healthyJob?.cancel()
+        pendingReopen = null
         val ending = reporter
         reporter = null
         val stream = session
+        session = null
         val orphan = stream?.detachSession()?.takeIf { it != ending?.hlsSession }
-        appScope.launch {
+        if (ending == null && orphan == null) return
+        stopInBackground {
             ending?.stop()
             if (orphan != null && stream != null) stream.stopSession(orphan)
-            withContext(Dispatchers.IO) { subtitleDir.deleteRecursively() }
         }
+    }
+
+    override fun onCleared() {
+        close()
+        released = true
+        player.removeListener(listener)
+        player.release()
+        stopInBackground { withContext(Dispatchers.IO) { subtitleDir.deleteRecursively() } }
     }
 
     // endregion
@@ -536,8 +615,10 @@ class VideoPlayerViewModel(
         audioIndex: Int? = null,
         playWhenReady: Boolean = player.playWhenReady,
     ) {
-        if (session == null) return
+        if (session == null || closed) return
         isSwitching = true
+        // The session being replaced gets no more keepalives: a late 404 for it means nothing.
+        reporter?.attachSession(null)
         pendingSeekMs = fileMs
         positionMs = fileMs
         val queued = pendingReopen
@@ -566,7 +647,8 @@ class VideoPlayerViewModel(
                 reporter?.attachSession(opened.session)
                 val playerMs = if (opened.isHls) (request.fileMs - opened.timeline.startMs).coerceAtLeast(0) else request.fileMs
                 load(opened, playerMs, request.playWhenReady && !backgrounded)
-                if (backgrounded) onBackground()
+                // Went to background meanwhile (onBackground skipped the switch): give the slot back now.
+                if (backgrounded) suspendStream(resumeAtMs = request.fileMs)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -574,7 +656,7 @@ class VideoPlayerViewModel(
                 player.pause()
                 // Nothing keeps the old session alive any more; stop it if the server still has it.
                 reporter?.attachSession(null)
-                current.detachSession()?.let { id -> appScope.launch { current.stopSession(id) } }
+                current.detachSession()?.let { id -> stopInBackground { current.stopSession(id) } }
                 phase = PlayerPhase.Failed(e)
                 return
             }
@@ -643,26 +725,72 @@ class VideoPlayerViewModel(
         player.trackSelectionParameters = builder.build()
     }
 
-    private fun onSessionLost() {
-        session?.sessionLost()
-        if (phase != PlayerPhase.Playing || backgrounded) return
+    /** A keepalive got 404 for [lost]. Ignored unless it is the session this player still holds. */
+    private fun onSessionLost(lost: String) {
+        val current = session ?: return
+        if (current.session != lost) return
+        current.sessionLost()
+        if (phase != PlayerPhase.Playing || backgrounded || reopenJob?.isActive == true) return
         reopen(currentFileMs())
     }
 
-    /** Playback errors: reopen the stream (a new session) a couple of times, then give up. */
+    /** The recovery budget refills only after a stretch of healthy playback, not on every READY. */
+    private fun markHealthyLater() {
+        healthyJob?.cancel()
+        healthyJob = viewModelScope.launch {
+            delay(HEALTHY_PLAYBACK_MS)
+            recoveries = 0
+        }
+    }
+
+    /**
+     * Playback errors: reopen the stream (a new session) a couple of times, then give up. When the
+     * device failed to decode what it claimed to support, the reopen asks for smaller caps, so the
+     * server remuxes or transcodes instead of answering with the same direct stream.
+     */
     private fun recover(error: PlaybackException) {
+        healthyJob?.cancel()
         val current = session
-        if (current == null || recoveries >= MAX_RECOVERIES) {
+        if (current == null || closed) {
             phase = PlayerPhase.Failed(PlaybackUnavailableException(error))
             return
         }
-        recoveries++
+        val reduced = reducedCaps(current.caps, error)
+        if (reduced == null && recoveries >= MAX_RECOVERIES) {
+            // Giving up: nothing may keep the broken session (and its transcode) alive.
+            detachAndStop(current)
+            phase = PlayerPhase.Failed(PlaybackUnavailableException(error))
+            return
+        }
+        if (reduced != null) current.caps = reduced else recoveries++
         val at = currentFileMs()
-        // Stop keepalives first: a 404 for the stopped session must not start a second reopen.
-        reporter?.attachSession(null)
-        val broken = current.detachSession()
-        if (broken != null) appScope.launch { current.stopSession(broken) }
+        detachAndStop(current)
         reopen(at)
+    }
+
+    /** Stops keepalives first (a 404 for the stopped session must not start a reopen), then the session. */
+    private fun detachAndStop(current: VideoSession) {
+        reporter?.attachSession(null)
+        val broken = current.detachSession() ?: return
+        stopInBackground { current.stopSession(broken) }
+    }
+
+    /** Smaller caps after a decoder or audio output failure, or null for other errors (or nothing left to drop). */
+    private fun reducedCaps(caps: PlaybackCaps, error: PlaybackException): PlaybackCaps? {
+        val format = (error as? ExoPlaybackException)?.takeIf { it.type == ExoPlaybackException.TYPE_RENDERER }?.rendererFormat
+        val audio = format?.sampleMimeType?.let(MimeTypes::isAudio) ?: false
+        return when (error.errorCode) {
+            PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
+            PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED,
+            -> CodecSupport.withoutFailingAudio(caps)
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+            -> if (audio) CodecSupport.withoutFailingAudio(caps) else CodecSupport.withoutFailingVideo(caps)
+            else -> null
+        }
     }
 
     private fun currentFileMs(): Long {
@@ -706,6 +834,7 @@ class VideoPlayerViewModel(
         private const val SEEK_SETTLE_MS = 700L
         private const val END_GUARD_MS = 1_000L
         private const val MAX_RECOVERIES = 2
+        private const val HEALTHY_PLAYBACK_MS = 30_000L
         private const val SUBTITLE_ATTEMPTS = 6
         private const val SUBTITLE_ID = "antresol-subtitle"
     }

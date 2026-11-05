@@ -98,4 +98,15 @@
     <string name="settings_revoke_body">На этом устройстве придётся снова войти в профиль.</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_app_version">Версия приложения</string>
+    <string name="error_too_many_attempts">Слишком много попыток. Попробуйте позже.</string>
+    <string name="account_open">Аккаунт: %1$s</string>
+    <string name="music_nothing_to_play">Нечего воспроизводить.</string>
+    <string name="music_playback_failed">Не удалось начать воспроизведение. Проверьте подключение и попробуйте снова.</string>
+    <string name="music_nothing_to_shuffle">Нечего перемешивать.</string>
+    <string name="detail_listen_from_start">Слушать с начала</string>
+    <string name="detail_read_from_start">Читать с начала</string>
+    <string name="confirm_sign_out_title">Выйти из профиля?</string>
+    <string name="confirm_sign_out_body">Устройство забудет профиль. Его придётся снова выбрать (и ввести пароль).</string>
+    <string name="confirm_change_server_title">Сменить сервер?</string>
+    <string name="confirm_change_server_body">Вы вернётесь к вводу адреса сервера. Вход в профили сохранится.</string>
 </resources>

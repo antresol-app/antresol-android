@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -37,16 +39,21 @@ import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PageTitle
+import app.antresol.mobile.ui.components.PagingFooter
 import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.TrackRow
 import app.antresol.mobile.ui.load
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.theme.AntresolColors
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import app.antresol.ui.R as UiR
 
-/** Every song (`/api/music/songs`), paged; [starred] lists the starred ones only. */
+/**
+ * Every song (`/api/music/songs`), paged; [starred] lists the starred ones only. Playing from this
+ * page queues the whole list: the pages not loaded yet are fetched and appended in the background.
+ */
 class SongsViewModel(private val client: AntresolClient, private val starred: Boolean) : ViewModel() {
     data class Songs(val tracks: List<Track>, val total: Int) {
         val hasMore: Boolean get() = tracks.size < total
@@ -55,7 +62,15 @@ class SongsViewModel(private val client: AntresolClient, private val starred: Bo
     var state: LoadState<Songs> by mutableStateOf(LoadState.Loading)
         private set
 
+    /** The last page failed to load; the list shows "Try Again" at its end. */
+    var pageError: Throwable? by mutableStateOf(null)
+        private set
+
+    var loadingMore: Boolean by mutableStateOf(false)
+        private set
+
     private var job: Job? = null
+    private var queueJob: Job? = null
 
     init {
         reload()
@@ -63,23 +78,72 @@ class SongsViewModel(private val client: AntresolClient, private val starred: Bo
 
     fun reload() {
         job?.cancel()
+        queueJob?.cancel()
+        pageError = null
         state = LoadState.Loading
         job = viewModelScope.launch {
             state = load { client.songs(starred = starred, offset = 0).let { Songs(it.items, it.total) } }
         }
     }
 
-    fun loadMore() {
+    /** Fetches the next page; [retry] after a failed page ("Try Again"). */
+    fun loadMore(retry: Boolean = false) {
+        if (pageError != null && !retry) return
         val songs = (state as? LoadState.Ready)?.value ?: return
-        if (!songs.hasMore || job?.isActive == true) return
+        // While a play queues the remaining pages, they arrive through it.
+        if (!songs.hasMore || job?.isActive == true || queueJob?.isActive == true) return
+        pageError = null
+        loadingMore = true
         job = viewModelScope.launch {
-            val next = load { client.songs(starred = starred, offset = songs.tracks.size) }
-            if (next is LoadState.Ready) {
-                val fresh = next.value.items
-                val total = if (fresh.isEmpty()) songs.tracks.size else next.value.total
-                state = LoadState.Ready(Songs(songs.tracks + fresh, total))
+            try {
+                nextPage()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                pageError = e
+            } finally {
+                loadingMore = false
             }
         }
+    }
+
+    /**
+     * Plays the list from [index] ([shuffled]: in random order) and keeps appending the pages not
+     * loaded yet to the same queue.
+     */
+    fun play(playback: PlaybackConnection, index: Int = 0, shuffled: Boolean = false) {
+        val songs = (state as? LoadState.Ready)?.value ?: return
+        val generation = playback.playTracks(songs.tracks, index, shuffled) ?: return
+        queueJob?.cancel()
+        queueJob = viewModelScope.launch {
+            // Wait for a page already loading, then fetch the rest page by page.
+            job?.join()
+            var queued = songs.tracks.size
+            while (true) {
+                val current = (state as? LoadState.Ready)?.value ?: return@launch
+                if (current.tracks.size > queued) {
+                    playback.appendTracks(generation, current.tracks.subList(queued, current.tracks.size))
+                    queued = current.tracks.size
+                }
+                if (!current.hasMore) return@launch
+                try {
+                    nextPage()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    pageError = e
+                    return@launch
+                }
+            }
+        }
+    }
+
+    /** Appends the next page to [state]; a page without new songs means the total was stale. */
+    private suspend fun nextPage() {
+        val songs = (state as? LoadState.Ready)?.value ?: return
+        val fresh = client.songs(starred = starred, offset = songs.tracks.size).let { it.items to it.total }
+        val total = if (fresh.first.isEmpty()) songs.tracks.size else fresh.second
+        state = LoadState.Ready(Songs(songs.tracks + fresh.first, total))
     }
 }
 
@@ -89,7 +153,7 @@ fun SongsScreen(viewModel: SongsViewModel, title: String, playback: PlaybackConn
     val bottom = LocalBottomBarPadding.current
     val list = rememberLazyListState()
     val nearEnd by remember { derivedStateOf { list.layoutInfo.visibleItemsInfo.lastOrNull()?.index?.let { it >= list.layoutInfo.totalItemsCount - 10 } == true } }
-    LaunchedEffect(nearEnd) { if (nearEnd) viewModel.loadMore() }
+    LaunchedEffect(nearEnd, viewModel.state) { if (nearEnd) viewModel.loadMore() }
     LazyColumn(
         state = list,
         modifier = Modifier.fillMaxSize().background(AntresolColors.Background).testTag("songs"),
@@ -106,7 +170,7 @@ fun SongsScreen(viewModel: SongsViewModel, title: String, playback: PlaybackConn
                     item("empty") { EmptyView(stringResource(UiR.string.state_empty)) }
                 } else {
                     item("actions") {
-                        PlayShuffleRow(onPlay = { playback.playTracks(tracks) }, onShuffle = { playback.playTracks(tracks, shuffled = true) })
+                        PlayShuffleRow(onPlay = { viewModel.play(playback) }, onShuffle = { viewModel.play(playback, shuffled = true) })
                     }
                     itemsIndexed(tracks, key = { index, track -> "$index-${track.id}" }) { index, track ->
                         TrackRow(
@@ -114,9 +178,12 @@ fun SongsScreen(viewModel: SongsViewModel, title: String, playback: PlaybackConn
                             number = null,
                             showArtist = true,
                             playing = playback.current?.trackId == track.id,
-                            onClick = { playback.playTracks(tracks, index) },
+                            onClick = { viewModel.play(playback, index) },
                             showCover = true,
                         )
+                    }
+                    item("footer") {
+                        PagingFooter(viewModel.pageError, viewModel.loadingMore, onRetry = { viewModel.loadMore(retry = true) })
                     }
                 }
             }
@@ -124,35 +191,50 @@ fun SongsScreen(viewModel: SongsViewModel, title: String, playback: PlaybackConn
     }
 }
 
-/** The white Play pill and the glass Shuffle pill, side by side. */
+/**
+ * The white Play pill and the glass Shuffle pill, side by side; without [onPlay] only Shuffle.
+ * [trailing] adds round buttons after them (an album's favorite star).
+ */
 @Composable
-fun PlayShuffleRow(onPlay: () -> Unit, onShuffle: () -> Unit, modifier: Modifier = Modifier) {
+fun PlayShuffleRow(
+    onPlay: (() -> Unit)?,
+    onShuffle: () -> Unit,
+    modifier: Modifier = Modifier,
+    shuffleEnabled: Boolean = true,
+    trailing: @Composable RowScope.() -> Unit = {},
+) {
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        PrimaryPillButton(
-            text = stringResource(UiR.string.action_play),
-            icon = AntresolIcons.Play,
-            onClick = onPlay,
-            modifier = Modifier.weight(1f).testTag("play-all"),
-        )
+        if (onPlay != null) {
+            PrimaryPillButton(
+                text = stringResource(UiR.string.action_play),
+                icon = AntresolIcons.Play,
+                onClick = onPlay,
+                modifier = Modifier.weight(1f).testTag("play-all"),
+            )
+        }
         GlassPillButton(
             text = stringResource(UiR.string.action_shuffle),
             icon = MobileIcons.Shuffle,
             onClick = onShuffle,
+            enabled = shuffleEnabled,
             modifier = Modifier.weight(1f).testTag("shuffle-all"),
         )
+        trailing()
     }
 }
 
 /** "Shuffle All" on the Music page. */
 @Composable
-fun ShuffleAllButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ShuffleAllButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     GlassPillButton(
         text = stringResource(R.string.music_shuffle_all),
         icon = MobileIcons.Shuffle,
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.padding(horizontal = PageGutter, vertical = 8.dp).testTag("music-shuffle-all"),
     )
 }

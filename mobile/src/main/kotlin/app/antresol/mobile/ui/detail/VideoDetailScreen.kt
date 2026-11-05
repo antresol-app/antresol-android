@@ -101,7 +101,7 @@ fun VideoDetailScreen(
         onPauseOrDispose { }
     }
     val snackbar = remember { SnackbarHostState() }
-    FailureSnackbar(viewModel.failed, snackbar, viewModel::consumeFailure)
+    NoticeSnackbar(viewModel.notice, snackbar, viewModel::consumeNotice)
     Box(Modifier.fillMaxSize().background(AntresolColors.Background)) {
         when (val state = viewModel.state) {
             LoadState.Loading -> DetailStateBox(onBack) { LoadingView() }

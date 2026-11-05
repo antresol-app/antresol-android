@@ -34,6 +34,7 @@ import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MediaCard
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PageTitle
+import app.antresol.mobile.ui.components.PagingFooter
 import app.antresol.mobile.ui.components.PageTop
 import app.antresol.mobile.ui.components.SegmentedPills
 import app.antresol.mobile.ui.components.defaultStyle
@@ -109,6 +110,9 @@ fun CardGridScreen(
                 }
                 items(state.value.cards, key = { "${it.kind}:${it.id}" }) { card ->
                     MediaCard(card = card, onClick = { onOpen(card) }, style = style ?: card.defaultStyle())
+                }
+                fullWidth("footer") {
+                    PagingFooter(viewModel.pageError, viewModel.loadingMore, onRetry = { viewModel.loadMore(retry = true) })
                 }
             }
         }

@@ -2,6 +2,7 @@ package app.antresol.mobile.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Bundle
 import android.os.SystemClock
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -15,6 +16,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import app.antresol.core.playback.PlaybackReporter
 import app.antresol.core.playback.PlaybackTiming
 import app.antresol.core.playback.ScrobbleTracker
@@ -22,9 +25,12 @@ import app.antresol.core.playback.playbackApi
 import app.antresol.mobile.AntresolMobileApp
 import app.antresol.mobile.MainActivity
 import app.antresol.mobile.settings.AppSettings
+import app.antresol.ui.playback.TranscodeSeekingPlayer
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -53,6 +59,9 @@ class PlaybackService : MediaSessionService() {
     private var scrobble: ScrobbleTracker? = null
     private var lastTickAt: Long? = null
 
+    /** Scrobble and position ticks; runs only while the player plays. */
+    private var tickJob: Job? = null
+
     private var reporter: PlaybackReporter? = null
     private var reporterBookId: Long? = null
 
@@ -60,18 +69,23 @@ class PlaybackService : MediaSessionService() {
     private var lastBookMs = 0L
 
     private val listener = object : Player.Listener {
-        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = onCurrentItem(mediaItem)
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) =
+            onCurrentItem(mediaItem, repeated = reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT)
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (!isPlaying) {
-                captureBookPosition()
+            if (isPlaying) {
+                startTicking()
+            } else {
+                tick()
+                tickJob?.cancel()
+                tickJob = null
                 lastTickAt = null
                 reporter?.let { scope.launch { it.flush() } }
             }
         }
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
-            if (timeline.isEmpty) onCurrentItem(null)
+            if (timeline.isEmpty) onCurrentItem(null, repeated = false)
         }
     }
 
@@ -109,7 +123,12 @@ class PlaybackService : MediaSessionService() {
             .setSessionActivity(openApp)
             .setBitmapLoader(CoilBitmapLoader(this, scope))
             .build()
-        scope.launch {
+    }
+
+    private fun startTicking() {
+        if (tickJob?.isActive == true) return
+        lastTickAt = SystemClock.elapsedRealtime()
+        tickJob = scope.launch {
             while (isActive) {
                 delay(TICK_MS)
                 tick()
@@ -139,10 +158,11 @@ class PlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 
-    private fun onCurrentItem(item: MediaItem?) {
+    private fun onCurrentItem(item: MediaItem?, repeated: Boolean) {
         val ref = MediaRef.parse(item?.mediaId)
         val trackId = (ref as? MediaRef.Track)?.trackId
-        if (trackId != scrobbleTrackId) {
+        // A repeated track counts as another play.
+        if (trackId != scrobbleTrackId || repeated) {
             scrobbleTrackId = trackId
             scrobble = trackId?.let { ScrobbleTracker(item?.mediaMetadata?.extras?.getLong(QueueExtras.DURATION_MS) ?: 0L) }
         }
@@ -154,8 +174,12 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun startReporter(bookId: Long, item: MediaItem) {
-        val client = app.session.client ?: return
-        val duration = item.mediaMetadata.extras?.getLong(QueueExtras.BOOK_DURATION_MS) ?: 0L
+        val extras = item.mediaMetadata.extras
+        // Unknown part lengths make every whole-book position wrong: write nothing for this book.
+        if (extras?.getBoolean(QueueExtras.REPORTS_PROGRESS, true) == false) return
+        // Pinned: the final write after a profile switch still goes to the profile that listened.
+        val client = app.session.client?.pinned() ?: return
+        val duration = extras?.getLong(QueueExtras.BOOK_DURATION_MS) ?: 0L
         reporterBookId = bookId
         lastBookMs = currentBookMs() ?: 0L
         reporter = PlaybackReporter(
@@ -170,8 +194,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     /** Final write for the book that stopped being current; runs in the app scope to outlive the service. */
-    private fun endReporter() {
-        val ending = reporter ?: return
+    private fun endReporter(): Job? {
+        val ending = reporter ?: return null
         reporter = null
         reporterBookId = null
         val write = app.appScope.launch {
@@ -183,7 +207,23 @@ class PlaybackService : MediaSessionService() {
                 // Progress writes are best effort.
             }
         }
-        FinalProgressWrites.track(write)
+        app.pendingWrites.track(write)
+        return write
+    }
+
+    /** Stops and empties the player, completing once the final audiobook write is done (sign-out). */
+    private fun flushAndStop(): ListenableFuture<SessionResult> {
+        captureBookPosition()
+        val write = endReporter()
+        player.stop()
+        player.clearMediaItems()
+        val result = SettableFuture.create<SessionResult>()
+        if (write == null) {
+            result.set(SessionResult(SessionResult.RESULT_SUCCESS))
+        } else {
+            write.invokeOnCompletion { result.set(SessionResult(SessionResult.RESULT_SUCCESS)) }
+        }
+        return result
     }
 
     private fun tick() {
@@ -232,6 +272,29 @@ class PlaybackService : MediaSessionService() {
     }
 
     private inner class SessionCallback : MediaSession.Callback {
+        /** The app's own controller may also ask to stop with the final progress write ([FLUSH_AND_STOP]). */
+        override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
+            if (controller.packageName != packageName) return super.onConnect(session, controller)
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                .add(SessionCommand(FLUSH_AND_STOP, Bundle.EMPTY))
+                .build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(commands)
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> =
+            if (customCommand.customAction == FLUSH_AND_STOP) {
+                flushAndStop()
+            } else {
+                super.onCustomCommand(session, controller, customCommand, args)
+            }
+
         /** Controllers send entries without URIs; rebuild them from the media id. */
         override fun onAddMediaItems(
             mediaSession: MediaSession,
@@ -246,6 +309,9 @@ class PlaybackService : MediaSessionService() {
 
     companion object {
         const val SESSION_ID = "antresol-audio"
+
+        /** Custom session command: stop, clear the queue and finish the last audiobook progress write. */
+        const val FLUSH_AND_STOP = "app.antresol.mobile.FLUSH_AND_STOP"
         const val SEEK_BACK_MS = 15_000L
         const val SEEK_FORWARD_MS = 30_000L
         private const val TICK_MS = 500L

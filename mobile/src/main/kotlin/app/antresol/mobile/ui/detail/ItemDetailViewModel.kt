@@ -10,6 +10,8 @@ import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
 import app.antresol.core.model.SeasonInfo
 import app.antresol.core.playback.Episodes
+import app.antresol.core.playback.PendingWrites
+import app.antresol.mobile.R
 import app.antresol.core.playback.Resume
 import app.antresol.mobile.ui.LoadViewModel
 import kotlinx.coroutines.CancellationException
@@ -41,15 +43,15 @@ data class VideoDetail(
  * Loads `/api/items/{id}` (plus `/api/progress/{id}` for a movie or episode) and toggles the
  * watchlist and watched state optimistically; a failed write is undone and reported in [failed].
  */
-class ItemDetailViewModel(private val client: AntresolClient, private val id: Long) :
-    LoadViewModel<VideoDetail>(fetch = { fetchDetail(client, id) }) {
+class ItemDetailViewModel(private val client: AntresolClient, private val id: Long, pendingWrites: PendingWrites) :
+    LoadViewModel<VideoDetail>(pendingWrites = pendingWrites, fetch = { fetchDetail(client, id) }) {
 
-    /** Set when a toggle could not be saved; the screen shows it once and calls [consumeFailure]. */
-    var failed: Boolean by mutableStateOf(false)
+    /** A string resource to show once (a toggle could not be saved); the screen calls [consumeNotice]. */
+    var notice: Int? by mutableStateOf(null)
         private set
 
-    fun consumeFailure() {
-        failed = false
+    fun consumeNotice() {
+        notice = null
     }
 
     fun toggleWatchlist() = mutate(
@@ -60,7 +62,8 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
     fun toggleWatched() = mutate(
         change = { detail ->
             val watched = !detail.watched
-            detail.copy(watched = watched, item = detail.item.withEpisodes { it.copy(watched = watched, progress = 0.0) })
+            // The server resets the position either way (0 when watched, deleted when not).
+            detail.copy(watched = watched, positionMs = 0, item = detail.item.withEpisodes { it.copy(watched = watched, progress = 0.0) })
         },
         write = { before -> client.setWatched(id, !before.watched) },
     )
@@ -94,7 +97,7 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
                 throw e
             } catch (e: Exception) {
                 update { before }
-                failed = true
+                notice = R.string.detail_action_failed
             }
         }
     }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -11,8 +12,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
@@ -22,6 +27,7 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Genre
 import app.antresol.core.model.Kind
 import app.antresol.core.model.Shelf
+import app.antresol.core.model.Track
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LoadViewModel
@@ -36,6 +42,8 @@ import app.antresol.mobile.ui.components.PageTitle
 import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.Shelf
 import app.antresol.mobile.ui.components.TabHeader
+import app.antresol.mobile.ui.detail.NoticeSnackbar
+import app.antresol.mobile.ui.music.ShuffleAllViewModel
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
@@ -54,7 +62,25 @@ fun MusicScreen(
     onOpen: (Card) -> Unit,
     onGrid: OpenGrid,
     onSongs: (title: String) -> Unit,
+    shuffleAll: ShuffleAllViewModel,
+    onPlayTracks: (List<Track>) -> Unit,
+) {
+    val snackbar = remember { SnackbarHostState() }
+    NoticeSnackbar(shuffleAll.notice, snackbar, shuffleAll::consumeNotice)
+    Box(Modifier.fillMaxSize()) {
+        MusicShelves(viewModel, onOpen, onGrid, onSongs, onShuffleAll = { shuffleAll.shuffle(onPlayTracks) }, shuffling = shuffleAll.busy)
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(LocalBottomBarPadding.current))
+    }
+}
+
+@Composable
+private fun MusicShelves(
+    viewModel: LoadViewModel<MusicHome>,
+    onOpen: (Card) -> Unit,
+    onGrid: OpenGrid,
+    onSongs: (title: String) -> Unit,
     onShuffleAll: () -> Unit,
+    shuffling: Boolean,
 ) {
     val allAlbums = stringResource(R.string.music_all_albums)
     val songs = stringResource(R.string.music_songs)
@@ -73,7 +99,7 @@ fun MusicScreen(
         ),
         shelves = { it.shelves },
         extra = { music ->
-            item("shuffle") { ShuffleAllButton(onShuffleAll) }
+            item("shuffle") { ShuffleAllButton(onShuffleAll, enabled = !shuffling) }
             if (music.genres.isNotEmpty()) {
                 item("genres") {
                     SectionTitle(stringResource(R.string.music_genres), Modifier.padding(top = 12.dp))

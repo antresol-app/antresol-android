@@ -2,6 +2,7 @@ package app.antresol.mobile.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.Bundle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -15,6 +16,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.BookDetail
@@ -22,6 +24,7 @@ import app.antresol.core.model.Chapter
 import app.antresol.core.model.Track
 import app.antresol.core.playback.AudiobookTimeline
 import app.antresol.core.playback.Chapters
+import app.antresol.core.playback.PartPosition
 import app.antresol.mobile.settings.AppSettings
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CancellationException
@@ -30,7 +33,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 import kotlin.random.Random
 
 /** The queue entry that is playing, as the UI shows it. */
@@ -63,7 +68,8 @@ sealed interface SleepTimer {
  * mini-player and the Now Playing screen, and the commands the UI needs (play an album, shuffle,
  * play an audiobook from a whole-book position, chapters, speed, sleep timer, star).
  * Lives in the Application so it survives activity restarts; it binds to the service on the first
- * command (the service only runs while this process does, so there is nothing to find earlier).
+ * command (the service only runs while this process does, so there is nothing to find earlier),
+ * reconnects after the service died, and lets go of it when the queue is stopped.
  */
 class PlaybackConnection(
     private val context: Context,
@@ -77,6 +83,15 @@ class PlaybackConnection(
     private var pollJob: Job? = null
     private var sleepJob: Job? = null
     private val starOverrides = mutableStateMapOf<Long, Boolean>()
+
+    /** Screens showing the position (mini player, Now Playing); the position is polled only for them. */
+    private var positionWatchers = 0
+
+    /** Changes with every new queue ([playTracks], [playAudiobook], [stop]); see [appendTracks]. */
+    private var queueGeneration = 0
+
+    /** Counts entry changes, including a repeated track (the "end of track" sleep timer). */
+    private var transitions = 0
 
     var current: NowPlaying? by mutableStateOf(null)
         private set
@@ -133,13 +148,20 @@ class PlaybackConnection(
     fun connect() {
         if (controllerFuture != null) return
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val future = MediaController.Builder(context, token).buildAsync()
+        val future = MediaController.Builder(context, token)
+            .setListener(object : MediaController.Listener {
+                override fun onDisconnected(controller: MediaController) = handleDisconnected(controller)
+            })
+            .buildAsync()
         controllerFuture = future
         future.addListener({
+            if (controllerFuture !== future) return@addListener
             val connected = try {
                 future.get()
             } catch (e: Exception) {
+                // Commands queued for this attempt must not run against a later connection.
                 controllerFuture = null
+                pending.clear()
                 return@addListener
             }
             onConnected(connected)
@@ -148,13 +170,17 @@ class PlaybackConnection(
 
     // region Commands
 
-    /** Plays [tracks] from [startIndex]; with [shuffled] the order is shuffled and the start is random. */
-    fun playTracks(tracks: List<Track>, startIndex: Int = 0, shuffled: Boolean = false) {
-        val urls = client()?.urls ?: return
-        if (tracks.isEmpty()) return
+    /**
+     * Plays [tracks] from [startIndex]; with [shuffled] the order is shuffled and the start is random.
+     * Returns the queue's generation for [appendTracks], or null when nothing was queued.
+     */
+    fun playTracks(tracks: List<Track>, startIndex: Int = 0, shuffled: Boolean = false): Int? {
+        val urls = client()?.urls ?: return null
+        if (tracks.isEmpty()) return null
         val items = tracks.map { QueueItems.track(it, urls) }
         val start = if (shuffled) Random.nextInt(items.size) else startIndex.coerceIn(0, items.lastIndex)
         book = null
+        val generation = ++queueGeneration
         withController { c ->
             c.shuffleModeEnabled = shuffled
             c.setPlaybackSpeed(1f)
@@ -162,6 +188,15 @@ class PlaybackConnection(
             c.prepare()
             c.play()
         }
+        return generation
+    }
+
+    /** Adds [tracks] to the end of the queue started by [playTracks], unless another queue replaced it. */
+    fun appendTracks(generation: Int, tracks: List<Track>) {
+        if (generation != queueGeneration || tracks.isEmpty()) return
+        val urls = client()?.urls ?: return
+        val items = tracks.map { QueueItems.track(it, urls) }
+        withController { c -> if (generation == queueGeneration) c.addMediaItems(items) }
     }
 
     /** Plays [book] from [fromBookMs] on the whole-book timeline. */
@@ -169,8 +204,11 @@ class PlaybackConnection(
         val urls = client()?.urls ?: return
         val items = QueueItems.audiobook(book, urls)
         if (items.isEmpty()) return
-        val position = AudiobookTimeline.of(book.files).locate(fromBookMs)
+        val timeline = AudiobookTimeline.of(book.files, book.durationMs)
+        // Unknown part lengths: whole-book positions cannot be located, start at the beginning.
+        val position = if (timeline.isComplete) timeline.locate(fromBookMs) else PartPosition(0, 0)
         this.book = book
+        queueGeneration++
         withController { c ->
             c.shuffleModeEnabled = false
             c.repeatMode = Player.REPEAT_MODE_OFF
@@ -210,8 +248,11 @@ class PlaybackConnection(
 
     /** Seeks on the whole-book timeline (audiobook scrubber, chapters). */
     fun seekBook(bookMs: Long) {
-        val files = book?.files ?: return seekTo(bookMs)
-        val position = AudiobookTimeline.of(files).locate(bookMs)
+        val playing = book ?: return seekTo(bookMs)
+        val timeline = AudiobookTimeline.of(playing.files, playing.durationMs)
+        // Unknown part lengths: only the current part's own timeline can be trusted.
+        if (!timeline.isComplete) return seekTo(bookMs - (current?.partStartMs ?: 0L))
+        val position = timeline.locate(bookMs)
         withController { it.seekTo(position.partIndex, position.offsetMs) }
     }
 
@@ -298,35 +339,116 @@ class PlaybackConnection(
         sleepTimer = null
     }
 
-    /** Stops playback and empties the queue (sign-out, profile switch, closing the player). */
+    /**
+     * Stops playback, empties the queue and lets go of the service so it can end (profile switch,
+     * closing the player).
+     */
     fun stop() {
-        cancelSleepTimer()
-        book = null
-        starOverrides.clear()
-        controller?.let {
-            it.stop()
-            it.clearMediaItems()
+        val connected = controller
+        resetQueueState()
+        if (connected != null) {
+            connected.stop()
+            connected.clearMediaItems()
         }
-        pending.clear()
+        disconnect()
     }
 
     /**
-     * Stops playback and waits (briefly) for the service's last audiobook progress write, so it
-     * still goes out with the current token. Used before sign-out revokes that token.
+     * Stops playback and waits (briefly) until the service has written the last audiobook position,
+     * so it still goes out with the current token. Used before sign-out revokes that token.
      */
     suspend fun stopAndFlush() {
         val connected = controller
-        stop()
-        if (connected == null) return
-        withTimeoutOrNull(FLUSH_TIMEOUT_MS) {
-            while (connected.mediaItemCount > 0) delay(FLUSH_POLL_MS)
+        resetQueueState()
+        if (connected == null) return disconnect()
+        val command = SessionCommand(PlaybackService.FLUSH_AND_STOP, Bundle.EMPTY)
+        if (connected.isSessionCommandAvailable(command)) {
+            val result = connected.sendCustomCommand(command, Bundle.EMPTY)
+            withTimeoutOrNull(FLUSH_TIMEOUT_MS) {
+                suspendCancellableCoroutine { cont ->
+                    result.addListener({ cont.resume(Unit) }, ContextCompat.getMainExecutor(context))
+                }
+            }
+        } else {
+            connected.stop()
+            connected.clearMediaItems()
         }
-        FinalProgressWrites.await(FLUSH_TIMEOUT_MS)
+        disconnect()
+    }
+
+    /**
+     * Registers a screen that shows the playback position; it is polled only while one is
+     * registered and something plays. Call the returned function when the screen stops.
+     */
+    fun watchPosition(): () -> Unit {
+        positionWatchers++
+        controller?.let(::updatePollJob)
+        var released = false
+        return {
+            if (!released) {
+                released = true
+                positionWatchers--
+                controller?.let(::updatePollJob)
+            }
+        }
     }
 
     // endregion
 
-    private fun itemKey(): Any? = currentChapter?.idx?.let { "chapter-$it" } ?: "item-$currentIndex-${current?.ref}"
+    private fun resetQueueState() {
+        cancelSleepTimer()
+        book = null
+        starOverrides.clear()
+        pending.clear()
+        queueGeneration++
+    }
+
+    /** Releases the controller (the service may stop) and clears what the UI shows. */
+    private fun disconnect() {
+        val connected = controller
+        val future = controllerFuture
+        controller = null
+        controllerFuture = null
+        if (connected != null) connected.release() else future?.let(MediaController::releaseFuture)
+        resetUiState()
+    }
+
+    /** The service went away (it died or was stopped): the next command connects again. */
+    private fun handleDisconnected(disconnected: MediaController) {
+        if (controller !== disconnected) return
+        controller = null
+        controllerFuture = null
+        cancelSleepTimer()
+        book = null
+        resetUiState()
+    }
+
+    private fun resetUiState() {
+        pollJob?.cancel()
+        pollJob = null
+        current = null
+        isPlaying = false
+        playWhenReady = false
+        isBuffering = false
+        positionMs = 0
+        durationMs = 0
+        queue = emptyList()
+        currentIndex = 0
+    }
+
+    /**
+     * The current chapter (read from the controller, so it works with no screen polling), or the
+     * entry, counting repeats of the same track.
+     */
+    private fun itemKey(): Any? {
+        val c = controller ?: return null
+        val chapters = book?.chapters.orEmpty()
+        val playing = current
+        if (playing?.isAudiobook == true && chapters.isNotEmpty()) {
+            return "chapter-" + Chapters.indexAt(chapters, playing.partStartMs + c.currentPosition.coerceAtLeast(0))
+        }
+        return "item-$transitions"
+    }
 
     private fun withController(block: (MediaController) -> Unit) {
         val connected = controller
@@ -343,6 +465,10 @@ class PlaybackConnection(
         connected.addListener(object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) = sync()
 
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                transitions++
+            }
+
             override fun onPlayerError(error: PlaybackException) {
                 this@PlaybackConnection.error = error
             }
@@ -351,10 +477,20 @@ class PlaybackConnection(
         pending.clear()
         queued.forEach { it(connected) }
         sync()
-        pollJob?.cancel()
+    }
+
+    /** Polls the position only while something plays and a screen shows it; events update it otherwise. */
+    private fun updatePollJob(c: MediaController) {
+        val wanted = c.isPlaying && positionWatchers > 0
+        if (!wanted) {
+            pollJob?.cancel()
+            pollJob = null
+            return
+        }
+        if (pollJob?.isActive == true) return
         pollJob = scope.launch {
-            while (isActive) {
-                if (current != null) updatePosition(connected)
+            while (isActive && controller === c) {
+                updatePosition(c)
                 delay(POLL_MS)
             }
         }
@@ -375,6 +511,7 @@ class PlaybackConnection(
         current = item?.toNowPlaying()
         if (current?.bookId != book?.card?.id) book = null
         updatePosition(c)
+        updatePollJob(c)
     }
 
     private fun updatePosition(c: MediaController) {
@@ -415,7 +552,6 @@ class PlaybackConnection(
 
         private const val POLL_MS = 250L
         private const val SLEEP_POLL_MS = 300L
-        private const val FLUSH_POLL_MS = 20L
         private const val FLUSH_TIMEOUT_MS = 3_000L
     }
 }

@@ -10,10 +10,10 @@ sealed interface BookAction {
     data class Listen(val fromMs: Long, val resume: Boolean) : BookAction
 
     /** Open comic volume [volumeId] in the reader. */
-    data class ReadComic(val volumeId: Long, val resume: Boolean) : BookAction
+    data class ReadComic(val volumeId: Long, val resume: Boolean, val fromStart: Boolean = false) : BookAction
 
     /** Open book [bookId] in the PDF reader. */
-    data class ReadPdf(val bookId: Long, val resume: Boolean) : BookAction
+    data class ReadPdf(val bookId: Long, val resume: Boolean, val fromStart: Boolean = false) : BookAction
 
     /** A book in a format the app cannot open yet (EPUB, FB2…). */
     data class Unsupported(val format: String) : BookAction

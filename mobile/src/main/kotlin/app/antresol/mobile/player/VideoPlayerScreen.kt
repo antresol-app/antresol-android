@@ -147,6 +147,9 @@ private fun VideoSurface(player: Player) {
             }
         },
         update = { it.player = player },
+        // The player outlives the view (it lives in the ViewModel): never keep a destroyed activity's view on it.
+        onReset = { it.player = null },
+        onRelease = { it.player = null },
         modifier = Modifier.fillMaxSize(),
     )
 }
@@ -163,8 +166,10 @@ private fun PlayingLayer(
     // Bumped on every interaction so the hide timer restarts.
     var touches by remember { mutableIntStateOf(0) }
     var seekFlash by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(visible, viewModel.isPlaying, menu, touches) {
-        if (visible && viewModel.isPlaying && menu == null) {
+    // While the seek bar is dragged the controls stay, or the slider would vanish mid-gesture.
+    var scrubbing by remember { mutableStateOf(false) }
+    LaunchedEffect(visible, viewModel.isPlaying, menu, touches, scrubbing) {
+        if (visible && viewModel.isPlaying && menu == null && !scrubbing) {
             delay(CONTROLS_HIDE_MS)
             visible = false
         }
@@ -216,7 +221,15 @@ private fun PlayingLayer(
             Box(Modifier.align(Alignment.Center)) { Spinner() }
         }
         AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
-            Controls(viewModel, canPictureInPicture, onPictureInPicture, onExit, onMenu = { menu = it }, onTouch = touched)
+            Controls(
+                viewModel, canPictureInPicture, onPictureInPicture, onExit,
+                onMenu = { menu = it },
+                onTouch = touched,
+                onScrubbing = { active ->
+                    scrubbing = active
+                    if (active) visible = true else touches++
+                },
+            )
         }
     }
     menu?.let { open -> MenuSheet(open, viewModel, onDismiss = { menu = null }) }
@@ -230,6 +243,7 @@ private fun Controls(
     onExit: () -> Unit,
     onMenu: (PlayerMenu) -> Unit,
     onTouch: () -> Unit,
+    onScrubbing: (Boolean) -> Unit,
 ) {
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f))) {
         // Top: back, title, track menus.
@@ -296,6 +310,7 @@ private fun Controls(
                 positionMs = viewModel.positionMs,
                 durationMs = viewModel.durationMs,
                 onSeek = { onTouch(); viewModel.seekTo(it) },
+                onScrubbing = onScrubbing,
             )
         }
     }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.antresol.core.model.Card
+import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Chapter
 import app.antresol.core.model.Kind
 import app.antresol.mobile.playback.PlaybackConnection
@@ -43,6 +45,7 @@ import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.mobile.ui.components.ErrorView
+import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.GlassPillButton
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
@@ -78,7 +81,7 @@ fun MediaDetailScreen(
         onPauseOrDispose { }
     }
     val snackbar = remember { SnackbarHostState() }
-    FailureSnackbar(viewModel.failed, snackbar, viewModel::consumeFailure)
+    NoticeSnackbar(viewModel.notice, snackbar, viewModel::consumeNotice)
     Box(Modifier.fillMaxSize().background(AntresolColors.Background)) {
         when (val state = viewModel.state) {
             LoadState.Loading -> DetailStateBox(onBack) { LoadingView() }
@@ -181,6 +184,23 @@ private fun MediaDetailContent(
     }
 }
 
+/** "Listen from Beginning" / "Read from Beginning" next to Resume or Continue Reading. */
+@Composable
+private fun RestartButton(action: BookAction?, book: BookDetail?, playback: PlaybackConnection, onRead: (BookAction) -> Unit) {
+    val restart: Pair<Int, () -> Unit> = when (action) {
+        is BookAction.Listen -> if (action.resume && book != null) R.string.detail_listen_from_start to { playback.playAudiobook(book, 0L) } else null
+        is BookAction.ReadComic -> if (action.resume) R.string.detail_read_from_start to { onRead(action.copy(fromStart = true)) } else null
+        is BookAction.ReadPdf -> if (action.resume) R.string.detail_read_from_start to { onRead(action.copy(fromStart = true)) } else null
+        is BookAction.Unsupported, null -> null
+    } ?: return
+    GlassIconButton(
+        icon = AntresolIcons.Restart,
+        contentDescription = stringResource(restart.first),
+        onClick = restart.second,
+        modifier = Modifier.size(50.dp).testTag("book-from-start"),
+    )
+}
+
 @Composable
 private fun ChapterRow(chapter: Chapter, current: Boolean, onClick: () -> Unit) {
     Row(
@@ -212,11 +232,23 @@ private fun MediaActions(detail: MediaDetail, viewModel: MediaDetailViewModel, p
             PlayShuffleRow(
                 onPlay = { playback.playTracks(detail.tracks) },
                 onShuffle = { playback.playTracks(detail.tracks, shuffled = true) },
-            )
+            ) {
+                detail.starred?.let { starred ->
+                    GlassIconButton(
+                        icon = if (starred) MobileIcons.StarFilled else MobileIcons.Star,
+                        contentDescription = stringResource(if (starred) R.string.now_playing_unstar else R.string.now_playing_star),
+                        onClick = viewModel::toggleStar,
+                        tint = if (starred) AntresolColors.Accent else AntresolColors.Label,
+                        modifier = Modifier.size(50.dp).testTag("album-star"),
+                    )
+                }
+            }
         }
+        // Play needs top tracks; Shuffle uses the server's shuffle of everything by the artist.
         Kind.ARTIST -> PlayShuffleRow(
-            onPlay = { playback.playTracks(detail.tracks) },
+            onPlay = if (detail.tracks.isNotEmpty()) ({ playback.playTracks(detail.tracks) }) else null,
             onShuffle = { viewModel.shuffleArtist { tracks -> playback.playTracks(tracks) } },
+            shuffleEnabled = !viewModel.shuffling,
         )
         else -> {
             val book = detail.book
@@ -247,6 +279,7 @@ private fun MediaActions(detail: MediaDetail, viewModel: MediaDetailViewModel, p
                         }
                         is BookAction.Unsupported, null -> Unit
                     }
+                    RestartButton(action, book, playback, onRead)
                     detail.want?.let { want ->
                         GlassPillButton(
                             text = stringResource(R.string.detail_want),

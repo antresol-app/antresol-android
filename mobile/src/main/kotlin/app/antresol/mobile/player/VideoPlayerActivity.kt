@@ -21,15 +21,20 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.session.MediaSession
+import app.antresol.core.session.AuthState
 import app.antresol.mobile.AntresolMobileApp
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.theme.AntresolTheme
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Full-screen landscape video playback in its own activity, so it can shrink to
@@ -68,9 +73,22 @@ class VideoPlayerActivity : ComponentActivity() {
             finish()
             return
         }
-        current?.get()?.takeIf { it !== this }?.finish()
+        // The previous player (e.g. in picture-in-picture) closes now: its media session goes first,
+        // and its final write starts before this one opens a stream.
+        current?.get()?.takeIf { it !== this }?.let { previous ->
+            previous.closePlayer()
+            previous.finish()
+        }
         if (savedInstanceState == null) app.playback.pause()
         current = WeakReference(this)
+        // The video belongs to the profile that started it: a profile switch or sign-out closes it.
+        val owner = (app.session.state.value as? AuthState.SignedIn)?.session?.let { it.serverId to it.userId }
+        lifecycleScope.launch {
+            app.session.state.first { state ->
+                (state as? AuthState.SignedIn)?.session?.let { it.serverId to it.userId } != owner
+            }
+            finish()
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
@@ -94,12 +112,16 @@ class VideoPlayerActivity : ComponentActivity() {
                         resume = mode,
                         defaultQuality = settings.videoQuality,
                         autoplayNext = { settings.autoplayNext },
+                        pendingWrites = app.pendingWrites,
                     )
                 }
             },
         )[VideoPlayerViewModel::class.java]
         // Headset buttons, Bluetooth and the picture-in-picture window's play/pause.
-        mediaSession = MediaSession.Builder(this, viewModel.player).setId(SESSION_ID).build()
+        // A unique id: the previous player's session may not be released yet.
+        mediaSession = MediaSession.Builder(this, viewModel.player)
+            .setId("$SESSION_ID-${sessionCounter.incrementAndGet()}")
+            .build()
         viewModel.player.addListener(pipUpdater)
         updatePictureInPictureParams()
 
@@ -129,18 +151,36 @@ class VideoPlayerActivity : ComponentActivity() {
         inPictureInPicture = isInPictureInPictureMode
     }
 
+    override fun onPause() {
+        super.onPause()
+        // Start the final progress write before the previous screen resumes and refreshes.
+        if (isFinishing) closePlayer()
+    }
+
     override fun onStop() {
         super.onStop()
         // The picture-in-picture window was closed: playback ends with it.
         if (inPictureInPicture) finish()
+        if (isFinishing) closePlayer()
     }
 
     override fun onDestroy() {
+        // Normally released in onPause; the ViewModel (and its player) may be cleared before this runs.
+        releaseMediaSession()
+        if (current?.get() === this) current = null
+        super.onDestroy()
+    }
+
+    /** Releases the media session (never outliving the player) and starts the player's final write. */
+    private fun closePlayer() {
+        releaseMediaSession()
+        if (::viewModel.isInitialized) viewModel.close()
+    }
+
+    private fun releaseMediaSession() {
         if (::viewModel.isInitialized) viewModel.player.removeListener(pipUpdater)
         mediaSession?.release()
         mediaSession = null
-        if (current?.get() === this) current = null
-        super.onDestroy()
     }
 
     private fun enterPictureInPicture() {
@@ -184,6 +224,7 @@ class VideoPlayerActivity : ComponentActivity() {
         private const val MAX_RATIO = 2.39f
 
         private var current: WeakReference<VideoPlayerActivity>? = null
+        private val sessionCounter = AtomicInteger()
 
         /** Plays a movie or episode; a series or season id plays its next episode. */
         fun start(context: Context, itemId: Long, resume: ResumeMode) {

@@ -2,7 +2,6 @@ package app.antresol.mobile.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -19,7 +18,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.antresol.ui.theme.Antresol
@@ -63,7 +61,7 @@ private fun PillButton(
             .clip(AntresolShapes.pill)
             .background(fill)
             .then(if (border != null) Modifier.border(1.dp, border, AntresolShapes.pill) else Modifier)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .focusClickable(AntresolShapes.pill, enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.5f)
             .padding(horizontal = 18.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -89,7 +87,7 @@ fun GlassIconButton(
             .clip(CircleShape)
             .background(AntresolColors.Glass)
             .border(1.dp, AntresolColors.GlassBorder, CircleShape)
-            .clickable(role = Role.Button, onClick = onClick),
+            .focusClickable(CircleShape, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(22.dp))

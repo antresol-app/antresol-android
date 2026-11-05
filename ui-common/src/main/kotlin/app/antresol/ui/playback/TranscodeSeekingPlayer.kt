@@ -24,7 +24,11 @@ class TranscodeSeekingPlayer(
     /** The same item streaming from [Long] ms, for a stream that cannot seek. */
     private val startingAt: (MediaItem, Long) -> MediaItem,
 ) : ForwardingPlayer(exo) {
-    /** The media id currently loaded from an offset, its offset, and the original item. */
+    /**
+     * The entry currently loaded from an offset (its index and media id: the same track can be in
+     * the queue twice), its offset, and the original item.
+     */
+    private var offsetIndex = C.INDEX_UNSET
     private var offsetMediaId: String? = null
     private var offsetMs = 0L
     private var original: MediaItem? = null
@@ -35,7 +39,7 @@ class TranscodeSeekingPlayer(
     init {
         exo.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                if (mediaItem?.mediaId != offsetMediaId || reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) restoreOriginal()
+                if (!onOffsetEntry() || reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) restoreOriginal()
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -69,7 +73,10 @@ class TranscodeSeekingPlayer(
 
     override fun setMediaItem(mediaItem: MediaItem) = setMediaItems(listOf(mediaItem), true)
 
-    private fun currentOffset(): Long = if (exo.currentMediaItem?.mediaId == offsetMediaId) offsetMs else 0L
+    private fun onOffsetEntry(): Boolean =
+        offsetMediaId != null && exo.currentMediaItemIndex == offsetIndex && exo.currentMediaItem?.mediaId == offsetMediaId
+
+    private fun currentOffset(): Long = if (onOffsetEntry()) offsetMs else 0L
 
     override fun getCurrentPosition(): Long = exo.currentPosition + currentOffset()
 
@@ -158,12 +165,13 @@ class TranscodeSeekingPlayer(
     /** Replaces the item with one streaming from [positionMs] (or the original for 0). */
     private fun reload(index: Int, positionMs: Long) {
         val item = exo.getMediaItemAt(index)
-        val base = original?.takeIf { item.mediaId == offsetMediaId } ?: item
+        val base = original?.takeIf { index == offsetIndex && item.mediaId == offsetMediaId } ?: item
         if (positionMs <= 0) {
             clearOffset()
             exo.replaceMediaItem(index, base)
         } else {
             original = base
+            offsetIndex = index
             offsetMediaId = base.mediaId
             offsetMs = positionMs
             exo.replaceMediaItem(index, startingAt(base, positionMs))
@@ -175,13 +183,15 @@ class TranscodeSeekingPlayer(
     private fun restoreOriginal() {
         val base = original ?: return
         val id = offsetMediaId
+        val index = offsetIndex
         clearOffset()
-        val index = (0 until exo.mediaItemCount).firstOrNull { exo.getMediaItemAt(it).mediaId == id } ?: return
+        if (index !in 0 until exo.mediaItemCount || exo.getMediaItemAt(index).mediaId != id) return
         exo.replaceMediaItem(index, base)
     }
 
     private fun clearOffset() {
         original = null
+        offsetIndex = C.INDEX_UNSET
         offsetMediaId = null
         offsetMs = 0
     }

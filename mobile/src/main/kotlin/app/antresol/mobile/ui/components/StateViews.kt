@@ -52,3 +52,14 @@ fun EmptyView(text: String, modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 48.dp),
     )
 }
+
+/** The end of a paged list: "Try Again" after a failed page, a small spinner while one loads. */
+@Composable
+fun PagingFooter(error: Throwable?, loading: Boolean, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    when {
+        error != null -> ErrorView(error, onRetry = onRetry, modifier = modifier)
+        loading -> Box(modifier.fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = AntresolColors.LabelSecondary, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+        }
+    }
+}

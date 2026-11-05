@@ -63,7 +63,8 @@ private fun PillButton(
             .then(if (border != null) Modifier.border(1.dp, border, AntresolShapes.pill) else Modifier)
             .focusClickable(AntresolShapes.pill, enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.5f)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
+            // 14 dp keeps "Перемешать" whole in a half-width pill on a 360 dp phone.
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {

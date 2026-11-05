@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -138,7 +139,7 @@ private fun MediaDetailContent(
                     val meta = listOfNotNull(
                         detail.year?.toString(),
                         detail.genres.takeIf { it.isNotEmpty() }?.take(2)?.joinToString(", "),
-                        detail.songCount?.takeIf { it > 0 }?.let { stringResource(UiR.string.detail_song_count, it) },
+                        detail.songCount?.takeIf { it > 0 }?.let { pluralStringResource(UiR.plurals.song_count, it, it) },
                         detail.durationMs?.let { spokenDuration(it) },
                     ).joinToString(" · ")
                     if (meta.isNotBlank()) Text(meta, style = Antresol.typography.caption, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))

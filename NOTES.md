@@ -509,3 +509,40 @@ Reviewer findings for `:core`, `:ui-common` and `:tv`, verified against the code
   (live UI tests against 127.0.0.1:8420 pass).
 - Known gaps are unchanged from the sections above (never run on hardware; no video MediaSession;
   tokens not Keystore-encrypted; single-page comics; e-books not readable on TV).
+
+## Mobile milestone 2 follow-up — review fixes ported to the phone
+
+Applied the "Phone chain" items from the TV review fixes and the TV player hardening:
+
+- **Sign-out flush**: `SessionManager.beforeSignOut` now calls `PlaybackConnection.stopAndFlush()`, which
+  stops the audio service, waits (≤ 3 s) for the queue to empty and then for the service's final audiobook
+  progress write (`FinalProgressWrites`) before the token is revoked. Profile switches keep using `stop()`
+  (the reporter's API is pinned to the old token, which stays valid).
+- `userMessage` maps only `InvalidServerAddressException` to "invalid server address" (decode errors and
+  other `IllegalArgumentException`s now show the generic error).
+- Album/playlist song counts use the `song_count` plural (EN one/other, RU one/few/many);
+  `detail_song_count` was removed from `:ui-common`.
+- `:mobile` now uses the `:core` helpers: `Chapters` (current chapter, previous with the 3 s restart
+  threshold, next), `Lyrics.lineIndexAt` / `plainText`, and `ComicProgress` for comic and PDF progress.
+  The phone's own `ReaderProgress` and `PlaybackConnection.chapterAt` are gone (their tests live in
+  `:core` as `ChaptersTest` / `ComicProgressTest`).
+- `VideoPlayerViewModel` got the TV player's session hardening: `/api/play` runs in `NonCancellable` and
+  unwanted sessions are DELETEd; reopens are queued and merged instead of cancelled; backgrounding detaches
+  the HLS session synchronously and a stream opened in the background is loaded paused and suspended;
+  `recover()` stops keepalives before stopping the broken session; an HTTP 401 from the stream drops the
+  media key; a retry releases the previous attempt's reporter/session; subtitle files live in a
+  per-player cache directory; seeks use `needsNewSession(target, availablePlayerMs)` (growing EVENT
+  playlists) and work without a known duration.
+- **Transcoded audio seeks** on the phone too: `playback/TranscodeSeekingPlayer` (copied from `:tv`) wraps
+  the service's ExoPlayer; the MediaSession and the progress/scrobble code use it. A seek in a stream
+  without Range support (`X-Vault-Transcode`) reloads the entry with `&t=<sec>` and adds the offset to
+  every reported position. It also applies a `setMediaItems` start position (audiobook resume) once the
+  stream turns out to be unseekable, so the "transcoded audio is not seekable" gap above is closed.
+
+### Still open
+- `VideoPlayerViewModel` and `TranscodeSeekingPlayer` remain copies of the TV ones (now with the same
+  fixes); moving one copy of each into `:ui-common` is still the cleanup to do.
+- The other "Mobile milestone 2 → Known gaps" above still apply (no device testing, no
+  playback resumption, no EPUB/FB2 reader).
+- Verified: `ANTRESOL_TEST_SERVER=1 ./gradlew --no-daemon :core:test :mobile:testDebugUnitTest assembleDebug`
+  passes with these changes (local build is authoritative).

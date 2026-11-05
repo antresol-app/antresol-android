@@ -43,7 +43,10 @@ import okhttp3.OkHttpClient
 class PlaybackService : MediaSessionService() {
     private val scope = MainScope()
     private val app get() = application as AntresolMobileApp
-    private lateinit var player: ExoPlayer
+    private lateinit var exo: ExoPlayer
+
+    /** [exo] with transcoded streams made seekable; the session and all position reads use it. */
+    private lateinit var player: Player
     private var mediaSession: MediaSession? = null
 
     private var scrobbleTrackId: Long? = null
@@ -79,7 +82,7 @@ class PlaybackService : MediaSessionService() {
         val http = DataSource.Factory {
             OkHttpDataSource.Factory(app.session.client?.httpClient ?: fallbackHttp).createDataSource()
         }
-        player = ExoPlayer.Builder(this)
+        exo = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
@@ -90,6 +93,7 @@ class PlaybackService : MediaSessionService() {
             .setSeekBackIncrementMs(SEEK_BACK_MS)
             .setSeekForwardIncrementMs(SEEK_FORWARD_MS)
             .build()
+        player = TranscodeSeekingPlayer(exo, ::knownDurationMs, ::startingAt)
         player.addListener(listener)
         val openApp = PendingIntent.getActivity(
             this,
@@ -130,7 +134,7 @@ class PlaybackService : MediaSessionService() {
         mediaSession?.release()
         mediaSession = null
         player.removeListener(listener)
-        player.release()
+        exo.release()
         scope.cancel()
         super.onDestroy()
     }
@@ -170,7 +174,7 @@ class PlaybackService : MediaSessionService() {
         val ending = reporter ?: return
         reporter = null
         reporterBookId = null
-        app.appScope.launch {
+        val write = app.appScope.launch {
             try {
                 ending.stop()
             } catch (e: CancellationException) {
@@ -179,6 +183,7 @@ class PlaybackService : MediaSessionService() {
                 // Progress writes are best effort.
             }
         }
+        FinalProgressWrites.track(write)
     }
 
     private fun tick() {
@@ -214,6 +219,16 @@ class PlaybackService : MediaSessionService() {
     private fun currentBookMs(): Long? {
         val start = player.currentMediaItem?.mediaMetadata?.extras?.getLong(QueueExtras.PART_START_MS) ?: return null
         return start + player.currentPosition.coerceAtLeast(0)
+    }
+
+    private fun knownDurationMs(item: MediaItem): Long? =
+        item.mediaMetadata.extras?.getLong(QueueExtras.DURATION_MS)?.takeIf { it > 0 }
+
+    /** The same entry streaming from [positionMs] (server-side `t`), for transcoded streams. */
+    private fun startingAt(item: MediaItem, positionMs: Long): MediaItem {
+        val urls = app.session.client?.urls ?: return item
+        val ref = MediaRef.parse(item.mediaId) ?: return item
+        return item.buildUpon().setUri(QueueItems.streamUri(ref, urls, startSec = positionMs / 1000.0)).build()
     }
 
     private inner class SessionCallback : MediaSession.Callback {

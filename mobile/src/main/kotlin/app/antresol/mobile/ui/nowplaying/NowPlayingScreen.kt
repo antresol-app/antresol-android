@@ -55,6 +55,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.Lyrics
+import app.antresol.core.playback.Chapters
+import app.antresol.core.playback.lineIndexAt
+import app.antresol.core.playback.plainText
 import app.antresol.mobile.R
 import app.antresol.mobile.playback.NowPlaying
 import app.antresol.mobile.playback.PlaybackConnection
@@ -274,20 +277,16 @@ private fun PlayPause(paused: Boolean, playback: PlaybackConnection) {
 
 private fun previousChapter(playback: PlaybackConnection) {
     val chapters = playback.book?.chapters.orEmpty()
-    val current = playback.currentChapter
-    if (chapters.isEmpty() || current == null) return playback.skipBy(-PlaybackService.SEEK_BACK_MS)
+    if (chapters.isEmpty()) return playback.skipBy(-PlaybackService.SEEK_BACK_MS)
     // Like a CD player: restart the chapter unless it only just began.
-    val target = if (playback.bookPositionMs - current.startMs > RESTART_THRESHOLD_MS) current else chapters.getOrNull(chapters.indexOf(current) - 1) ?: current
-    playback.seekBook(target.startMs)
+    playback.seekBook(Chapters.previousStartMs(chapters, playback.bookPositionMs))
 }
 
 private fun nextChapter(playback: PlaybackConnection) {
     val chapters = playback.book?.chapters.orEmpty()
-    val current = playback.currentChapter ?: return playback.skipBy(PlaybackService.SEEK_FORWARD_MS)
-    chapters.getOrNull(chapters.indexOf(current) + 1)?.let { playback.seekBook(it.startMs) }
+    if (chapters.isEmpty()) return playback.skipBy(PlaybackService.SEEK_FORWARD_MS)
+    Chapters.nextStartMs(chapters, playback.bookPositionMs)?.let { playback.seekBook(it) }
 }
-
-private const val RESTART_THRESHOLD_MS = 3_000L
 
 @Composable
 private fun PanelToggle(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
@@ -371,14 +370,14 @@ private fun LyricsPanel(trackId: Long, playback: PlaybackConnection, client: Ant
     }
     if (!loaded.synced || loaded.lines.isEmpty()) {
         Text(
-            loaded.lyrics,
+            loaded.plainText,
             style = Antresol.typography.title.copy(color = AntresolColors.Label, lineHeight = Antresol.typography.title.fontSize * 1.5f),
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("lyrics"),
         )
         return
     }
     val lines = loaded.lines
-    val currentLine = lines.indexOfLast { it.t * 1000 <= playback.positionMs }.coerceAtLeast(0)
+    val currentLine = loaded.lineIndexAt(playback.positionMs).coerceAtLeast(0)
     val listState = rememberLazyListState()
     LaunchedEffect(currentLine) { listState.animateScrollToItem((currentLine - 2).coerceAtLeast(0)) }
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("lyrics"), contentPadding = PaddingValues(vertical = 24.dp)) {

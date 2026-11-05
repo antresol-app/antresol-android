@@ -2,6 +2,7 @@ package app.antresol.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,8 +31,11 @@ import app.antresol.ui.theme.AntresolShapes
 import coil.compose.AsyncImage
 
 /**
- * Artwork with the Antresol fallback: while loading, on error, or when [url] is null the title is
- * drawn on a gradient (like the web app's title overlay). Load [url] with the image loader from
+ * Artwork with the Antresol fallback: the title on a gradient (like the web app's title overlay) is
+ * drawn under the image and stays there until the image has loaded, so a crossfade never fades in
+ * from an empty box and a failed or missing image ([url] null) keeps the placeholder. Boxes narrower
+ * than [COMPACT_ARTWORK] (list thumbnails, the mini player) show the title's initial instead of an
+ * ellipsised title. Load [url] with the image loader from
  * [app.antresol.ui.image.AntresolImageLoader], which adds the Bearer header.
  */
 @Composable
@@ -44,25 +48,27 @@ fun ArtworkImage(
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     var loaded by remember(url) { mutableStateOf(false) }
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .clip(shape)
-            .background(AntresolColors.BackgroundElevated),
+            .background(AntresolColors.BackgroundElevated)
+            .background(AntresolGradients.placeholder(title)),
     ) {
         if (!loaded) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(AntresolGradients.placeholder(title)),
-                contentAlignment = Alignment.BottomStart,
-            ) {
+            if (maxWidth < COMPACT_ARTWORK) {
+                Text(
+                    text = title.trim().take(1).uppercase(),
+                    style = Antresol.typography.title,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            } else {
                 Text(
                     text = title,
                     style = Antresol.typography.title,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Start,
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
                 )
             }
         }
@@ -79,6 +85,9 @@ fun ArtworkImage(
         overlay()
     }
 }
+
+/** Artwork narrower than this shows the title's initial rather than the title. */
+private val COMPACT_ARTWORK = 96.dp
 
 /** A 2:3 poster with rounded corners (radius 12) and an optional progress bar along the bottom. */
 @Composable

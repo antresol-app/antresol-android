@@ -43,8 +43,8 @@ object CardSizes {
     fun width(style: CardStyle): Dp {
         val wide = LocalConfiguration.current.screenWidthDp >= 600
         return when (style) {
-            CardStyle.Poster, CardStyle.Square -> if (wide) 168.dp else 150.dp
-            CardStyle.Circle -> if (wide) 150.dp else 132.dp
+            CardStyle.Poster, CardStyle.Square -> if (wide) 168.dp else 140.dp
+            CardStyle.Circle -> if (wide) 150.dp else 124.dp
             CardStyle.Wide -> if (wide) 320.dp else 272.dp
         }
     }
@@ -55,8 +55,8 @@ object CardSizes {
         val wide = LocalConfiguration.current.screenWidthDp >= 600
         return when (style) {
             CardStyle.Wide -> if (wide) 280.dp else 240.dp
-            CardStyle.Circle -> if (wide) 140.dp else 104.dp
-            else -> if (wide) 140.dp else 104.dp
+            // 100 dp: three columns fit a 360 dp phone between the 16 dp gutters and 12 dp gaps.
+            else -> if (wide) 140.dp else 100.dp
         }
     }
 }

@@ -138,6 +138,9 @@ class MobilePlaybackLiveUiTest {
         // Album → tap the first track → the mini-player appears.
         tab("Music")
         waitFor(hasText("Songs"))
+        // The page's shelves load after its links: shoot the loaded page, not the spinner.
+        waitFor(hasText("Rock"))
+        Thread.sleep(1000)
         shot("play-10-music")
         val track = playFirstTrackOfTestAlbum()
         Thread.sleep(1000)

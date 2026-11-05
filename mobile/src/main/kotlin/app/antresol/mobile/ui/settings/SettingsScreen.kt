@@ -194,7 +194,7 @@ fun SettingsScreen(
                             onLanguageChanged()
                         }
                     },
-                    modifier = Modifier.padding(horizontal = PageGutter, vertical = 4.dp).testTag("settings-language"),
+                    modifier = Modifier.padding(vertical = 4.dp).testTag("settings-language"),
                 )
             }
 

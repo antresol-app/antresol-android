@@ -804,3 +804,47 @@ green (11 live UI tests), `scripts/update-screenshots.sh` green, plus the releas
 ### Known gaps
 - The release APKs were never installed on a device or emulator; GitHub Actions release/tag jobs never ran.
 - Play listing graphics (icon 512, feature graphic, TV banner 1280×720, real-device screenshots) are not made.
+
+## Design fidelity pass (screenshots vs docs/design-ref)
+
+Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; fixes below, gallery re-rendered.
+
+### Shared (`:ui-common`)
+- `ArtworkImage`: the title-on-gradient placeholder now sits *under* the image and stays until it loads. Before,
+  it was removed on success and Coil's crossfade faded in from the empty dark box, so posters flashed (and many
+  gallery shots showed) plain dark tiles. Boxes narrower than 96 dp (queue/track thumbnails, mini player) show
+  the title's initial instead of an ellipsised title ("S…", "…").
+- `BadgeRow` wraps (FlowRow) instead of cutting badges in narrow cards ("Audio EN RU" became "Audio").
+
+### Phone
+- Grids: minimum column 100 dp, so posters are three across on a 360 dp phone as in the reference (104 dp gave
+  two huge columns). Shelf cards 140 dp (poster/square) and 124 dp (circle), matching the reference proportion.
+- Album page: Add to Playlist and the star moved to the top bar opposite Back (`BackBar`/`DetailHeader`
+  `actions`), so Play and Shuffle keep full labels ("Pl…", "Sh…" before). `PlayShuffleRow` lost its now unused
+  `trailing` slot.
+- Book actions and playlist edit actions use FlowRow: they wrap rather than truncate ("Want t…", "Delete P…"),
+  which also covers the longer Russian labels.
+- `SegmentedPills` scrolls as a whole from the page gutter to the screen edge (new `gutter` parameter) instead
+  of clipping inside its own capsule (Search's "Books" was cut). Pill padding 14 dp.
+- Artwork placeholders of Now Playing, the mini player and the queue are seeded by the album title, so they match
+  the album's card instead of each song getting another colour.
+- Now Playing: Speed and Sleep toggles are plain like the panel toggles until active (they had a stray dark disc).
+- A bottom fade behind the mini player and tab bar, so content no longer shows through the bar edges.
+
+### TV
+- Search: title, field and scope pills start on the page gutter, aligned with the result rows (the centred
+  column did not line up with anything).
+- Detail pages: no uniform 30 dp LazyColumn spacing; sections keep 30 dp above them and song/chapter rows sit
+  close (tracks were ~65 dp apart).
+- Settings no longer dims the tab it was opened from in the top bar (it belongs to the avatar).
+- Now-playing chip: the equalizer bars rest at uneven heights and start desynchronised; flat bars read as "…".
+
+### Tests
+- `MobilePlaybackLiveUiTest` waits for the Music page's shelves before its shot (it captured the spinner).
+
+### Known gaps (observed, not fixed)
+- Robolectric does not move focus into the TV side panels (see the TV live test comment), so the Settings
+  quality and Add to Playlist shots show no focused row; on a device the first/selected row takes focus.
+- The faint rectangle behind the focused profile circle on TV is how Robolectric draws the tv-material glow; not
+  checked on a device.
+- Hero/now-playing artwork in some shots is still mid-crossfade (Robolectric clock), showing the placeholder.

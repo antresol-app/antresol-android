@@ -234,7 +234,7 @@ private fun VideoDetailContent(
                             selected = season,
                             label = { it.title.ifBlank { stringResource(UiR.string.detail_season_number, it.number) } },
                             onSelect = { selectedSeasonId = it.id },
-                            modifier = Modifier.padding(horizontal = PageGutter, vertical = 4.dp),
+                            modifier = Modifier.padding(vertical = 4.dp),
                         )
                     }
                     SeasonWatchedToggle(season) { viewModel.toggleSeasonWatched(season) }

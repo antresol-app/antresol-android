@@ -100,8 +100,9 @@ fun SearchScreen(
             verticalArrangement = Arrangement.spacedBy(30.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
+            // Title, field and scope pills start on the page gutter like the result rows below them.
             item(key = "field") {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = ScreenPaddingH)) {
                     Column(Modifier.width(FIELD_WIDTH), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text(stringResource(R.string.nav_search), style = Antresol.typography.pageTitle)
                         TvTextField(
@@ -115,14 +116,12 @@ fun SearchScreen(
                                 .fillMaxWidth()
                                 .remembersFocus(focus, FIELD_KEY),
                         )
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            SegmentedPills(
-                                options = scopeLabels,
-                                selectedIndex = viewModel.scope.ordinal,
-                                onSelect = { viewModel.selectScope(SearchScope.entries[it]) },
-                                modifier = Modifier.remembersGroupFocus(focus, "search/scope"),
-                            )
-                        }
+                        SegmentedPills(
+                            options = scopeLabels,
+                            selectedIndex = viewModel.scope.ordinal,
+                            onSelect = { viewModel.selectScope(SearchScope.entries[it]) },
+                            modifier = Modifier.remembersGroupFocus(focus, "search/scope"),
+                        )
                     }
                 }
             }

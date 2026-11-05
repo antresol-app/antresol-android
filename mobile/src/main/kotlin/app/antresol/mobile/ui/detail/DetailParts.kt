@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -34,13 +35,14 @@ import app.antresol.ui.theme.AntresolShapes
 
 /**
  * The top of a detail page: an artwork-tinted glow fading to black behind [artwork], the back
- * button over the status bar, and the title block at the bottom.
+ * button over the status bar (with optional [actions] opposite it), and the title block at the bottom.
  */
 @Composable
 fun DetailHeader(
     tintUrl: String?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit = {},
     artwork: @Composable BoxScope.() -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -53,7 +55,7 @@ fun DetailHeader(
         )
         Box(Modifier.matchParentSize(), content = artwork)
         Column(Modifier.fillMaxWidth()) {
-            BackBar(onBack)
+            BackBar(onBack, actions = actions)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

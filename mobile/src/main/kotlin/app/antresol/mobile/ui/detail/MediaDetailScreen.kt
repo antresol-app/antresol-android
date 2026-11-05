@@ -4,8 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -148,7 +151,12 @@ private fun MediaDetailContent(
         contentPadding = PaddingValues(bottom = bottom.calculateBottomPadding() + 24.dp),
     ) {
         item("header") {
-            DetailHeader(tintUrl = urls?.image(card.poster), onBack = onBack, artwork = {}) {
+            DetailHeader(
+                tintUrl = urls?.image(card.poster),
+                onBack = onBack,
+                actions = { if (card.kind == Kind.ALBUM) AlbumHeaderActions(detail, viewModel) },
+                artwork = {},
+            ) {
                 val (aspect, shape) = when (card.kind) {
                     Kind.ALBUM, Kind.PLAYLIST -> 1f to AntresolShapes.card
                     Kind.ARTIST -> 1f to CircleShape
@@ -252,11 +260,13 @@ private fun RestartButton(action: BookAction?, book: BookDetail?, playback: Play
 }
 
 /** Edit (or Done), Rename and Delete under a playlist's Play and Shuffle. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PlaylistActions(viewModel: MediaDetailViewModel, onDialog: (PlaylistDialog) -> Unit) {
-    Row(
+    FlowRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         GlassPillButton(
             text = stringResource(if (viewModel.editing) R.string.playlist_done else R.string.playlist_edit),
@@ -325,7 +335,30 @@ private fun ChapterRow(chapter: Chapter, current: Boolean, onClick: () -> Unit) 
     }
 }
 
+/** Add to Playlist and the favourite star, opposite the back button so Play and Shuffle keep the full width. */
+@Composable
+private fun RowScope.AlbumHeaderActions(detail: MediaDetail, viewModel: MediaDetailViewModel) {
+    if (detail.tracks.isNotEmpty()) {
+        GlassIconButton(
+            icon = MobileIcons.PlaylistAdd,
+            contentDescription = stringResource(UiR.string.playlist_add),
+            onClick = { viewModel.playlistPicker.open(detail.tracks.map { it.id }) },
+            modifier = Modifier.testTag("album-add-to-playlist"),
+        )
+    }
+    detail.starred?.let { starred ->
+        GlassIconButton(
+            icon = if (starred) MobileIcons.StarFilled else MobileIcons.Star,
+            contentDescription = stringResource(if (starred) R.string.now_playing_unstar else R.string.now_playing_star),
+            onClick = viewModel::toggleStar,
+            tint = if (starred) AntresolColors.Accent else AntresolColors.Label,
+            modifier = Modifier.testTag("album-star"),
+        )
+    }
+}
+
 /** Play/Shuffle for music, Listen/Read plus Want to Read for books, or a note for formats the app cannot open. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MediaActions(detail: MediaDetail, viewModel: MediaDetailViewModel, playback: PlaybackConnection, onRead: (BookAction) -> Unit) {
     val card = detail.card
@@ -334,25 +367,7 @@ private fun MediaActions(detail: MediaDetail, viewModel: MediaDetailViewModel, p
             PlayShuffleRow(
                 onPlay = { playback.playTracks(detail.tracks) },
                 onShuffle = { playback.playTracks(detail.tracks, shuffled = true) },
-            ) {
-                if (card.kind == Kind.ALBUM) {
-                    GlassIconButton(
-                        icon = MobileIcons.PlaylistAdd,
-                        contentDescription = stringResource(UiR.string.playlist_add),
-                        onClick = { viewModel.playlistPicker.open(detail.tracks.map { it.id }) },
-                        modifier = Modifier.size(50.dp).testTag("album-add-to-playlist"),
-                    )
-                }
-                detail.starred?.let { starred ->
-                    GlassIconButton(
-                        icon = if (starred) MobileIcons.StarFilled else MobileIcons.Star,
-                        contentDescription = stringResource(if (starred) R.string.now_playing_unstar else R.string.now_playing_star),
-                        onClick = viewModel::toggleStar,
-                        tint = if (starred) AntresolColors.Accent else AntresolColors.Label,
-                        modifier = Modifier.size(50.dp).testTag("album-star"),
-                    )
-                }
-            }
+            )
         }
         // Play needs top tracks; Shuffle uses the server's shuffle of everything by the artist.
         Kind.ARTIST -> PlayShuffleRow(
@@ -368,7 +383,12 @@ private fun MediaActions(detail: MediaDetail, viewModel: MediaDetailViewModel, p
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), modifier = Modifier.fillMaxWidth()) {
+                // Wraps instead of truncating when the labels do not fit one line (narrow phones, Russian).
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     when (action) {
                         is BookAction.Listen -> PrimaryPillButton(
                             text = stringResource(if (action.resume) UiR.string.action_resume else UiR.string.action_listen),
@@ -376,7 +396,7 @@ private fun MediaActions(detail: MediaDetail, viewModel: MediaDetailViewModel, p
                             onClick = {
                                 if (action.resume) playback.resumeAudiobook(book, action.fromMs) else playback.playAudiobook(book, 0L)
                             },
-                            modifier = Modifier.weight(1f, fill = false).testTag("book-listen"),
+                            modifier = Modifier.testTag("book-listen"),
                         )
                         is BookAction.ReadComic, is BookAction.ReadPdf -> {
                             val resume = (action as? BookAction.ReadComic)?.resume ?: (action as BookAction.ReadPdf).resume
@@ -384,7 +404,7 @@ private fun MediaActions(detail: MediaDetail, viewModel: MediaDetailViewModel, p
                                 text = stringResource(if (resume) R.string.detail_continue_reading else UiR.string.action_read),
                                 icon = MobileIcons.Book,
                                 onClick = { onRead(action) },
-                                modifier = Modifier.weight(1f, fill = false).testTag("book-read"),
+                                modifier = Modifier.testTag("book-read"),
                             )
                         }
                         is BookAction.Unsupported, null -> Unit
@@ -395,7 +415,7 @@ private fun MediaActions(detail: MediaDetail, viewModel: MediaDetailViewModel, p
                             text = stringResource(R.string.detail_want),
                             icon = if (want) MobileIcons.Check else MobileIcons.Plus,
                             onClick = viewModel::toggleWant,
-                            modifier = Modifier.weight(1f, fill = false).testTag("toggle-want"),
+                            modifier = Modifier.testTag("toggle-want"),
                         )
                     }
                 }

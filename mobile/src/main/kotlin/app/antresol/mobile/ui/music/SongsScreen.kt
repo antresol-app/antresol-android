@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -149,17 +148,13 @@ private fun SongsList(viewModel: SongsViewModel, title: String, playback: Playba
     }
 }
 
-/**
- * The white Play pill and the glass Shuffle pill, side by side; without [onPlay] only Shuffle.
- * [trailing] adds round buttons after them (an album's favorite star).
- */
+/** The white Play pill and the glass Shuffle pill, side by side; without [onPlay] only Shuffle. */
 @Composable
 fun PlayShuffleRow(
     onPlay: (() -> Unit)?,
     onShuffle: () -> Unit,
     modifier: Modifier = Modifier,
     shuffleEnabled: Boolean = true,
-    trailing: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 12.dp),
@@ -181,7 +176,6 @@ fun PlayShuffleRow(
             enabled = shuffleEnabled,
             modifier = Modifier.weight(1f).testTag("shuffle-all"),
         )
-        trailing()
     }
 }
 

@@ -1,12 +1,16 @@
 package app.antresol.mobile.ui.components
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.stringResource
@@ -14,16 +18,20 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.antresol.mobile.R
 
-/** The top of a pushed page: a round glass back button under the status bar. */
+/** The top of a pushed page: a round glass back button under the status bar, with optional [actions] on the right. */
 @Composable
-fun BackBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
+fun BackBar(onBack: () -> Unit, modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}) {
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = PageGutter - 4.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         GlassIconButton(icon = MobileIcons.ChevronLeft, contentDescription = stringResource(R.string.back), onClick = onBack)
+        Spacer(Modifier.weight(1f))
+        actions()
     }
 }
 

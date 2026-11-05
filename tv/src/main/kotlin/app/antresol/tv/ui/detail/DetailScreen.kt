@@ -198,7 +198,7 @@ private fun DetailContent(
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(bottom = 56.dp),
-                verticalArrangement = Arrangement.spacedBy(30.dp),
+                // No uniform spacing: sections keep [SectionGap] above them while song and chapter rows sit close.
                 modifier = Modifier.fillMaxSize(),
             ) {
                 item(key = "header") {
@@ -261,7 +261,7 @@ private fun DetailContent(
                             playing = audio.currentTrack?.id == track.id,
                             onClick = { viewModel.playTracks(index, onStarted = actions.nowPlaying) },
                             modifier = Modifier
-                                .padding(horizontal = ScreenPaddingH)
+                                .padding(horizontal = ScreenPaddingH, vertical = 2.dp)
                                 .remembersFocus(focus, "track/${track.id}/$index"),
                         )
                     }
@@ -279,7 +279,7 @@ private fun DetailContent(
                             playing = current == index,
                             onClick = { viewModel.listen(fromMs = chapter.startMs, onStarted = actions.nowPlaying) },
                             modifier = Modifier
-                                .padding(horizontal = ScreenPaddingH)
+                                .padding(horizontal = ScreenPaddingH, vertical = 2.dp)
                                 .remembersFocus(focus, "chapter/${chapter.idx}"),
                         )
                     }
@@ -287,6 +287,7 @@ private fun DetailContent(
                 if (video != null && video.seasons.isNotEmpty()) {
                     item(key = "seasons") {
                         SeasonsSection(
+                            modifier = Modifier.padding(top = SectionGap),
                             seasons = video.seasons,
                             initialEpisodeId = video.playTarget?.itemId,
                             focus = focus,
@@ -302,6 +303,7 @@ private fun DetailContent(
                         cards = row.cards,
                         onOpen = onOpen,
                         focus = focus,
+                        modifier = Modifier.padding(top = SectionGap),
                     )
                 }
             }
@@ -542,8 +544,11 @@ private fun VideoActions(
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(start = ScreenPaddingH, end = ScreenPaddingH, top = 4.dp, bottom = 4.dp))
+    Text(text, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(start = ScreenPaddingH, end = ScreenPaddingH, top = SectionGap, bottom = 10.dp))
 }
+
+/** Space above each section (songs, chapters, seasons, shelves) under the header. */
+private val SectionGap = 30.dp
 
 /** Play, Shuffle and Favorite of an album, playlist or artist; Add to Playlist (albums) or Delete (playlists). */
 @Composable

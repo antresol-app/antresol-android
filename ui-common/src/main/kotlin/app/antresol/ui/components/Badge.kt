@@ -3,7 +3,8 @@ package app.antresol.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,11 +32,12 @@ fun Badge(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** A row of [Badge]s, quality badges first. */
+/** [Badge]s, quality badges first; they wrap onto a second line in narrow cards (as in the web app) instead of being cut. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BadgeRow(badges: List<String>, modifier: Modifier = Modifier, max: Int = 3) {
     if (badges.isEmpty()) return
-    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Badges.ordered(badges).take(max).forEach { Badge(it) }
     }
 }

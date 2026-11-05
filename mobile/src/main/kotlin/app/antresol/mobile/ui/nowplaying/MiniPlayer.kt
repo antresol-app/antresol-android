@@ -67,7 +67,7 @@ fun MiniPlayer(playback: PlaybackConnection, onOpen: () -> Unit, modifier: Modif
         ) {
             ArtworkImage(
                 url = playing.artworkUrl,
-                title = playing.title,
+                title = playing.artworkTitle,
                 shape = AntresolShapes.badge,
                 modifier = Modifier.size(44.dp),
             )

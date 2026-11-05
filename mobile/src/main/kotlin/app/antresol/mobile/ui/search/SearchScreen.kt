@@ -130,7 +130,7 @@ fun SearchScreen(
                 selected = viewModel.filter,
                 label = { stringResource(it.label) },
                 onSelect = { viewModel.filter = it },
-                modifier = Modifier.padding(horizontal = PageGutter, vertical = 8.dp),
+                modifier = Modifier.padding(vertical = 8.dp),
             )
         }
         when (val results = viewModel.results) {

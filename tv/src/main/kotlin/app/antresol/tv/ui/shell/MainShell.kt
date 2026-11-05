@@ -155,9 +155,15 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         backStack?.destination?.hierarchy?.any { it.hasRoute(tab.route::class) } == true
     }
     // The nearest tab below the current page in the back stack: the section a detail page belongs to.
+    // Settings belongs to the profile avatar, not to the tab it was opened from.
     val stack by navController.currentBackStack.collectAsStateWithLifecycle()
-    val contextTab = stack.asReversed().firstNotNullOfOrNull { entry ->
-        NavTab.entries.firstOrNull { tab -> entry.destination.hasRoute(tab.route::class) }
+    val inSettings = backStack?.destination?.hasRoute(SettingsRoute::class) == true
+    val contextTab = if (inSettings) {
+        null
+    } else {
+        stack.asReversed().firstNotNullOfOrNull { entry ->
+            NavTab.entries.firstOrNull { tab -> entry.destination.hasRoute(tab.route::class) }
+        }
     }
     // Full-screen experiences hide the nav; detail, grid and settings pages keep it (no tab selected).
     val fullScreen = backStack?.destination?.let { destination ->

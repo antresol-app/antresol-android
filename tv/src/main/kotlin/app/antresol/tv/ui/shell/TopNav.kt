@@ -1,6 +1,8 @@
 package app.antresol.tv.ui.shell
 
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.StartOffsetType
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -198,22 +200,27 @@ private fun NowPlayingChip(title: String, active: Boolean, onClick: () -> Unit) 
     }
 }
 
-/** Three bars that bounce while audio plays and rest flat when paused. */
+/** Three bars that bounce while audio plays and rest at fixed, uneven heights when paused (flat bars read as "…"). */
 @Composable
 private fun EqualizerBars(active: Boolean, color: Color) {
     val transition = rememberInfiniteTransition(label = "equalizer")
-    val phases = listOf(0, 180, 360).map { delayMs ->
+    // Uneven lows and fast-forwarded start offsets keep the bars at different heights from the first frame.
+    val phases = listOf(0, 180, 360).mapIndexed { index, offsetMs ->
         transition.animateFloat(
-            initialValue = 0.3f,
+            initialValue = PausedBars[index] * 0.5f,
             targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(420, delayMillis = delayMs), RepeatMode.Reverse),
+            animationSpec = infiniteRepeatable(
+                tween(420),
+                RepeatMode.Reverse,
+                initialStartOffset = StartOffset(offsetMs, StartOffsetType.FastForward),
+            ),
             label = "bar",
         )
     }
     Canvas(Modifier.size(width = 12.dp, height = 12.dp)) {
         val barWidth = size.width / 5
         phases.forEachIndexed { index, phase ->
-            val height = size.height * if (active) phase.value else 0.3f
+            val height = size.height * if (active) phase.value else PausedBars[index]
             drawRect(
                 color = color,
                 topLeft = Offset(index * 2 * barWidth, size.height - height),
@@ -222,6 +229,8 @@ private fun EqualizerBars(active: Boolean, color: Color) {
         }
     }
 }
+
+private val PausedBars = listOf(0.5f, 1f, 0.7f)
 
 @Composable
 private fun AvatarButton(userName: String, avatar: String, onClick: () -> Unit) {

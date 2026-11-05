@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -185,7 +186,7 @@ private fun PanelContent(panel: Panel, playback: PlaybackConnection, client: Ant
     when (panel) {
         Panel.Artwork -> ArtworkImage(
             url = playing.artworkUrl,
-            title = playing.title,
+            title = playing.artworkTitle,
             shape = AntresolShapes.sheet,
             modifier = Modifier
                 .widthIn(max = 420.dp)
@@ -321,10 +322,11 @@ private fun TextToggle(text: String, description: String, tag: String, onClick: 
     Text(
         text,
         style = Antresol.typography.bodyEmphasis.copy(color = AntresolColors.LabelSecondary),
+        textAlign = TextAlign.Center,
         modifier = Modifier
-            .background(AntresolColors.Glass.copy(alpha = 0.5f), AntresolShapes.pill)
             .focusClickable(AntresolShapes.pill, onClickLabel = description, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .widthIn(min = 44.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
             .testTag(tag),
     )
 }
@@ -340,13 +342,16 @@ private fun SleepToggle(playback: PlaybackConnection, onClick: () -> Unit) {
         }
     }
     Row(
+        // Like the panel toggles: plain until a timer runs, then a white pill with the time left.
         modifier = Modifier
-            .background(if (timer != null) AntresolColors.Label else AntresolColors.Glass.copy(alpha = 0.5f), AntresolShapes.pill)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .heightIn(min = 44.dp)
+            .widthIn(min = 44.dp)
+            .background(if (timer != null) AntresolColors.Label else androidx.compose.ui.graphics.Color.Transparent, AntresolShapes.pill)
+            .focusClickable(AntresolShapes.pill, onClick = onClick)
+            .padding(horizontal = 12.dp)
             .testTag("now-playing-sleep"),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
     ) {
         val color = if (timer != null) AntresolColors.LabelInverse else AntresolColors.LabelSecondary
         Icon(MobileIcons.Moon, contentDescription = stringResource(R.string.sleep_timer), tint = color, modifier = Modifier.size(20.dp))
@@ -440,7 +445,7 @@ private fun QueueRow(item: MediaItem, index: Int, current: Boolean, onClick: () 
     ) {
         ArtworkImage(
             url = item.mediaMetadata.artworkUri?.toString(),
-            title = item.mediaMetadata.title?.toString().orEmpty(),
+            title = (item.mediaMetadata.albumTitle ?: item.mediaMetadata.title)?.toString().orEmpty(),
             shape = AntresolShapes.badge,
             modifier = Modifier.size(40.dp),
         )

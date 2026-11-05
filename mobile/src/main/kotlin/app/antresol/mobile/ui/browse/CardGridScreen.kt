@@ -137,15 +137,13 @@ fun CardGridScreen(
             val sort = viewModel.sort
             if (sorts.isNotEmpty() && sort != null) {
                 fullWidth("sorts") {
-                    // The Box gives the pills loose width constraints, so they hug their content on tablets.
-                    Box(Modifier.fillMaxWidth()) {
-                        SegmentedPills(
-                            options = sorts,
-                            selected = sort,
-                            label = { stringResource(it.label) },
-                            onSelect = viewModel::select,
-                        )
-                    }
+                    SegmentedPills(
+                        options = sorts,
+                        selected = sort,
+                        label = { stringResource(it.label) },
+                        onSelect = viewModel::select,
+                        modifier = Modifier.fullBleed(PageGutter),
+                    )
                 }
             }
             when (val state = viewModel.state) {

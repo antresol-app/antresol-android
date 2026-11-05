@@ -67,13 +67,14 @@ fun SeasonsSection(
     focus: FocusMemory,
     onPlayEpisode: (EpisodeCard) -> Unit,
     onOpenEpisode: (EpisodeCard) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var selected by rememberSaveable {
         mutableIntStateOf(seasons.indexOfFirst { season -> season.episodes.any { it.id == initialEpisodeId } }.coerceAtLeast(0))
     }
     val season = seasons[selected.coerceIn(seasons.indices)]
     val titles = seasons.map { it.title.ifBlank { stringResource(R.string.detail_season_number, it.number) } }
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = modifier.fillMaxWidth()) {
         Box(Modifier.padding(horizontal = ScreenPaddingH)) {
             if (seasons.size > 1) {
                 SegmentedPills(options = titles, selectedIndex = selected, onSelect = { selected = it }, selectOnFocus = true)

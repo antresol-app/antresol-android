@@ -55,6 +55,9 @@ data class NowPlaying(
     val isAudiobook: Boolean get() = ref is MediaRef.BookPart
     val trackId: Long? get() = (ref as? MediaRef.Track)?.trackId
     val bookId: Long? get() = (ref as? MediaRef.BookPart)?.bookId
+
+    /** The title the artwork placeholder is drawn from: the album, so it matches the album's card. */
+    val artworkTitle: String get() = if (isAudiobook) title else album.ifBlank { title }
 }
 
 /** A running sleep timer: at a time, or when the current track/chapter ends. */

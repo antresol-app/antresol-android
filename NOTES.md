@@ -606,3 +606,53 @@ updated for the scope pills on Search).
 - Device tokens are still plain JSON in DataStore (now excluded from backup and device transfer);
   Keystore wrapping needs real-device testing.
 - A "See All" tile is not a focusable shelf title as on the web; Search scope is client-side.
+
+## Phone review fixes
+
+### Fixed
+- Video player (ported from TV and extended): one client pinned to the starting profile; the player
+  closes on a profile switch or sign-out. Decoder or audio-output errors reopen with
+  `CodecSupport.withoutFailingVideo/Audio`. The recovery budget refills only after 30 s of healthy
+  playback. HLS stops are chained, and `/api/play` waits for them (no false 429). `StreamLimitException` is raised for
+  `/api/play` 429s only. Caps come from `DeviceCaps.current(limitToDisplay = false)` off the main thread.
+  Every pause saves progress. `playNext` runs once, from Playing or Up Next only. The final write starts in `onPause` when the activity
+  is finishing and is tracked in `app.pendingWrites`. Media sessions get unique ids and are released before
+  the player. PlayerView is detached on release. `configChanges` matches TV. The scrubber keeps the controls
+  visible while dragging.
+- Pending writes: `PendingWrites.completions`. `LoadViewModel(pendingWrites = …)` (Home, video/media detail)
+  waits for writes before a refresh and refreshes after each finished write. Reader final saves are tracked too.
+- Audio: a `FLUSH_AND_STOP` custom session command finishes the last audiobook write before sign-out.
+  The controller reconnects after the service dies, pending commands are dropped when a connect fails, and the controller
+  is released on stop. Positions are polled only while playing and while a screen is started (`PositionUpdates`). The service ticks
+  only while playing. Books with unknown part lengths start at 0 and write no progress (`REPORTS_PROGRESS`).
+  The repeat-one sleep timer and scrobbles work. The mobile `TranscodeSeekingPlayer` copy was deleted; the
+  ui-common one now tracks the offset entry by index.
+- Shell: per-profile ViewModel stores (`ShellStores`, same as TV). Sign Out, Switch Profile and Change Server run in
+  `appScope`; Sign Out and Change Server ask for confirmation first. Readers use pinned clients.
+- PDF: the cache is per server (hash of the base URL) and per file size. Downloads go through `AntresolClient.download`
+  (401 handling, localized errors) into a unique temp file. A corrupt copy is fetched again once. `PdfDocument.closeSafely`
+  closes under the render lock.
+- UI: paging errors show Try Again plus a loading footer (grids, Songs). Songs Play/Shuffle queue the whole
+  library (`appendTracks`). Shuffle All and artist Shuffle show a busy state and notices. Artist Play is hidden
+  without top tracks. Restart buttons appear for audiobooks, comics and PDFs (`fromStart` routes). There is an album favorite.
+  Continue Watching resumes (long press opens the page). Tapping a song in Search plays it (long press opens the album).
+  Search focuses its field and hides the keyboard on scroll. The header uses LogoTile and the avatar has a content description.
+  Custom clickables show a focus ring. The Now Playing panel falls back when it no longer applies, and a lyrics error offers retry. Comic pages
+  offer retry, and Next Volume shows on reaching the end. Episodes and seasons link to their series. Cast keys are unique.
+  Settings shows device errors with retry, and a failed revoke shows a notice. 429 at sign-in reads "Too many attempts". Toggling
+  Watched resets the resume position. The password is not saveable. `data_extraction_rules.xml` is added. `mov` is a container.
+  The hero artwork fades smoothly.
+
+### Rejected / not changed
+- Finding "LoadViewModel refresh race" and "onCleared final write" were the same issue: fixed once (see above).
+
+### Known gaps
+- Tokens are still plain JSON in DataStore (no backup or transfer). Keystore wrapping is not done.
+- If the Songs queue fails to fetch a page while appending, appending stops. The list shows Try Again, but
+  pages loaded afterwards are not added to the queue.
+- Focus rings cover the shared buttons, cards and tabs. Some one-off rows (settings rows, chapter rows) still use plain
+  `clickable`.
+
+### Verified
+`ANTRESOL_TEST_SERVER=1 ./gradlew :core:test :mobile:testDebugUnitTest assembleDebug` green (live UI tests
+updated for the avatar description "Account: Admin").

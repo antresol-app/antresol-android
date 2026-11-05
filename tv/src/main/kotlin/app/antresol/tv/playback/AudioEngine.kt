@@ -31,6 +31,7 @@ import app.antresol.core.playback.PlaybackReporter
 import app.antresol.core.playback.PlaybackTiming
 import app.antresol.core.playback.ScrobbleTracker
 import app.antresol.core.playback.playbackApi
+import app.antresol.ui.playback.TranscodeSeekingPlayer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job

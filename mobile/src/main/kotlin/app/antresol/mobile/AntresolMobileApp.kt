@@ -7,6 +7,7 @@ import app.antresol.core.model.DeviceInfo
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
 import app.antresol.mobile.playback.PlaybackConnection
+import app.antresol.mobile.player.VideoPlayerActivity
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.data.DataStoreSessionStore
 import app.antresol.ui.image.AntresolImageLoader
@@ -52,13 +53,21 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
             scope = appScope,
         )
         playback = PlaybackConnection(this, appScope, settings) { session.client }
+        // Sign-out revokes the token: close the players first, while their final writes still work.
+        session.beforeSignOut = {
+            VideoPlayerActivity.closeAndAwait()
+            playback.stopAndFlush()
+        }
         // Whatever was playing belongs to the profile that played it.
         appScope.launch {
             session.state
                 .map { (it as? AuthState.SignedIn)?.session?.let { s -> s.serverUrl to s.userId } }
                 .distinctUntilChanged()
                 .drop(1)
-                .collect { playback.stop() }
+                .collect {
+                    VideoPlayerActivity.close()
+                    playback.stop()
+                }
         }
     }
 

@@ -1,4 +1,4 @@
-package app.antresol.tv.playback
+package app.antresol.ui.playback
 
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -17,7 +17,7 @@ import kotlin.math.abs
  * this player, so the offset is invisible to them.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
-internal class TranscodeSeekingPlayer(
+class TranscodeSeekingPlayer(
     private val exo: ExoPlayer,
     /** The known length of an item from the server (track or part duration), if any. */
     private val knownDurationMs: (MediaItem) -> Long?,
@@ -49,6 +49,25 @@ internal class TranscodeSeekingPlayer(
         clearOffset()
         pending = if (positionMs > 0) index to positionMs else null
     }
+
+    /** A controller (MediaSession) sets the playlist through this player: remember its start. */
+    override fun setMediaItems(mediaItems: List<MediaItem>, startIndex: Int, startPositionMs: Long) {
+        exo.setMediaItems(mediaItems, startIndex, startPositionMs)
+        expectStart(startIndex, startPositionMs.coerceAtLeast(0))
+    }
+
+    override fun setMediaItems(mediaItems: List<MediaItem>, resetPosition: Boolean) {
+        exo.setMediaItems(mediaItems, resetPosition)
+        expectStart(exo.currentMediaItemIndex, if (resetPosition) 0 else exo.currentPosition)
+    }
+
+    override fun setMediaItems(mediaItems: List<MediaItem>) = setMediaItems(mediaItems, true)
+
+    override fun setMediaItem(mediaItem: MediaItem, startPositionMs: Long) = setMediaItems(listOf(mediaItem), 0, startPositionMs)
+
+    override fun setMediaItem(mediaItem: MediaItem, resetPosition: Boolean) = setMediaItems(listOf(mediaItem), resetPosition)
+
+    override fun setMediaItem(mediaItem: MediaItem) = setMediaItems(listOf(mediaItem), true)
 
     private fun currentOffset(): Long = if (exo.currentMediaItem?.mediaId == offsetMediaId) offsetMs else 0L
 

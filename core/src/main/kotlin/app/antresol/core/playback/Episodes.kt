@@ -16,6 +16,15 @@ object Episodes {
         return if (index < 0) null else all.getOrNull(index + 1)
     }
 
-    /** What "Play" on a series starts: the server's `next`, else the first episode. */
-    fun toPlay(series: ItemDetail): EpisodeCard? = series.next ?: ordered(series).firstOrNull()
+    /**
+     * What "Play" on a series or season starts: the server's `next` (set for series only), else the
+     * first episode in progress, else the first unwatched one, else the first.
+     */
+    fun toPlay(series: ItemDetail): EpisodeCard? {
+        series.next?.let { return it }
+        val all = ordered(series)
+        return all.firstOrNull { !it.watched && it.progress > 0.0 && it.progress < 1.0 }
+            ?: all.firstOrNull { !it.watched }
+            ?: all.firstOrNull()
+    }
 }

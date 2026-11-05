@@ -49,6 +49,8 @@ fun TimeSlider(
     durationMs: Long,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    /** True while the thumb is held (a drag in progress), false once it is released. */
+    onDraggingChange: (Boolean) -> Unit = {},
 ) {
     var dragging by remember { mutableStateOf<Float?>(null) }
     val duration = durationMs.coerceAtLeast(1)
@@ -56,10 +58,14 @@ fun TimeSlider(
     Column(modifier.fillMaxWidth()) {
         Slider(
             value = dragging ?: (positionMs.toFloat() / duration).coerceIn(0f, 1f),
-            onValueChange = { dragging = it },
+            onValueChange = {
+                if (dragging == null) onDraggingChange(true)
+                dragging = it
+            },
             onValueChangeFinished = {
                 dragging?.let { onSeek((it * duration).toLong()) }
                 dragging = null
+                onDraggingChange(false)
             },
             enabled = durationMs > 0,
             colors = SliderDefaults.colors(

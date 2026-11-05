@@ -24,15 +24,20 @@ object DeviceCaps {
     @Volatile
     private var decoderMaxHeight: Int? = null
 
-    fun current(context: Context): PlaybackCaps =
-        CodecSupport.caps(decoders(), passthrough(context), maxHeight(context))
+    /**
+     * [limitToDisplay]: also cap the height at the display's (TVs, where a bigger video is wasted).
+     * Phones and tablets scale any decodable video to the surface, so only the decoder limits them
+     * and the user's quality setting decides the rest.
+     */
+    fun current(context: Context, limitToDisplay: Boolean = true): PlaybackCaps =
+        CodecSupport.caps(decoders(), passthrough(context), maxHeight(context, limitToDisplay))
 
     /**
-     * The smaller of the display's tallest mode (its short side, so phones count in landscape) and
-     * the tallest H.264/HEVC hardware decode. Unknown or implausible values (below 720) mean no limit.
+     * The tallest H.264/HEVC hardware decode and, with [limitToDisplay], at most the display's tallest
+     * mode (its short side). Unknown or implausible values (below 720) mean no limit.
      */
-    private fun maxHeight(context: Context): Int? {
-        val display = context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY)
+    private fun maxHeight(context: Context, limitToDisplay: Boolean): Int? {
+        val display = if (limitToDisplay) context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY) else null
         val displayHeight = display?.supportedModes
             ?.maxOfOrNull { minOf(it.physicalWidth, it.physicalHeight) }
             ?.takeIf { it >= MIN_PLAUSIBLE_HEIGHT }

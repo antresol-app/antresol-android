@@ -8,6 +8,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Rational
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -29,6 +30,9 @@ import androidx.media3.session.MediaSession
 import app.antresol.mobile.AntresolMobileApp
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.theme.AntresolTheme
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withTimeoutOrNull
 import java.lang.ref.WeakReference
 
 /**
@@ -41,6 +45,9 @@ class VideoPlayerActivity : ComponentActivity() {
     private lateinit var viewModel: VideoPlayerViewModel
     private var mediaSession: MediaSession? = null
     private var inPictureInPicture by mutableStateOf(false)
+
+    /** Completed in [onDestroy] with the closing player's final progress write, if it closed. */
+    private val destroyed = CompletableDeferred<Job?>()
 
     private val canPictureInPicture: Boolean by lazy {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
@@ -99,7 +106,11 @@ class VideoPlayerActivity : ComponentActivity() {
             },
         )[VideoPlayerViewModel::class.java]
         // Headset buttons, Bluetooth and the picture-in-picture window's play/pause.
-        mediaSession = MediaSession.Builder(this, viewModel.player).setId(SESSION_ID).build()
+        // Unique per instance: the previous player's session is only released when it is destroyed,
+        // which happens after this one starts.
+        mediaSession = MediaSession.Builder(this, viewModel.player)
+            .setId("$SESSION_ID-${System.identityHashCode(this)}")
+            .build()
         viewModel.player.addListener(pipUpdater)
         updatePictureInPictureParams()
 
@@ -141,6 +152,8 @@ class VideoPlayerActivity : ComponentActivity() {
         mediaSession = null
         if (current?.get() === this) current = null
         super.onDestroy()
+        // The ViewModel was cleared above (super.onDestroy) when the activity is finishing.
+        destroyed.complete(if (isFinishing && ::viewModel.isInitialized) viewModel.finalWrite else null)
     }
 
     private fun enterPictureInPicture() {
@@ -183,15 +196,39 @@ class VideoPlayerActivity : ComponentActivity() {
         private const val SESSION_ID = "antresol-video"
         private const val MAX_RATIO = 2.39f
 
+        private const val START_DEBOUNCE_MS = 1_000L
+
         private var current: WeakReference<VideoPlayerActivity>? = null
+        private var lastStartAt = 0L
 
         /** Plays a movie or episode; a series or season id plays its next episode. */
         fun start(context: Context, itemId: Long, resume: ResumeMode) {
+            // A double tap on Play must not open two players.
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastStartAt < START_DEBOUNCE_MS) return
+            lastStartAt = now
             context.startActivity(
                 Intent(context, VideoPlayerActivity::class.java)
                     .putExtra(EXTRA_ITEM_ID, itemId)
                     .putExtra(EXTRA_RESUME, resume.name),
             )
         }
+
+        /**
+         * Closes the open player (also in picture-in-picture) and waits for its final progress write
+         * and session stop, so a sign-out can revoke the token afterwards.
+         */
+        suspend fun closeAndAwait() {
+            val activity = current?.get() ?: return
+            activity.finish()
+            withTimeoutOrNull(CLOSE_TIMEOUT_MS) { activity.destroyed.await()?.join() }
+        }
+
+        /** Closes the open player without waiting (the signed-in profile changed). */
+        fun close() {
+            current?.get()?.finish()
+        }
+
+        private const val CLOSE_TIMEOUT_MS = 5_000L
     }
 }

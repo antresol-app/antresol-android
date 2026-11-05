@@ -42,6 +42,7 @@ dependencies {
     api(libs.androidx.compose.ui.tooling.preview)
     api(libs.coil.compose)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.androidx.compose.ui.tooling)

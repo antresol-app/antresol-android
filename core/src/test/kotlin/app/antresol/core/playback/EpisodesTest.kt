@@ -36,6 +36,29 @@ class EpisodesTest {
     }
 
     @Test
+    fun seasonWithoutNextPicksInProgressThenUnwatched() {
+        val season = ItemDetail(
+            id = 10,
+            seasons = listOf(
+                SeasonInfo(
+                    id = 10,
+                    number = 1,
+                    episodes = listOf(
+                        EpisodeCard(id = 11, episodeNo = 1, watched = true),
+                        EpisodeCard(id = 12, episodeNo = 2),
+                        EpisodeCard(id = 13, episodeNo = 3, progress = 0.4),
+                    ),
+                ),
+            ),
+        )
+        assertEquals(13L, Episodes.toPlay(season)?.id)
+        val noneStarted = season.copy(seasons = listOf(season.seasons[0].copy(episodes = season.seasons[0].episodes.take(2))))
+        assertEquals(12L, Episodes.toPlay(noneStarted)?.id)
+        val allWatched = season.copy(seasons = listOf(season.seasons[0].copy(episodes = listOf(EpisodeCard(id = 11, episodeNo = 1, watched = true)))))
+        assertEquals(11L, Episodes.toPlay(allWatched)?.id)
+    }
+
+    @Test
     fun realSeriesSampleHasAnOrder() {
         val url = requireNotNull(javaClass.classLoader.getResource("api-samples/item-series.json"))
         val sample = AntresolClient.json.decodeFromString(ItemDetail.serializer(), File(url.toURI()).readText())

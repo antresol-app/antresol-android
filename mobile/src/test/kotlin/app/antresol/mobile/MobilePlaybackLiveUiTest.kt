@@ -21,6 +21,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.Profile
+import app.antresol.core.model.Track
 import app.antresol.core.model.Progress
 import app.antresol.core.model.ProgressUpdate
 import app.antresol.core.session.AuthState
@@ -41,6 +42,7 @@ import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.android.controller.ServiceController
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -54,20 +56,33 @@ import org.robolectric.shadows.ShadowLooper
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "en-w393dp-h852dp-port-xxhdpi")
+@Config(sdk = [34], qualifiers = "en-w360dp-h800dp-port-xxhdpi")
 class MobilePlaybackLiveUiTest {
     private val compose = createAndroidComposeRule<ComponentActivity>()
     private val saved = mutableMapOf<Long, Progress>()
 
-    /** Final progress writes run after the test body; wait for them, then restore what was there. */
+    private var service: ServiceController<PlaybackService>? = null
+
+    /**
+     * Final progress writes run after the test body; wait for them, then restore what was there. Then destroy the
+     * playback service: Media3 keeps session ids in a static map, and the next test creates the service again.
+     */
     private val restoreProgress = object : ExternalResource() {
         override fun after() {
-            if (saved.isEmpty()) return
-            repeat(30) {
-                ShadowLooper.idleMainLooper(100, TimeUnit.MILLISECONDS)
-                Thread.sleep(100)
+            if (saved.isNotEmpty()) {
+                repeat(30) {
+                    ShadowLooper.idleMainLooper(100, TimeUnit.MILLISECONDS)
+                    Thread.sleep(100)
+                }
+                restoreSaved()
+                // A player's final write can land after that (it runs in the app scope); restore again until it sticks.
+                for (attempt in 1..10) {
+                    if (restoreSaved() == 0) break
+                    ShadowLooper.idleMainLooper(500, TimeUnit.MILLISECONDS)
+                    Thread.sleep(500)
+                }
             }
-            runBlocking { app.session.client?.let { client -> saved.forEach { (id, before) -> client.restore(id, before) } } }
+            service?.destroy()
         }
     }
 
@@ -86,8 +101,14 @@ class MobilePlaybackLiveUiTest {
     }
 
     @Test
-    @Config(sdk = [34], qualifiers = "en-w852dp-h393dp-land-xxhdpi")
-    fun videoPlayerActivity() {
+    @Config(sdk = [34], qualifiers = "en-w800dp-h360dp-land-xxhdpi")
+    fun videoPlayerActivity() = videoPlayer("play-01-video-controls", "play-02-video-quality")
+
+    @Test
+    @Config(sdk = [34], qualifiers = "en-w1024dp-h768dp-land-xhdpi")
+    fun tabletVideoPlayer() = videoPlayer("tablet-20-video-controls", "tablet-21-video-quality")
+
+    private fun videoPlayer(controlsShot: String, qualityShot: String) {
         val client = app.session.requireClient()
         val movieId = runBlocking { client.search("Big Buck Demo").library.first().id }
         remember(movieId)
@@ -98,11 +119,11 @@ class MobilePlaybackLiveUiTest {
                 compose.onAllNodes(hasTestTag("player-play-pause") or hasText("Try Again"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
             }
             Thread.sleep(500)
-            shot(scenario, "play-01-video-controls")
+            shot(scenario, controlsShot)
             if (compose.onAllNodes(hasContentDescription("Quality"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
                 compose.onNode(hasContentDescription("Quality")).performClick()
                 waitFor(hasText("Original"))
-                shot(scenario, "play-02-video-quality")
+                shot(scenario, qualityShot)
             }
         }
     }
@@ -118,14 +139,7 @@ class MobilePlaybackLiveUiTest {
         tab("Music")
         waitFor(hasText("Songs"))
         shot("play-10-music")
-        compose.onNode(hasText("All Albums")).performClick()
-        waitFor(hasText("Test Album"))
-        compose.onAllNodes(hasText("Test Album"), useUnmergedTree = true).onFirst().performClick()
-        waitFor(hasTestTag("play-all"))
-        val album = runBlocking { client.album(client.albums().items.first { it.title == "Test Album" }.id) }
-        val track = album.tracks.first()
-        compose.onNode(hasTestTag("track-${track.id}")).performClick()
-        waitFor(hasTestTag("mini-player"))
+        val track = playFirstTrackOfTestAlbum()
         Thread.sleep(1000)
         shot("play-11-album-mini-player")
 
@@ -157,12 +171,7 @@ class MobilePlaybackLiveUiTest {
         // Audiobook: Resume plays through the same service; Now Playing shows chapters and speed.
         val audiobookId = runBlocking { client.books("audiobook").items.first { it.title == "Chapter Book" }.id }
         remember(audiobookId)
-        tab("Books")
-        waitFor(hasText("Audiobooks"))
-        compose.onAllNodes(hasText("Audiobooks")).onFirst().performClick()
-        waitFor(hasText("Chapter Book"))
-        compose.onAllNodes(hasText("Chapter Book"), useUnmergedTree = true).onFirst().performClick()
-        waitFor(hasTestTag("book-listen"))
+        openAudiobook()
         Thread.sleep(1000)
         shot("play-20-audiobook-detail")
         compose.onNode(hasTestTag("book-listen")).performClick()
@@ -201,16 +210,70 @@ class MobilePlaybackLiveUiTest {
         waitFor(hasTestTag("book-read"))
 
         // Settings from the account sheet.
+        openSettings()
+        waitFor(hasText("This device"))
+        shot("play-40-settings")
+        compose.onNode(hasTestTag("settings")).performScrollToNode(hasText("App Version"))
+        shot("play-41-settings-bottom")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "en-w1024dp-h768dp-land-xhdpi")
+    fun tabletNowPlayingAudiobookAndSettings() {
+        bindPlaybackService()
+        compose.setContent { AntresolTheme { AntresolMobileRoot(app.session) } }
+        waitFor(hasText("Details"))
+        tab("Music")
+        waitFor(hasText("Songs"))
+        playFirstTrackOfTestAlbum()
+        Thread.sleep(1000)
+        shot("tablet-10-album")
+        compose.onNode(hasTestTag("mini-player")).performClick()
+        waitFor(hasTestTag("now-playing-title"))
+        Thread.sleep(1000)
+        shot("tablet-11-now-playing")
+        compose.onNode(hasTestTag("now-playing-close")).performClick()
+        compose.runOnUiThread { app.playback.stop() }
+
+        openAudiobook()
+        Thread.sleep(1000)
+        shot("tablet-12-audiobook")
+        openSettings()
+        shot("tablet-13-settings")
+    }
+
+    /** From the Music tab: All Albums → Test Album → tap its first track, until the mini-player shows. */
+    private fun playFirstTrackOfTestAlbum(): Track {
+        val client = app.session.requireClient()
+        compose.onNode(hasText("All Albums")).performClick()
+        waitFor(hasText("Test Album"))
+        compose.onAllNodes(hasText("Test Album"), useUnmergedTree = true).onFirst().performClick()
+        waitFor(hasTestTag("play-all"))
+        val album = runBlocking { client.album(client.albums().items.first { it.title == "Test Album" }.id) }
+        val track = album.tracks.first()
+        compose.onNode(hasTestTag("track-${track.id}")).performClick()
+        waitFor(hasTestTag("mini-player"))
+        return track
+    }
+
+    /** Books tab → Audiobooks → the "Chapter Book" detail page. */
+    private fun openAudiobook() {
+        tab("Books")
+        waitFor(hasText("Audiobooks"))
+        compose.onAllNodes(hasText("Audiobooks")).onFirst().performClick()
+        waitFor(hasText("Chapter Book"))
+        compose.onAllNodes(hasText("Chapter Book"), useUnmergedTree = true).onFirst().performClick()
+        waitFor(hasTestTag("book-listen"))
+    }
+
+    /** Home tab → avatar → Settings, once the server version has loaded. */
+    private fun openSettings() {
         tab("Home")
         waitFor(hasText("Details"))
         compose.onAllNodes(hasContentDescription("Account: Admin")).onFirst().performClick()
         waitFor(hasTestTag("account-settings"))
         compose.onNode(hasTestTag("account-settings")).performClick()
-        waitFor(hasText("This device"))
         waitFor(hasText("0.3.0", substring = true))
-        shot("play-40-settings")
-        compose.onNode(hasTestTag("settings")).performScrollToNode(hasText("App Version"))
-        shot("play-41-settings-bottom")
     }
 
     private fun signIn() = runBlocking {
@@ -223,13 +286,24 @@ class MobilePlaybackLiveUiTest {
 
     /** Robolectric does not start bound services; hand MediaController the real service's binder. */
     private fun bindPlaybackService() {
-        val service = Robolectric.buildService(PlaybackService::class.java).create().get()
+        val service = Robolectric.buildService(PlaybackService::class.java).create().also { service = it }.get()
         val component = ComponentName(app, PlaybackService::class.java)
         val binder = service.onBind(Intent(MediaSessionService.SERVICE_INTERFACE).setComponent(component))
         shadowOf(app).setComponentNameAndServiceForBindService(component, binder)
     }
 
     private fun remember(itemId: Long) = runBlocking { saved[itemId] = app.session.requireClient().progress(itemId) }
+
+    /** Puts back the progress of every [saved] item that differs from before; returns how many did. */
+    private fun restoreSaved(): Int = runBlocking {
+        val client = app.session.client ?: return@runBlocking 0
+        saved.count { (id, before) ->
+            val now = client.progress(id)
+            val drifted = now.positionMs != before.positionMs || now.finished != before.finished || now.locator != before.locator
+            if (drifted) client.restore(id, before)
+            drifted
+        }
+    }
 
     private suspend fun AntresolClient.restore(id: Long, before: Progress) {
         when {

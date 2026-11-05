@@ -98,6 +98,7 @@ class TvLiveUiTest {
 
         // Server address: a bad address shows an error, the real one opens the profile picker.
         waitFor(hasText("Connect to your server"))
+        shot("00-server")
         val field = compose.onNode(hasSetTextAction())
         field.performTextReplacement("127.0.0.1:1")
         field.performImeAction()
@@ -303,9 +304,10 @@ class TvLiveUiTest {
         }
         compose.setContent { AntresolTvTheme { AntresolTvRoot(session) } }
         waitFor(isFocused() and (hasText("Play") or hasText("Resume") or hasAnyDescendant(hasText("Play") or hasText("Resume"))))
+        val heroAction = focusedTitle() // "Play", or "Resume" while another run left progress on the hero item
 
         key(KeyEvent.KEYCODE_DPAD_UP)
-        moveUntilFocused(KeyEvent.KEYCODE_DPAD_DOWN, "Play", maxPresses = 2)
+        moveUntilFocused(KeyEvent.KEYCODE_DPAD_DOWN, heroAction, maxPresses = 2)
         // Music: header links, genre chips and shelves; the first album card has focus.
         key(KeyEvent.KEYCODE_DPAD_UP)
         key(KeyEvent.KEYCODE_DPAD_RIGHT, times = 3)

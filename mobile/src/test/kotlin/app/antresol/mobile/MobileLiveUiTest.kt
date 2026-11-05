@@ -59,7 +59,7 @@ class MobileLiveUiTest {
     }
 
     @Test
-    @Config(sdk = [34], qualifiers = "en-w393dp-h852dp-port-xxhdpi")
+    @Config(sdk = [34], qualifiers = "en-w360dp-h800dp-port-xxhdpi")
     fun phoneOnboardingBrowseDetailSearch() {
         val session = app.session
         runBlocking {
@@ -71,6 +71,7 @@ class MobileLiveUiTest {
 
         // Server address: a bad address shows an error, the real one opens the profile picker.
         waitFor(hasText("Connect to your server"))
+        shot("phone-00-server")
         val field = compose.onNode(hasTestTag("server-address"))
         field.performTextReplacement("127.0.0.1:1")
         field.performImeAction()
@@ -159,15 +160,21 @@ class MobileLiveUiTest {
 
     @Test
     @Config(sdk = [34], qualifiers = "en-w1024dp-h768dp-land-xhdpi")
-    fun tabletHomeAndGrid() {
+    fun tabletOnboardingBrowseAndSearch() {
         val session = app.session
         runBlocking {
             session.restore()
             if (session.state.value is AuthState.SignedIn) session.switchProfile()
             session.connect(serverUrl!!)
-            session.signIn(Profile(id = 1, name = "Admin", hasPassword = true), password)
         }
         compose.setContent { AntresolTheme { AntresolMobileRoot(session) } }
+        waitFor(hasText("Who’s watching?"))
+        shot("tablet-00-profiles")
+        compose.onNode(hasTestTag("profile-1")).performClick()
+        waitFor(hasText("Enter the password for Admin"))
+        compose.onNode(hasTestTag("password")).performTextReplacement(password)
+        compose.onNode(hasTestTag("password")).performImeAction()
+
         waitFor(hasText("Details"))
         Thread.sleep(2500)
         shot("tablet-01-home")
@@ -179,6 +186,37 @@ class MobileLiveUiTest {
         waitFor(hasTestTag("toggle-watched"))
         Thread.sleep(1500)
         shot("tablet-03-detail")
+        compose.onNode(hasContentDescription("Back")).performClick()
+
+        tab("TV Shows")
+        waitFor(hasText("Test Show"))
+        compose.onAllNodes(hasText("Test Show"), useUnmergedTree = true).onFirst().performClick()
+        waitFor(hasText("Season 2"))
+        Thread.sleep(1500)
+        shot("tablet-04-series-detail")
+        compose.onNode(hasContentDescription("Back")).performClick()
+
+        tab("Music")
+        waitFor(hasText("All Albums"))
+        Thread.sleep(1500)
+        shot("tablet-05-music")
+        compose.onNode(hasText("All Albums")).performClick()
+        waitFor(hasText("By Artist"))
+        Thread.sleep(1000)
+        shot("tablet-06-albums")
+        compose.onNode(hasContentDescription("Back")).performClick()
+
+        tab("Books")
+        waitFor(hasText("Manga & Comics"))
+        Thread.sleep(1500)
+        shot("tablet-07-books")
+
+        compose.onNode(hasTestTag("tab-Search")).performClick()
+        waitFor(hasText("Browse"))
+        compose.onNode(hasTestTag("search-field")).performTextReplacement("test")
+        waitFor(hasText("Movies & TV Shows"))
+        Thread.sleep(1500)
+        shot("tablet-08-search")
         runBlocking { session.switchProfile() }
     }
 
@@ -188,7 +226,7 @@ class MobileLiveUiTest {
      * end (also when a step fails).
      */
     @Test
-    @Config(sdk = [34], qualifiers = "en-w393dp-h852dp-port-xxhdpi")
+    @Config(sdk = [34], qualifiers = "en-w360dp-h800dp-port-xxhdpi")
     fun phonePlaylists() {
         val session = app.session
         val name = "UI Test Mix"

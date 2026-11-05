@@ -41,6 +41,10 @@ android {
     }
 }
 
+// The live UI tests of both apps sign in as the same profile and play the same items; running them at the same time
+// (org.gradle.parallel) lets one app's progress snapshot capture the other's playback. Run the phone's after the TV's.
+tasks.withType<Test>().configureEach { mustRunAfter(":tv:testDebugUnitTest") }
+
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)

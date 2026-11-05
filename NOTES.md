@@ -10,7 +10,8 @@ Running log between milestones. Newest entries at the bottom.
   OkHttp 4.12, kotlinx-serialization 1.7.3, coroutines 1.9.0, Coil 2.7.0, navigation 2.8.5, lifecycle 2.8.7,
   DataStore 1.1.1). Wrapper: Gradle 8.14.3. Java/Kotlin target 17 (no `jvmToolchain`, the container has JDK 21 only).
 - minSdk 26 for all Android modules (adaptive icons only, no legacy PNG launcher icons), compile/target 35.
-- CI: `.github/workflows/ci.yml` runs `./gradlew :core:test assembleDebug` on JDK 17.
+- CI: `.github/workflows/ci.yml` runs `./gradlew :core:test assembleDebug` on JDK 17 (extended since; see
+  "Release engineering + screenshots").
 - `local.properties` (`sdk.dir=/opt/android-sdk`) is gitignored; create it in fresh clones.
 
 ### `:core` (pure Kotlin/JVM, package `app.antresol.core`)
@@ -182,7 +183,8 @@ Running log between milestones. Newest entries at the bottom.
 - `MobileLiveUiTest` (Robolectric, NATIVE graphics, only with `ANTRESOL_TEST_SERVER`): phone flow — server error
   + connect, profiles, password, home, Movies sort, movie detail (watchlist toggled on the server and back),
   series detail with seasons, Music, All Albums, Books, Search browse + results, account sheet, switch profile;
-  tablet (1024×768) home, Movies grid, detail. Screenshots in `mobile/build/screenshots/`.
+  tablet (1024×768) home, Movies grid, detail. Screenshots in `mobile/build/screenshots/`. (Phone size and the tablet
+  coverage changed in "Release engineering + screenshots".)
   Waits advance Robolectric's paused main looper so `delay()`-based work (search debounce) runs.
 
 ### Known gaps (for mobile milestone 2)
@@ -732,3 +734,73 @@ green, plus `:ui-common:testDebugUnitTest`.
 - TV playlists: no rename, remove or reorder (phone only).
 - Test runs leave many "robolectric" device sessions on the test server (pre-existing; seen in the new
   devices list).
+
+## Release engineering + screenshots
+
+### Release builds
+- Root `build.gradle.kts` configures both apps (`plugins.withId("com.android.application")`): `versionName` from
+  `antresolVersionName` in `gradle.properties` (1.0.0), `versionCode` = `GITHUB_RUN_NUMBER` or 1, release = R8 +
+  resource shrinking + `proguard-android-optimize.txt`, signing from `ANTRESOL_KEYSTORE_FILE` / `_PASSWORD` /
+  `ANTRESOL_KEY_ALIAS` / `ANTRESOL_KEY_PASSWORD` (env or Gradle property), unsigned when absent. The modules no
+  longer set versions or release build types themselves. Details and secret names: `docs/RELEASE.md`.
+- Keep rules: nothing new was needed. `ui-common/consumer-rules.pro` keeps `$$serializer`/`serializer()` for
+  `app.antresol.**`; kotlinx.serialization, Media3, OkHttp, Coil ship their own rules. No reflection or
+  `getIdentifier` in the code base (checked), so resource shrinking is safe.
+- **R8 proof**: `verifyReleaseSerialization` (in the root script) runs before every `assembleRelease`/`bundleRelease`.
+  It reads `mapping.txt` + `usage.txt` (which together list every class R8 saw) and fails unless each serializable
+  app class kept its `$$serializer` unrenamed with all members and a surviving class kept `serializer()` unrenamed.
+  Current result: phone 71/71, TV 72/72 serializable classes, all kept. A doctored mapping (renamed serializer)
+  makes it fail, so the check is live.
+- Decision: no Robolectric run of the release variant. Unit tests (also `testReleaseUnitTest`) run the unminified
+  classes, so they cannot show R8 damage; the mapping check is the honest proof available without a device.
+  A real-device smoke test of the release APK remains to be done.
+- Verified: `:tv:assembleRelease :mobile:assembleRelease :tv:bundleRelease :mobile:bundleRelease` (APKs ≈ 3.4–3.7 MB,
+  AABs ≈ 7 MB), and signing with a throwaway keystore (`apksigner verify` OK, versionCode 42 from
+  `GITHUB_RUN_NUMBER=42`).
+
+### CI
+- Push/PR: unit tests + debug builds (unchanged). Push to main and tags: release APKs + AABs, uploaded with the
+  debug APKs and R8 mappings as workflow artifacts `debug-apks` and `release`. Tags `v*`: job `github-release`
+  (`contents: write`) runs `gh release create` with `GITHUB_TOKEN`; notes = both apps' en-US changelog.
+  Signing secrets: `ANTRESOL_KEYSTORE_BASE64`, `ANTRESOL_KEYSTORE_PASSWORD`, `ANTRESOL_KEY_ALIAS`,
+  `ANTRESOL_KEY_PASSWORD`; without them files are named `*-unsigned.*`. Not run on GitHub from here (no way to
+  trigger it); YAML parsed locally.
+
+### Store metadata
+- Decision: two apps need two listings, so the fastlane folders live per module:
+  `{mobile,tv}/fastlane/metadata/android/{en-US,ru-RU}/` (title, short/full description, `changelogs/1.txt`), within
+  Play's length limits. Copy follows the server README (own server required, no content, no data collected) and only
+  claims what the Android apps do (no offline downloads, no EPUB reader on Android).
+- `docs/PLAY_STORE.md`: data safety answers (no data collected or shared, traffic only to the user's server),
+  permissions, TV review notes (leanback banner present, 1280×720 banner and TV screenshots still needed, reviewers
+  need a demo server), graphics to make.
+
+### Screenshot gallery
+- `docs/screenshots/{tv,mobile/phone,mobile/tablet}` (59 PNGs) + `docs/screenshots/README.md`, produced by
+  `scripts/update-screenshots.sh` (runs the live UI tests, then copies a fixed selection under stable names;
+  `--copy-only` reuses the last run).
+- Tests changed: phone qualifiers are now `w360dp-h800dp-xxhdpi` (1080×2400; the player `w800dp-h360dp`). New shots:
+  clean server screens (TV + phone). The tablet test became `tabletOnboardingBrowseAndSearch` (profiles, home,
+  movies, movie and series detail, music, albums, books, search) and `MobilePlaybackLiveUiTest` gained
+  `tabletVideoPlayer` and `tabletNowPlayingAudiobookAndSettings` (album, two-column Now Playing, audiobook,
+  settings); shared steps are helpers (`videoPlayer`, `playFirstTrackOfTestAlbum`, `openAudiobook`, `openSettings`).
+- Fix: Media3 keeps session ids in a static map, so a second test creating `PlaybackService` failed with "Session ID
+  must be unique"; the outer rule now destroys the service after each test.
+- Fix (test isolation): with `org.gradle.parallel` the TV and phone live tests ran at the same time as the same
+  profile on the same items, so the phone's progress snapshot captured the TV player's position and "restored" it
+  (Big Buck Demo kept 881 ms of progress; the TV test then saw Resume instead of Play). `:mobile` test tasks now
+  `mustRunAfter(":tv:testDebugUnitTest")`; the phone playback test re-restores until a late final write no longer
+  changes the progress; the TV music test accepts the hero's Play or Resume. The stray progress on the server was
+  reset (movie 19 unwatched, as the tests expect).
+- Observed, not fixed: comic pages never decode under Robolectric (TV shows "This page couldn't be loaded", the
+  phone a black page), so readers are left out of the gallery; verify on a device. The test library has almost no
+  posters, so most cards show the gradient placeholder. On a landscape tablet the Settings column is capped at
+  720 dp and left-aligned (by design of the existing screen, looks sparse).
+
+### Verified
+`ANTRESOL_TEST_SERVER=1 ./gradlew --no-daemon :core:test :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug`
+green (11 live UI tests), `scripts/update-screenshots.sh` green, plus the release/bundle builds above.
+
+### Known gaps
+- The release APKs were never installed on a device or emulator; GitHub Actions release/tag jobs never ran.
+- Play listing graphics (icon 512, feature graphic, TV banner 1280×720, real-device screenshots) are not made.

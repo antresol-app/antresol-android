@@ -8,7 +8,12 @@ Native Android and Android TV apps for the self-hosted
     ./gradlew :core:test :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug   # unit tests + both apps
     ANTRESOL_TEST_SERVER=1 ./gradlew :core:test :tv:testDebugUnitTest :mobile:testDebugUnitTest   # plus live tests against http://127.0.0.1:8420
 
-Create `local.properties` with `sdk.dir=<Android SDK>` in a fresh clone. JDK 17+.
+    ./gradlew :tv:assembleRelease :mobile:assembleRelease :tv:bundleRelease :mobile:bundleRelease   # release APKs/AABs
+    scripts/update-screenshots.sh   # regenerate docs/screenshots from the live UI tests
+
+Create `local.properties` with `sdk.dir=<Android SDK>` in a fresh clone. JDK 17+. Release signing, versioning and CI:
+[docs/RELEASE.md](docs/RELEASE.md). Store listings: [docs/PLAY_STORE.md](docs/PLAY_STORE.md). Screenshots:
+[docs/screenshots](docs/screenshots/README.md).
 
 ## Android TV app (`:tv`)
 

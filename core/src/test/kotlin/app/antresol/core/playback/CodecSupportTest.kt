@@ -21,4 +21,16 @@ class CodecSupportTest {
         assertEquals(listOf("h264", "hevc", "vp9", "av1"), caps.videoCodecs)
         assertEquals(listOf("aac", "mp3", "opus", "flac", "ac3", "eac3"), caps.audioCodecs)
     }
+
+    @Test
+    fun failingDecodersLowerTheCapsOnce() {
+        val caps = CodecSupport.caps(setOf("video/hevc", "audio/eac3"), passthrough = setOf("ac3"), maxHeight = 2160)
+        val video = CodecSupport.withoutFailingVideo(caps)!!
+        assertEquals(listOf("h264"), video.videoCodecs)
+        assertEquals(1080, video.maxHeight)
+        assertEquals(null, CodecSupport.withoutFailingVideo(video))
+        val audio = CodecSupport.withoutFailingAudio(caps)!!
+        assertEquals(CodecSupport.ALWAYS_AUDIO, audio.audioCodecs)
+        assertEquals(null, CodecSupport.withoutFailingAudio(audio))
+    }
 }

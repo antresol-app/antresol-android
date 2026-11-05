@@ -47,6 +47,9 @@ class ComicReaderViewModel(
     private var savedPage: Int? = null
     private var saveJob: Job? = null
 
+    /** Writes as the profile that opened the reader, even when the last one runs after a profile switch. */
+    private val writer: AntresolClient = client.pinned()
+
     init {
         reload()
     }
@@ -97,7 +100,7 @@ class ComicReaderViewModel(
         val volume = (state as? LoadState.Ready)?.value ?: return
         val current = page
         if (current == savedPage || volume.count == 0) return
-        runCatching { client.saveProgress(volumeId, ComicProgress.update(current, volume.count)) }
+        runCatching { writer.saveProgress(volumeId, ComicProgress.update(current, volume.count)) }
             .onSuccess { savedPage = current }
     }
 

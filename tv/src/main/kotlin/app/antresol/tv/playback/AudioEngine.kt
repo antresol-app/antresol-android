@@ -18,6 +18,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -31,6 +32,7 @@ import app.antresol.core.playback.PlaybackReporter
 import app.antresol.core.playback.PlaybackTiming
 import app.antresol.core.playback.ScrobbleTracker
 import app.antresol.core.playback.playbackApi
+import app.antresol.ui.playback.TranscodeSeekingPlayer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -45,7 +47,7 @@ sealed interface AudioContent {
     data class Music(val tracks: List<Track>) : AudioContent
 
     data class Audiobook(val book: BookDetail) : AudioContent {
-        val timeline = AudiobookTimeline.of(book.files)
+        val timeline = AudiobookTimeline.of(book.files, book.durationMs)
         val durationMs: Long get() = book.durationMs.takeIf { it > 0 } ?: timeline.totalMs
         val chapters: List<Chapter> get() = book.chapters
     }
@@ -184,6 +186,11 @@ class AudioEngine(
 
             override fun onPlayerError(e: PlaybackException) {
                 error = e
+                // Streams carry the Bearer header outside AntresolClient: a 401 here (device revoked)
+                // must still reach the session, which then returns the app to the profile picker.
+                if ((e.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode == 401) {
+                    scope.launch { runCatching { clientProvider()?.me() } }
+                }
             }
         })
     }
@@ -201,7 +208,7 @@ class AudioEngine(
         val queue = if (shuffled) tracks.shuffled() else tracks
         val start = if (shuffled) 0 else startIndex.coerceIn(0, queue.lastIndex)
         knownDurations.clear()
-        val items = queue.map { trackItem(client, it) }
+        val items = queue.mapIndexed { position, track -> trackItem(client, track, position) }
         content = AudioContent.Music(queue)
         queueId++
         exo.shuffleModeEnabled = false
@@ -213,18 +220,23 @@ class AudioEngine(
 
     /**
      * Adds [tracks] to the end of the music queue [queue] (from [playTracks]), e.g. the next pages of
-     * the Songs list. Does nothing when something else has started playing since.
+     * the Songs list. Does nothing when something else has started playing since (or playback
+     * stopped). Returns whether [queue] is still the one playing, so a caller can stop fetching.
      */
-    fun appendTracks(queue: Long, tracks: List<Track>) {
-        val client = clientProvider() ?: return
-        val music = content as? AudioContent.Music ?: return
-        if (queue != queueId || tracks.isEmpty()) return
-        exo.addMediaItems(tracks.map { trackItem(client, it) })
+    fun appendTracks(queue: Long, tracks: List<Track>): Boolean {
+        val client = clientProvider() ?: return false
+        val music = content as? AudioContent.Music ?: return false
+        if (queue != queueId) return false
+        if (tracks.isEmpty()) return true
+        val first = music.tracks.size
+        exo.addMediaItems(tracks.mapIndexed { offset, track -> trackItem(client, track, first + offset) })
         content = AudioContent.Music(music.tracks + tracks)
+        return true
     }
 
-    private fun trackItem(client: AntresolClient, track: Track): MediaItem = mediaItem(
-        id = "$TRACK_PREFIX${track.id}",
+    /** The media id is unique per queue position: a playlist can hold the same track twice. */
+    private fun trackItem(client: AntresolClient, track: Track, position: Int): MediaItem = mediaItem(
+        id = "$TRACK_PREFIX${track.id}:$position",
         uri = client.urls.track(track.id),
         durationMs = track.durationMs,
         metadata = MediaMetadata.Builder()
@@ -244,6 +256,9 @@ class AudioEngine(
         endAudiobook()
         val audiobook = AudioContent.Audiobook(book)
         val start = audiobook.timeline.locate(startBookMs.coerceIn(0, audiobook.durationMs))
+        // Unknown part lengths (locate falls back to the first part): reports would overwrite the
+        // saved position with meaningless whole-book times, so this playback writes none.
+        val reportsProgress = audiobook.timeline.isComplete
         knownDurations.clear()
         val artwork = client.urls.image(book.card.poster)?.let(Uri::parse)
         val items = book.files.mapIndexed { part, file ->
@@ -265,7 +280,7 @@ class AudioEngine(
         exo.repeatMode = Player.REPEAT_MODE_OFF
         exo.setPlaybackSpeed(speed)
         begin(items, start.partIndex, start.offsetMs)
-        reporter = BookReporter(client, audiobook).also { it.reporter.start() }
+        if (reportsProgress) reporter = BookReporter(client, audiobook).also { it.reporter.start() }
     }
 
     private fun begin(items: List<MediaItem>, startIndex: Int, startMs: Long) {
@@ -293,7 +308,7 @@ class AudioEngine(
         val urls = clientProvider()?.urls ?: return item
         val seconds = positionMs / 1000.0
         val uri = when {
-            item.mediaId.startsWith(TRACK_PREFIX) -> urls.track(item.mediaId.removePrefix(TRACK_PREFIX).toLong(), startSec = seconds)
+            item.mediaId.startsWith(TRACK_PREFIX) -> urls.track(item.mediaId.removePrefix(TRACK_PREFIX).substringBefore(':').toLong(), startSec = seconds)
             item.mediaId.startsWith(PART_PREFIX) ->
                 urls.audio(item.mediaId.removePrefix(PART_PREFIX).substringBefore(':').toLong(), startSec = seconds)
             else -> return item

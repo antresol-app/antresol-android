@@ -74,11 +74,23 @@ class TvSettings(context: Context) {
             return base.createConfigurationContext(config)
         }
 
-        /** Whether a track language code ("en", "eng", "rus") is the language [iso1]. */
+        /**
+         * Whether a track language code ("en", "eng", "rus", or a bibliographic "ger"/"fre" as
+         * Matroska and ffprobe report them) is the language [iso1].
+         */
         fun sameLanguage(code: String, iso1: String): Boolean {
             if (code.isBlank() || iso1.isBlank()) return false
             if (code.equals(iso1, ignoreCase = true)) return true
-            return runCatching { Locale(code).isO3Language.equals(Locale(iso1).isO3Language, ignoreCase = true) }.getOrDefault(false)
+            val terminology = code.lowercase().let { BIBLIOGRAPHIC_TO_TERMINOLOGY[it] ?: it }
+            return runCatching { Locale(terminology).isO3Language.equals(Locale(iso1).isO3Language, ignoreCase = true) }.getOrDefault(false)
         }
+
+        /** ISO 639-2/B codes that differ from the /T codes Java's `isO3Language` returns. */
+        private val BIBLIOGRAPHIC_TO_TERMINOLOGY = mapOf(
+            "alb" to "sqi", "arm" to "hye", "baq" to "eus", "bur" to "mya", "chi" to "zho",
+            "cze" to "ces", "dut" to "nld", "fre" to "fra", "geo" to "kat", "ger" to "deu",
+            "gre" to "ell", "ice" to "isl", "mac" to "mkd", "mao" to "mri", "may" to "msa",
+            "per" to "fas", "rum" to "ron", "slo" to "slk", "tib" to "bod", "wel" to "cym",
+        )
     }
 }

@@ -22,7 +22,9 @@ class VideoSessionTest {
             return PlayResponse(mode = "remux", url = "/api/hls/s$next/index.m3u8", startSec = (request.startSec ?: 0.0) - 1)
         }
 
-        override suspend fun mediaKey(minValidMs: Long) = "key"
+        var keyFails = false
+
+        override suspend fun mediaKey(minValidMs: Long) = if (keyFails) throw java.io.IOException("offline") else "key"
         override suspend fun stopSession(session: String) {
             stopped += session
         }
@@ -51,6 +53,19 @@ class VideoSessionTest {
         assertEquals(Quality.P720, api.requests[2].quality)
         assertEquals(2, api.requests[2].audioIndex)
         assertEquals(4_000, session.source!!.timeline.startMs)
+    }
+
+    @Test
+    fun aFailedMediaKeyStopsTheSessionJustOpened() = runTest {
+        val api = FakeApi()
+        val session = VideoSession(api, fileId = 7, caps = PlaybackCaps.EXOPLAYER_BASELINE)
+        session.open(0)
+        api.keyFails = true
+        val failure = runCatching { session.open(30_000) }.exceptionOrNull()
+        assertTrue(failure is java.io.IOException)
+        assertEquals("s1", api.requests[1].replaceSession)
+        assertEquals(listOf("s2"), api.stopped)
+        assertNull(session.session)
     }
 
     @Test

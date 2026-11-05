@@ -75,6 +75,7 @@ class SongsViewModel(
         private set
 
     private var job: Job? = null
+    private var queueFill: Job? = null
 
     init {
         reload()
@@ -99,8 +100,10 @@ class SongsViewModel(
     fun play(index: Int) {
         val songs = (state as? LoadState.Ready)?.value ?: return
         val queue = audio.playTracks(songs.tracks, index) ?: return
+        queueFill?.cancel()
         if (!songs.hasMore) return
-        appScope.launch {
+        // On the app scope: the queue keeps filling after leaving the page, until it is replaced or stopped.
+        queueFill = appScope.launch {
             var offset = songs.tracks.size
             while (offset < songs.total) {
                 val page = try {
@@ -110,8 +113,7 @@ class SongsViewModel(
                 } catch (_: Exception) {
                     return@launch // The queue just ends earlier; playing what is loaded matters more.
                 }
-                if (page.items.isEmpty()) return@launch
-                audio.appendTracks(queue, page.items)
+                if (page.items.isEmpty() || !audio.appendTracks(queue, page.items)) return@launch
                 offset += page.items.size
             }
         }

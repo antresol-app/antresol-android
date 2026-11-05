@@ -47,11 +47,18 @@ class AudiobookTimeline(partDurationsMs: List<Long>) {
     val totalMs: Long = durations.sum()
     val partCount: Int get() = durations.size
 
+    /**
+     * Every part has a known length. Without it whole-book positions mean nothing (the server has
+     * not probed the files yet): play from the first part and do not write progress.
+     */
+    val isComplete: Boolean = durations.isNotEmpty() && durations.all { it > 0 }
+
     fun partStartMs(index: Int): Long = starts[index]
 
     /** The part containing [bookMs] and the offset inside it. Positions past the end land at the end of the last part. */
     fun locate(bookMs: Long): PartPosition {
         require(durations.isNotEmpty()) { "Audiobook has no parts" }
+        if (totalMs == 0L) return PartPosition(0, 0)
         val clamped = bookMs.coerceIn(0, totalMs)
         for (i in durations.indices) {
             if (clamped < starts[i] + durations[i]) return PartPosition(i, clamped - starts[i])
@@ -62,7 +69,13 @@ class AudiobookTimeline(partDurationsMs: List<Long>) {
     fun bookMs(partIndex: Int, offsetMs: Long): Long = starts[partIndex] + offsetMs.coerceIn(0, durations[partIndex])
 
     companion object {
-        fun of(files: List<BookFile>): AudiobookTimeline = AudiobookTimeline(files.map { it.durationMs })
+        /** [bookDurationMs] stands in for the length of a single part the server did not report. */
+        fun of(files: List<BookFile>, bookDurationMs: Long = 0): AudiobookTimeline =
+            AudiobookTimeline(
+                files.map { it.durationMs }.let { durations ->
+                    if (durations.size == 1 && durations[0] <= 0) listOf(bookDurationMs) else durations
+                },
+            )
     }
 }
 

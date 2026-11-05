@@ -300,7 +300,8 @@ class AntresolClient(
 
     private suspend fun execute(request: Request, reportUnauthorized: Boolean = true): RawResponse {
         // Send the token read now, so a 401 is reported for the token that actually failed.
-        val sentToken = token
+        // Never hand the token to another host (a server-supplied absolute URL, e.g. a subtitle).
+        val sentToken = token?.takeIf { request.url.isSameOrigin(urls.baseUrl.toHttpUrl()) }
         val authorized = if (sentToken == null) request else request.newBuilder().header("Authorization", "Bearer $sentToken").build()
         val response = httpClient.newCall(authorized).awaitRaw()
         if (response.status in 200..299) return response

@@ -262,4 +262,17 @@ class AntresolClientTest {
         assertNull(client.token)
         assertEquals("/api/logout", server.takeRequest().path)
     }
+
+    @Test
+    fun tokenIsNeverSentToAnotherHost() = runTest {
+        val other = MockWebServer().apply { start() }
+        try {
+            other.enqueue(MockResponse().setBody("WEBVTT"))
+            client.token = "tok"
+            assertEquals("WEBVTT", client.subtitleVtt(other.url("/subs/1.vtt").toString()))
+            assertNull(other.takeRequest().getHeader("Authorization"))
+        } finally {
+            other.shutdown()
+        }
+    }
 }

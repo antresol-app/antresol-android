@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.playback.PendingWrites
 import app.antresol.core.model.Card
 import app.antresol.core.model.HomeResponse
 import app.antresol.core.model.Kind
@@ -43,7 +44,10 @@ data class HomeContent(
     }
 }
 
-class HomeViewModel(private val client: AntresolClient) : ViewModel() {
+class HomeViewModel(
+    private val client: AntresolClient,
+    private val pendingWrites: PendingWrites = PendingWrites(),
+) : ViewModel() {
     var state: LoadState<HomeContent> by mutableStateOf(LoadState.Loading)
         private set
 
@@ -67,6 +71,8 @@ class HomeViewModel(private val client: AntresolClient) : ViewModel() {
     fun refresh() {
         if (state !is LoadState.Ready || job?.isActive == true) return
         job = viewModelScope.launch {
+            // The player's final progress write must land first, or Continue Watching shows the old position.
+            pendingWrites.await()
             val fresh = load { HomeContent.from(client.home()) }
             if (fresh is LoadState.Ready && fresh != state) state = fresh
         }

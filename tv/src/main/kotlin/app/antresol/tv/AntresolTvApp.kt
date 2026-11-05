@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import app.antresol.core.api.ServerLanguage
 import app.antresol.core.model.DeviceInfo
+import app.antresol.core.playback.PendingWrites
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
 import app.antresol.tv.playback.AudioEngine
@@ -40,6 +41,9 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
 
     /** Music and audiobook playback, shared with [app.antresol.tv.playback.PlaybackService]. Created on first use. */
     val audio: AudioEngine by audioEngine
+
+    /** Final progress writes of closed players, awaited by screens that show progress. */
+    val pendingWrites = PendingWrites()
 
     /** Set when the system asks to show the now-playing screen (tap on the media session). */
     val nowPlayingRequested = MutableStateFlow(false)

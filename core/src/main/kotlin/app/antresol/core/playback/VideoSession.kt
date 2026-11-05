@@ -41,10 +41,13 @@ data class VideoSource(val play: PlayResponse, val url: String) {
 class VideoSession(
     private val api: VideoApi,
     val fileId: Long,
-    private val caps: PlaybackCaps,
+    caps: PlaybackCaps,
     quality: String = Quality.AUTO,
     audioIndex: Int? = null,
 ) {
+    /** The caps sent with every open; lowered when the device failed to play what it claimed. */
+    var caps: PlaybackCaps = caps
+
     var quality: String = quality
         private set
 
@@ -76,13 +79,21 @@ class VideoSession(
             replaceSession = session,
         )
         val play = api.play(fileId, request)
+        // The server already replaced the old session: from here on, this player holds the new one.
+        session = play.hlsSession
         // Every segment URI (and a direct stream's range requests) reuse this key until the end.
         val remainingMs = (play.durationMs - startMs).coerceAtLeast(0)
-        val opened = VideoSource(play, api.playbackUrl(play.url, api.mediaKey(remainingMs + KEY_MARGIN_MS)))
+        val key = try {
+            api.mediaKey(remainingMs + KEY_MARGIN_MS)
+        } catch (e: Exception) {
+            // Without a key nobody plays (or keeps alive) the new session: give the slot back.
+            detachSession()?.let { stopSession(it) }
+            throw e
+        }
+        val opened = VideoSource(play, api.playbackUrl(play.url, key))
         this.quality = quality
         this.audioIndex = audioIndex
         source = opened
-        session = opened.session
         return opened
     }
 

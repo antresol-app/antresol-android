@@ -1,5 +1,6 @@
 package app.antresol.core.playback
 
+import app.antresol.core.model.BookFile
 import app.antresol.core.model.BookProgress
 import app.antresol.core.model.PlayResponse
 import app.antresol.core.model.Progress
@@ -75,5 +76,15 @@ class TimelinesTest {
         val long = ScrobbleTracker(durationMs = 300_000)
         assertFalse(long.onPlayed(29_999))
         assertTrue(long.onPlayed(1))
+    }
+
+    @Test
+    fun audiobookWithUnknownDurationsStartsAtTheFirstPart() {
+        val unknown = AudiobookTimeline(listOf(0, 0))
+        assertFalse(unknown.isComplete)
+        assertEquals(PartPosition(0, 0), unknown.locate(120_000))
+        val single = AudiobookTimeline.of(listOf(BookFile(id = 1)), bookDurationMs = 60_000)
+        assertTrue(single.isComplete)
+        assertEquals(PartPosition(0, 30_000), single.locate(30_000))
     }
 }

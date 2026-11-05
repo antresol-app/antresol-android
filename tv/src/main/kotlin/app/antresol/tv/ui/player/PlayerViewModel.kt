@@ -21,6 +21,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
@@ -30,9 +31,12 @@ import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.FileInfo
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
+import app.antresol.core.model.PlaybackCaps
 import app.antresol.core.model.Quality
 import app.antresol.core.model.SubTrack
+import app.antresol.core.playback.CodecSupport
 import app.antresol.core.playback.Episodes
+import app.antresol.core.playback.PendingWrites
 import app.antresol.core.playback.PlaybackReporter
 import app.antresol.core.playback.Resume
 import app.antresol.core.playback.VideoSession
@@ -83,6 +87,9 @@ sealed interface PlayerPhase {
 /** The item has no playable file, or the player gave up on the stream. */
 class PlaybackUnavailableException(cause: Throwable? = null) : Exception(cause)
 
+/** `/api/play` answered 429: the profile already streams on as many devices as it may. */
+class StreamLimitException(cause: ApiException) : Exception(cause)
+
 /**
  * Plays one movie or episode (and the following episodes) with ExoPlayer, following the spec's
  * video flow: `/api/play` with the device caps, direct or HLS via `?mk=`, HLS keepalive and stop,
@@ -98,7 +105,14 @@ class PlayerViewModel(
     itemId: Long,
     resume: ResumeMode,
     private val preferences: TvPreferences = TvPreferences(),
+    private val pendingWrites: PendingWrites = PendingWrites(),
 ) : ViewModel() {
+    /**
+     * The client for this player's own calls (sessions, keepalives, progress, media key), pinned to
+     * the profile that started it: stops and final writes after a profile switch still count.
+     */
+    private val api: AntresolClient = client.pinned()
+
     val player: ExoPlayer = buildPlayer()
 
     var phase: PlayerPhase by mutableStateOf(PlayerPhase.Loading)
@@ -173,6 +187,9 @@ class PlayerViewModel(
     private var subtitleJob: Job? = null
     private var upNextJob: Job? = null
 
+    /** HLS stops in flight; a new `/api/play` waits for them, so the profile never briefly holds three sessions. */
+    private var stopping: Job? = null
+
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
             isPlaying = playing
@@ -194,13 +211,22 @@ class PlayerViewModel(
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            // A 401 on the stream means the media key died (its session was revoked): fetch a new one.
             val http = error.cause as? HttpDataSource.InvalidResponseCodeException
-            if (http?.responseCode == 401) appScope.launch { client.mediaKeys.invalidate() }
+            if (http?.responseCode == 401) {
+                // The media key died: its device session was revoked or deleted. Drop the key, and let
+                // an authenticated call report the 401 so the app returns to the profile picker.
+                appScope.launch {
+                    api.mediaKeys.invalidate()
+                    runCatching { client.me() }
+                }
+            }
             recover(error)
         }
 
-        override fun onTracksChanged(tracks: Tracks) = applyTextSelection()
+        override fun onTracksChanged(tracks: Tracks) {
+            applyTextSelection()
+            applyAudioSelection()
+        }
     }
 
     init {
@@ -230,7 +256,7 @@ class PlayerViewModel(
                 item = detail
                 currentItemId = detail.id
                 findNextEpisode(detail)
-                val saved = if (mode == ResumeMode.FromStart) 0L else savedPositionMs(detail.id)
+                val saved = if (mode == ResumeMode.FromStart) 0L else savedPositionMs(detail, file)
                 if (mode == ResumeMode.Ask && saved >= RESUME_PROMPT_MIN_MS) {
                     pendingFile = file
                     phase = PlayerPhase.AskResume(saved)
@@ -262,12 +288,17 @@ class PlayerViewModel(
         }
     }
 
-    private suspend fun savedPositionMs(itemId: Long): Long = try {
-        (Resume.videoStartSec(client.progress(itemId)) * 1000).toLong()
+    /**
+     * The resume point from `/api/progress`; if that fails, the watched fraction the item came with.
+     * Starting at 0 instead would overwrite the server's resume point with the first progress write.
+     */
+    private suspend fun savedPositionMs(detail: ItemDetail, file: FileInfo): Long = try {
+        (Resume.videoStartSec(client.progress(detail.id)) * 1000).toLong()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        0L
+        val fraction = detail.progress.takeIf { it > 0.0 && it < 1.0 } ?: 0.0
+        (fraction * (file.durationMs ?: 0L)).toLong()
     }
 
     private fun findNextEpisode(detail: ItemDetail) {
@@ -287,7 +318,9 @@ class PlayerViewModel(
 
     private suspend fun begin(file: FileInfo, startMs: Long) {
         releaseStream()
-        val newSession = VideoSession(client.videoApi(), file.id, DeviceCaps.current(context), quality = preferences.defaultQuality)
+        // Enumerating codecs can take hundreds of ms on a slow stick: keep it off the main thread.
+        val caps = withContext(Dispatchers.Default) { DeviceCaps.current(context) }
+        val newSession = VideoSession(api.videoApi(), file.id, caps, quality = preferences.defaultQuality)
         session = newSession
         selectedSubtitle = null
         rawSubtitles.clear()
@@ -295,19 +328,19 @@ class PlayerViewModel(
         val duration = opened.play.durationMs.takeIf { it > 0 } ?: file.durationMs ?: 0L
         durationMs = duration
         reporter = PlaybackReporter(
-            api = client.playbackApi(),
+            api = api.playbackApi(),
             scope = viewModelScope,
             itemId = currentItemId,
             durationMs = duration,
             positionMs = ::reportedPositionMs,
             isPlaying = { !released && player.isPlaying },
-            onSessionLost = { onSessionLost() },
+            onSessionLost = ::onSessionLost,
         ).also { it.start(opened.session) }
         preselectSubtitle(opened)
         load(opened, opened.timeline.initialPlayerSeekMs, playWhenReady = !backgrounded)
         phase = PlayerPhase.Playing
         // Opened while in the background: give the HLS slot back until the app returns.
-        if (backgrounded) onBackground()
+        if (backgrounded) suspendStream(resumeAtMs = startMs)
     }
 
     /** Stops the reporter and HLS session of a previous attempt (retry after a failed start). */
@@ -319,10 +352,24 @@ class PlayerViewModel(
         source = null
         val orphan = oldSession?.detachSession()?.takeIf { it != oldReporter?.hlsSession }
         if (oldReporter == null && orphan == null) return
-        appScope.launch {
+        stopInBackground {
             oldReporter?.stop()
             if (orphan != null && oldSession != null) oldSession.stopSession(orphan)
         }
+    }
+
+    /**
+     * Runs a session stop (or a final write plus stop) on the app scope, so it survives the player,
+     * and registers it: the next `/api/play` waits for it and screens refresh after it.
+     */
+    private fun stopInBackground(block: suspend () -> Unit) {
+        val previous = stopping
+        val job = appScope.launch {
+            previous?.join()
+            block()
+        }
+        stopping = job
+        pendingWrites.track(job)
     }
 
     /**
@@ -331,9 +378,16 @@ class PlayerViewModel(
      * it does not hold one of the profile's two slots.
      */
     private suspend fun openOrStop(target: VideoSession, open: suspend () -> VideoSource): VideoSource {
-        val opened = withContext(NonCancellable) { open() }
+        val opened = withContext(NonCancellable) {
+            stopping?.join()
+            try {
+                open()
+            } catch (e: ApiException) {
+                throw if (e.isTooManySessions) StreamLimitException(e) else e
+            }
+        }
         if (!currentCoroutineContext().isActive || released || session !== target) {
-            target.detachSession()?.let { id -> appScope.launch { target.stopSession(id) } }
+            target.detachSession()?.let { id -> stopInBackground { target.stopSession(id) } }
             throw CancellationException("Stream no longer wanted")
         }
         return opened
@@ -500,15 +554,16 @@ class PlayerViewModel(
         phase = PlayerPhase.Playing
     }
 
+    /** "Next Episode", the remote's Next key and the end of the Up Next countdown. */
     fun playNext() {
+        // Loading (a second press) is ignored: it would skip another episode.
+        if (phase != PlayerPhase.Playing && phase !is PlayerPhase.UpNext) return
         val next = nextEpisode ?: return
+        nextEpisode = null
         upNextJob?.cancel()
         upNextJob = null
-        phase = PlayerPhase.Loading
-        viewModelScope.launch {
-            finishCurrent()
-            start(next.id, ResumeMode.Resume)
-        }
+        finishCurrent()
+        start(next.id, ResumeMode.Resume)
     }
 
     private fun onEnded() {
@@ -519,6 +574,11 @@ class PlayerViewModel(
             phase = PlayerPhase.Finished
             return
         }
+        startUpNext(next)
+    }
+
+    private fun startUpNext(next: EpisodeCard) {
+        upNextJob?.cancel()
         upNextJob = viewModelScope.launch {
             for (seconds in UP_NEXT_SECONDS downTo 1) {
                 phase = PlayerPhase.UpNext(next, seconds)
@@ -528,8 +588,8 @@ class PlayerViewModel(
         }
     }
 
-    /** Final progress write and session stop for the item that is ending. */
-    private suspend fun finishCurrent() {
+    /** Final progress write and session stop for the item that is ending (the next `/api/play` waits for it). */
+    private fun finishCurrent() {
         lastFileMs = currentFileMs()
         val ending = reporter
         reporter = null
@@ -538,37 +598,52 @@ class PlayerViewModel(
         pendingReopen = null
         player.stop()
         player.clearMediaItems()
-        ending?.stop()
+        if (ending != null) stopInBackground { ending.stop() }
     }
 
     // endregion
 
     // region Lifecycle
 
-    /** The app went to background: pause, save, and give the HLS slot back to the profile. */
+    /**
+     * The app went to background: pause, save, and give the HLS slot back to the profile. The Up
+     * Next countdown stops (it restarts on return). A reopen in flight suspends its stream once loaded.
+     */
     fun onBackground() {
         backgrounded = true
         if (released) return
         player.pause()
-        if (source == null || phase != PlayerPhase.Playing || isSwitching) return
-        val current = session ?: return
-        // Detach now, so a quick return (which opens a new session) is never stopped by this.
-        val toStop = current.detachSession() ?: return
-        suspendedAtMs = currentFileMs()
-        val active = reporter
-        active?.attachSession(null)
-        appScope.launch {
-            active?.flush()
-            current.stopSession(toStop)
+        if (source == null || isSwitching) return
+        val upNext = phase as? PlayerPhase.UpNext
+        if (upNext != null) {
+            upNextJob?.cancel()
+            upNextJob = null
         }
+        // Only a playing stream reopens on return; at Up Next or after an error there is nothing to resume.
+        suspendStream(resumeAtMs = if (phase == PlayerPhase.Playing) currentFileMs() else null)
     }
 
-    /** Back from background: reopen the suspended HLS stream, paused, where it was. */
+    /** Back from background: restart the Up Next countdown, or reopen the suspended stream, paused, where it was. */
     fun onForeground() {
         backgrounded = false
+        (phase as? PlayerPhase.UpNext)?.let { if (upNextJob?.isActive != true) startUpNext(it.episode) }
         val at = suspendedAtMs ?: return
         suspendedAtMs = null
         reopen(at, playWhenReady = false)
+    }
+
+    /** Stops keepalives and the HLS session; [resumeAtMs] is where [onForeground] reopens (null: it does not). */
+    private fun suspendStream(resumeAtMs: Long?) {
+        val current = session ?: return
+        // Detach now, so a quick return (which opens a new session) is never stopped by this.
+        val toStop = current.detachSession() ?: return
+        suspendedAtMs = resumeAtMs
+        val active = reporter
+        active?.attachSession(null)
+        stopInBackground {
+            active?.flush()
+            current.stopSession(toStop)
+        }
     }
 
     override fun onCleared() {
@@ -580,7 +655,7 @@ class PlayerViewModel(
         reporter = null
         val stream = session
         val orphan = stream?.detachSession()?.takeIf { it != ending?.hlsSession }
-        appScope.launch {
+        stopInBackground {
             ending?.stop()
             if (orphan != null && stream != null) stream.stopSession(orphan)
             withContext(Dispatchers.IO) { subtitleDir.deleteRecursively() }
@@ -606,6 +681,8 @@ class PlayerViewModel(
     ) {
         if (session == null) return
         isSwitching = true
+        // The session being replaced gets no more keepalives: a late 404 for it means nothing.
+        reporter?.attachSession(null)
         pendingSeekMs = fileMs
         positionMs = fileMs
         val queued = pendingReopen
@@ -634,7 +711,8 @@ class PlayerViewModel(
                 reporter?.attachSession(opened.session)
                 val playerMs = if (opened.isHls) (request.fileMs - opened.timeline.startMs).coerceAtLeast(0) else request.fileMs
                 load(opened, playerMs, request.playWhenReady && !backgrounded)
-                if (backgrounded) onBackground()
+                // Went to background meanwhile (onBackground skipped the switch): give the slot back now.
+                if (backgrounded) suspendStream(resumeAtMs = request.fileMs)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -642,7 +720,7 @@ class PlayerViewModel(
                 player.pause()
                 // Nothing keeps the old session alive any more; stop it if the server still has it.
                 reporter?.attachSession(null)
-                current.detachSession()?.let { id -> appScope.launch { current.stopSession(id) } }
+                current.detachSession()?.let { id -> stopInBackground { current.stopSession(id) } }
                 phase = PlayerPhase.Failed(e)
                 return
             }
@@ -657,6 +735,10 @@ class PlayerViewModel(
             .setUri(opened.url)
             .apply { if (opened.isHls) setMimeType(MimeTypes.APPLICATION_M3U8) }
             .setSubtitleConfigurations(listOfNotNull(subtitle))
+            .build()
+        // The audio override of a previous direct stream refers to tracks of another file.
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
             .build()
         player.setMediaItem(mediaItem, playerStartMs)
         player.playWhenReady = playWhenReady
@@ -686,13 +768,13 @@ class PlayerViewModel(
     private suspend fun downloadVtt(url: String): String {
         repeat(SUBTITLE_ATTEMPTS - 1) {
             try {
-                return client.subtitleVtt(url)
+                return api.subtitleVtt(url)
             } catch (e: ApiException) {
                 val wait = e.retryAfterSec ?: throw e
                 delay(wait.coerceIn(1, 5) * 1_000)
             }
         }
-        return client.subtitleVtt(url)
+        return api.subtitleVtt(url)
     }
 
     /** Shows only the side-loaded subtitle (never tracks embedded in a direct-play MKV). */
@@ -711,26 +793,79 @@ class PlayerViewModel(
         player.trackSelectionParameters = builder.build()
     }
 
-    private fun onSessionLost() {
-        session?.sessionLost()
-        if (phase != PlayerPhase.Playing || backgrounded) return
+    /**
+     * Direct play keeps ExoPlayer's own audio choice from following the server's: select the audio
+     * track the server reports as playing (`audioIndex`, by its order among the file's audio streams).
+     */
+    private fun applyAudioSelection() {
+        if (released) return
+        val play = source?.play ?: return
+        if (play.isHls) return
+        val wanted = play.audioIndex ?: return
+        val ordinal = play.audio.sortedBy { it.index }.indexOfFirst { it.index == wanted }
+        val group = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.getOrNull(ordinal) ?: return
+        if (group.isSelected || !group.isTrackSupported(0)) return
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+            .build()
+    }
+
+    /** A keepalive got 404 for [lost]. Ignored unless it is the session this player still holds. */
+    private fun onSessionLost(lost: String) {
+        val current = session ?: return
+        if (current.session != lost) return
+        current.sessionLost()
+        if (phase != PlayerPhase.Playing || backgrounded || reopenJob?.isActive == true) return
         reopen(currentFileMs())
     }
 
-    /** Playback errors: reopen the stream (a new session) a couple of times, then give up. */
+    /**
+     * Playback errors: reopen the stream (a new session) a couple of times, then give up. When the
+     * device failed to decode what it claimed to support, the reopen asks for smaller caps, so the
+     * server remuxes or transcodes instead of answering with the same direct stream.
+     */
     private fun recover(error: PlaybackException) {
         val current = session
-        if (current == null || recoveries >= MAX_RECOVERIES) {
+        if (current == null) {
             phase = PlayerPhase.Failed(PlaybackUnavailableException(error))
             return
         }
-        recoveries++
+        val reduced = reducedCaps(current, error)
+        if (reduced == null && recoveries >= MAX_RECOVERIES) {
+            // Giving up: nothing may keep the broken session (and its transcode) alive.
+            detachAndStop(current)
+            phase = PlayerPhase.Failed(PlaybackUnavailableException(error))
+            return
+        }
+        if (reduced != null) current.caps = reduced else recoveries++
         val at = currentFileMs()
-        // Stop keepalives first: a 404 for the stopped session must not start a second reopen.
-        reporter?.attachSession(null)
-        val broken = current.detachSession()
-        if (broken != null) appScope.launch { current.stopSession(broken) }
+        detachAndStop(current)
         reopen(at)
+    }
+
+    /** Stops keepalives first (a 404 for the stopped session must not start a reopen), then the session. */
+    private fun detachAndStop(current: VideoSession) {
+        reporter?.attachSession(null)
+        val broken = current.detachSession() ?: return
+        stopInBackground { current.stopSession(broken) }
+    }
+
+    /** Smaller caps after a decoder or audio output failure, or null for other errors (or nothing left to drop). */
+    private fun reducedCaps(current: VideoSession, error: PlaybackException): PlaybackCaps? {
+        val format = (error as? ExoPlaybackException)?.takeIf { it.type == ExoPlaybackException.TYPE_RENDERER }?.rendererFormat
+        val audio = format?.sampleMimeType?.let(MimeTypes::isAudio) ?: false
+        return when (error.errorCode) {
+            PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
+            PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED,
+            -> CodecSupport.withoutFailingAudio(current.caps)
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+            -> if (audio) CodecSupport.withoutFailingAudio(current.caps) else CodecSupport.withoutFailingVideo(current.caps)
+            else -> null
+        }
     }
 
     private fun currentFileMs(): Long {

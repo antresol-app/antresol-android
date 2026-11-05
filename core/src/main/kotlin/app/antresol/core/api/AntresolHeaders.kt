@@ -19,7 +19,7 @@ class AntresolHeadersInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val server = baseUrl()?.toHttpUrlOrNull()
-        if (server == null || !request.url.sameOrigin(server)) return chain.proceed(request)
+        if (server == null || !request.url.isSameOrigin(server)) return chain.proceed(request)
 
         val builder = request.newBuilder().removeHeader("Origin")
         if (request.header("Accept-Language") == null) builder.header("Accept-Language", language())
@@ -29,10 +29,11 @@ class AntresolHeadersInterceptor(
         }
         return chain.proceed(builder.build())
     }
-
-    private fun HttpUrl.sameOrigin(other: HttpUrl): Boolean =
-        scheme == other.scheme && host == other.host && port == other.port
 }
+
+/** Same scheme, host and port: the only URLs that may receive the device token. */
+internal fun HttpUrl.isSameOrigin(other: HttpUrl): Boolean =
+    scheme == other.scheme && host == other.host && port == other.port
 
 /** Maps a locale language to what the server understands. The server defaults to Russian. */
 object ServerLanguage {

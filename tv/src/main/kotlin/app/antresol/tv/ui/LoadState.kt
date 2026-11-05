@@ -5,6 +5,7 @@ import app.antresol.core.api.ApiException
 import app.antresol.core.api.InvalidServerAddressException
 import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.tv.ui.player.PlaybackUnavailableException
+import app.antresol.tv.ui.player.StreamLimitException
 import app.antresol.ui.R
 import kotlinx.coroutines.CancellationException
 import java.io.IOException
@@ -29,9 +30,12 @@ suspend fun <T> load(block: suspend () -> T): LoadState<T> = try {
 fun Throwable.userMessage(resources: Resources): String = when (this) {
     is ServerNeedsSetupException -> resources.getString(R.string.server_needs_setup)
     is PlaybackUnavailableException -> resources.getString(R.string.error_playback)
+    is StreamLimitException -> resources.getString(R.string.error_too_many_streams)
     is ApiException -> when {
-        isTooManySessions -> resources.getString(R.string.error_too_many_streams)
         status == 200 -> resources.getString(R.string.error_generic)
+        // Throttled (e.g. too many sign-in attempts): the server's sentence plus how long to wait.
+        retryAfterSec != null && status == 429 ->
+            listOfNotNull(message, resources.getString(R.string.error_retry_after, retryAfterSec)).joinToString(" ")
         else -> message ?: resources.getString(R.string.error_generic)
     }
     is InvalidServerAddressException -> resources.getString(R.string.server_invalid_address)

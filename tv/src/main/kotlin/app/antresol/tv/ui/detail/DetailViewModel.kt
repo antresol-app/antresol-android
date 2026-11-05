@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.playback.PendingWrites
 import app.antresol.core.model.AlbumDetail
 import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.AudioTrack
@@ -113,6 +114,7 @@ class DetailViewModel(
     private val audio: AudioEngine,
     private val kind: String,
     private val id: Long,
+    private val pendingWrites: PendingWrites = PendingWrites(),
 ) : ViewModel() {
     var state: LoadState<DetailModel> by mutableStateOf(LoadState.Loading)
         private set
@@ -143,6 +145,7 @@ class DetailViewModel(
     fun refresh() {
         if (state !is LoadState.Ready || job?.isActive == true || toggleJob?.isActive == true) return
         job = viewModelScope.launch {
+            pendingWrites.await()
             val fresh = load { fetch() }
             if (fresh is LoadState.Ready) state = fresh
         }

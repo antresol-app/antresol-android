@@ -191,6 +191,9 @@ class PlaybackConnection(
         return generation
     }
 
+    /** Whether the queue [playTracks] returned [generation] for is still the one playing. */
+    fun isCurrentQueue(generation: Int): Boolean = generation == queueGeneration
+
     /** Adds [tracks] to the end of the queue started by [playTracks], unless another queue replaced it. */
     fun appendTracks(generation: Int, tracks: List<Track>) {
         if (generation != queueGeneration || tracks.isEmpty()) return

@@ -26,6 +26,10 @@ open class LoadViewModel<T>(
     var state: LoadState<T> by mutableStateOf(LoadState.Loading)
         private set
 
+    /** A pull-to-refresh is running. */
+    var refreshing: Boolean by mutableStateOf(false)
+        private set
+
     private var loadedAt = 0L
     private var job: Job? = null
 
@@ -43,6 +47,7 @@ open class LoadViewModel<T>(
 
     fun reload() {
         job?.cancel()
+        refreshing = false
         state = LoadState.Loading
         job = viewModelScope.launch { apply(load { fetch() }) }
     }
@@ -54,6 +59,21 @@ open class LoadViewModel<T>(
             pendingWrites?.await()
             val fresh = load { fetch() }
             if (fresh is LoadState.Ready) apply(fresh)
+        }
+    }
+
+    /** Pull to refresh: shows the indicator while it runs; an error page reloads instead. */
+    fun pullToRefresh() {
+        if (state is LoadState.Failed) return reload()
+        if (state !is LoadState.Ready || job?.isActive == true) return
+        refreshing = true
+        job = viewModelScope.launch {
+            try {
+                val fresh = load { fetch() }
+                if (fresh is LoadState.Ready) apply(fresh)
+            } finally {
+                refreshing = false
+            }
         }
     }
 

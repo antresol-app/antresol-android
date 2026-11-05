@@ -65,8 +65,13 @@ class PlaybackService : MediaSessionService() {
     private var reporter: PlaybackReporter? = null
     private var reporterBookId: Long? = null
 
-    /** The last whole-book position seen for [reporterBookId], for the final write after the queue moved on. */
-    private var lastBookMs = 0L
+    /**
+     * The last whole-book position seen for [reporterBookId], for its final write after the queue
+     * moved on. One per reporter: starting the next book never changes the previous book's final write.
+     */
+    private var lastBook: LastPosition? = null
+
+    private class LastPosition(var ms: Long)
 
     private val listener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) =
@@ -181,13 +186,14 @@ class PlaybackService : MediaSessionService() {
         val client = app.session.client?.pinned() ?: return
         val duration = extras?.getLong(QueueExtras.BOOK_DURATION_MS) ?: 0L
         reporterBookId = bookId
-        lastBookMs = currentBookMs() ?: 0L
+        val last = LastPosition(currentBookMs() ?: 0L)
+        lastBook = last
         reporter = PlaybackReporter(
             api = client.playbackApi(),
             scope = scope,
             itemId = bookId,
             durationMs = duration,
-            positionMs = { currentBookMs()?.takeIf { currentBookId() == bookId } ?: lastBookMs },
+            positionMs = { currentBookMs()?.takeIf { currentBookId() == bookId } ?: last.ms },
             isPlaying = { player.isPlaying },
             timing = PlaybackTiming.AUDIOBOOK,
         ).also { it.start() }
@@ -195,9 +201,11 @@ class PlaybackService : MediaSessionService() {
 
     /** Final write for the book that stopped being current; runs in the app scope to outlive the service. */
     private fun endReporter(): Job? {
+        captureBookPosition()
         val ending = reporter ?: return null
         reporter = null
         reporterBookId = null
+        lastBook = null
         val write = app.appScope.launch {
             try {
                 ending.stop()
@@ -213,7 +221,6 @@ class PlaybackService : MediaSessionService() {
 
     /** Stops and empties the player, completing once the final audiobook write is done (sign-out). */
     private fun flushAndStop(): ListenableFuture<SessionResult> {
-        captureBookPosition()
         val write = endReporter()
         player.stop()
         player.clearMediaItems()
@@ -251,7 +258,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun captureBookPosition() {
-        if (reporterBookId != null && currentBookId() == reporterBookId) currentBookMs()?.let { lastBookMs = it }
+        val last = lastBook ?: return
+        if (currentBookId() == reporterBookId) currentBookMs()?.let { last.ms = it }
     }
 
     private fun currentBookId(): Long? = (MediaRef.parse(player.currentMediaItem?.mediaId) as? MediaRef.BookPart)?.bookId

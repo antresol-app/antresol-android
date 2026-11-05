@@ -39,6 +39,7 @@ import app.antresol.mobile.ui.music.ShuffleAllButton
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PageTitle
+import app.antresol.mobile.ui.components.RefreshBox
 import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.Shelf
 import app.antresol.mobile.ui.components.TabHeader
@@ -55,7 +56,7 @@ data class MusicHome(val shelves: List<Shelf>, val genres: List<Genre>)
 /** Opens a grid page. */
 typealias OpenGrid = (source: GridSource, title: String) -> Unit
 
-/** Music: links to every album, song, artist and playlist, Shuffle All, genre chips, then the music shelves. */
+/** Music: Shuffle All, links to every album, song, artist and playlist, genre chips, then the music shelves. */
 @Composable
 fun MusicScreen(
     viewModel: LoadViewModel<MusicHome>,
@@ -88,18 +89,16 @@ private fun MusicShelves(
     val playlists = stringResource(R.string.music_playlists)
     ShelvesPage(
         title = stringResource(UiR.string.nav_music),
-        state = viewModel.state,
-        onRetry = viewModel::reload,
-        onResume = viewModel::refresh,
+        viewModel = viewModel,
         links = listOf(
             allAlbums to { onGrid(GridSource.Albums(), allAlbums) },
             songs to { onSongs(songs) },
             artists to { onGrid(GridSource.Artists, artists) },
             playlists to { onGrid(GridSource.Playlists, playlists) },
         ),
+        header = { ShuffleAllButton(onShuffleAll, enabled = !shuffling) },
         shelves = { it.shelves },
         extra = { music ->
-            item("shuffle") { ShuffleAllButton(onShuffleAll, enabled = !shuffling) }
             if (music.genres.isNotEmpty()) {
                 item("genres") {
                     SectionTitle(stringResource(R.string.music_genres), Modifier.padding(top = 12.dp))
@@ -124,9 +123,7 @@ fun BooksScreen(
     val comics = stringResource(R.string.books_comics)
     ShelvesPage(
         title = stringResource(UiR.string.nav_books),
-        state = viewModel.state,
-        onRetry = viewModel::reload,
-        onResume = viewModel::refresh,
+        viewModel = viewModel,
         links = listOf(
             allBooks to { onGrid(GridSource.Books(Kind.BOOK), allBooks) },
             audiobooks to { onGrid(GridSource.Books(Kind.AUDIOBOOK), audiobooks) },
@@ -142,38 +139,39 @@ fun BooksScreen(
 @Composable
 private fun <T> ShelvesPage(
     title: String,
-    state: LoadState<T>,
-    onRetry: () -> Unit,
-    onResume: () -> Unit,
+    viewModel: LoadViewModel<T>,
     links: List<Pair<String, () -> Unit>>,
     shelves: (T) -> List<Shelf>,
     extra: LazyListScope.(T) -> Unit,
     onOpen: (Card) -> Unit,
     onSeeAll: (Shelf) -> Unit,
+    /** Shown before the data loads (Shuffle All works even when the shelves failed). */
+    header: (@Composable () -> Unit)? = null,
 ) {
-    LifecycleResumeEffect(state) {
-        onResume()
+    LifecycleResumeEffect(viewModel) {
+        viewModel.refresh()
         onPauseOrDispose { }
     }
     val bottom = LocalBottomBarPadding.current
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AntresolColors.Background),
-        contentPadding = PaddingValues(bottom = bottom.calculateBottomPadding() + 16.dp),
-    ) {
-        item("top") { TabHeader() }
-        item("title") { PageTitle(title) }
-        item("links") { LinkRow(links) }
-        when (state) {
-            LoadState.Loading -> item("loading") { LoadingView() }
-            is LoadState.Failed -> item("error") { ErrorView(state.error, onRetry = onRetry) }
-            is LoadState.Ready -> {
-                extra(state.value)
-                val list = shelves(state.value).filter { it.cards.isNotEmpty() }
-                if (list.isEmpty()) item("empty") { EmptyView(stringResource(UiR.string.state_empty)) }
-                items(list, key = { it.id }) { shelf ->
-                    Shelf(title = shelf.title, cards = shelf.cards, onOpen = onOpen, onSeeAll = { onSeeAll(shelf) })
+    RefreshBox(viewModel.refreshing, onRefresh = viewModel::pullToRefresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = bottom.calculateBottomPadding() + 16.dp),
+        ) {
+            item("top") { TabHeader() }
+            item("title") { PageTitle(title) }
+            if (header != null) item("header") { header() }
+            item("links") { LinkRow(links) }
+            when (val state = viewModel.state) {
+                LoadState.Loading -> item("loading") { LoadingView() }
+                is LoadState.Failed -> item("error") { ErrorView(state.error, onRetry = viewModel::reload) }
+                is LoadState.Ready -> {
+                    extra(state.value)
+                    val list = shelves(state.value).filter { it.cards.isNotEmpty() }
+                    if (list.isEmpty()) item("empty") { EmptyView(stringResource(UiR.string.state_empty)) }
+                    items(list, key = { it.id }) { shelf ->
+                        Shelf(title = shelf.title, cards = shelf.cards, onOpen = onOpen, onSeeAll = { onSeeAll(shelf) })
+                    }
                 }
             }
         }

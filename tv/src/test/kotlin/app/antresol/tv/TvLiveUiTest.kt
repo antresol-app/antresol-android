@@ -404,7 +404,7 @@ class TvLiveUiTest {
         // Signed-in devices: this test device is listed as the current one (nothing is revoked here,
         // the other live tests may be signed in at the same time).
         key(KeyEvent.KEYCODE_DPAD_DOWN, times = 4)
-        waitFor(hasText("Signed-in Devices"))
+        waitFor(hasText("SIGNED-IN DEVICES"))
         waitFor(hasText("This device"))
         shot("31-settings-devices")
 

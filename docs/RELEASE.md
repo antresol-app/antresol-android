@@ -8,7 +8,8 @@
 Both apps share one release setup in the root `build.gradle.kts`:
 
 - **Version**: `versionName` is `antresolVersionName` in `gradle.properties` (1.0.0). `versionCode` is the
-  CI run number (`GITHUB_RUN_NUMBER`), or 1 for local builds. Play needs a higher code for every upload, which the
+  CI run number (`GITHUB_RUN_NUMBER`), or `antresolVersionCode` in `gradle.properties` for local builds
+  (2: the first Play upload). Play needs a higher code for every upload, which the
   run number gives.
 - **R8**: minification and resource shrinking. Keep rules: `ui-common/consumer-rules.pro` (API models and
   navigation routes) plus the rules that kotlinx.serialization, Media3, OkHttp, Coil and AndroidX ship in their

@@ -11,7 +11,8 @@ plugins {
 
 /**
  * Release settings shared by the TV and phone apps (see docs/RELEASE.md):
- * - version name from `antresolVersionName` (gradle.properties), version code from `GITHUB_RUN_NUMBER` (1 locally);
+ * - version name from `antresolVersionName` (gradle.properties), version code from `GITHUB_RUN_NUMBER` (CI) or
+ *   `antresolVersionCode` (gradle.properties, local builds);
  * - R8 minification and resource shrinking;
  * - signing from `ANTRESOL_KEYSTORE_FILE` / `_PASSWORD` / `_KEY_ALIAS` / `_KEY_PASSWORD` (environment variables or
  *   Gradle properties). Without a keystore the release outputs are unsigned.
@@ -24,7 +25,8 @@ subprojects {
         extensions.configure<ApplicationExtension> {
             defaultConfig {
                 versionName = providers.gradleProperty("antresolVersionName").get()
-                versionCode = setting("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+                versionCode = setting("GITHUB_RUN_NUMBER")?.toIntOrNull()
+                    ?: providers.gradleProperty("antresolVersionCode").get().toInt()
             }
             val keystore = setting("ANTRESOL_KEYSTORE_FILE")?.let { rootProject.file(it) }
             val release = keystore?.let { file ->

@@ -9,12 +9,12 @@ plugins {
 
 android {
     namespace = "app.antresol.tv"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.antresol.tv"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         // versionName, versionCode, R8 and signing: see the root build.gradle.kts.
     }
 

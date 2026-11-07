@@ -9,7 +9,8 @@ Running log between milestones. Newest entries at the bottom.
   (AGP 8.7.3, Kotlin 2.1.0 + compose plugin, Compose BOM 2024.12.01, tv-material 1.0.0, media3 1.5.1,
   OkHttp 4.12, kotlinx-serialization 1.7.3, coroutines 1.9.0, Coil 2.7.0, navigation 2.8.5, lifecycle 2.8.7,
   DataStore 1.1.1). Wrapper: Gradle 8.14.3. Java/Kotlin target 17 (no `jvmToolchain`, the container has JDK 21 only).
-- minSdk 26 for all Android modules (adaptive icons only, no legacy PNG launcher icons), compile/target 35.
+- minSdk 26 for all Android modules (adaptive icons only, no legacy PNG launcher icons), compile/target 35
+  (36 since "Google Play preparation").
 - CI: `.github/workflows/ci.yml` runs `./gradlew :core:test assembleDebug` on JDK 17 (extended since; see
   "Release engineering + screenshots").
 - `local.properties` (`sdk.dir=/opt/android-sdk`) is gitignored; create it in fresh clones.
@@ -859,3 +860,25 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
 - Screenshots: phone shots are framed 1080×1920 with localized captions (raw 1080×2400 exceeds Play's 2:1 aspect
   limit); tablet (`tenInchScreenshots/`) and TV (`tvScreenshots/`) gallery shots are copied unchanged. Selections
   and captions are lists at the top of the script. Details and caveats in `docs/PLAY_STORE.md` → Graphics.
+
+## Google Play preparation (API 36, real screenshots, version 2)
+
+- **API 36**: `compileSdk`/`targetSdk` 36 in `:tv`, `:mobile` (`:ui-common` compiles against 36). AGP stays 8.7.3:
+  it links, dexes and runs R8 against android-36 without problems, so `android.suppressUnsupportedCompileSdk=36`
+  silences its "untested API level" warning instead of an AGP/Kotlin bump. Robolectric tests keep their pinned
+  `@Config(sdk = 34/35)`.
+- API 36 behaviour checked on emulators (phone, tablet, TV): edge to edge was already on (`enableEdgeToEdge`,
+  insets per screen) and is correct; the one visible problem was scrolled titles colliding with the transparent
+  status bar, fixed with a short status-bar gradient in `MainShell` (not on readers/player). Back handling is all
+  `BackHandler` (predictive back works); the player's `sensorLandscape` is ignored on large screens from API 36,
+  which is fine (the tablet is landscape anyway, and the player handles any orientation).
+- **Version**: local builds take `versionCode` from `antresolVersionCode` (2) in `gradle.properties`; CI still uses
+  the run number. `changelogs/2.txt` (copy of 1.txt) in all four locale folders.
+- **Store screenshots**: emulator captures (API 36 Google APIs / Android TV images, Pixel 8, Pixel Tablet, TV 1080p)
+  of the debug builds signed in to a demo server with open-licensed content, demo-mode status bar; 8 per form factor
+  in `docs/store-screenshots/`. `scripts/render-store-graphics.js` turns them into posters with CSS device frames
+  (`--screenshots` for posters only). Details in `docs/PLAY_STORE.md` → Graphics. The Robolectric gallery in
+  `docs/screenshots` is unchanged and no longer feeds the store.
+- Observed, not fixed: the profile picker shows the server as `host:443` for an https address (explicit default port).
+- Release AABs for both apps signed with the upload key and verified (`jarsigner -verify`, bundletool: versionCode 2,
+  targetSdk 36). The release builds were still not installed on a device.

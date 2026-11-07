@@ -10,7 +10,8 @@ Two apps, two listings, one developer account:
 Each locale folder has `title.txt` (≤ 30 characters), `short_description.txt` (≤ 80), `full_description.txt`
 (≤ 4000) and `changelogs/<versionCode>.txt` (≤ 500). The folders follow fastlane `supply`'s layout, so they can be
 uploaded with `fastlane supply --metadata_path mobile/fastlane/metadata/android --package_name app.antresol.mobile`
-(and the same for `tv`). `changelogs/1.txt` is the first release's text; CI builds get the run number as their
+(and the same for `tv`). `changelogs/1.txt` is the first release's text and `changelogs/2.txt` the same text for the first Play upload
+(versionCode 2, see `antresolVersionCode`); CI builds get the run number as their
 versionCode, so copy the text to `changelogs/<versionCode>.txt` (or `default.txt`) for the build you upload.
 The copy follows the server README: the app needs the user's own Antresol server and provides no content.
 
@@ -18,22 +19,32 @@ The copy follows the server README: the app needs the user's own Antresol server
 
 All listing graphics are in the fastlane trees next to the text (`<app>/fastlane/metadata/android/<locale>/images/`),
 so `fastlane supply` uploads them with the listing. They are rendered by `scripts/render-store-graphics.js`
-(Playwright + Chromium, `node scripts/render-store-graphics.js`); re-run it after the logo, the tagline or the
-gallery changes. Both locales (en-US, ru-RU) of both apps have:
+(Playwright + Chromium; `NODE_PATH=<dir containing node_modules/playwright> node scripts/render-store-graphics.js`).
+`--screenshots` renders only the screenshot posters and leaves the icon, feature graphic and TV banner alone;
+`--offline` skips loading Inter from Google Fonts. Both locales (en-US, ru-RU) of both apps have:
 
 - `icon.png` 512×512, 32-bit RGBA PNG, full-bleed square from `docs/design-ref/app-icon.svg` (Play applies the mask).
 - `featureGraphic.png` 1024×500: brand gradient, logo mark, "Antresol" and the localized tagline, centred
   (en "Your films, music and books. One library.", ru "Твои фильмы. Твоя музыка. Твои книги. В одной библиотеке.").
-- **Phone app**: `phoneScreenshots/` — 8 gallery shots framed on the brand gradient with a localized caption,
-  1080×1920 (the raw 1080×2400 gallery shots are taller than Play's 2:1 limit, so they cannot be uploaded as they
-  are); `tenInchScreenshots/` — 8 tablet shots (2048×1536) copied as they are.
-- **TV app**: `tvBanner.png` 1280×720 in the feature-graphic style; `tvScreenshots/` — 8 gallery shots
-  (1920×1080) copied as they are.
+- **Phone app**: `phoneScreenshots/` — 8 posters 1080×1920; `tenInchScreenshots/` — 8 posters 2560×1600.
+- **TV app**: `tvBanner.png` 1280×720 in the feature-graphic style; `tvScreenshots/` — 8 posters 1920×1080.
 
-Caveats: the screenshots come from the Robolectric gallery (English UI, test library without posters), so the
-ru-RU listing shows English UI under Russian captions. Replace them with shots from a real device and a real
-library (and Russian UI for ru-RU) before publishing if possible, then re-run the script. No 7" tablet set is
-made; Play accepts the 10" set for tablets.
+### Screenshot posters
+
+Each poster is the brand gradient, a short English caption and a real capture inside a device frame drawn in CSS
+(no third-party device art): a phone with thin bezel, concentric rounded corners, punch-hole camera and side buttons
+(turned to landscape for the video player), a tablet with a wider bezel and a camera in the long edge, and a TV with
+a slim bezel on a small stand. The same English posters go to en-US and ru-RU (the app UI in them is English).
+Sizes are inside Play's limits (each side 320–3840 px, long side ≤ 2× short side, < 8 MB).
+
+The captures are in `docs/store-screenshots/{phone,tablet,tv}/` (JPEG): home, film, series, player (paused, with
+controls), album, now playing, books and search. They come from emulators (API 36: Pixel 8 1080×2400, Pixel Tablet
+2560×1600, Android TV 1080p) running the debug builds signed in to a demo server with open-licensed content (Blender
+open movies, Creative Commons music, public-domain books), with the demo status bar (9:41, full battery, Wi-Fi).
+None shows the server address, the sign-in screen or Settings. To refresh them: sign in on the emulators, drive the
+app with `adb shell input`, `adb exec-out screencap -p`, save the picks under the same names, then re-run the script
+with `--screenshots`. Captions and order are the `SHOTS` table at the top of the script. No 7" tablet set is made;
+Play accepts the 10" set for tablets.
 
 ## Android TV review notes
 

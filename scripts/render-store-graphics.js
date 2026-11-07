@@ -2,9 +2,13 @@
 // Renders the Google Play listing graphics into both fastlane metadata trees
 // (mobile/fastlane and tv/fastlane) for en-US and ru-RU:
 //   icon.png (512x512), featureGraphic.png (1024x500), tvBanner.png (1280x720, TV only),
-//   phoneScreenshots/ (1080x1920 framed + captioned), tenInchScreenshots/ and tvScreenshots/ (copied).
-// Sources: docs/design-ref/{app-icon,logo-mark}.svg and the gallery in docs/screenshots.
-// Usage: node scripts/render-store-graphics.js   (needs the `playwright` npm package with Chromium)
+//   phoneScreenshots/ (1080x1920), tenInchScreenshots/ (2560x1600) and tvScreenshots/ (1920x1080): posters with the
+//   brand gradient, an English caption and the capture inside a CSS-drawn phone, tablet or TV frame.
+// Sources: docs/design-ref/{app-icon,logo-mark}.svg and the emulator captures in docs/store-screenshots.
+// Usage: node scripts/render-store-graphics.js [--screenshots] [--offline]
+//   --screenshots  only the posters (leave icon, feature graphic and TV banner untouched)
+//   --offline      do not load Inter from Google Fonts (system sans instead)
+// Needs the `playwright` npm package with Chromium (e.g. NODE_PATH=<dir with node_modules/playwright>).
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -15,27 +19,51 @@ const ROOT = path.resolve(__dirname, '..');
 const LOCALES = ['en-US', 'ru-RU'];
 const FONT = `'Inter', 'DejaVu Sans', system-ui, sans-serif`;
 const BRAND = 'linear-gradient(160deg, #3a1c8c, #9b2fc9)';
+// Inter from Google Fonts when online (`--offline` skips it and uses the system sans).
+const FONT_LINK = process.argv.includes('--offline') ? ''
+  : '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=block">';
+const ONLY_SCREENSHOTS = process.argv.includes('--screenshots');
 
 const TAGLINE = {
   'en-US': ['Your films, music and books.', 'One library.'],
   'ru-RU': ['Твои фильмы. Твоя музыка. Твои книги.', 'В одной библиотеке.'],
 };
 
-// Phone shots: [gallery file, en caption, ru caption]
-const PHONE = [
-  ['04-home.png', 'Your whole library, one tap away', 'Вся библиотека под рукой'],
-  ['07-movie-detail.png', 'Every audio track and subtitle', 'Все звуковые дорожки и субтитры'],
-  ['08-series-detail.png', 'Series with seasons and progress', 'Сериалы с сезонами и прогрессом'],
-  ['11-music.png', 'All your music in one place', 'Вся твоя музыка в одном месте'],
-  ['14-now-playing.png', 'Keeps playing in the background', 'Играет и в фоне'],
-  ['16-books.png', 'Books, comics and audiobooks', 'Книги, комиксы и аудиокниги'],
-  ['18-audiobook-playing.png', 'Audiobooks pick up where you left off', 'Аудиокниги с того места, где остановился'],
-  ['21-search-results.png', 'Find anything in seconds', 'Найдётся всё за секунды'],
-];
-const TABLET = ['02-home.png', '03-movies.png', '04-movie-detail.png', '05-series-detail.png',
-  '08-music.png', '10-album.png', '12-books.png', '13-audiobook.png'];
-const TV = ['04-home.png', '05-home-shelves.png', '07-movie-detail.png', '08-series-detail.png',
-  '11-music.png', '13-now-playing.png', '14-books.png', '15-audiobook.png'];
+// Store screenshots: real captures from emulators signed in to a demo server with open-licensed content
+// (docs/store-screenshots/{phone,tablet,tv}/*.jpg). Each becomes a "poster": brand gradient, an English caption
+// and the capture inside a device frame drawn here in CSS (no third-party device art). [source, caption]
+const SHOTS = {
+  phone: [
+    ['home', 'Your whole library, one tap away'],
+    ['film', 'Every audio track and subtitle'],
+    ['series', 'Series with seasons and progress'],
+    ['player', 'Picks up right where you stopped'],
+    ['album', 'All your music in one place'],
+    ['now-playing', 'Keeps playing in the background'],
+    ['books', 'Books, comics and audiobooks'],
+    ['search', 'Find anything in seconds'],
+  ],
+  tablet: [
+    ['home', 'Your whole library on a bigger screen'],
+    ['film', 'Every audio track and subtitle'],
+    ['series', 'Series with seasons and progress'],
+    ['player', 'Picks up right where you stopped'],
+    ['album', 'All your music in one place'],
+    ['now-playing', 'Keeps playing in the background'],
+    ['books', 'Books, comics and audiobooks'],
+    ['search', 'Find anything in seconds'],
+  ],
+  tv: [
+    ['home', 'Your library on the big screen'],
+    ['film', 'Every audio track and subtitle'],
+    ['series', 'Series with seasons and progress'],
+    ['player', 'Picks up right where you stopped'],
+    ['album', 'All your music, made for the remote'],
+    ['now-playing', 'Up Next, lyrics and a sleep timer'],
+    ['books', 'Books, comics and audiobooks'],
+    ['search', 'Find anything in seconds'],
+  ],
+};
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const dataUrl = (p) => 'data:image/png;base64,' + fs.readFileSync(path.join(ROOT, p)).toString('base64');
@@ -45,7 +73,7 @@ const iconSvg = read('docs/design-ref/app-icon.svg')
   .replace('rx="228"', '')
   .replace('<svg ', '<svg width="512" height="512" ');
 
-const page = (w, h, body, css = '') => `<!doctype html><html><head><meta charset="utf-8"><style>
+const page = (w, h, body, css = '') => `<!doctype html><html><head><meta charset="utf-8">${FONT_LINK}<style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:${w}px;height:${h}px;overflow:hidden;background:#000}
 body{font-family:${FONT};color:#fff;-webkit-font-smoothing:antialiased}
@@ -70,15 +98,97 @@ function lockup(w, h, locale, s) {
   color:rgba(255,255,255,.86);letter-spacing:-0.005em}`);
 }
 
-function phoneFrame(file, caption) {
-  const W = 1080, H = 1920, SH = 1500, SW = Math.round(SH * 1080 / 2400);
-  return page(W, H, `<div class="brand">${glows(W, H)}
-  <div class="cap">${caption}</div>
-  <img class="shot" src="${dataUrl('docs/screenshots/mobile/phone/' + file)}"></div>`, `
-.cap{position:absolute;left:90px;right:90px;top:110px;height:220px;display:flex;align-items:center;justify-content:center;
-  text-align:center;text-wrap:balance;font-weight:800;font-size:76px;line-height:1.1;letter-spacing:-0.02em}
-.shot{position:absolute;left:${(W - SW) / 2}px;top:${H - SH - 70}px;width:${SW}px;height:${SH}px;border-radius:56px;
-  border:3px solid rgba(255,255,255,.35);box-shadow:0 30px 80px rgba(20,6,46,.55)}`);
+// Poster canvases (Play: each side 320–3840 px, long side at most twice the short side) and where the caption and the
+// device go. Captions are English for every locale (the UI in the captures is English).
+const POSTER = {
+  phone: { w: 1080, h: 1920, font: 76, cap: [90, 110, 900, 230], area: [70, 400, 940, 1450] },
+  tablet: { w: 2560, h: 1600, font: 92, cap: [160, 70, 2240, 230], area: [140, 350, 2280, 1180] },
+  tv: { w: 1920, h: 1080, font: 62, cap: [160, 40, 1600, 150], area: [150, 215, 1620, 840] },
+};
+
+const jpegUrl = (p) => 'data:image/jpeg;base64,' + fs.readFileSync(path.join(ROOT, p)).toString('base64');
+const jpegSize = (p) => { // width/height from the SOFn marker
+  const b = fs.readFileSync(path.join(ROOT, p));
+  for (let i = 2; i < b.length;) {
+    const marker = b[i + 1], len = b.readUInt16BE(i + 2);
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+      return { w: b.readUInt16BE(i + 7), h: b.readUInt16BE(i + 5) };
+    }
+    i += 2 + len;
+  }
+  throw new Error('No JPEG size in ' + p);
+};
+
+// Device frames, all measured from the screen's short side (s) so phone, tablet and TV keep their proportions:
+// bezel width, screen corner radius (the frame's outer radius is screen radius + bezel, so the corners stay concentric).
+const DEVICE = {
+  phone: { bezel: 0.03, radius: 0.096, stand: 0 },   // Pixel-8-like: thin bezel, round corners, punch-hole camera
+  tablet: { bezel: 0.045, radius: 0.035, stand: 0 }, // tablet: wider bezel, camera in the long top bezel
+  tv: { bezel: 0.012, radius: 0.006, stand: 0.075 }, // TV: slim bezel on a small stand
+};
+
+function devicePoster(kind, src, caption) {
+  const P = POSTER[kind], D = DEVICE[kind];
+  const img = jpegSize(src);
+  const landscape = img.w > img.h;
+  const [ax, ay, aw, ah] = P.area;
+  // Largest screen that fits the area with its bezel (and stand), keeping the capture's aspect ratio.
+  const fit = (sw) => {
+    const sh = sw * img.h / img.w, short = Math.min(sw, sh), bz = short * D.bezel;
+    return { sw, sh, bz, w: sw + 2 * bz, h: sh + 2 * bz + short * D.stand };
+  };
+  let lo = 10, hi = aw;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2, f = fit(m); if (f.w <= aw && f.h <= ah) lo = m; else hi = m; }
+  const f = fit(Math.floor(lo));
+  const sw = Math.round(f.sw), sh = Math.round(f.sh), bz = Math.round(f.bz), short = Math.min(sw, sh);
+  const r = Math.round(short * D.radius);
+  const left = Math.round(ax + (aw - f.w) / 2);
+  let top = Math.round(ay + (ah - f.h) / 2), capTop = P.cap[1];
+  if (landscape && P.h > P.w) {
+    // A landscape capture on a portrait poster (the phone player): centre caption and device together.
+    const gap = 80, group = P.cap[3] + gap + f.h;
+    capTop = Math.round((P.h - group) / 2);
+    top = capTop + P.cap[3] + gap;
+  }
+  let extras = '';
+  if (kind === 'phone') {
+    // Punch-hole camera: centred on the top edge in portrait; the device turns 90° for landscape video, so the
+    // camera goes to the left edge and the side buttons (right edge in portrait) to the top.
+    const d = Math.round(short * 0.067), off = Math.round(short * 0.061);
+    extras += landscape
+      ? `<div class="hole" style="width:${d}px;height:${d}px;left:${bz + off - d / 2}px;top:${bz + sh / 2 - d / 2}px"></div>`
+      : `<div class="hole" style="width:${d}px;height:${d}px;left:${bz + sw / 2 - d / 2}px;top:${bz + off - d / 2}px"></div>`;
+    const bw = Math.max(5, Math.round(short * 0.009));
+    const btn = (from, len) => landscape
+      ? `<div class="btn" style="left:${Math.round(f.w * (1 - from - len))}px;top:${-bw + 1}px;width:${Math.round(f.w * len)}px;height:${bw}px"></div>`
+      : `<div class="btn" style="top:${Math.round(f.h * from)}px;right:${-bw + 1}px;height:${Math.round(f.h * len)}px;width:${bw}px"></div>`;
+    extras += btn(0.2, 0.07) + btn(0.31, 0.13);
+  } else if (kind === 'tablet') {
+    const d = Math.max(8, Math.round(bz * 0.32));
+    extras += `<div class="hole" style="width:${d}px;height:${d}px;left:${f.w / 2 - d / 2}px;top:${bz / 2 - d / 2}px"></div>`;
+  } else if (kind === 'tv') {
+    const neckW = Math.round(sw * 0.07), neckH = Math.round(short * D.stand * 0.55);
+    const footW = Math.round(sw * 0.3), footH = Math.round(short * D.stand * 0.45);
+    extras += `<div class="neck" style="width:${neckW}px;height:${neckH}px;left:${f.w / 2 - neckW / 2}px;top:${sh + 2 * bz}px"></div>
+      <div class="foot" style="width:${footW}px;height:${footH}px;left:${f.w / 2 - footW / 2}px;top:${sh + 2 * bz + neckH}px"></div>`;
+  }
+  return page(P.w, P.h, `<div class="brand">${glows(P.w, P.h)}
+  <div class="cap" style="top:${capTop}px">${caption}</div>
+  <div class="dev" style="left:${left}px;top:${top}px;width:${sw + 2 * bz}px;height:${sh + 2 * bz}px;border-radius:${r + bz}px">
+    <div class="screen" style="left:${bz}px;top:${bz}px;width:${sw}px;height:${sh}px;border-radius:${r}px">
+      <img src="${jpegUrl(src)}" width="${sw}" height="${sh}"></div>${extras}</div></div>`, `
+.cap{position:absolute;left:${P.cap[0]}px;width:${P.cap[2]}px;height:${P.cap[3]}px;display:flex;
+  align-items:center;justify-content:center;text-align:center;text-wrap:balance;font-weight:800;font-size:${P.font}px;
+  line-height:1.1;letter-spacing:-0.02em}
+.dev{position:absolute;background:#0b0b0f;
+  box-shadow:inset 0 0 0 2px #34343d,inset 0 0 0 4px #121217,0 ${P.h * 0.02}px ${P.h * 0.05}px rgba(14,4,40,.55)}
+.screen{position:absolute;overflow:hidden;background:#000}
+.screen img{display:block;width:100%;height:100%}
+.hole{position:absolute;border-radius:50%;background:#050507;box-shadow:inset 0 0 0 2px #1d1d24}
+.btn{position:absolute;background:#26262d;border-radius:3px}
+.neck{position:absolute;background:linear-gradient(90deg,#16161b,#2c2c34,#16161b)}
+.foot{position:absolute;border-radius:6px 6px 3px 3px;background:linear-gradient(180deg,#2c2c34,#121216);
+  box-shadow:0 ${P.h * 0.012}px ${P.h * 0.03}px rgba(14,4,40,.5)}`);
 }
 
 async function shot(browser, html, w, h, out) {
@@ -125,30 +235,27 @@ async function toRgba(browser, file) {
     chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]));
 }
 
-function copyShots(srcDir, files, outDir) {
-  fs.rmSync(outDir, { recursive: true, force: true });
-  fs.mkdirSync(outDir, { recursive: true });
-  files.forEach((f) => fs.copyFileSync(path.join(ROOT, srcDir, f), path.join(outDir, f)));
-}
-
 (async () => {
   const browser = await chromium.launch();
   for (const app of ['mobile', 'tv']) {
     for (const loc of LOCALES) {
       const img = path.join(ROOT, app, 'fastlane/metadata/android', loc, 'images');
-      await shot(browser, page(512, 512, iconSvg), 512, 512, path.join(img, 'icon.png'));
-      await toRgba(browser, path.join(img, 'icon.png'));
-      await shot(browser, lockup(1024, 500, loc, 1), 1024, 500, path.join(img, 'featureGraphic.png'));
-      if (app === 'tv') {
-        await shot(browser, lockup(1280, 720, loc, 1.3), 1280, 720, path.join(img, 'tvBanner.png'));
-        copyShots('docs/screenshots/tv', TV, path.join(img, 'tvScreenshots'));
-      } else {
-        const dir = path.join(img, 'phoneScreenshots');
+      if (!ONLY_SCREENSHOTS) {
+        await shot(browser, page(512, 512, iconSvg), 512, 512, path.join(img, 'icon.png'));
+        await toRgba(browser, path.join(img, 'icon.png'));
+        await shot(browser, lockup(1024, 500, loc, 1), 1024, 500, path.join(img, 'featureGraphic.png'));
+        if (app === 'tv') await shot(browser, lockup(1280, 720, loc, 1.3), 1280, 720, path.join(img, 'tvBanner.png'));
+      }
+      const sets = app === 'tv' ? [['tv', 'tvScreenshots']] : [['phone', 'phoneScreenshots'], ['tablet', 'tenInchScreenshots']];
+      for (const [kind, folder] of sets) {
+        const dir = path.join(img, folder);
         fs.rmSync(dir, { recursive: true, force: true });
-        for (const [file, en, ru] of PHONE) {
-          await shot(browser, phoneFrame(file, loc === 'ru-RU' ? ru : en), 1080, 1920, path.join(dir, file));
+        let n = 0;
+        for (const [name, caption] of SHOTS[kind]) {
+          const out = path.join(dir, `${String(++n).padStart(2, '0')}-${name}.png`);
+          const html = devicePoster(kind, `docs/store-screenshots/${kind}/${name}.jpg`, caption);
+          await shot(browser, html, POSTER[kind].w, POSTER[kind].h, out);
         }
-        copyShots('docs/screenshots/mobile/tablet', TABLET, path.join(img, 'tenInchScreenshots'));
       }
     }
   }

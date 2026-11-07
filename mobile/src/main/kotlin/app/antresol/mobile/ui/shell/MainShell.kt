@@ -23,8 +23,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -386,6 +388,21 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
             }
             if (!fullScreen) {
+                // Edge to edge (enforced from API 35): scrolled titles must not collide with the status bar icons.
+                val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                Box(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(statusTop + 16.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                0f to AntresolColors.Background.copy(alpha = 0.8f),
+                                0.6f to AntresolColors.Background.copy(alpha = 0.55f),
+                                1f to Color.Transparent,
+                            ),
+                        ),
+                )
                 // Content fades out under the floating bars, as the glass has no backdrop blur on Android.
                 Column(
                     modifier = Modifier

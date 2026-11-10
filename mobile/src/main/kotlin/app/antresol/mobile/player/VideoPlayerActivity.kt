@@ -233,6 +233,14 @@ class VideoPlayerActivity : ComponentActivity() {
         private var current: WeakReference<VideoPlayerActivity>? = null
         private val sessionCounter = AtomicInteger()
 
+        /** Closes the open video (for example in picture-in-picture) before something else plays. */
+        fun closeCurrent() {
+            current?.get()?.let { previous ->
+                previous.closePlayer()
+                previous.finish()
+            }
+        }
+
         /** Plays a movie or episode; a series or season id plays its next episode. */
         fun start(context: Context, itemId: Long, resume: ResumeMode) {
             context.startActivity(

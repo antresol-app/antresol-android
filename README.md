@@ -22,7 +22,7 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
 
 - **Onboarding**: server address (a bare host gets port 8420), profile picker with gradient avatars
   and a password step for protected profiles. The session is restored on launch.
-- **Shell**: a centred glass pill (Search, Home, Movies, TV Shows, Music, Books), the now-playing chip
+- **Shell**: a centred glass pill (Search, Home, Movies, TV Shows, TV, Music, Books), the now-playing chip
   while music or an audiobook is loaded, and the avatar, which opens Settings. Down from the pills
   enters the page and returns to the element that was focused there.
 - **Home**: an artwork-tinted hero (eyebrow line, huge title, white Play and glass Details pills),
@@ -34,6 +34,12 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   ExoPlayer player sends the device's codec caps (direct play, or HLS remux/transcode), has audio,
   subtitle and quality menus, keeps the HLS session alive, saves progress every 10 s and counts
   down to the next episode.
+- **TV (live channels)**: the server's channels by section («All» shows every section as a row, a
+  section pill shows only its channels), each card with the programme on air, its live progress and
+  the channel's gradient logo. OK opens the full-screen live player (live edge, no seeking): Up/Down,
+  Channel +/− and Page Up/Down switch to the next/previous channel by number (wrapping); the overlay
+  shows the channel, the programme with its time and progress, and what is next. A starting channel
+  is retried automatically; other server refusals are shown with Try Again.
 - **Music**: album, artist and playlist pages with Play, Shuffle, Favorite and the track list. A
   Media3 `MediaSessionService` keeps music playing while you browse or leave the app and publishes
   it to the system's now-playing card and remote. Now Playing has an artwork-tinted background,
@@ -64,6 +70,9 @@ Live UI tests (`TvLiveUiTest`, Robolectric with D-pad key events) write screensh
   and quality menus. It uses direct play when the phone can decode the file, and HLS remux or
   transcode when it can't. Progress is saved every 10 s, and the next episode starts after a
   countdown.
+- **TV (live channels)**: «On Air Now» on Home (after the first shelf; the tab bar keeps five tabs, as
+  on the web) opens the TV page with section pills and channel cards. The live player is a landscape
+  activity; channel up/down buttons and vertical swipes switch channels, a tap shows the overlay.
 - **Music & audiobooks**: a Media3 `MediaSessionService` handles background playback, the
   notification and lock-screen controls. A mini-player sits above the tab bar. Now Playing has
   synced lyrics, the queue, shuffle/repeat, star and a sleep timer. Audiobooks also get chapters,

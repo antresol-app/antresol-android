@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
+import app.antresol.ui.components.AntresolIcons
 
 /**
  * Phone line icons in the design's style (24 grid, stroke 1.9, round caps), complementing
@@ -136,17 +137,9 @@ object MobileIcons {
         lineTo(14.5f, 18.5f)
     }
 
-    val ChevronDown: ImageVector = lineIcon("ChevronDown") {
-        moveTo(5.5f, 9.5f)
-        lineTo(12f, 16f)
-        lineTo(18.5f, 9.5f)
-    }
+    val ChevronDown: ImageVector = AntresolIcons.ChevronDown
 
-    val ChevronUp: ImageVector = lineIcon("ChevronUp") {
-        moveTo(5.5f, 14.5f)
-        lineTo(12f, 8f)
-        lineTo(18.5f, 14.5f)
-    }
+    val ChevronUp: ImageVector = AntresolIcons.ChevronUp
 
     /** A circled minus: "remove from the list". */
     val MinusCircle: ImageVector = lineIcon("MinusCircle") {

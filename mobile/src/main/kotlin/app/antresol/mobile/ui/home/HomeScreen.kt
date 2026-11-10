@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +39,8 @@ fun HomeScreen(
     onContinue: (Card) -> Unit,
     onPlay: (Card) -> Unit,
     onSeeAll: (Shelf) -> Unit,
+    /** «On Air Now», after the first shelf (as on the web); draws nothing without channels. */
+    onAir: @Composable () -> Unit = {},
 ) {
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
@@ -73,16 +74,20 @@ fun HomeScreen(
                         }
                     }
                     if (content.isEmpty) item("empty") { EmptyView(stringResource(R.string.home_empty)) }
-                    items(content.shelves, key = { it.id }) { shelf ->
-                        val continuing = shelf.id == ShelfId.CONTINUE
-                        Shelf(
-                            title = shelf.title,
-                            cards = shelf.cards,
-                            onOpen = if (continuing) onContinue else onOpen,
-                            onLongPress = if (continuing) onOpen else null,
-                            style = if (continuing) CardStyle.Wide else null,
-                            onSeeAll = { onSeeAll(shelf) },
-                        )
+                    if (content.shelves.isEmpty()) item("on-air") { onAir() }
+                    content.shelves.forEachIndexed { index, shelf ->
+                        item(shelf.id) {
+                            val continuing = shelf.id == ShelfId.CONTINUE
+                            Shelf(
+                                title = shelf.title,
+                                cards = shelf.cards,
+                                onOpen = if (continuing) onContinue else onOpen,
+                                onLongPress = if (continuing) onOpen else null,
+                                style = if (continuing) CardStyle.Wide else null,
+                                onSeeAll = { onSeeAll(shelf) },
+                            )
+                        }
+                        if (index == 0) item("on-air") { onAir() }
                     }
                 }
             }

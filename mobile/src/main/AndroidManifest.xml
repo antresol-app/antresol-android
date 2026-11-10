@@ -40,6 +40,15 @@
             android:supportsPictureInPicture="true"
             android:theme="@style/Theme.Antresol" />
 
+        <!-- A live channel, landscape; Up/Down buttons and vertical swipes switch channels. -->
+        <activity
+            android:name=".player.LivePlayerActivity"
+            android:configChanges="density|fontScale|keyboard|keyboardHidden|layoutDirection|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.Antresol" />
+
         <!-- Music and audiobooks in the background, with the system media notification. -->
         <service
             android:name=".playback.PlaybackService"

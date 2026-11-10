@@ -36,6 +36,18 @@ object AntresolIcons {
         lineTo(12f, 7.7f)
     }
 
+    val ChevronUp: ImageVector = lineIcon("ChevronUp") {
+        moveTo(5.5f, 14.5f)
+        lineTo(12f, 8f)
+        lineTo(18.5f, 14.5f)
+    }
+
+    val ChevronDown: ImageVector = lineIcon("ChevronDown") {
+        moveTo(5.5f, 9.5f)
+        lineTo(12f, 16f)
+        lineTo(18.5f, 9.5f)
+    }
+
     val ChevronRight: ImageVector = lineIcon("ChevronRight") {
         moveTo(9.5f, 5.5f)
         lineTo(16f, 12f)

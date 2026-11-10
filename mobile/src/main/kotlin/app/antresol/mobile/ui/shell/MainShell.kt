@@ -62,6 +62,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.antresol.core.model.Card
+import app.antresol.core.model.Channel
 import app.antresol.core.model.Kind
 import app.antresol.core.model.ShelfId
 import app.antresol.core.playback.Resume
@@ -70,6 +71,7 @@ import app.antresol.core.session.SessionManager
 import app.antresol.mobile.AntresolMobileApp
 import app.antresol.mobile.MainActivity
 import app.antresol.mobile.R as MobileR
+import app.antresol.mobile.player.LivePlayerActivity
 import app.antresol.mobile.player.VideoPlayerActivity
 import app.antresol.mobile.reader.ComicReaderScreen
 import app.antresol.mobile.reader.ComicReaderViewModel
@@ -87,6 +89,8 @@ import app.antresol.mobile.ui.browse.MusicHome
 import app.antresol.mobile.ui.browse.MusicScreen
 import app.antresol.mobile.ui.browse.OpenGrid
 import app.antresol.mobile.ui.browse.ShelfPage
+import app.antresol.mobile.ui.channels.ChannelsScreen
+import app.antresol.mobile.ui.channels.OnAirShelf
 import app.antresol.mobile.ui.components.HeaderProfile
 import app.antresol.mobile.ui.components.LocalHeaderProfile
 import app.antresol.mobile.ui.detail.BookAction
@@ -107,6 +111,7 @@ import app.antresol.mobile.ui.search.SearchViewModel
 import app.antresol.mobile.ui.settings.SettingsScreen
 import app.antresol.mobile.ui.settings.SettingsViewModel
 import app.antresol.ui.R
+import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.AntresolColors
 import kotlinx.coroutines.CancellationException
@@ -204,6 +209,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
 
     val open: (Card) -> Unit = { card -> navController.navigate(DetailRoute(card)) }
     val playVideo: (Long, ResumeMode) -> Unit = { id, mode -> VideoPlayerActivity.start(context, id, mode) }
+    val watchChannel: (Channel) -> Unit = { channel -> LivePlayerActivity.start(context, channel.id) }
     val read: (BookAction) -> Unit = { action ->
         when (action) {
             is BookAction.ReadComic -> navController.navigate(ComicReaderRoute(action.volumeId, action.fromStart))
@@ -270,6 +276,20 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         // Videos play (resuming); a hero album or book opens its page.
                         onPlay = { card -> if (card.kind in VIDEO_KINDS) playVideo(card.id, ResumeMode.Resume) else open(card) },
                         onSeeAll = { shelf -> openGrid(GridSource.forShelf(ShelfPage.Home, shelf.id), shelf.title) },
+                        onAir = {
+                            OnAirShelf(
+                                viewModel = viewModel(key = "on-air") { ChannelsViewModel({ client.channels().channels }) },
+                                onWatch = watchChannel,
+                                onSeeAll = { navController.navigate(ChannelsRoute) },
+                            )
+                        },
+                    )
+                }
+                composable<ChannelsRoute> {
+                    ChannelsScreen(
+                        viewModel = viewModel { ChannelsViewModel({ client.channels().channels }) },
+                        onWatch = watchChannel,
+                        onBack = back,
                     )
                 }
                 composable<MoviesRoute> {

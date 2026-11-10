@@ -882,3 +882,51 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
 - Observed, not fixed: the profile picker shows the server as `host:443` for an https address (explicit default port).
 - Release AABs for both apps signed with the upload key and verified (`jarsigner -verify`, bundletool: versionCode 2,
   targetSdk 36). The release builds were still not installed on a device.
+
+## Live TV channels («ТВ»)
+
+### `:core`
+- `model/Channels.kt`: `Channel`, `ChannelProgram`, `ChannelList`, `ChannelGuide` (editor fields such as
+  `rules` are ignored). `AntresolClient.channels()`, `channelGuide(id, hours)`, `openLiveChannel(id)` (fetches a
+  media key with ≥ 6 h left, GETs the live playlist so the server starts the encoder and reports 503/403/404 as
+  `ApiException`, returns the signed URL). `MediaUrls.liveChannel(id, mk)`.
+- `channels/ChannelLogic.kt`: `Channels.sections` (web's `byCategory`), `neighbour` (zap by number, wrapping),
+  `progress`, `onAir` (guide → now/next), `showing` (a card moves on to `next` when `now` ended between
+  refreshes), `programLine`; `LiveStartPolicy` (503 with `Retry-After` ≤ 5 s = "starting", retried up to 15
+  times; everything else shows the server's message).
+- `channels/LiveTvSession.kt`: the player's logic without ExoPlayer (`LiveApi`, state flow of channels, current
+  channel, guide and `LiveStream` Starting/Ready/Failed; zap, retry, refresh every 30 s, reopen after a player
+  error with the same retry budget). Tests: `ChannelLogicTest`, `LiveTvSessionTest`, sample decoding
+  (`channels.json`, `channel-guide.json`), client request shapes.
+
+### `:ui-common`
+- `playback/LivePlayerViewModel`: ExoPlayer (OkHttp data source, HLS by MIME type) driven by `LiveTvSession`;
+  behind-live-window → back to the live edge; a 401 drops the media key; background stops the stream and
+  reopens it at the live edge on return. No progress, no HLS keepalive (the live stream has no session).
+- `channels/ChannelsViewModel` (shared by both apps; sections, picked section, `onAir`, 30 s refresh while a page
+  is started, pull to refresh, keeps data on a failed refresh), `ChannelLogo`/`ChannelLogoBadge` (gradient tile),
+  `rememberNowMs`, `programClock`. EN/RU strings `nav_tv`, `tv_*`. `AntresolIcons.ChevronUp/Down` (moved from
+  `MobileIcons`). Test `ChannelsViewModelTest`.
+
+### Apps
+- TV: `NavTab.Tv` («ТВ») between TV Shows and Music; `ChannelsRoute` → `ui/channels/ChannelsScreen` (title +
+  section pills, rows or a 3-column section grid of `ChannelCard`s built on `CardSurface`), `LiveRoute` →
+  `ui/player/LivePlayerScreen` (full screen, nav hidden). Up/Down/Channel±/Page± zap; other keys show the
+  overlay; the error panel's Try Again takes focus. Audio pauses before live TV.
+- Phone: decision as on the web — no sixth tab; `OnAirShelf` on Home after the first shelf, its title opens
+  `ChannelsRoute` (pushed page). `player/LivePlayerActivity` (landscape, closes an open video player, pauses
+  music, closes on profile switch) + `LivePlayerScreen` (tap = overlay, buttons and vertical swipe zap).
+
+### Verified
+- `./gradlew :core:test :ui-common:testDebugUnitTest :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug`.
+- On emulators (API 36 Google APIs image; the TV app on a 1920×1080 / 320 dpi D-pad AVD, as no Android TV
+  image was installed) against a test server: tab, sections, live playback (frames advance), zapping with
+  D-pad and Channel+, wrap from 1 to the last channel, the server's "too many channels" refusal with Try
+  Again, Back restoring focus; phone Home shelf, TV page, section, live playback, button and swipe zapping.
+
+### Known gaps
+- Not run on a real Android TV image/device (leanback launcher, real remote CH± keys); no Robolectric live UI
+  test for the channels screens yet.
+- A server keeps a channel's encoder running for a while after the viewer leaves, and allows 3 at once, so
+  quick zapping through many channels shows "too many channels" (server behaviour, same on the web).
+- The live player has no MediaSession (headset buttons / system now-playing) and no picture-in-picture.

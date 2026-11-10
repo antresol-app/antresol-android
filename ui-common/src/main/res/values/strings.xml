@@ -159,4 +159,24 @@
     <string name="playlist_delete_body">The songs stay in your library.</string>
     <string name="playlist_added">Added to “%1$s”.</string>
     <string name="playlist_failed">Couldn’t update the playlist. Try again.</string>
+
+    <!-- Live TV channels -->
+    <string name="nav_tv">TV</string>
+    <string name="tv_sections">Sections</string>
+    <string name="tv_all_sections">All</string>
+    <string name="tv_on_air">On Air Now</string>
+    <string name="tv_live">Live</string>
+    <string name="tv_channel_number">%1$d · %2$s</string>
+    <string name="tv_nothing">Nothing on now</string>
+    <string name="tv_next">Next: %1$s</string>
+    <string name="tv_next_at">At %1$s — %2$s</string>
+    <string name="tv_time">%1$s–%2$s</string>
+    <string name="tv_starting">Starting the channel…</string>
+    <string name="tv_failed">The channel can’t be shown</string>
+    <string name="tv_channel_up">Next Channel</string>
+    <string name="tv_channel_down">Previous Channel</string>
+    <string name="tv_watch">Watch “%1$s”</string>
+    <string name="tv_back">Back to Channels</string>
+    <string name="tv_empty">No channels yet</string>
+    <string name="tv_empty_hint">Channels appear by themselves once the library has at least six movies of a genre or a series with eight episodes.</string>
 </resources>

@@ -104,9 +104,10 @@ fun PlayerScreen(viewModel: PlayerViewModel, onExit: () -> Unit) {
     }
 }
 
+/** The video picture (and subtitles) of [player]; Compose draws every control. */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun VideoSurface(player: Player) {
+internal fun VideoSurface(player: Player) {
     AndroidView(
         factory = { context ->
             PlayerView(context).apply {
@@ -151,7 +152,7 @@ private fun Backdrop(item: ItemDetail?, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Spinner() {
+internal fun Spinner() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(color = AntresolColors.Label, strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
     }

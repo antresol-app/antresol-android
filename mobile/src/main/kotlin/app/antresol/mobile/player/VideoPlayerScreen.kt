@@ -125,8 +125,9 @@ fun VideoPlayerScreen(
     }
 }
 
+/** The video picture of [player] (shared with the live player); Compose draws every control. */
 @Composable
-private fun VideoSurface(player: Player) {
+internal fun VideoSurface(player: Player) {
     AndroidView(
         factory = { context ->
             PlayerView(context).apply {
@@ -348,7 +349,7 @@ private fun Overlay(item: ItemDetail?, onExit: () -> Unit, content: @Composable 
 }
 
 @Composable
-private fun Spinner() {
+internal fun Spinner() {
     CircularProgressIndicator(color = AntresolColors.Label, strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
 }
 

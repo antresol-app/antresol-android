@@ -65,6 +65,7 @@ import app.antresol.tv.ui.browse.GridKind
 import app.antresol.tv.ui.browse.GridSource
 import app.antresol.tv.ui.browse.ShelvesScreen
 import app.antresol.tv.ui.browse.ShelvesViewModel
+import app.antresol.tv.ui.channels.ChannelsScreen
 import app.antresol.tv.ui.comics.ComicReaderScreen
 import app.antresol.tv.ui.comics.ComicReaderViewModel
 import app.antresol.tv.ui.components.GlassNotice
@@ -80,6 +81,7 @@ import app.antresol.tv.ui.music.SongsScreen
 import app.antresol.tv.ui.music.SongsViewModel
 import app.antresol.tv.ui.nowplaying.NowPlayingScreen
 import app.antresol.tv.ui.nowplaying.NowPlayingViewModel
+import app.antresol.tv.ui.player.LivePlayerScreen
 import app.antresol.tv.ui.player.PlayerScreen
 import app.antresol.tv.ui.player.PlayerViewModel
 import app.antresol.tv.ui.search.BrowseTarget
@@ -89,6 +91,8 @@ import app.antresol.tv.ui.settings.SettingsScreen
 import app.antresol.tv.ui.settings.SettingsViewModel
 import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
+import app.antresol.ui.channels.ChannelsViewModel
+import app.antresol.ui.playback.LivePlayerViewModel
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
@@ -168,7 +172,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     // Full-screen experiences hide the nav; detail, grid and settings pages keep it (no tab selected).
     val fullScreen = backStack?.destination?.let { destination ->
         destination.hasRoute(PlayerRoute::class) || destination.hasRoute(ComicReaderRoute::class) ||
-            destination.hasRoute(NowPlayingRoute::class)
+            destination.hasRoute(NowPlayingRoute::class) || destination.hasRoute(LiveRoute::class)
     } ?: true
     var panelOpen by remember { mutableStateOf(false) }
     val navVisible = !fullScreen && !panelOpen
@@ -257,6 +261,18 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 page<ShowsRoute>(contentFocus) {
                     LibraryGrid(GridSource(GridKind.Shows), stringResource(R.string.nav_tv_shows), open, onScrolledToTop, canTakeFocus)
+                }
+                page<ChannelsRoute>(contentFocus) {
+                    ChannelsScreen(
+                        viewModel = viewModel { ChannelsViewModel({ client.channels().channels }) },
+                        onWatch = { channel ->
+                            // Live TV takes over the screen and the speakers, like a video.
+                            audio.pause()
+                            navController.navigate(LiveRoute(channel.id))
+                        },
+                        onScrolledToTop = onScrolledToTop,
+                        canTakeFocus = canTakeFocus,
+                    )
                 }
                 page<MusicRoute>(contentFocus) {
                     ShelvesScreen(
@@ -376,6 +392,10 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         },
                         onExit = { navController.popBackStack() },
                     )
+                }
+                composable<LiveRoute> { entry ->
+                    val route = entry.toRoute<LiveRoute>()
+                    LivePlayerScreen(viewModel = viewModel { LivePlayerViewModel(app, client, route.channelId) })
                 }
                 composable<PlayerRoute> { entry ->
                     val route = entry.toRoute<PlayerRoute>()

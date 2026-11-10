@@ -46,6 +46,10 @@ data class SongsRoute(val title: String)
 @Serializable
 data object SettingsRoute
 
+/** «TV»: the live channels by section, reached from «On Air Now» on Home (the tab bar keeps five tabs). */
+@Serializable
+data object ChannelsRoute
+
 /** The comic reader for volume [volumeId] ([fromStart]: page 1, not the saved page); full screen without the tab bar. */
 @Serializable
 data class ComicReaderRoute(val volumeId: Long, val fromStart: Boolean = false)

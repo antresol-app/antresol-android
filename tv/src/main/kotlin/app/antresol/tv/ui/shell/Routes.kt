@@ -15,6 +15,10 @@ data object MoviesRoute
 @Serializable
 data object ShowsRoute
 
+/** The «TV» tab: live channels by section. */
+@Serializable
+data object ChannelsRoute
+
 @Serializable
 data object MusicRoute
 
@@ -54,12 +58,17 @@ data class DetailRoute(val kind: String, val id: Long) {
 @Serializable
 data class PlayerRoute(val itemId: Long, val resume: String)
 
+/** A live channel, full screen; Up/Down switch channels inside the player. */
+@Serializable
+data class LiveRoute(val channelId: Long)
+
 /** The top navigation pills, in display order. The search pill shows only its icon ([label] is its description). */
 enum class NavTab(val route: Any, @StringRes val label: Int, val iconOnly: Boolean = false) {
     Search(SearchRoute, R.string.nav_search, iconOnly = true),
     Home(HomeRoute, R.string.nav_home),
     Movies(MoviesRoute, R.string.nav_movies),
     Shows(ShowsRoute, R.string.nav_tv_shows),
+    Tv(ChannelsRoute, R.string.nav_tv),
     Music(MusicRoute, R.string.nav_music),
     Books(BooksRoute, R.string.nav_books),
 }

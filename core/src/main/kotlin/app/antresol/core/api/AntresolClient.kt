@@ -4,6 +4,8 @@ import app.antresol.core.model.AlbumDetail
 import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
+import app.antresol.core.model.ChannelGuide
+import app.antresol.core.model.ChannelList
 import app.antresol.core.model.ComicPages
 import app.antresol.core.model.DeviceInfo
 import app.antresol.core.model.DeviceSessions
@@ -290,6 +292,29 @@ class AntresolClient(
 
     // endregion
 
+    // region Live channels
+
+    /** `GET /api/channels`: the channels this profile may watch (kid profiles get only theirs). */
+    suspend fun channels(): ChannelList = get("api/channels")
+
+    /** `GET /api/channels/{id}/guide`: the programme on air and the next [hours] of the channel. */
+    suspend fun channelGuide(id: Long, hours: Int = 6): ChannelGuide =
+        get("api/channels/$id/guide") { addQueryParameter("hours", hours.toString()) }
+
+    /**
+     * Opens a channel's live stream and returns its playlist URL signed with a media key for the
+     * player. The first request starts the channel's encoder: the server may hold it for a while or
+     * answer 503 with `Retry-After` (see [app.antresol.core.channels.LiveStartPolicy]); any non-2xx
+     * answer is thrown as [ApiException] with the server's message.
+     */
+    suspend fun openLiveChannel(id: Long): String {
+        val url = urls.liveChannel(id, mediaKeys.get(LIVE_KEY_LIFETIME))
+        execute(buildRequest("GET", url.toHttpUrl(), null))
+        return url
+    }
+
+    // endregion
+
     // region Plumbing
 
     private fun url(path: String, query: HttpUrl.Builder.() -> Unit = {}): HttpUrl =
@@ -364,6 +389,9 @@ class AntresolClient(
     companion object {
         /** Page size the web app uses everywhere `total` is returned. */
         const val PAGE_SIZE = 120
+
+        /** A live channel can be watched for hours: its key is refreshed with less than this left. */
+        private val LIVE_KEY_LIFETIME: java.time.Duration = java.time.Duration.ofHours(6)
 
         private val JSON = "application/json; charset=utf-8".toMediaType()
         private val EMPTY_BODY = ByteArray(0).toRequestBody(null)

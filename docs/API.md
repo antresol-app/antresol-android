@@ -35,6 +35,7 @@ Conventions:
 9. [Server-sent events](#9-events-sse)
 10. [Admin and other endpoints (brief)](#10-other-endpoints)
 11. [Client implementation notes](#11-client-implementation-notes)
+12. [Live TV channels](#12-live-tv-channels)
 
 ---
 
@@ -223,7 +224,7 @@ Sample: `auth-token.json`.
 No body. Returns:
 
 ```json
-{ "expiresAt": "2026-11-05T07:58:37Z", "key": "v1.2.1.1793865517.s7nHqQNy7rzmMnPou772dH" }
+{ "expiresAt": "2026-11-05T07:58:37Z", "key": "v1.2.1.1793865517.<mac>" }
 ```
 
 | Field | Type | Notes |
@@ -1103,3 +1104,70 @@ These are admin, settings and management endpoints, documented briefly. Most are
 - "Remote" clients (outside the LAN, as determined by the server) get quality capped to
   `settings.remoteQuality` (default 1080). `quality.remote` in play responses reflects this.
   Passwordless profiles cannot sign in remotely.
+
+---
+
+## 12. Live TV channels
+
+Channels are never-ending programmes the server builds from the library (by genre, decade, a series
+"non-stop", or hand-picked titles). Clients only watch them; creating and editing channels is web-only.
+Kid profiles get only the channels allowed for their age (the server filters).
+
+### 12.1 `GET /api/channels`
+
+```json
+{
+  "channels": [
+    {
+      "id": 2, "number": 10, "name": "Comedy", "category": "Movies by Genre",
+      "personal": false, "auto": true, "enabled": true, "canEdit": true,
+      "logo": 1,
+      "rules": { "kinds": ["movie"], "genres": ["comedy"], "order": "shuffle" },
+      "now":  { "itemId": 6, "title": "Funny People", "subtitle": "S1 E5 · Episode 5", "overview": "…", "year": 1993,
+                "start": "2026-11-10T22:44:00Z", "end": "2026-11-10T23:15:00Z",
+                "poster": "/api/images/local/6/poster", "backdrop": "/api/images/local/6/backdrop" },
+      "next": { "…": "same shape" }
+    }
+  ],
+  "canManage": true,
+  "canCreate": true
+}
+```
+
+- **Sections** of the TV tab are the distinct `category` values, ordered by their lowest channel
+  `number`; channels inside a section are ordered by `number`.
+- `logo` (0…6) is the index of the avatar gradient (`grad-1` … `grad-7`, 145°) the channel's logo tile
+  is drawn in, with the channel's name centred in bold white. `GET /api/channels/{id}/logo.png` (Bearer)
+  is the same tile as a 480×270 PNG.
+- `now`/`next` may be absent. `subtitle` exists for episodes. `start`/`end` are ISO 8601 with 0–9
+  fraction digits. Programme progress = (now − start) / (end − start).
+- `rules`, `canEdit`, `canManage`, `canCreate` are for the web editor. The list changes over time:
+  refresh it about every 30 s while it is on screen.
+
+Sample: `channels.json`.
+
+### 12.2 `GET /api/channels/{id}/guide?hours=6`
+
+`{ "channel": {…channel…}, "programs": [ {programme}, … ] }`, from the programme on air onwards. The
+programme on air at a given time is the first whose `end` is later. Sample: `channel-guide.json`.
+
+### 12.3 `GET /api/channels/live/{id}/index.m3u8` (`?mk=`)
+
+The channel's live HLS: a sliding window of 10 × 6 s MPEG-TS segments (H.264 + AAC stereo) with
+`EXT-X-DISCONTINUITY` at programme boundaries. With `?mk=` the server appends the same key to every
+segment line, so a player needs no headers. There is no seeking, no progress and no HLS session to
+keep alive; start at the live edge.
+
+The first request starts the channel's encoder. The server may hold it for up to ~20 s, or answer:
+
+| Status | `Retry-After` | Meaning | Client |
+|---|---|---|---|
+| 503 | `2` | The channel is starting | Retry after the delay ("Starting the channel…") |
+| 503 | `30` | Too many channels run at once (server limit) | Show `error`, offer Try Again |
+| 503 | — | Nothing to show on the channel / live channels unavailable | Show `error` |
+| 403 | — | A kid's screen time is over | Show `error` |
+| 404 | — | The channel is gone or not visible | Show `error` |
+
+A channel keeps running on the server for a while after its last viewer left, so switching through
+many channels quickly can hit the "too many channels" limit.
+

@@ -210,6 +210,45 @@ class AntresolClientTest {
     }
 
     @Test
+    fun channelCalls() = runTest {
+        client.token = "t"
+        enqueue("""{"channels":[{"id":2,"number":10,"name":"Comedy","category":"Movies","logo":1,"rules":{"order":"shuffle"}}],"canManage":true}""")
+        enqueue("""{"channel":{"id":2,"number":10,"name":"Comedy"},"programs":[{"itemId":6,"title":"A","start":"2026-01-01T10:00:00Z","end":"2026-01-01T10:30:00Z"}]}""")
+        val list = client.channels()
+        val guide = client.channelGuide(2)
+        assertEquals("Comedy", list.channels.single().name)
+        assertNull(list.channels.single().now)
+        assertEquals(6L, guide.programs.single().itemId)
+        val first = server.takeRequest()
+        assertEquals("/api/channels", first.path)
+        assertEquals("Bearer t", first.getHeader("Authorization"))
+        assertEquals("/api/channels/2/guide?hours=6", server.takeRequest().path)
+    }
+
+    @Test
+    fun openLiveChannelSignsThePlaylistAndReportsStarting() = runTest {
+        client.token = "t"
+        val expires = java.time.Instant.now().plus(java.time.Duration.ofHours(12)).toString()
+        enqueue("""{"key":"k1","expiresAt":"$expires"}""")
+        enqueue("""{"error":"Starting"}""", code = 503, headers = mapOf("Retry-After" to "2"))
+        enqueue("#EXTM3U\n")
+        try {
+            client.openLiveChannel(4)
+            fail("503 expected")
+        } catch (e: ApiException) {
+            assertEquals(503, e.status)
+            assertEquals(2L, e.retryAfterSec)
+            assertEquals("Starting", e.message)
+        }
+        val url = client.openLiveChannel(4)
+        assertTrue(url.endsWith("/api/channels/live/4/index.m3u8?mk=k1"))
+        assertEquals("/api/auth/media-key", server.takeRequest().path)
+        assertEquals("/api/channels/live/4/index.m3u8?mk=k1", server.takeRequest().path)
+        // The cached key is reused for the second attempt.
+        assertEquals("/api/channels/live/4/index.m3u8?mk=k1", server.takeRequest().path)
+    }
+
+    @Test
     fun lyricsNotFoundIsNull() = runTest {
         client.token = "t"
         enqueue("""{"error":"No lyrics"}""", code = 404)

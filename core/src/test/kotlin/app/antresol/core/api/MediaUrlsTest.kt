@@ -50,6 +50,8 @@ class MediaUrlsTest {
         )
         assertEquals("http://nas.local:8420/api/audio/11?accept=aac&t=30", urls.audio(11, listOf("aac"), startSec = 30.0))
         assertEquals("http://nas.local:8420/api/comics/13/page/0", urls.comicPage(13, 0))
+        assertEquals("http://nas.local:8420/api/channels/live/2/index.m3u8?mk=v1.2.1.9.x", urls.liveChannel(2, "v1.2.1.9.x"))
+        assertEquals("http://nas.local:8420/api/channels/live/2/index.m3u8", urls.liveChannel(2))
     }
 
     @Test

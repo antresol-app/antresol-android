@@ -4,6 +4,8 @@ import app.antresol.core.model.AlbumDetail
 import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
+import app.antresol.core.model.ChannelGuide
+import app.antresol.core.model.ChannelList
 import app.antresol.core.model.ComicPages
 import app.antresol.core.model.DeviceSessions
 import app.antresol.core.model.ErrorBody
@@ -57,6 +59,8 @@ class SampleDecodingTest {
         "books-audiobooks" to serializer<Page<Card>>(),
         "books-comics" to serializer<Page<Card>>(),
         "books-home" to serializer<ShelvesResponse>(),
+        "channel-guide" to serializer<ChannelGuide>(),
+        "channels" to serializer<ChannelList>(),
         "comic-pages" to serializer<ComicPages>(),
         "error-401" to serializer<ErrorBody>(),
         "health" to serializer<Health>(),
@@ -119,6 +123,25 @@ class SampleDecodingTest {
             assertTrue("Failed to decode $name: ${decoded.exceptionOrNull()}", decoded.isSuccess)
         }
         assertEquals(files.map { it.nameWithoutExtension }.toSet(), decoders.keys)
+    }
+
+    @Test
+    fun channelsAndGuide() {
+        val list = sample<ChannelList>("channels")
+        assertTrue(list.channels.size >= 2)
+        val first = list.channels.first()
+        assertEquals(1L, first.id)
+        assertEquals(1, first.number)
+        assertTrue(first.name.isNotBlank() && first.category.isNotBlank())
+        assertEquals(1, first.logo)
+        val now = requireNotNull(first.now)
+        assertEquals("/api/images/local/4/backdrop", now.backdrop)
+        assertTrue(now.start < now.end)
+        assertNotNull(first.next)
+        val guide = sample<ChannelGuide>("channel-guide")
+        assertEquals(1L, guide.channel.id)
+        assertEquals(4, guide.programs.size)
+        assertEquals(guide.programs[0].end, guide.programs[1].start)
     }
 
     @Test

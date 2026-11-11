@@ -314,4 +314,31 @@ class AntresolClientTest {
             other.shutdown()
         }
     }
+
+    @Test
+    fun channelRoundThreeCalls() = runTest {
+        repeat(3) { enqueue(code = 204) }
+        enqueue("""{"from":"2026-11-11T18:30:00Z","to":"2026-11-12T00:30:00Z","channels":[]}""")
+        enqueue("""{"audioLangs":["ru"],"subMode":"foreign","subLangs":["ru"],"preferCleaned":true}""")
+        client.setChannelFavorite(5, true)
+        client.setChannelFavorite(5, false)
+        client.setLastChannel(7)
+        client.channelEpg("2026-11-11T18:30:00Z", hours = 99)
+        val prefs = client.playbackPrefs()
+
+        val fav = server.takeRequest()
+        assertEquals("PUT", fav.method)
+        assertEquals("/api/channels/5/favorite", fav.path)
+        assertEquals("external-audio", fav.getHeader("X-Vault-Caps"))
+        assertEquals("DELETE", server.takeRequest().method)
+        val last = server.takeRequest()
+        assertEquals("/api/channels/last", last.path)
+        assertEquals(7, takeJson(last)["channelId"]!!.jsonPrimitive.int)
+        val epg = server.takeRequest().requestUrl!!
+        assertEquals("/api/channels/epg", epg.encodedPath)
+        assertEquals("2026-11-11T18:30:00Z", epg.queryParameter("from"))
+        assertEquals("24", epg.queryParameter("hours"))
+        assertEquals("foreign", prefs.subMode)
+        assertTrue(prefs.preferCleaned)
+    }
 }

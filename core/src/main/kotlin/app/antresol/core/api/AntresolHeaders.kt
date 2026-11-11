@@ -6,7 +6,7 @@ import okhttp3.Interceptor
 import okhttp3.Response
 
 /**
- * Adds `Authorization: Bearer`, `Accept-Language` and strips `Origin` on requests to the
+ * Adds `Authorization: Bearer`, `Accept-Language`, `X-Vault-Caps` and strips `Origin` on requests to the
  * Antresol server only, so the same OkHttpClient can serve Coil and ExoPlayer safely.
  *
  * The providers are read on every request, so a sign-in or language change applies at once.
@@ -23,6 +23,8 @@ class AntresolHeadersInterceptor(
 
         val builder = request.newBuilder().removeHeader("Origin")
         if (request.header("Accept-Language") == null) builder.header("Accept-Language", language())
+        // This client lists external voice-over files and cleaned tracks (index 2000+, `src`, «Очищено»).
+        if (request.header(CAPS_HEADER) == null) builder.header(CAPS_HEADER, CAPS)
         val bearer = token()
         if (bearer != null && request.header("Authorization") == null && request.url.queryParameter("mk") == null) {
             builder.header("Authorization", "Bearer $bearer")
@@ -30,6 +32,10 @@ class AntresolHeadersInterceptor(
         return chain.proceed(builder.build())
     }
 }
+
+/** What the app understands beyond the first builds; without it the server hides external audio. */
+const val CAPS_HEADER = "X-Vault-Caps"
+const val CAPS = "external-audio"
 
 /** Same scheme, host and port: the only URLs that may receive the device token. */
 internal fun HttpUrl.isSameOrigin(other: HttpUrl): Boolean =

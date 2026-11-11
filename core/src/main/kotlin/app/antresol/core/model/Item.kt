@@ -97,7 +97,26 @@ data class AudioTrack(
     val title: String = "",
     val channels: Int = 0,
     @SerialName("default") val isDefault: Boolean = false,
-)
+    /** A voice-over file beside the video (index 2000+); [src] identifies it for `/api/play`. */
+    val external: Boolean = false,
+    val src: String = "",
+    val studio: String = "",
+    /** `cleaned` for a voice-over with the original voices taken out («Очищено»), else empty. */
+    val kind: String = "",
+    /** `subtraction` or `ml`, for a cleaned track. */
+    val method: String = "",
+    /** The index of the track a cleaned one was made from. */
+    val cleanedFrom: Int? = null,
+) {
+    val isCleaned: Boolean get() = kind == KIND_CLEANED
+
+    companion object {
+        const val KIND_CLEANED = "cleaned"
+
+        /** External and cleaned tracks are numbered from here. */
+        const val EXTERNAL_BASE = 2000
+    }
+}
 
 @Serializable
 data class SubTrack(

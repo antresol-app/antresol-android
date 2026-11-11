@@ -4,6 +4,7 @@ import app.antresol.core.model.AlbumDetail
 import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
+import app.antresol.core.model.ChannelEpg
 import app.antresol.core.model.ChannelGuide
 import app.antresol.core.model.ChannelList
 import app.antresol.core.model.ComicPages
@@ -15,6 +16,7 @@ import app.antresol.core.model.Health
 import app.antresol.core.model.HlsStatus
 import app.antresol.core.model.HomeResponse
 import app.antresol.core.model.ItemDetail
+import app.antresol.core.model.LastChannelRequest
 import app.antresol.core.model.LibraryStatus
 import app.antresol.core.model.Lyrics
 import app.antresol.core.model.Me
@@ -23,6 +25,7 @@ import app.antresol.core.model.Page
 import app.antresol.core.model.PlayRecord
 import app.antresol.core.model.PlayRequest
 import app.antresol.core.model.PlayResponse
+import app.antresol.core.model.PlaybackPrefs
 import app.antresol.core.model.Playlist
 import app.antresol.core.model.PlaylistCreate
 import app.antresol.core.model.PlaylistDetail
@@ -300,6 +303,30 @@ class AntresolClient(
     /** `GET /api/channels/{id}/guide`: the programme on air and the next [hours] of the channel. */
     suspend fun channelGuide(id: Long, hours: Int = 6): ChannelGuide =
         get("api/channels/$id/guide") { addQueryParameter("hours", hours.toString()) }
+
+    /**
+     * `GET /api/channels/epg`: every channel with the programmes overlapping `[from, from + hours)`.
+     * [fromIso] is RFC 3339 (the server clamps it to now − 12 h … now + 47 h); null asks for now.
+     */
+    suspend fun channelEpg(fromIso: String?, hours: Int = 6): ChannelEpg =
+        get("api/channels/epg") {
+            addOptional("from", fromIso)
+            addQueryParameter("hours", hours.coerceIn(1, 24).toString())
+        }
+
+    /** Marks a channel as a favourite of this profile (`PUT`), or not (`DELETE`); both idempotent. */
+    suspend fun setChannelFavorite(id: Long, favorite: Boolean) =
+        sendNoContent(if (favorite) "PUT" else "DELETE", url("api/channels/$id/favorite"), null)
+
+    /**
+     * `PUT /api/channels/last`: the channel just tuned in becomes the profile's «last channel». It is
+     * a TV's last channel, not media progress: the server writes nothing else.
+     */
+    suspend fun setLastChannel(id: Long) =
+        sendNoContent("PUT", url("api/channels/last"), jsonBody(LastChannelRequest(id)))
+
+    /** `GET /api/me/playback-prefs`: the profile's audio and subtitle languages. */
+    suspend fun playbackPrefs(): PlaybackPrefs = get("api/me/playback-prefs")
 
     /**
      * Opens a channel's live stream and returns its playlist URL signed with a media key for the

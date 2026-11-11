@@ -17,20 +17,24 @@ class ChannelLogicTest {
     private fun ms(iso: String) = Instant.parse(iso).toEpochMilli()
 
     @Test
-    fun sectionsAreOrderedByTheirLowestNumber() {
+    fun oneListByNumberWithThemesAndFavouritesAsFilters() {
         val list = listOf(
-            channel(1, 40, "Decades"),
-            channel(2, 11, "Genres"),
+            channel(1, 4, "Decades"),
+            channel(2, 3, "Genres").copy(favorite = true),
             channel(3, 1, "All"),
-            channel(4, 10, "Genres"),
-            channel(5, 100, "Series"),
-            channel(6, 2, "Decades"),
+            channel(4, 2, "Genres"),
+            channel(5, 5, "Series").copy(favorite = true),
         )
-        val sections = Channels.sections(list)
-        assertEquals(listOf("All", "Decades", "Genres", "Series"), sections.map { it.category })
-        assertEquals(listOf(6L, 1L), sections[1].channels.map { it.id })
-        assertEquals(listOf(4L, 2L), sections[2].channels.map { it.id })
-        assertEquals(emptyList<ChannelSection>(), Channels.sections(emptyList()))
+        assertEquals(listOf("All", "Genres", "Decades", "Series"), Channels.themes(list))
+        assertEquals(listOf(3L, 4L, 2L, 1L, 5L), Channels.filter(list, ChannelFilter.All).map { it.id })
+        assertEquals(listOf(2L, 5L), Channels.filter(list, ChannelFilter.Favorites).map { it.id })
+        assertEquals(listOf(4L, 2L), Channels.filter(list, ChannelFilter.Theme("Genres")).map { it.id })
+        assertEquals(ChannelFilter.All, Channels.validFilter(list, ChannelFilter.Theme("Gone")))
+        assertEquals(ChannelFilter.Favorites, Channels.validFilter(list, ChannelFilter.Favorites))
+        for (filter in listOf(ChannelFilter.All, ChannelFilter.Favorites, ChannelFilter.Theme("Кино: 90-е"))) {
+            assertEquals(filter, ChannelFilter.fromKey(filter.key))
+        }
+        assertEquals(ChannelFilter.All, ChannelFilter.fromKey(null))
     }
 
     @Test
@@ -41,8 +45,11 @@ class ChannelLogicTest {
         assertEquals(11L, Channels.neighbour(list, 10, +1)?.id)
         assertEquals(10L, Channels.neighbour(list, 11, -1)?.id)
         assertEquals(11L, Channels.neighbour(list, 12, -1)?.id)
-        // A channel that disappeared switches to the first one.
+        // A channel that disappeared switches to the first one, or by its number when known.
         assertEquals(11L, Channels.neighbour(list, 99, +1)?.id)
+        assertEquals(10L, Channels.neighbour(list, 99, +1, currentNumber = 20)?.id)
+        assertEquals(12L, Channels.neighbour(list, 99, -1, currentNumber = 20)?.id)
+        assertEquals(10L, Channels.neighbour(list, 99, -1, currentNumber = 1)?.id)
         assertNull(Channels.neighbour(list.take(1), 10, +1))
         assertNull(Channels.neighbour(emptyList(), 10, -1))
     }
@@ -104,38 +111,21 @@ class ChannelLogicTest {
     }
 
     @Test
-    fun continueIsTheLastChannelWhileItIsVisible() {
+    fun lastChannelWhileItIsVisible() {
         val channels = listOf(channel(1, 1, "a"), channel(2, 2, "b"))
-        assertEquals(2L, Channels.continueWith(channels, 2)?.id)
-        assertNull(Channels.continueWith(channels, null))
+        assertEquals(2L, Channels.lastChannel(channels, 2)?.id)
+        assertNull(Channels.lastChannel(channels, null))
         // Gone, or no longer visible to the profile (a kid's age limit).
-        assertNull(Channels.continueWith(channels, 9))
+        assertNull(Channels.lastChannel(channels, 9))
     }
 
     @Test
-    fun miniGuideIsTheSectionByNumberStartingAtTheCurrentChannel() {
-        val channels = listOf(
-            channel(1, 30, "Films"),
-            channel(2, 1, "Kids"),
-            channel(3, 10, "Films"),
-            channel(4, 20, "Films"),
-            channel(5, 2, "Kids"),
-        )
-        val guide = Channels.miniGuide(channels, 4)
-        assertEquals("Films", guide.category)
+    fun miniGuideIsTheOpenedListByNumber() {
+        val films = listOf(channel(1, 30, "Films"), channel(3, 10, "Films"), channel(4, 20, "Films"))
+        val guide = Channels.miniGuide(films, 4)
         assertEquals(listOf(3L, 4L, 1L), guide.channels.map { it.id })
-        assertEquals(1, guide.startIndex)
-
-        assertEquals(0, Channels.miniGuide(channels, 2).startIndex)
-        assertEquals(listOf(2L, 5L), Channels.miniGuide(channels, 2).channels.map { it.id })
-    }
-
-    @Test
-    fun miniGuideOfAnUnknownChannelShowsEveryChannel() {
-        val channels = listOf(channel(1, 30, "Films"), channel(2, 1, "Kids"))
-        val guide = Channels.miniGuide(channels, 99)
-        assertEquals(listOf(2L, 1L), guide.channels.map { it.id })
-        assertEquals(0, guide.startIndex)
+        assertEquals(1, guide.currentIndex)
+        assertEquals(0, Channels.miniGuide(films, 99).currentIndex)
         assertEquals(MiniGuide.Empty, Channels.miniGuide(emptyList(), 1))
     }
 }

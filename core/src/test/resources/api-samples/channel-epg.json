@@ -1,0 +1,57 @@
+{
+  "channels": [
+    {
+      "id": 1,
+      "number": 1,
+      "name": "Все фильмы",
+      "category": "Кино и сериалы",
+      "favorite": false,
+      "programs": [
+        {
+          "id": "1-1",
+          "itemId": 18,
+          "kind": "movie",
+          "title": "Морской бриз",
+          "overview": "Тестовый фильм «Морской бриз».",
+          "year": 1993,
+          "rating": "12+",
+          "genres": [
+            "комедия",
+            "приключения"
+          ],
+          "start": "2026-11-11T22:26:58.987Z",
+          "end": "2026-11-11T22:33:59.01Z",
+          "poster": "/api/images/local/18/poster",
+          "backdrop": "/api/images/local/18/backdrop"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "number": 2,
+      "name": "Комедии",
+      "category": "Кино по жанрам",
+      "favorite": false,
+      "programs": [
+        {
+          "id": "2-1",
+          "itemId": 28,
+          "kind": "movie",
+          "title": "Смешные люди",
+          "overview": "Тестовый фильм «Смешные люди» для проверки каналов: несколько озвучек и субтитры.",
+          "year": 1996,
+          "rating": "12+",
+          "genres": [
+            "комедия"
+          ],
+          "start": "2026-11-11T22:26:59Z",
+          "end": "2026-11-11T22:31:59.023Z",
+          "poster": "/api/images/local/28/poster",
+          "backdrop": "/api/images/local/28/backdrop"
+        }
+      ]
+    }
+  ],
+  "from": "2026-11-11T21:30:00Z",
+  "to": "2026-11-11T22:30:00Z"
+}

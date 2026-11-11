@@ -39,6 +39,8 @@ data class PlayRequest(
     val startSec: Double? = null,
     val quality: String? = null,
     val audioIndex: Int? = null,
+    /** The `src` of an external or cleaned track (index 2000+): it wins over the index. */
+    val audioSrc: String? = null,
     val replaceSession: String? = null,
     val burnSubtitle: Int? = null,
 )

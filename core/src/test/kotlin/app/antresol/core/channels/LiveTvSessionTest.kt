@@ -3,6 +3,7 @@ package app.antresol.core.channels
 import app.antresol.core.api.ApiException
 import app.antresol.core.model.Channel
 import app.antresol.core.model.ChannelProgram
+import app.antresol.core.model.PlaybackPrefs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -43,11 +44,69 @@ class LiveTvSessionTest {
             openErrors.removeFirstOrNull()?.let { throw it }
             return "live/$channelId"
         }
+
+        val lasts = mutableListOf<Long>()
+        val favorites = mutableListOf<Pair<Long, Boolean>>()
+        var favoriteFails = false
+
+        override suspend fun setLast(channelId: Long) {
+            lasts += channelId
+        }
+
+        override suspend fun setFavorite(channelId: Long, favorite: Boolean) {
+            favorites += channelId to favorite
+            if (favoriteFails) throw ApiException(500, "no")
+        }
+
+        override suspend fun prefs() = PlaybackPrefs(audioLangs = listOf("en"))
     }
 
     private val api = FakeApi()
 
-    private fun TestScope.session(channelId: Long = 1) = LiveTvSession(api, backgroundScope, channelId)
+    private fun TestScope.session(channelId: Long = 1, filter: ChannelFilter = ChannelFilter.All) =
+        LiveTvSession(api, backgroundScope, channelId, filter)
+
+    @Test
+    fun tuningInMarksTheLastChannelOncePerSwitch() = runTest {
+        val session = session()
+        session.start()
+        runCurrent()
+        session.zap(1)
+        runCurrent()
+        session.retry()
+        runCurrent()
+        assertEquals(listOf(1L, 3L), api.lasts)
+        assertEquals(listOf("en"), session.state.value.prefs?.audioLangs)
+    }
+
+    @Test
+    fun zapStaysInTheListItWasOpenedFrom() = runTest {
+        api.channels[0] = api.channels[0].copy(favorite = true)
+        api.channels[1] = api.channels[1].copy(favorite = true)
+        val session = session(filter = ChannelFilter.Favorites)
+        session.start()
+        runCurrent()
+        assertTrue(session.zap(1))
+        assertEquals(2L, session.state.value.channelId)
+        assertTrue(session.zap(1))
+        assertEquals(1L, session.state.value.channelId)
+        assertEquals(listOf(1L, 2L), session.state.value.listed.map { it.id })
+    }
+
+    @Test
+    fun favouriteShowsAtOnceAndIsUndoneWhenRefused() = runTest {
+        val session = session()
+        session.start()
+        runCurrent()
+        session.setFavorite(2, true)
+        assertTrue(session.state.value.channels.first { it.id == 2L }.favorite)
+        runCurrent()
+        assertEquals(listOf(2L to true), api.favorites)
+        api.favoriteFails = true
+        session.setFavorite(3, true)
+        runCurrent()
+        assertFalse(session.state.value.channels.first { it.id == 3L }.favorite)
+    }
 
     @Test
     fun opensTheStreamAndLoadsTheGuide() = runTest {
@@ -196,6 +255,6 @@ class LiveTvSessionTest {
         val at = java.time.Instant.parse("2026-11-10T22:40:00Z").toEpochMilli()
         val guide = liveMiniGuide(LiveTvState(channels, 2, listOf(fresh), LiveStream.Starting(0)), at)
         assertEquals(listOf("Stale", "Fresh"), guide.channels.map { it.now?.title })
-        assertEquals(1, guide.startIndex)
+        assertEquals(1, guide.currentIndex)
     }
 }

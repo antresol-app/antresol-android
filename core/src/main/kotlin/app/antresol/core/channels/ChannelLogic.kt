@@ -6,16 +6,43 @@ import app.antresol.core.model.ChannelProgram
 import java.time.Instant
 import java.time.format.DateTimeParseException
 
-/** A section of the TV tab: the channels of one category, by number. */
-data class ChannelSection(val category: String, val channels: List<Channel>)
+/**
+ * Which channels a list shows: all of them, the profile's favourites, or one theme (category). The
+ * list keeps the number order whatever the filter (a TV's list never reorders). [key] survives
+ * process death and intents.
+ */
+sealed interface ChannelFilter {
+    val key: String
+
+    data object All : ChannelFilter {
+        override val key = "all"
+    }
+
+    data object Favorites : ChannelFilter {
+        override val key = "favorites"
+    }
+
+    data class Theme(val category: String) : ChannelFilter {
+        override val key = "theme:$category"
+    }
+
+    companion object {
+        fun fromKey(key: String?): ChannelFilter = when {
+            key == null || key == All.key -> All
+            key == Favorites.key -> Favorites
+            key.startsWith("theme:") -> Theme(key.removePrefix("theme:"))
+            else -> All
+        }
+    }
+}
 
 /**
- * The player's mini-guide: the channels of the current channel's section by number, and where the
- * strip starts ([startIndex], the channel being watched). Empty while the channels are loading.
+ * The player's mini-guide: the channels of the list the player was opened from, by number, and the
+ * one being watched ([currentIndex]). Empty while the channels are loading.
  */
-data class MiniGuide(val category: String, val channels: List<Channel>, val startIndex: Int) {
+data class MiniGuide(val channels: List<Channel>, val currentIndex: Int) {
     companion object {
-        val Empty = MiniGuide("", emptyList(), 0)
+        val Empty = MiniGuide(emptyList(), 0)
     }
 }
 
@@ -27,41 +54,57 @@ object Channels {
     /** Hours of guide the player asks for. */
     const val GUIDE_HOURS = 6
 
-    /** The channels by category, sections in the order of their lowest number, channels by number. */
-    fun sections(channels: List<Channel>): List<ChannelSection> =
-        sortedByNumber(channels)
-            .groupBy { it.category }
-            .map { (category, list) -> ChannelSection(category, list) }
-
     fun sortedByNumber(channels: List<Channel>): List<Channel> = channels.sortedWith(compareBy({ it.number }, { it.id }))
+
+    /** The themes (categories) for the filter, in the order of their lowest channel number. */
+    fun themes(channels: List<Channel>): List<String> =
+        sortedByNumber(channels).map { it.category }.filter { it.isNotBlank() }.distinct()
+
+    /** The channels [filter] lets through, by number. */
+    fun filter(channels: List<Channel>, filter: ChannelFilter): List<Channel> = sortedByNumber(
+        when (filter) {
+            ChannelFilter.All -> channels
+            ChannelFilter.Favorites -> channels.filter { it.favorite }
+            is ChannelFilter.Theme -> channels.filter { it.category == filter.category }
+        },
+    )
+
+    /** [filter] while it still means something (a theme that is gone falls back to «All»). */
+    fun validFilter(channels: List<Channel>, filter: ChannelFilter): ChannelFilter = when (filter) {
+        is ChannelFilter.Theme -> if (channels.any { it.category == filter.category }) filter else ChannelFilter.All
+        else -> filter
+    }
 
     /**
      * The channel [step] places from [currentId] in number order, wrapping at both ends (+1 is
-     * "channel up", the next number). Null when there is no other channel to switch to.
+     * "channel up", the next number). A channel not in [channels] (unfavourited while watching)
+     * goes to the nearest number in the [step] direction. Null when there is no other channel.
      */
-    fun neighbour(channels: List<Channel>, currentId: Long, step: Int): Channel? {
+    fun neighbour(channels: List<Channel>, currentId: Long, step: Int, currentNumber: Int? = null): Channel? {
         val sorted = sortedByNumber(channels)
-        if (sorted.size < 2) return null
         val index = sorted.indexOfFirst { it.id == currentId }
-        if (index < 0) return sorted.first()
-        val target = Math.floorMod(index + step, sorted.size)
-        return sorted[target]
+        if (index < 0) {
+            if (sorted.isEmpty()) return null
+            val number = currentNumber ?: return sorted.first()
+            return if (step > 0) {
+                sorted.firstOrNull { it.number > number } ?: sorted.first()
+            } else {
+                sorted.lastOrNull { it.number < number } ?: sorted.last()
+            }
+        }
+        if (sorted.size < 2) return null
+        return sorted[Math.floorMod(index + step, sorted.size)]
     }
 
-    /** The last watched channel while the profile can still see it, for «Continue»; else null. */
-    fun continueWith(channels: List<Channel>, lastId: Long?): Channel? =
+    /** The profile's last channel while it can still see it (focus, highlight, «back to N»); else null. */
+    fun lastChannel(channels: List<Channel>, lastId: Long?): Channel? =
         lastId?.let { id -> channels.firstOrNull { it.id == id } }
 
-    /**
-     * The strip of the player's mini-guide for [currentId]: its section's channels by number,
-     * starting at it. A channel that is not in the list (yet) gives every channel from the first.
-     */
+    /** The mini-guide for [currentId]: the list it was opened from ([channels], already filtered). */
     fun miniGuide(channels: List<Channel>, currentId: Long): MiniGuide {
         if (channels.isEmpty()) return MiniGuide.Empty
-        val current = channels.firstOrNull { it.id == currentId }
-            ?: return MiniGuide("", sortedByNumber(channels), 0)
-        val section = sortedByNumber(channels.filter { it.category == current.category })
-        return MiniGuide(current.category, section, section.indexOfFirst { it.id == currentId }.coerceAtLeast(0))
+        val sorted = sortedByNumber(channels)
+        return MiniGuide(sorted, sorted.indexOfFirst { it.id == currentId }.coerceAtLeast(0))
     }
 
     /** Epoch milliseconds of an ISO 8601 time from the server, or null when it cannot be read. */
@@ -96,6 +139,20 @@ object Channels {
         val ended = (epochMs(now.end) ?: Long.MAX_VALUE) <= nowMs
         val started = (epochMs(next.start) ?: Long.MAX_VALUE) <= nowMs
         return if (ended && started) next else now
+    }
+
+    /** The programme on air at [atMs], or null (a gap, or [atMs] outside the list). */
+    fun programAt(programs: List<ChannelProgram>, atMs: Long): ChannelProgram? = programs.firstOrNull { program ->
+        val start = epochMs(program.start) ?: return@firstOrNull false
+        val end = epochMs(program.end) ?: return@firstOrNull false
+        atMs in start until end
+    }
+
+    /** [program] is on air at [nowMs]. */
+    fun isOnAir(program: ChannelProgram, nowMs: Long): Boolean {
+        val start = epochMs(program.start) ?: return false
+        val end = epochMs(program.end) ?: return false
+        return nowMs in start until end
     }
 
     /** "Title · S1 E5 · Episode 5": the programme's title with its subtitle, when it has one. */

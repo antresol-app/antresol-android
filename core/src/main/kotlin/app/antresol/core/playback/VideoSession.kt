@@ -55,6 +55,10 @@ class VideoSession(
     var audioIndex: Int? = audioIndex
         private set
 
+    /** The `src` of the external or cleaned track asked for (see [PlayRequest.audioSrc]). */
+    var audioSrc: String? = null
+        private set
+
     var source: VideoSource? = null
         private set
 
@@ -70,12 +74,14 @@ class VideoSession(
         startMs: Long,
         quality: String = this.quality,
         audioIndex: Int? = this.audioIndex,
+        audioSrc: String? = if (audioIndex == this.audioIndex) this.audioSrc else null,
     ): VideoSource {
         val request = PlayRequest(
             caps = caps,
             startSec = (startMs.coerceAtLeast(0) / 1000.0).takeIf { it > 0 },
             quality = quality.takeIf { it != Quality.AUTO },
             audioIndex = audioIndex,
+            audioSrc = audioSrc?.takeIf { it.isNotEmpty() },
             replaceSession = session,
         )
         val play = api.play(fileId, request)
@@ -93,6 +99,8 @@ class VideoSession(
         val opened = VideoSource(play, api.playbackUrl(play.url, key))
         this.quality = quality
         this.audioIndex = audioIndex
+        // Keep the external track's identity for the next reopen (seek, quality): positions shift.
+        this.audioSrc = audioSrc ?: audioIndex?.let { wanted -> play.audio.firstOrNull { it.index == wanted }?.src?.takeIf { it.isNotEmpty() } }
         source = opened
         return opened
     }

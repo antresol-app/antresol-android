@@ -3,6 +3,7 @@ package app.antresol.core.channels
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.Channel
 import app.antresol.core.model.ChannelProgram
+import app.antresol.core.model.PlaybackPrefs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -14,7 +15,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** The server calls of the live player; [AntresolClient.liveApi] is the real one. */
+/**
+ * Every server call the live player may make; [AntresolClient.liveApi] is the real one. TV is TV:
+ * the only writes are [setLast] and [setFavorite]; nothing here touches progress, «Continue
+ * Watching», watched flags, track memory or scrobbles (see LiveTvNoHistoryTest).
+ */
 interface LiveApi {
     suspend fun channels(): List<Channel>
 
@@ -22,6 +27,14 @@ interface LiveApi {
 
     /** Starts the channel's stream and returns the URL for the player (see [AntresolClient.openLiveChannel]). */
     suspend fun open(channelId: Long): String
+
+    /** `PUT /api/channels/last`: the channel tuned in becomes the profile's last channel. */
+    suspend fun setLast(channelId: Long)
+
+    suspend fun setFavorite(channelId: Long, favorite: Boolean)
+
+    /** The profile's languages, for the default audio and subtitles (read only). */
+    suspend fun prefs(): PlaybackPrefs
 }
 
 fun AntresolClient.liveApi(): LiveApi {
@@ -32,6 +45,12 @@ fun AntresolClient.liveApi(): LiveApi {
         override suspend fun guide(channelId: Long): List<ChannelProgram> = client.channelGuide(channelId, Channels.GUIDE_HOURS).programs
 
         override suspend fun open(channelId: Long): String = client.openLiveChannel(channelId)
+
+        override suspend fun setLast(channelId: Long) = client.setLastChannel(channelId)
+
+        override suspend fun setFavorite(channelId: Long, favorite: Boolean) = client.setChannelFavorite(channelId, favorite)
+
+        override suspend fun prefs(): PlaybackPrefs = client.playbackPrefs()
     }
 }
 
@@ -55,8 +74,15 @@ data class LiveTvState(
     /** The guide of [channelId] from the programme on air on (empty until loaded). */
     val programs: List<ChannelProgram>,
     val stream: LiveStream,
+    /** The list the player was opened from: zapping and the mini-guide stay inside it. */
+    val filter: ChannelFilter = ChannelFilter.All,
+    /** The profile's languages, null until loaded (or when they could not be read). */
+    val prefs: PlaybackPrefs? = null,
 ) {
     val channel: Channel? get() = channels.firstOrNull { it.id == channelId }
+
+    /** The channels of [filter], by number. */
+    val listed: List<Channel> get() = Channels.filter(channels, filter)
 
     /**
      * The programme on air at [nowMs] and the one after it: from the guide once loaded, else from
@@ -75,7 +101,7 @@ data class LiveTvState(
  * and next (the channel list is up to 30 s older), the others what the list says.
  */
 fun liveMiniGuide(state: LiveTvState, nowMs: Long): MiniGuide {
-    val guide = Channels.miniGuide(state.channels, state.channelId)
+    val guide = Channels.miniGuide(state.listed, state.channelId)
     val (now, next) = Channels.onAir(state.programs, nowMs)
     if (now == null) return guide
     return guide.copy(channels = guide.channels.map { if (it.id == state.channelId) it.copy(now = now, next = next) else it })
@@ -92,8 +118,9 @@ class LiveTvSession(
     private val api: LiveApi,
     private val scope: CoroutineScope,
     channelId: Long,
+    filter: ChannelFilter = ChannelFilter.All,
 ) {
-    private val _state = MutableStateFlow(LiveTvState(emptyList(), channelId, emptyList(), LiveStream.Starting(0)))
+    private val _state = MutableStateFlow(LiveTvState(emptyList(), channelId, emptyList(), LiveStream.Starting(0), filter))
     val state: StateFlow<LiveTvState> = _state.asStateFlow()
 
     private var failures = 0
@@ -101,6 +128,7 @@ class LiveTvSession(
     private var openJob: Job? = null
     private var guideJob: Job? = null
     private var refreshJob: Job? = null
+    private var lastMarked: Long? = null
 
     /** Opens the stream and starts the periodic refresh (again after [stop]). */
     fun start() {
@@ -108,6 +136,7 @@ class LiveTvSession(
         failures = 0
         open()
         refreshJob = scope.launch {
+            if (_state.value.prefs == null) launch { loadPrefs() }
             loadChannels()
             while (isActive) {
                 delay(Channels.REFRESH_MS)
@@ -128,10 +157,30 @@ class LiveTvSession(
         refreshJob = null
     }
 
-    /** Switches to the channel [step] numbers away (+1 up, −1 down), wrapping. False when there is none. */
+    /**
+     * Switches to the channel [step] places away in the list the player was opened from (+1 up, −1
+     * down), by number, wrapping. False when there is none.
+     */
     fun zap(step: Int): Boolean {
-        val target = Channels.neighbour(_state.value.channels, _state.value.channelId, step) ?: return false
+        val state = _state.value
+        val target = Channels.neighbour(state.listed, state.channelId, step, state.channel?.number) ?: return false
         return tune(target.id)
+    }
+
+    /**
+     * Makes [channelId] a favourite of the profile, or not: shown at once, sent to the server, and
+     * undone when the server refuses.
+     */
+    fun setFavorite(channelId: Long, favorite: Boolean) {
+        setFavoriteLocally(channelId, favorite)
+        scope.launch {
+            val ok = runCatchingNonCancel { api.setFavorite(channelId, favorite) } != null
+            if (!ok) setFavoriteLocally(channelId, !favorite)
+        }
+    }
+
+    private fun setFavoriteLocally(channelId: Long, favorite: Boolean) {
+        _state.update { state -> state.copy(channels = state.channels.map { if (it.id == channelId) it.copy(favorite = favorite) else it }) }
     }
 
     /** Switches to [channelId] (the mini-guide). False when it is already on. */
@@ -177,6 +226,7 @@ class LiveTvSession(
                 try {
                     val url = api.open(channelId)
                     _state.update { it.copy(stream = LiveStream.Ready(url, ++generation)) }
+                    markLast(channelId)
                     return@launch
                 } catch (e: CancellationException) {
                     throw e
@@ -195,6 +245,20 @@ class LiveTvSession(
                 }
             }
         }
+    }
+
+    /** The channel is tuned in: it becomes the profile's last channel (once per switch, best effort). */
+    private fun markLast(channelId: Long) {
+        if (lastMarked == channelId) return
+        lastMarked = channelId
+        scope.launch {
+            if (runCatchingNonCancel { api.setLast(channelId) } == null && lastMarked == channelId) lastMarked = null
+        }
+    }
+
+    private suspend fun loadPrefs() {
+        val prefs = runCatchingNonCancel { api.prefs() } ?: return
+        _state.update { it.copy(prefs = prefs) }
     }
 
     private fun reloadGuide() {

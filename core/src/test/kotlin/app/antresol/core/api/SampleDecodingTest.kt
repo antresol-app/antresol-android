@@ -4,6 +4,7 @@ import app.antresol.core.model.AlbumDetail
 import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
+import app.antresol.core.model.ChannelEpg
 import app.antresol.core.model.ChannelGuide
 import app.antresol.core.model.ChannelList
 import app.antresol.core.model.ComicPages
@@ -59,6 +60,7 @@ class SampleDecodingTest {
         "books-audiobooks" to serializer<Page<Card>>(),
         "books-comics" to serializer<Page<Card>>(),
         "books-home" to serializer<ShelvesResponse>(),
+        "channel-epg" to serializer<ChannelEpg>(),
         "channel-guide" to serializer<ChannelGuide>(),
         "channels" to serializer<ChannelList>(),
         "comic-pages" to serializer<ComicPages>(),
@@ -133,11 +135,19 @@ class SampleDecodingTest {
         assertEquals(1L, first.id)
         assertEquals(1, first.number)
         assertTrue(first.name.isNotBlank() && first.category.isNotBlank())
-        assertEquals(1, first.logo)
+        assertEquals(2L, list.lastChannel)
+        assertTrue(list.channels.single { it.id == 3L }.favorite)
         val now = requireNotNull(first.now)
-        assertEquals("/api/images/local/4/backdrop", now.backdrop)
+        assertEquals("/api/images/local/18/backdrop", now.backdrop)
+        assertEquals("1-1", now.id)
+        assertEquals("movie", now.kind)
+        assertEquals(listOf("комедия", "приключения"), now.genres)
         assertTrue(now.start < now.end)
         assertNotNull(first.next)
+        val epg = sample<ChannelEpg>("channel-epg")
+        assertTrue(epg.from < epg.to)
+        assertEquals(listOf(1L, 2L), epg.channels.map { it.id })
+        assertTrue(epg.channels.first().programs.isNotEmpty())
         val guide = sample<ChannelGuide>("channel-guide")
         assertEquals(1L, guide.channel.id)
         assertEquals(4, guide.programs.size)

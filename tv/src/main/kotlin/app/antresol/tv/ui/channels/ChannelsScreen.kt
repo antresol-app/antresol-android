@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -20,15 +21,23 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
@@ -46,13 +55,12 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.core.channels.ChannelFilter
+import kotlinx.coroutines.launch
 import app.antresol.core.channels.Channels
 import app.antresol.core.model.Channel
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.LoadingView
-import app.antresol.tv.ui.components.MenuOption
-import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.tv.ui.components.SegmentedPills
 import app.antresol.tv.ui.components.VerticalShelfScrolling
@@ -60,6 +68,7 @@ import app.antresol.tv.ui.components.listRowColors
 import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.ui.R
 import app.antresol.ui.channels.ChannelsView
+import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.ProgrammeStill
 import app.antresol.ui.channels.programClock
@@ -87,44 +96,87 @@ fun ChannelsScreen(
     onWatch: (Channel, ChannelFilter) -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
+    onPanelOpenChanged: (Boolean) -> Unit = {},
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.startRefreshing() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.stopRefreshing() }
-    LaunchedEffect(Unit) { onScrolledToTop(true) }
     val nowMs = rememberNowMs()
     val loaded = viewModel.channels
     val error = viewModel.error
     val filter = viewModel.filter
     var menuFor by remember { mutableStateOf<Channel?>(null) }
+    // Held OK opens the menu when it is released: a panel can't take focus while the key is down.
+    var pendingMenu by remember { mutableStateOf<Channel?>(null) }
+    var guidePanel by remember { mutableStateOf(false) }
+    var menuSelected by remember { mutableStateOf(0) }
+    // A panel covers the page: the shell hides its navigation meanwhile.
+    LaunchedEffect(menuFor != null || guidePanel) { onPanelOpenChanged(menuFor != null || guidePanel) }
     val watch: (Channel) -> Unit = { onWatch(it, filter) }
 
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(top = 84.dp)) {
-            Header(viewModel)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                val pending = pendingMenu
+                val open = menuFor
+                when {
+                    pending != null && event.type == KeyEventType.KeyUp && event.key in OkKeys -> {
+                        pendingMenu = null
+                        menuSelected = 1
+                        menuFor = pending
+                        true
+                    }
+                    open != null -> handlePanelKey(event, 2, menuSelected, onSelect = { menuSelected = it }) { index ->
+                        menuFor = null
+                        if (index == 0) watch(open) else viewModel.toggleFavorite(open)
+                    }
+                    else -> false
+                }
+            },
+    ) {
+        // Switching «Каналы | Телегид» rebuilds the page under the pills: focus follows to the new ones.
+        val viewFocus = remember { FocusRequester() }
+        var refocusView by remember { mutableStateOf(false) }
+        // The view just picked takes focus itself (its focused pill went away with the old view).
+        val takeFocus: () -> Boolean = { refocusView || canTakeFocus() }
+        LaunchedEffect(viewModel.view) {
+            if (refocusView) {
+                kotlinx.coroutines.delay(600)
+                refocusView = false
+            }
+        }
+        val header: @Composable () -> Unit = { Header(viewModel, viewFocus, onViewPicked = { refocusView = true }) }
+        when {
+            error != null || loaded == null || loaded.isEmpty() ||
+                (viewModel.shown.isEmpty() && filter == ChannelFilter.Favorites) -> Column(Modifier.fillMaxSize().padding(top = 84.dp)) {
+                LaunchedEffect(Unit) { onScrolledToTop(true) }
+                header()
                 when {
                     error != null -> ErrorView(error, onRetry = viewModel::reload, modifier = Modifier.padding(top = 40.dp), takeFocus = canTakeFocus())
                     loaded == null -> LoadingView(Modifier.padding(top = 80.dp))
                     loaded.isEmpty() -> Empty(stringResource(R.string.tv_empty), stringResource(R.string.tv_empty_hint))
-                    viewModel.shown.isEmpty() && filter == ChannelFilter.Favorites ->
-                        Empty(stringResource(R.string.tv_favorites_empty), stringResource(R.string.tv_favorites_empty_hint))
-                    viewModel.view == ChannelsView.Guide -> GuideScreen(viewModel, nowMs, canTakeFocus, onWatch = watch)
-                    else -> ChannelList(viewModel, nowMs, canTakeFocus, onWatch = watch, onMenu = { menuFor = it })
+                    else -> Empty(stringResource(R.string.tv_favorites_empty), stringResource(R.string.tv_favorites_empty_hint))
                 }
             }
+            viewModel.view == ChannelsView.Guide -> {
+                // The guide keeps its header and ruler under the navigation: never "scrolled".
+                LaunchedEffect(Unit) { onScrolledToTop(true) }
+                GuideScreen(viewModel, nowMs, takeFocus, header, onPanel = { guidePanel = it }, onWatch = watch)
+            }
+            else -> ChannelList(viewModel, nowMs, takeFocus, header, onScrolledToTop, onWatch = watch, onMenu = { pendingMenu = it })
         }
         menuFor?.let { channel ->
             val favorite = viewModel.channels?.firstOrNull { it.id == channel.id }?.favorite ?: channel.favorite
-            OptionsPanel(
+            KeyPanel(
                 title = stringResource(R.string.tv_channel_number, channel.number, channel.name),
-                options = listOf(
-                    MenuOption(stringResource(R.string.tv_watch_now), false) { watch(channel) },
-                    MenuOption(stringResource(if (favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add), false) {
-                        viewModel.toggleFavorite(channel)
-                    },
+                actions = listOf(
+                    PanelAction(stringResource(R.string.tv_watch_now), AntresolIcons.Play) {},
+                    PanelAction(
+                        stringResource(if (favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),
+                        if (favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
+                    ) {},
                 ),
-                onDismiss = { menuFor = null },
-                focusIndex = 1,
+                selected = menuSelected,
             )
             androidx.activity.compose.BackHandler { menuFor = null }
         }
@@ -133,7 +185,7 @@ fun ChannelsScreen(
 
 /** «ТВ», «Каналы | Телегид» and the filters on one line. */
 @Composable
-private fun Header(viewModel: ChannelsViewModel) {
+private fun Header(viewModel: ChannelsViewModel, viewFocus: FocusRequester, onViewPicked: () -> Unit) {
     val themes = viewModel.themes
     val filters = listOf(ChannelFilter.All, ChannelFilter.Favorites) + themes.map { ChannelFilter.Theme(it) }
     Row(
@@ -150,8 +202,15 @@ private fun Header(viewModel: ChannelsViewModel) {
             SegmentedPills(
                 options = listOf(stringResource(R.string.tv_view_channels), stringResource(R.string.tv_view_guide)),
                 selectedIndex = viewModel.view.ordinal,
-                onSelect = { viewModel.showView(ChannelsView.entries[it]) },
-                modifier = Modifier.semantics { contentDescription = viewLabel },
+                onSelect = {
+                    if (ChannelsView.entries[it] != viewModel.view) {
+                        onViewPicked()
+                        viewModel.showView(ChannelsView.entries[it])
+                    }
+                },
+                modifier = Modifier
+                    .semantics { contentDescription = viewLabel }
+                    .focusRequester(viewFocus),
             )
             Spacer(Modifier.width(16.dp))
             val filterLabel = stringResource(R.string.tv_filter)
@@ -176,37 +235,75 @@ private fun Header(viewModel: ChannelsViewModel) {
     }
 }
 
-/** The channel list on the left, the focused channel's programme on the right. */
+/**
+ * The header and the channel list in one lazy column (so D-pad search moves between them, as on
+ * the other pages), with the focused channel's programme drawn on the right.
+ */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun ChannelList(
     viewModel: ChannelsViewModel,
     nowMs: Long,
     canTakeFocus: () -> Boolean,
+    header: @Composable () -> Unit,
+    onScrolledToTop: (Boolean) -> Unit,
     onWatch: (Channel) -> Unit,
     onMenu: (Channel) -> Unit,
 ) {
     val shown = viewModel.shown
     val last = viewModel.lastChannel
     var focusedId by rememberSaveable(viewModel.filter.key) { mutableStateOf(last?.id ?: shown.firstOrNull()?.id) }
-    val startIndex = shown.indexOfFirst { it.id == focusedId }.coerceAtLeast(0)
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (startIndex - 2).coerceAtLeast(0))
+    // Where focus starts: the last channel (a TV turns on where it was left), else the first.
+    val startIndex = shown.indexOfFirst { it.id == last?.id }.coerceAtLeast(0)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (startIndex > 3) startIndex - 1 else 0)
     val startFocus = remember(viewModel.filter.key) { FocusRequester() }
+    // The first time focus comes into the list (from the navigation), it lands on the last channel.
+    var entered by rememberSaveable(viewModel.filter.key) { mutableStateOf(false) }
     LaunchedEffect(viewModel.filter.key, shown.isNotEmpty()) {
-        if (shown.isNotEmpty() && canTakeFocus()) startFocus.tryRequestFocus()
+        if (shown.isNotEmpty() && canTakeFocus()) entered = startFocus.tryRequestFocus()
     }
     val focused = shown.firstOrNull { it.id == focusedId } ?: shown.firstOrNull()
-    Row(Modifier.fillMaxSize()) {
-        VerticalShelfScrolling(leadingFraction = 0.2f, trailingFraction = 0.2f) {
+    val scope = rememberCoroutineScope()
+    val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 40 } }
+    LaunchedEffect(atTop) { onScrolledToTop(atTop) }
+    // Up/Down walk the list one channel at a time (scrolled first, so the row is there to focus).
+    val rowFocus = remember { mutableMapOf<Long, FocusRequester>() }
+    fun rowRequester(id: Long) = rowFocus.getOrPut(id) { FocusRequester() }
+    var focusedIndex by remember { mutableStateOf(-1) }
+    fun step(delta: Int): Boolean {
+        if (focusedIndex < 0) return false
+        val target = focusedIndex + delta
+        if (target < 0) return false // Up from the first channel: the header.
+        if (target >= shown.size) return true
+        scope.launch {
+            val lazyIndex = target + 1 // after the header item
+            val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == lazyIndex }
+            val viewportEnd = listState.layoutInfo.viewportEndOffset
+            val topLimit = listState.layoutInfo.viewportStartOffset + listState.layoutInfo.viewportSize.height / 6
+            val fullyIn = info != null && info.offset >= topLimit && info.offset + info.size <= viewportEnd
+            if (!fullyIn) listState.animateScrollToItem((lazyIndex - if (delta > 0) 4 else 1).coerceAtLeast(0))
+            rowRequester(shown[target].id).tryRequestFocus(6)
+        }
+        return true
+    }
+    Box(Modifier.fillMaxSize()) {
+        VerticalShelfScrolling {
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(start = ScreenPaddingH - 12.dp, end = 12.dp, bottom = 32.dp),
+                contentPadding = PaddingValues(top = 84.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier
-                    .width(ListWidth + ScreenPaddingH)
-                    .fillMaxHeight()
-                    .focusRestorer { startFocus },
+                    .fillMaxSize()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when (event.key) {
+                            Key.DirectionDown -> step(1)
+                            Key.DirectionUp -> step(-1)
+                            else -> false
+                        }
+                    },
             ) {
+                item(key = "header") { header() }
                 itemsIndexed(shown, key = { _, channel -> channel.id }) { index, channel ->
                     TvChannelRow(
                         channel = channel,
@@ -215,15 +312,46 @@ private fun ChannelList(
                         onClick = { onWatch(channel) },
                         onLongClick = { onMenu(channel) },
                         modifier = Modifier
+                            .padding(start = ScreenPaddingH - 12.dp)
+                            .width(ListWidth)
                             .then(if (index == startIndex) Modifier.focusRequester(startFocus) else Modifier)
-                            .onFocusChanged { if (it.isFocused) focusedId = channel.id },
+                            .focusRequester(rowRequester(channel.id))
+                            .onFocusChanged { state ->
+                                if (!state.isFocused) {
+                                    if (focusedIndex == index) focusedIndex = -1
+                                    return@onFocusChanged
+                                }
+                                focusedIndex = index
+                                focusedId = channel.id
+                                if (!entered) {
+                                    entered = true
+                                    if (index != startIndex) scope.launch { startFocus.tryRequestFocus() }
+                                }
+                            },
                     )
                 }
             }
         }
-        if (focused != null) ChannelPreview(focused, nowMs, Modifier.weight(1f).padding(start = 28.dp, end = ScreenPaddingH))
+        if (focused != null) {
+            ChannelPreview(
+                focused,
+                nowMs,
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 84.dp + HeaderHeight, end = ScreenPaddingH)
+                    .width(PreviewWidth),
+            )
+        }
     }
 }
+
+private val OkKeys = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
+
+/** The header row's height with its bottom gap (the preview starts under it). */
+private val HeaderHeight = 64.dp
+
+/** The preview's width: what is right of the list. */
+private val PreviewWidth = 960.dp - ScreenPaddingH * 2 - ListWidth - 28.dp
 
 /** One row of the TV list: number, a small still, name with the star, the programme and its progress. */
 @Composable
@@ -305,11 +433,12 @@ private fun ChannelPreview(channel: Channel, nowMs: Long, modifier: Modifier = M
     val context = LocalContext.current
     val program = Channels.showing(channel, nowMs)
     val next = channel.next?.takeIf { it != program }
-    Column(modifier.fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.height(540.dp - 84.dp - HeaderHeight), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // At most 280 dp wide, so the programme's text and «Далее» fit under it on the 540 dp screen.
         ProgrammeStill(
             url = urls?.image(programmeArt(program)),
             shape = AntresolShapes.card,
-            modifier = Modifier.fillMaxWidth().aspectRatio(AntresolMotion.BACKDROP_ASPECT),
+            modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(AntresolMotion.BACKDROP_ASPECT),
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
             Text(
@@ -341,6 +470,15 @@ private fun ChannelPreview(channel: Channel, nowMs: Long, modifier: Modifier = M
             KeyHint("OK", stringResource(R.string.tv_watch_now))
             KeyHint("OK ⋯", stringResource(if (channel.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add))
         }
+    }
+}
+
+/** [FocusRequester.requestFocus], ignoring a requester that is not attached (yet). */
+fun FocusRequester.requestFocusSafely() {
+    try {
+        requestFocus()
+    } catch (_: IllegalStateException) {
+        // Not attached (yet).
     }
 }
 

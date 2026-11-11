@@ -274,6 +274,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         },
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
+                        onPanelOpenChanged = { panelOpen = it },
                     )
                 }
                 page<MusicRoute>(contentFocus) {

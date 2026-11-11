@@ -65,7 +65,6 @@ import app.antresol.tv.ui.components.LoadingView
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.ScreenPaddingH
-import app.antresol.tv.ui.components.trapHorizontalFocus
 import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.ui.R
 import app.antresol.ui.channels.ChannelsViewModel
@@ -84,6 +83,9 @@ import kotlinx.coroutines.launch
 private val ChannelColumnWidth = 168.dp
 private val RowHeight = 52.dp
 private val RulerHeight = 28.dp
+
+/** Lazy items before the first channel row: the page header and the sticky ruler. */
+private const val FIRST_ROW = 2
 
 /** Width of one minute, set per guide ([Epg.minuteWidth]): a 90-min film is 450 dp, short clips are stretched. */
 private val LocalMinuteWidth = androidx.compose.runtime.staticCompositionLocalOf { 5.dp }
@@ -106,44 +108,75 @@ private data class Picked(val row: ChannelEpgRow, val program: ChannelProgram)
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun GuideScreen(viewModel: ChannelsViewModel, nowMs: Long, canTakeFocus: () -> Boolean, onWatch: (Channel) -> Unit) {
+fun GuideScreen(viewModel: ChannelsViewModel, nowMs: Long, canTakeFocus: () -> Boolean, header: @Composable () -> Unit, onPanel: (Boolean) -> Unit, onWatch: (Channel) -> Unit) {
     val rows = viewModel.guideRows
     val error = viewModel.guideError
     LaunchedEffect(Unit) { if (rows == null && error == null) viewModel.loadGuide() }
     var picked by remember { mutableStateOf<Picked?>(null) }
-    when {
-        error != null -> ErrorView(error, onRetry = viewModel::loadGuide, modifier = Modifier.padding(top = 40.dp), takeFocus = canTakeFocus())
-        rows == null -> LoadingView(Modifier.padding(top = 80.dp))
-        else -> GuideGrid(
-            rows = viewModel.shownGuide,
-            fromMs = viewModel.guideFromMs,
-            toMs = viewModel.guideToMs,
-            nowMs = nowMs,
-            lastChannelId = viewModel.lastChannel?.id,
-            canTakeFocus = { canTakeFocus() && picked == null },
-            onPick = { row, program -> picked = Picked(row, program) },
-            onNearEnd = viewModel::loadMoreGuide,
-        )
+    var selected by remember { mutableStateOf(0) }
+    LaunchedEffect(picked != null) { onPanel(picked != null) }
+    val pick = picked
+    val channel = pick?.let { p -> viewModel.channels?.firstOrNull { it.id == p.row.id } }
+    val onAir = pick != null && Channels.isOnAir(pick.program, nowMs)
+    val favorite = channel?.favorite ?: pick?.row?.favorite ?: false
+    val run: (Int) -> Unit = { index ->
+        val watchIndex = if (onAir) 0 else -1
+        if (index == watchIndex) {
+            picked = null
+            channel?.let(onWatch)
+        } else {
+            channel?.let(viewModel::toggleFavorite)
+        }
     }
-    picked?.let { pick ->
-        val channel = viewModel.channels?.firstOrNull { it.id == pick.row.id }
-        ProgramPanel(
-            row = pick.row.copy(favorite = channel?.favorite ?: pick.row.favorite),
-            program = pick.program,
-            nowMs = nowMs,
-            onWatch = {
-                picked = null
-                channel?.let(onWatch)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (picked == null) return@onPreviewKeyEvent false
+                handlePanelKey(event, if (onAir) 2 else 1, selected, onSelect = { selected = it }, onRun = run)
             },
-            onToggleFavorite = { channel?.let(viewModel::toggleFavorite) },
-        )
-        BackHandler { picked = null }
+    ) {
+        when {
+            error != null || rows == null -> Column(Modifier.fillMaxSize().padding(top = 84.dp)) {
+                header()
+                if (error != null) {
+                    ErrorView(error, onRetry = viewModel::loadGuide, modifier = Modifier.padding(top = 40.dp), takeFocus = canTakeFocus())
+                } else {
+                    LoadingView(Modifier.padding(top = 80.dp))
+                }
+            }
+            else -> GuideGrid(
+                header = header,
+                rows = viewModel.shownGuide,
+                fromMs = viewModel.guideFromMs,
+                toMs = viewModel.guideToMs,
+                nowMs = nowMs,
+                lastChannelId = viewModel.lastChannel?.id,
+                canTakeFocus = { canTakeFocus() && picked == null },
+                onPick = { row, program ->
+                    selected = 0
+                    picked = Picked(row, program)
+                },
+                onNearEnd = viewModel::loadMoreGuide,
+            )
+        }
+        if (pick != null) {
+            ProgramPanel(
+                row = pick.row.copy(favorite = favorite),
+                program = pick.program,
+                nowMs = nowMs,
+                onAir = onAir,
+                selected = selected,
+            )
+            BackHandler { picked = null }
+        }
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun GuideGrid(
+    header: @Composable () -> Unit,
     rows: List<ChannelEpgRow>,
     fromMs: Long,
     toMs: Long,
@@ -166,6 +199,8 @@ private fun GuideGrid(
     var anchorMs by remember { mutableLongStateOf(nowMs) }
     var focusedRow by remember { mutableStateOf(rows.indexOfFirst { it.id == lastChannelId }.coerceAtLeast(0)) }
     var vertical by remember { mutableStateOf(false) }
+    // Focus is on a programme block (Up/Down are ours), not on the header.
+    var inGrid by remember { mutableStateOf(false) }
     val visibleFromMs = fromMs + with(density) { (scroll.value.toDp() / minute * 60_000f).toLong() }
 
     LaunchedEffect(fromMs, rows.isNotEmpty()) {
@@ -173,7 +208,7 @@ private fun GuideGrid(
         // Open on now (half an hour of the past in view), focus on the last channel's programme on air.
         scroll.scrollTo(with(density) { (nowMs - 2 * tick - fromMs).coerceAtLeast(0).minutesToDp(minute).roundToPx() })
         val start = rows.indexOfFirst { it.id == lastChannelId }.coerceAtLeast(0)
-        listState.scrollToItem((start - 2).coerceAtLeast(0))
+        listState.scrollToItem(if (start > 3) start - 1 + FIRST_ROW else 0)
         anchorMs = nowMs
         val target = Epg.landing(Epg.visible(rows[start], fromMs, toMs), nowMs) ?: return@LaunchedEffect
         if (canTakeFocus()) {
@@ -182,13 +217,37 @@ private fun GuideGrid(
         }
     }
 
+    var focusedProgram by remember { mutableStateOf<ChannelProgram?>(null) }
+
+    /** Left/Right: the previous/next programme of the channel, revealed first; stays at the ends. */
+    fun moveHorizontally(step: Int): Boolean {
+        if (!inGrid) return false
+        val row = rows.getOrNull(focusedRow) ?: return true
+        val programs = Epg.visible(row, fromMs, toMs)
+        val index = programs.indexOfFirst { it.id == focusedProgram?.id }
+        val target = programs.getOrNull(index + step)
+        if (index < 0 || target == null) {
+            if (step > 0) onNearEnd()
+            return true
+        }
+        scope.launch {
+            reveal(target, fromMs, scroll, density, minute)
+            requester(target).tryRequestFocus(6)
+        }
+        return true
+    }
+
     fun moveVertically(step: Int): Boolean {
+        if (!inGrid) return false
         val target = focusedRow + step
         if (target !in rows.indices) return step > 0 // Down at the end stays; Up leaves for the header.
         val program = Epg.landing(Epg.visible(rows[target], fromMs, toMs), anchorMs) ?: return true
         scope.launch {
-            val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
-            if (target !in visible.drop(1).dropLast(1)) listState.scrollToItem((target - 2).coerceAtLeast(0))
+            val lazyIndex = target + FIRST_ROW
+            val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }.filter { it >= FIRST_ROW }
+            if (lazyIndex !in visible.drop(1).dropLast(1)) {
+                listState.scrollToItem(if (step > 0) (lazyIndex - 3).coerceAtLeast(FIRST_ROW) else (lazyIndex - 1).coerceAtLeast(0))
+            }
             vertical = true
             requester(program).tryRequestFocus(6)
         }
@@ -204,27 +263,35 @@ private fun GuideGrid(
                 when (event.key) {
                     Key.DirectionDown -> moveVertically(1)
                     Key.DirectionUp -> moveVertically(-1)
+                    Key.DirectionLeft -> moveHorizontally(-1)
+                    Key.DirectionRight -> moveHorizontally(1)
                     else -> false
                 }
             },
     ) {
-        Row(Modifier.height(RulerHeight).padding(start = ScreenPaddingH), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                guideDayLabel(visibleFromMs, nowMs),
-                style = Antresol.typography.caption,
-                color = AntresolColors.Label,
-                modifier = Modifier.width(ChannelColumnWidth),
-            )
-            Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scroll, enabled = false)) {
-                Ruler(fromMs, toMs, nowMs, width, tick)
-            }
-        }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(AntresolColors.Hairline))
         LazyColumn(
             state = listState,
+            // Padded as a whole (not its content): the sticky ruler stops under the navigation.
             contentPadding = PaddingValues(bottom = 24.dp),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(top = 84.dp),
         ) {
+            item(key = "header") { header() }
+            stickyHeader(key = "ruler") {
+                Column(Modifier.fillMaxWidth().background(AntresolColors.Background)) {
+                    Row(Modifier.height(RulerHeight).padding(start = ScreenPaddingH), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            guideDayLabel(visibleFromMs, nowMs),
+                            style = Antresol.typography.caption,
+                            color = AntresolColors.Label,
+                            modifier = Modifier.width(ChannelColumnWidth),
+                        )
+                        Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scroll, enabled = false)) {
+                            Ruler(fromMs, toMs, nowMs, width, tick)
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(AntresolColors.Hairline))
+                }
+            }
             itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
                 Row(Modifier.height(RowHeight).padding(start = ScreenPaddingH)) {
                     ChannelCell(row, last = row.id == lastChannelId, focused = index == focusedRow)
@@ -233,7 +300,7 @@ private fun GuideGrid(
                             .weight(1f)
                             .fillMaxHeight()
                             .horizontalScroll(scroll, enabled = false)
-                            .trapHorizontalFocus()
+                            .onFocusChanged { if (it.hasFocus) inGrid = true else if (index == focusedRow) inGrid = false }
                             .focusGroup(),
                     ) {
                         Timeline(
@@ -246,6 +313,7 @@ private fun GuideGrid(
                             requester = ::requester,
                             onFocused = { program ->
                                 focusedRow = index
+                                focusedProgram = program
                                 if (vertical) {
                                     vertical = false
                                 } else {
@@ -276,8 +344,10 @@ private suspend fun reveal(program: ChannelProgram, fromMs: Long, scroll: Scroll
         val margin = 24.dp.roundToPx()
         val viewport = scroll.viewportSize
         when {
-            left < scroll.value -> if (right - margin > scroll.value) Unit else scroll.animateScrollTo((left - margin).coerceAtLeast(0))
-            left > scroll.value + viewport - 4 * margin -> scroll.animateScrollTo((left - margin).coerceAtMost(scroll.maxValue))
+            // A programme that began off-screen to the left but still runs into view stays as it is.
+            left < scroll.value -> if (right - 4 * margin > scroll.value) Unit else scroll.animateScrollTo((left - margin).coerceAtLeast(0))
+            // Paging forward keeps the focused start a quarter in, so what came before stays in view.
+            left > scroll.value + viewport - 4 * margin -> scroll.animateScrollTo((left - viewport / 4).coerceIn(0, scroll.maxValue))
         }
     }
 }
@@ -420,68 +490,32 @@ private fun GuideBlock(program: ChannelProgram, nowMs: Long, textInset: Dp, onCl
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 /** The details of a programme over the guide: still, channel, title, time, facts, overview, actions. */
 @Composable
-private fun ProgramPanel(row: ChannelEpgRow, program: ChannelProgram, nowMs: Long, onWatch: () -> Unit, onToggleFavorite: () -> Unit) {
+private fun ProgramPanel(row: ChannelEpgRow, program: ChannelProgram, nowMs: Long, onAir: Boolean, selected: Int) {
     val urls = LocalMediaUrls.current
-    val onAir = Channels.isOnAir(program, nowMs)
-    val first = remember { FocusRequester() }
-    LaunchedEffect(program.id) { first.tryRequestFocus() }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f)),
-        contentAlignment = Alignment.CenterEnd,
-    ) {
-        Column(
-            Modifier
-                .fillMaxHeight()
-                .width(420.dp)
-                .background(AntresolColors.BackgroundElevated)
-                .padding(horizontal = 28.dp, vertical = 32.dp)
-                .focusProperties { exit = { FocusRequester.Cancel } }
-                .focusGroup(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ProgrammeStill(
-                url = urls?.image(programmeArt(program)),
-                shape = AntresolShapes.card,
-                modifier = Modifier.fillMaxWidth().aspectRatio(AntresolMotion.BACKDROP_ASPECT),
-            )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
-                Text(stringResource(R.string.tv_channel_number, row.number, row.name), style = Antresol.typography.caption)
-                if (row.favorite) FavoriteMark()
-            }
-            Text(program.title, style = Antresol.typography.sectionTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (program.subtitle.isNotBlank()) Text(program.subtitle, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, maxLines = 1)
-            ProgramTime(program, nowMs)
-            programFacts(program).takeIf { it.isNotEmpty() }?.let { Text(it, style = Antresol.typography.caption) }
-            if (program.overview.isNotBlank()) {
-                Text(program.overview, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, maxLines = 4, overflow = TextOverflow.Ellipsis)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 10.dp)) {
-                if (onAir) {
-                    PillButton(
-                        text = stringResource(R.string.tv_watch_now),
-                        onClick = onWatch,
-                        style = PillStyle.Primary,
-                        icon = AntresolIcons.Play,
-                        modifier = Modifier.focusRequester(first),
-                    )
-                }
-                PillButton(
-                    text = stringResource(if (row.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),
-                    onClick = onToggleFavorite,
-                    style = PillStyle.Glass,
-                    icon = if (row.favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
-                    modifier = if (onAir) Modifier else Modifier.focusRequester(first),
-                )
-            }
+    val actions = listOfNotNull(
+        PanelAction(stringResource(R.string.tv_watch_now), AntresolIcons.Play) {}.takeIf { onAir },
+        PanelAction(
+            stringResource(if (row.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),
+            if (row.favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
+        ) {},
+    )
+    KeyPanel(title = stringResource(R.string.tv_channel_number, row.number, row.name), actions = actions, selected = selected, width = 420.dp) {
+        ProgrammeStill(
+            url = urls?.image(programmeArt(program)),
+            shape = AntresolShapes.card,
+            modifier = Modifier.fillMaxWidth().aspectRatio(AntresolMotion.BACKDROP_ASPECT),
+        )
+        Text(program.title, style = Antresol.typography.sectionTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (program.subtitle.isNotBlank()) Text(program.subtitle, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, maxLines = 1)
+        ProgramTime(program, nowMs)
+        programFacts(program).takeIf { it.isNotEmpty() }?.let { Text(it, style = Antresol.typography.caption) }
+        if (program.overview.isNotBlank()) {
+            Text(program.overview, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
     }
 }
-
 
 /**
  * How far a block's title moves right so it stays readable at the visible left edge when the

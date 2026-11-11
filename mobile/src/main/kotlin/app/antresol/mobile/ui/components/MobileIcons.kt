@@ -52,6 +52,14 @@ object MobileIcons {
         lineTo(15.5f, 20f)
     }
 
+    /** Live TV («ТВ»): a set with an antenna, unlike the plain screen of «Сериалы». */
+    val LiveTv: ImageVector = lineIcon("LiveTv") {
+        roundedRect(3f, 8f, 21f, 20f, 2f)
+        moveTo(8f, 3.5f)
+        lineTo(12f, 7.5f)
+        lineTo(16f, 3.5f)
+    }
+
     val Music: ImageVector = lineIcon("Music") {
         moveTo(9f, 17.5f)
         lineTo(9f, 5.5f)

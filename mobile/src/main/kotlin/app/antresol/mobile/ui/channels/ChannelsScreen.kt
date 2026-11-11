@@ -2,60 +2,61 @@ package app.antresol.mobile.ui.channels
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyGridScope
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
+import app.antresol.core.channels.ChannelFilter
 import app.antresol.core.model.Channel
 import app.antresol.mobile.ui.LocalBottomBarPadding
-import app.antresol.mobile.ui.components.CardSizes
-import app.antresol.mobile.ui.components.CardStyle
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.LoadingView
-import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PageTitle
 import app.antresol.mobile.ui.components.PageTop
 import app.antresol.mobile.ui.components.RefreshBox
-import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.SegmentedPills
-import app.antresol.mobile.ui.components.fullBleed
 import app.antresol.ui.R
+import app.antresol.ui.channels.ChannelsView
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.rememberNowMs
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 
 /**
- * «TV»: the live channels. The section pills pick «All» (every section as a row of channel cards)
- * or one section (its channels as a grid), under «Continue» (the channel this profile watched
- * last). A card opens the live player. The list refreshes every
- * 30 s while the page is on screen, and on pull.
+ * «ТВ», a tab of its own: ONE numbered list of channels, like a television («Каналы»), or the
+ * programme guide of the same list («Телегид»). Filters «Все · Избранное · <themes>» narrow both.
+ * The list opens on the profile's last channel (highlighted). A tap tunes in (the player zaps
+ * inside the list it was opened from); a long press toggles the favourite. Refreshes every 30 s
+ * while shown, and on pull.
  */
 @Composable
 fun ChannelsScreen(
     viewModel: ChannelsViewModel,
-    onWatch: (Channel) -> Unit,
-    onBack: (() -> Unit)?,
+    onWatch: (Channel, ChannelFilter) -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     LifecycleStartEffect(viewModel) {
         viewModel.startRefreshing()
@@ -64,90 +65,150 @@ fun ChannelsScreen(
     val bottom = LocalBottomBarPadding.current
     val direction = LocalLayoutDirection.current
     val nowMs = rememberNowMs()
-    val loaded = viewModel.sections
+    val loaded = viewModel.channels
     val error = viewModel.error
-    val sections = loaded.orEmpty()
-    val selected = viewModel.selectedSection
-    RefreshBox(viewModel.refreshing, onRefresh = viewModel::pullToRefresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(CardSizes.gridMinWidth(CardStyle.Wide)),
-            contentPadding = PaddingValues(
-                start = PageGutter + bottom.calculateStartPadding(direction),
-                end = PageGutter + bottom.calculateEndPadding(direction),
-                bottom = bottom.calculateBottomPadding() + 16.dp,
-            ),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            fullWidth("top") { Box(Modifier.fullBleed(PageGutter)) { PageTop(onBack) } }
-            fullWidth("title") { PageTitle(stringResource(R.string.nav_tv), Modifier.fullBleed(PageGutter)) }
-            if (sections.size > 1) {
-                fullWidth("sections") {
-                    SegmentedPills(
-                        options = listOf<String?>(null) + sections.map { it.category },
-                        selected = selected,
-                        label = { it ?: stringResource(R.string.tv_all_sections) },
-                        onSelect = viewModel::select,
-                        modifier = Modifier.fullBleed(PageGutter),
-                    )
-                }
-            }
-            when {
-                error != null -> fullWidth("error") { ErrorView(error, onRetry = viewModel::reload) }
-                loaded == null -> fullWidth("loading") { LoadingView() }
-                sections.isEmpty() -> fullWidth("empty") { EmptyChannels() }
-                else -> {
-                    viewModel.continueChannel?.let { channel ->
-                        fullWidth("continue") { ContinueChannel(channel, nowMs, onClick = { onWatch(channel) }, modifier = Modifier.padding(bottom = 4.dp)) }
-                    }
-                    channelSections(viewModel, selected, nowMs, onWatch)
-                }
-            }
-        }
-    }
-}
+    val filter = viewModel.filter
+    val shown = viewModel.shown
+    val last = viewModel.lastChannel
+    val watch: (Channel) -> Unit = { channel -> onWatch(channel, filter) }
+    val padding = PaddingValues(
+        start = bottom.calculateStartPadding(direction),
+        end = bottom.calculateEndPadding(direction),
+        bottom = bottom.calculateBottomPadding() + 16.dp,
+    )
 
-/** «All»: every section as a row; one picked section: its channels as a grid. */
-private fun LazyGridScope.channelSections(viewModel: ChannelsViewModel, selected: String?, nowMs: Long, onWatch: (Channel) -> Unit) {
+    val header: LazyListScope.() -> Unit = {
+        item("top") { PageTop(onBack) }
+        item("title") { TitleRow(viewModel) }
+        if (loaded != null && loaded.isNotEmpty()) item("filters") { FilterRow(viewModel) }
+    }
+
     when {
-        selected == null -> viewModel.shown.forEach { section ->
-            fullWidth("row/${section.category}") {
-                ChannelShelf(section.category, section.channels, nowMs, onWatch, Modifier.fullBleed(PageGutter))
+        viewModel.view == ChannelsView.Guide && loaded != null && loaded.isNotEmpty() -> GuidePage(viewModel, nowMs, padding, watch)
+        else -> {
+            val listState = rememberLazyListState()
+            var scrolledToLast by rememberSaveable { mutableStateOf(false) }
+            LaunchedEffect(last?.id, shown.size) {
+                // Open on the last channel (a TV turns on where it was left), once.
+                val index = shown.indexOfFirst { it.id == last?.id }
+                if (!scrolledToLast && index >= 0) {
+                    scrolledToLast = true
+                    if (index > 2) listState.scrollToItem(HEADER_ITEMS + index - 1)
+                }
             }
-        }
-        else -> items(viewModel.shown.first().channels, key = { "channel/${it.id}" }) { channel ->
-            ChannelCard(channel, nowMs, onClick = { onWatch(channel) })
+            RefreshBox(viewModel.refreshing, onRefresh = viewModel::pullToRefresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
+                LazyColumn(state = listState, contentPadding = padding, modifier = Modifier.fillMaxSize().testTag("channel-list")) {
+                    header()
+                    when {
+                        error != null -> item("error") { ErrorView(error, onRetry = viewModel::reload) }
+                        loaded == null -> item("loading") { LoadingView() }
+                        loaded.isEmpty() -> item("empty") { Empty(stringResource(R.string.tv_empty), stringResource(R.string.tv_empty_hint)) }
+                        shown.isEmpty() && filter == ChannelFilter.Favorites -> item("no-favorites") {
+                            Empty(stringResource(R.string.tv_favorites_empty), stringResource(R.string.tv_favorites_empty_hint))
+                        }
+                        else -> items(shown, key = { it.id }) { channel ->
+                            ChannelRow(
+                                channel = channel,
+                                nowMs = nowMs,
+                                onClick = { watch(channel) },
+                                onToggleFavorite = { viewModel.toggleFavorite(channel) },
+                                last = channel.id == last?.id,
+                                modifier = Modifier.padding(vertical = 2.dp).testTag("channel-${channel.number}"),
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
-/** A titled row of channel cards (a section of «All», or «On Air Now» on Home). */
+/** Items before the first channel row: the header, the title row, the filters. */
+private const val HEADER_ITEMS = 3
+
+/** «ТВ» and the view switch «Каналы | Телегид». */
 @Composable
-fun ChannelShelf(
-    title: String,
-    channels: List<Channel>,
-    nowMs: Long,
-    onWatch: (Channel) -> Unit,
-    modifier: Modifier = Modifier,
-    onSeeAll: (() -> Unit)? = null,
-) {
-    Column(modifier = modifier) {
-        SectionTitle(title, onSeeAll = onSeeAll)
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = PageGutter),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(top = 4.dp),
-        ) {
-            items(channels, key = { it.id }) { channel ->
-                ChannelCard(channel, nowMs, onClick = { onWatch(channel) }, width = CardSizes.width(CardStyle.Wide))
-            }
+private fun TitleRow(viewModel: ChannelsViewModel) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        PageTitle(stringResource(R.string.nav_tv), Modifier.weight(1f))
+        if (!viewModel.channels.isNullOrEmpty()) {
+            SegmentedPills(
+                options = ChannelsView.entries,
+                selected = viewModel.view,
+                label = { stringResource(if (it == ChannelsView.Channels) R.string.tv_view_channels else R.string.tv_view_guide) },
+                onSelect = viewModel::showView,
+                modifier = Modifier.testTag("tv-view"),
+            )
         }
     }
 }
 
+/** «Все · Избранное · <themes>»: one row that scrolls when it does not fit. */
 @Composable
-private fun EmptyChannels() {
+private fun FilterRow(viewModel: ChannelsViewModel) {
+    val options = listOf(ChannelFilter.All, ChannelFilter.Favorites) + viewModel.themes.map { ChannelFilter.Theme(it) }
+    SegmentedPills(
+        options = options,
+        selected = viewModel.filter,
+        label = { option ->
+            when (option) {
+                ChannelFilter.All -> stringResource(R.string.tv_all_sections)
+                ChannelFilter.Favorites -> stringResource(R.string.tv_favorites)
+                is ChannelFilter.Theme -> option.category
+            }
+        },
+        onSelect = viewModel::select,
+        modifier = Modifier.padding(top = 4.dp, bottom = 10.dp).testTag("tv-filters"),
+    )
+}
+
+@Composable
+private fun GuidePage(viewModel: ChannelsViewModel, nowMs: Long, padding: PaddingValues, onWatch: (Channel) -> Unit) {
+    var pick by androidx.compose.runtime.remember { mutableStateOf<GuidePick?>(null) }
+    val rows = viewModel.guideRows
+    val guideError = viewModel.guideError
+    LaunchedEffect(Unit) { if (rows == null && guideError == null) viewModel.loadGuide() }
+    Column(Modifier.fillMaxSize().background(AntresolColors.Background)) {
+        PageTop(null)
+        TitleRow(viewModel)
+        FilterRow(viewModel)
+        val shown = viewModel.shownGuide
+        when {
+            guideError != null -> ErrorView(guideError, onRetry = viewModel::loadGuide)
+            rows == null -> LoadingView()
+            shown.isEmpty() && viewModel.filter == ChannelFilter.Favorites ->
+                Empty(stringResource(R.string.tv_favorites_empty), stringResource(R.string.tv_favorites_empty_hint))
+            else -> GuideGrid(
+                rows = shown,
+                fromMs = viewModel.guideFromMs,
+                toMs = viewModel.guideToMs,
+                nowMs = nowMs,
+                lastChannelId = viewModel.lastChannel?.id,
+                onPick = { pick = it },
+                onWatchChannel = { id -> viewModel.channels?.firstOrNull { it.id == id }?.let(onWatch) },
+                onNearEnd = viewModel::loadMoreGuide,
+                contentPadding = padding,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+    pick?.let { picked ->
+        val channel = viewModel.channels?.firstOrNull { it.id == picked.channelId }
+        ProgramSheet(
+            pick = picked.copy(favorite = channel?.favorite ?: picked.favorite),
+            nowMs = nowMs,
+            onWatch = {
+                pick = null
+                channel?.let(onWatch)
+            },
+            onToggleFavorite = { channel?.let(viewModel::toggleFavorite) },
+            onDismiss = { pick = null },
+        )
+    }
+}
+
+@Composable
+private fun Empty(title: String, hint: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -155,15 +216,8 @@ private fun EmptyChannels() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(stringResource(R.string.tv_empty), style = Antresol.typography.sectionTitle, textAlign = TextAlign.Center)
-        Text(
-            stringResource(R.string.tv_empty_hint),
-            style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary),
-            textAlign = TextAlign.Center,
-        )
+        Text(title, style = Antresol.typography.sectionTitle, textAlign = TextAlign.Center)
+        Text(hint, style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary), textAlign = TextAlign.Center)
     }
 }
 
-private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit) {
-    item(key = key, span = { GridItemSpan(maxLineSpan) }) { content() }
-}

@@ -7,6 +7,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -428,7 +429,7 @@ private fun UpNextPanel(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit, onClos
     }
 }
 
-private data class MenuOption(val label: String, val selected: Boolean, val onSelect: () -> Unit)
+private data class MenuOption(val label: String, val selected: Boolean, val badge: String? = null, val onSelect: () -> Unit)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -443,7 +444,11 @@ private fun MenuSheet(menu: PlayerMenu, viewModel: VideoPlayerViewModel, onDismi
     )
     val options = when (menu) {
         PlayerMenu.Audio -> viewModel.audioTracks.map { track ->
-            MenuOption(TrackLabels.audio(resources, track), track.index == viewModel.selectedAudioIndex) { viewModel.selectAudio(track) }
+            MenuOption(
+                TrackLabels.audio(resources, track),
+                track.index == viewModel.selectedAudioIndex,
+                badge = if (track.isCleaned) resources.getString(UiR.string.track_cleaned) else null,
+            ) { viewModel.selectAudio(track) }
         }
         PlayerMenu.Subtitles -> listOf(
             MenuOption(stringResource(UiR.string.detail_subtitles_off), viewModel.selectedSubtitle == null) { viewModel.selectSubtitle(null) },
@@ -481,11 +486,25 @@ private fun MenuSheet(menu: PlayerMenu, viewModel: VideoPlayerViewModel, onDismi
                     Box(Modifier.size(22.dp)) {
                         if (option.selected) Icon(AntresolIcons.Check, contentDescription = null, tint = AntresolColors.Accent)
                     }
-                    Text(option.label, style = Antresol.typography.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(option.label, style = Antresol.typography.body, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    option.badge?.let { badge -> CleanedBadge(badge) }
                 }
             }
         }
     }
+}
+
+/** «Очищено»: a hairline capsule after a cleaned voice-over's label. */
+@Composable
+internal fun CleanedBadge(text: String) {
+    Text(
+        text,
+        style = Antresol.typography.badge.copy(color = AntresolColors.LabelSecondary),
+        maxLines = 1,
+        modifier = Modifier
+            .border(1.dp, AntresolColors.LabelTertiary, AntresolShapes.badge)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
 
 @Composable

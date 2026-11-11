@@ -9,6 +9,20 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import app.antresol.mobile.R as MobileR
+import app.antresol.ui.components.AntresolIcons
+import app.antresol.core.model.ProgramTrack
+import app.antresol.core.channels.ChannelFilter
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -66,7 +80,6 @@ import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.RoundIconButton
 import app.antresol.mobile.ui.channels.ChannelCard
 import app.antresol.ui.R
-import app.antresol.ui.channels.ChannelLogoBadge
 import app.antresol.ui.channels.LiveBadge
 import app.antresol.ui.channels.programClock
 import app.antresol.ui.channels.rememberNowMs
@@ -78,50 +91,66 @@ import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 import kotlinx.coroutines.delay
 
-private const val BANNER_HIDE_MS = 5_000L
+private const val CONTROLS_HIDE_MS = 5_000L
 private const val GUIDE_HIDE_MS = 8_000L
 
 /** A vertical swipe at least this long switches the channel. */
 private val ZAP_SWIPE = 72.dp
 
 /** Width of a channel card in the strip. */
-private val StripCardWidth = 164.dp
-
-/** What is over the picture: nothing, the channel banner (after a switch), or the banner with the strip (a tap). */
-private enum class Overlay { Hidden, Banner, Guide }
+private val StripCardWidth = 168.dp
 
 /**
- * A channel live, edge to edge. A tap shows the banner (back, the channel with «Live», the programme
- * on air with its progress, what is next, channel up/down) and the strip of the section's channels;
- * another tap hides them. A vertical swipe switches channels (up for the next number); the banner
- * slides in, and the previous channel's last frame holds, dimmed, until the new one draws. In
- * picture-in-picture only the picture shows. It is live: no seek bar, no pause.
+ * What is over the picture: nothing; the info bar alone (after a switch); the controls (a tap: the
+ * top bar with back, favourite, audio, subtitles, channel list and PiP, channel up/down and the
+ * info bar); or the channel strip.
+ */
+private enum class Overlay { Hidden, Banner, Controls, Guide }
+
+/** The track picker open over the player. */
+private enum class TrackMenu { Audio, Subtitles }
+
+/**
+ * A channel live, edge to edge, in the style of the app's film player. A tap shows the controls;
+ * another tap hides them. A vertical swipe switches channels inside the list the player was opened
+ * from (up for the next number); the info bar slides in, and the previous channel's last frame
+ * holds, dimmed, until the new one draws. Audio and subtitles are the stream's renditions, picked
+ * per programme; the choice sticks across programmes and switches. In picture-in-picture only the
+ * picture shows. It is live: no seek bar, no pause, nothing remembered.
  */
 @Composable
-fun LivePlayerScreen(viewModel: LivePlayerViewModel, inPictureInPicture: Boolean, onExit: () -> Unit) {
+fun LivePlayerScreen(
+    viewModel: LivePlayerViewModel,
+    inPictureInPicture: Boolean,
+    canPictureInPicture: Boolean,
+    onPictureInPicture: () -> Unit,
+    onExit: () -> Unit,
+) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onBackground() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onForeground() }
     BackHandler(onBack = onExit)
     val state = viewModel.state
     val stream = state.stream
     var overlay by remember { mutableStateOf(Overlay.Banner) }
+    var menu by remember { mutableStateOf<TrackMenu?>(null) }
     var touches by remember { mutableIntStateOf(0) }
-    LaunchedEffect(overlay, touches, viewModel.isPlaying, state.channelId) {
-        if (overlay != Overlay.Hidden && viewModel.isPlaying) {
-            delay(if (overlay == Overlay.Guide) GUIDE_HIDE_MS else BANNER_HIDE_MS)
+    LaunchedEffect(overlay, touches, viewModel.isPlaying, state.channelId, menu) {
+        if (overlay != Overlay.Hidden && viewModel.isPlaying && menu == null) {
+            delay(if (overlay == Overlay.Guide) GUIDE_HIDE_MS else CONTROLS_HIDE_MS)
             overlay = Overlay.Hidden
         }
     }
     val zap: (Int) -> Unit = { step ->
         if (viewModel.zap(step)) {
-            if (overlay == Overlay.Hidden) overlay = Overlay.Banner
+            if (overlay == Overlay.Hidden || overlay == Overlay.Guide) overlay = Overlay.Banner
             touches++
         }
     }
     val holding = viewModel.awaitingPicture && viewModel.hasPicture
     val scrim by animateFloatAsState(if (holding) 0.45f else 0f, tween(AntresolMotion.MEDIUM_MS), label = "held-frame")
     val overlays = !inPictureInPicture
-    val bannerShown = overlays && (overlay != Overlay.Hidden || !viewModel.isPlaying)
+    val controls = overlays && overlay == Overlay.Controls
+    val infoShown = overlays && (overlay == Overlay.Banner || overlay == Overlay.Controls || (!viewModel.isPlaying && overlay != Overlay.Guide))
 
     Box(
         Modifier
@@ -129,8 +158,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel, inPictureInPicture: Boolean
             .background(Color.Black)
             .testTag("live-surface")
             .pointerInput(Unit) {
-                // A tap opens the banner with the strip (also over a switch's banner); a tap on that hides it.
-                detectTapGestures(onTap = { overlay = if (overlay == Overlay.Guide) Overlay.Hidden else Overlay.Guide })
+                detectTapGestures(onTap = { overlay = if (overlay == Overlay.Controls || overlay == Overlay.Guide) Overlay.Hidden else Overlay.Controls })
             }
             .pointerInput(Unit) {
                 var dragged = 0f
@@ -151,13 +179,39 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel, inPictureInPicture: Boolean
                 .alpha(scrim)
                 .background(Color.Black),
         )
+        AnimatedVisibility(visible = controls, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f))) {
+                TopBar(
+                    viewModel = viewModel,
+                    canPictureInPicture = canPictureInPicture,
+                    onPictureInPicture = onPictureInPicture,
+                    onExit = onExit,
+                    onMenu = { menu = it; touches++ },
+                    onGuide = { overlay = Overlay.Guide },
+                    onTouch = { touches++ },
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+                if (state.listed.size > 1) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                            .padding(end = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        RoundIconButton(MobileIcons.ChevronUp, stringResource(R.string.tv_channel_up), { zap(1) }, glass = true, size = 48.dp, iconSize = 24.dp, modifier = Modifier.testTag("live-channel-up"))
+                        RoundIconButton(MobileIcons.ChevronDown, stringResource(R.string.tv_channel_down), { zap(-1) }, glass = true, size = 48.dp, iconSize = 24.dp, modifier = Modifier.testTag("live-channel-down"))
+                    }
+                }
+            }
+        }
         AnimatedVisibility(
-            visible = bannerShown,
-            enter = slideInVertically(tween(AntresolMotion.MEDIUM_MS)) { -it / 3 } + fadeIn(tween(AntresolMotion.MEDIUM_MS)),
-            exit = slideOutVertically(tween(AntresolMotion.MEDIUM_MS)) { -it / 4 } + fadeOut(tween(AntresolMotion.MEDIUM_MS)),
-            modifier = Modifier.align(Alignment.TopCenter),
+            visible = infoShown,
+            enter = slideInVertically(tween(AntresolMotion.MEDIUM_MS)) { it / 3 } + fadeIn(tween(AntresolMotion.MEDIUM_MS)),
+            exit = slideOutVertically(tween(AntresolMotion.MEDIUM_MS)) { it / 4 } + fadeOut(tween(AntresolMotion.MEDIUM_MS)),
+            modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            ChannelBanner(state, onExit = onExit, onZap = { step -> touches++; zap(step) })
+            InfoBar(state)
         }
         AnimatedVisibility(
             visible = overlays && overlay == Overlay.Guide,
@@ -167,6 +221,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel, inPictureInPicture: Boolean
         ) {
             ChannelStrip(
                 guide = viewModel.miniGuide,
+                title = filterTitle(state.filter),
                 currentId = state.channelId,
                 onScroll = { touches++ },
                 onTune = { channel ->
@@ -194,87 +249,134 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel, inPictureInPicture: Boolean
             }
         }
     }
+    menu?.let { open -> TrackSheet(open, viewModel, onDismiss = { menu = null }) }
 }
 
-/**
- * The banner at the top: back, the logo, «10 · Comedy» with «● Live», the programme on air, its
- * start and end around the live progress, what is next, and the channel up/down buttons.
- */
+/** «Все каналы», «Избранное» or the theme: the list the player zaps through. */
 @Composable
-private fun ChannelBanner(state: LiveTvState, onExit: () -> Unit, onZap: (Int) -> Unit) {
-    val context = LocalContext.current
-    val nowMs = rememberNowMs(1_000L)
-    val channel = state.channel
-    val (onAir, next) = state.onAir(nowMs)
+private fun filterTitle(filter: ChannelFilter): String = when (filter) {
+    ChannelFilter.All -> stringResource(R.string.nav_tv)
+    ChannelFilter.Favorites -> stringResource(R.string.tv_favorites)
+    is ChannelFilter.Theme -> filter.category
+}
+
+/** The top bar: back on the left; favourite, audio, subtitles, channel list and PiP on the right. */
+@Composable
+private fun TopBar(
+    viewModel: LivePlayerViewModel,
+    canPictureInPicture: Boolean,
+    onPictureInPicture: () -> Unit,
+    onExit: () -> Unit,
+    onMenu: (TrackMenu) -> Unit,
+    onGuide: () -> Unit,
+    onTouch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val channel = viewModel.state.channel
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.85f), 0.65f to Color.Black.copy(alpha = 0.6f), 1f to Color.Transparent))
+            .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 40.dp),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         GlassIconButton(MobileIcons.ChevronLeft, stringResource(R.string.tv_back), onExit)
+        Spacer(Modifier.weight(1f))
         if (channel != null) {
-            ChannelLogoBadge(name = channel.name, logo = channel.logo, width = 72.dp, modifier = Modifier.padding(top = 2.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        stringResource(R.string.tv_channel_number, channel.number, channel.name),
-                        style = Antresol.typography.title.copy(color = AntresolColors.LabelSecondary),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    LiveBadge()
-                }
-                Text(
-                    onAir?.let(Channels::programLine) ?: stringResource(R.string.tv_nothing),
-                    style = Antresol.typography.sectionTitle,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (onAir != null) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier
-                            .padding(top = 6.dp)
-                            .widthIn(max = 420.dp),
-                    ) {
-                        Text(programClock(context, onAir.start), style = Antresol.typography.caption)
-                        ProgressBar(fraction = Channels.progress(onAir, nowMs), modifier = Modifier.weight(1f))
-                        Text(programClock(context, onAir.end), style = Antresol.typography.caption)
-                    }
-                }
-                if (next != null) {
-                    Text(
-                        stringResource(R.string.tv_next_at_long, programClock(context, next.start), Channels.programLine(next)),
-                        style = Antresol.typography.caption,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-            }
-        } else {
-            Box(Modifier.weight(1f))
+            val favorite = channel.favorite
+            RoundIconButton(
+                if (favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
+                stringResource(if (favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),
+                { onTouch(); viewModel.toggleFavorite() },
+                glass = true, size = 44.dp, iconSize = 22.dp,
+                modifier = Modifier.testTag("live-favorite"),
+            )
         }
-        if (state.channels.size > 1) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                RoundIconButton(MobileIcons.ChevronUp, stringResource(R.string.tv_channel_up), { onZap(1) }, glass = true, size = 40.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-channel-up"))
-                RoundIconButton(MobileIcons.ChevronDown, stringResource(R.string.tv_channel_down), { onZap(-1) }, glass = true, size = 40.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-channel-down"))
-            }
+        if (viewModel.audioOptions.isNotEmpty()) {
+            RoundIconButton(AntresolIcons.Audio, stringResource(R.string.detail_audio), { onMenu(TrackMenu.Audio) }, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-audio"))
+        }
+        if (viewModel.subtitleOptions.isNotEmpty()) {
+            RoundIconButton(AntresolIcons.Subtitles, stringResource(R.string.detail_subtitles), { onMenu(TrackMenu.Subtitles) }, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-subtitles"))
+        }
+        if (viewModel.state.listed.size > 1) {
+            RoundIconButton(AntresolIcons.List, stringResource(R.string.tv_channel_list), onGuide, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-guide"))
+        }
+        if (canPictureInPicture) {
+            RoundIconButton(MobileIcons.Pip, stringResource(MobileR.string.player_pip), onPictureInPicture, glass = true, size = 44.dp, iconSize = 22.dp)
         }
     }
 }
 
-/** The section's channels in a row at the bottom, scrolled to the one on; a tap switches to it. */
+/**
+ * The info bar at the bottom (Apple TV / Android TV Live Channels): «10 · Comedy ● Live», the
+ * programme on air with its episode, its start and end around the live progress, and what is next.
+ */
 @Composable
-private fun ChannelStrip(guide: MiniGuide, currentId: Long, onScroll: () -> Unit, onTune: (Channel) -> Unit) {
+private fun InfoBar(state: LiveTvState) {
+    val context = LocalContext.current
+    val nowMs = rememberNowMs(1_000L)
+    val channel = state.channel
+    val (onAir, next) = state.onAir(nowMs)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color.Black.copy(alpha = 0.6f), 1f to Color.Black.copy(alpha = 0.85f)))
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+            .padding(start = 24.dp, end = 24.dp, top = 40.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (channel != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    stringResource(R.string.tv_channel_number, channel.number, channel.name),
+                    style = Antresol.typography.title.copy(color = AntresolColors.LabelSecondary, fontFeatureSettings = "tnum"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (channel.favorite) Icon(AntresolIcons.StarFilled, null, tint = AntresolColors.Orange, modifier = Modifier.size(14.dp))
+                LiveBadge()
+            }
+        }
+        Text(
+            onAir?.title ?: stringResource(R.string.tv_nothing),
+            style = Antresol.typography.pageTitle,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (onAir != null && onAir.subtitle.isNotBlank()) {
+            Text(onAir.subtitle, style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (onAir != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(top = 8.dp).widthIn(max = 560.dp),
+            ) {
+                Text(programClock(context, onAir.start), style = Antresol.typography.caption)
+                ProgressBar(fraction = Channels.progress(onAir, nowMs), modifier = Modifier.weight(1f))
+                Text(programClock(context, onAir.end), style = Antresol.typography.caption)
+            }
+        }
+        if (next != null) {
+            Text(
+                stringResource(R.string.tv_next_short, programClock(context, next.start), Channels.programLine(next)),
+                style = Antresol.typography.caption,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
+/** The list's channels in a row at the bottom, scrolled to the one on; a tap switches to it. */
+@Composable
+private fun ChannelStrip(guide: MiniGuide, title: String, currentId: Long, onScroll: () -> Unit, onTune: (Channel) -> Unit) {
     val nowMs = rememberNowMs()
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = guide.startIndex)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = guide.currentIndex)
     LaunchedEffect(listState.isScrollInProgress) { if (listState.isScrollInProgress) onScroll() }
     val direction = LocalLayoutDirection.current
     val insets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal).asPaddingValues()
@@ -286,15 +388,15 @@ private fun ChannelStrip(guide: MiniGuide, currentId: Long, onScroll: () -> Unit
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            guide.category.ifEmpty { stringResource(R.string.nav_tv) },
+            title,
             style = Antresol.typography.title,
-            modifier = Modifier.padding(start = 16.dp + insets.calculateStartPadding(direction)),
+            modifier = Modifier.padding(start = 24.dp + insets.calculateStartPadding(direction)),
         )
         LazyRow(
             state = listState,
             contentPadding = PaddingValues(
-                start = 16.dp + insets.calculateStartPadding(direction),
-                end = 16.dp + insets.calculateEndPadding(direction),
+                start = 24.dp + insets.calculateStartPadding(direction),
+                end = 24.dp + insets.calculateEndPadding(direction),
             ),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -307,6 +409,59 @@ private fun ChannelStrip(guide: MiniGuide, currentId: Long, onScroll: () -> Unit
                     watching = channel.id == currentId,
                     showNext = false,
                 )
+            }
+        }
+    }
+}
+
+/**
+ * «Звук» / «Субтитры» for the programme on air: the renditions the server names for it
+ * («Русский — LostFilm», «English», «Оригинал (fr)»); the choice sticks for this player only.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrackSheet(menu: TrackMenu, viewModel: LivePlayerViewModel, onDismiss: () -> Unit) {
+    val selection = viewModel.trackSelection
+    val options: List<Triple<String, Boolean, () -> Unit>> = when (menu) {
+        TrackMenu.Audio -> viewModel.audioOptions.map { track ->
+            Triple(track.label.ifBlank { track.name }, track.slot == selection.audio?.slot) { viewModel.selectAudio(track) }
+        }
+        TrackMenu.Subtitles -> listOf(
+            Triple(stringResource(R.string.detail_subtitles_off), selection.subtitles == null) { viewModel.selectSubtitles(null) },
+        ) + viewModel.subtitleOptions.map { track: ProgramTrack ->
+            Triple(track.label.ifBlank { track.name }, track.slot == selection.subtitles?.slot) { viewModel.selectSubtitles(track) }
+        }
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AntresolColors.BackgroundElevated,
+        shape = AntresolShapes.sheet,
+    ) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+            Text(
+                stringResource(if (menu == TrackMenu.Audio) R.string.detail_audio else R.string.detail_subtitles),
+                style = Antresol.typography.sectionTitle,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            )
+            options.forEach { (label, selected, onSelect) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onSelect()
+                            onDismiss()
+                        }
+                        .padding(horizontal = 20.dp, vertical = 14.dp)
+                        .testTag("live-track-option"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Box(Modifier.size(22.dp)) {
+                        if (selected) Icon(AntresolIcons.Check, contentDescription = null, tint = AntresolColors.Accent)
+                    }
+                    Text(label, style = Antresol.typography.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }

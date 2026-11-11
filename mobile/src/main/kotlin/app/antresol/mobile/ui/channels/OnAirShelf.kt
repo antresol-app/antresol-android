@@ -1,6 +1,15 @@
 package app.antresol.mobile.ui.channels
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import app.antresol.mobile.ui.components.CardSizes
+import app.antresol.mobile.ui.components.CardStyle
+import app.antresol.mobile.ui.components.PageGutter
+import app.antresol.mobile.ui.components.SectionTitle
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -15,8 +24,8 @@ import app.antresol.ui.channels.rememberNowMs
 private const val ON_AIR_MAX = 20
 
 /**
- * «On Air Now» on Home: the channels and what they show, the phone's way into «TV» (its tab bar
- * has room for five tabs, as on the web). The title opens the TV page. Nothing without channels.
+ * «Сейчас в эфире» on Home: the channels and what they show. The title opens the «ТВ» tab.
+ * Nothing without channels.
  */
 @Composable
 fun OnAirShelf(viewModel: ChannelsViewModel, onWatch: (Channel) -> Unit, onSeeAll: () -> Unit) {
@@ -34,4 +43,28 @@ fun OnAirShelf(viewModel: ChannelsViewModel, onWatch: (Channel) -> Unit, onSeeAl
         onSeeAll = onSeeAll,
         modifier = Modifier.padding(top = 20.dp),
     )
+}
+
+/** A titled row of channel cards («Сейчас в эфире» on Home). */
+@Composable
+fun ChannelShelf(
+    title: String,
+    channels: List<Channel>,
+    nowMs: Long,
+    onWatch: (Channel) -> Unit,
+    modifier: Modifier = Modifier,
+    onSeeAll: (() -> Unit)? = null,
+) {
+    Column(modifier = modifier) {
+        SectionTitle(title, onSeeAll = onSeeAll)
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = PageGutter),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(top = 4.dp),
+        ) {
+            items(channels, key = { it.id }) { channel ->
+                ChannelCard(channel, nowMs, onClick = { onWatch(channel) }, width = CardSizes.width(CardStyle.Wide))
+            }
+        }
+    }
 }

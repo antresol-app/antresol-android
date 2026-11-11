@@ -27,6 +27,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
+import app.antresol.core.channels.ChannelFilter
 import app.antresol.core.session.AuthState
 import app.antresol.mobile.AntresolMobileApp
 import app.antresol.mobile.settings.AppSettings
@@ -101,10 +102,10 @@ class LivePlayerActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
         }
 
-        val lastChannel = app.lastChannels.of(signedIn.serverId, signedIn.userId)
+        val filter = ChannelFilter.fromKey(intent.getStringExtra(EXTRA_FILTER))
         viewModel = ViewModelProvider(
             this,
-            viewModelFactory { initializer { LivePlayerViewModel(applicationContext, client, channelId, lastChannel) } },
+            viewModelFactory { initializer { LivePlayerViewModel(applicationContext, client, channelId, filter) } },
         )[LivePlayerViewModel::class.java]
         // Headset buttons, Bluetooth, the picture-in-picture window's play/pause; live, no seeking.
         mediaSession = LiveMediaSession.build(this, viewModel.player)
@@ -115,7 +116,13 @@ class LivePlayerActivity : ComponentActivity() {
             AntresolTheme {
                 // The strip's cards show the programmes' pictures.
                 CompositionLocalProvider(LocalMediaUrls provides client.urls) {
-                    LivePlayerScreen(viewModel = viewModel, inPictureInPicture = inPictureInPicture, onExit = ::finish)
+                    LivePlayerScreen(
+                        viewModel = viewModel,
+                        inPictureInPicture = inPictureInPicture,
+                        canPictureInPicture = canPictureInPicture,
+                        onPictureInPicture = ::enterPictureInPicture,
+                        onExit = ::finish,
+                    )
                 }
             }
         }
@@ -176,6 +183,7 @@ class LivePlayerActivity : ComponentActivity() {
 
     companion object {
         private const val EXTRA_CHANNEL_ID = "channelId"
+        private const val EXTRA_FILTER = "filter"
 
         private var current: WeakReference<LivePlayerActivity>? = null
 
@@ -187,8 +195,13 @@ class LivePlayerActivity : ComponentActivity() {
             }
         }
 
-        fun start(context: Context, channelId: Long) {
-            context.startActivity(Intent(context, LivePlayerActivity::class.java).putExtra(EXTRA_CHANNEL_ID, channelId))
+        /** Opens [channelId]; zapping stays inside the list of [filter] it was opened from. */
+        fun start(context: Context, channelId: Long, filter: ChannelFilter = ChannelFilter.All) {
+            context.startActivity(
+                Intent(context, LivePlayerActivity::class.java)
+                    .putExtra(EXTRA_CHANNEL_ID, channelId)
+                    .putExtra(EXTRA_FILTER, filter.key),
+            )
         }
     }
 }

@@ -46,7 +46,7 @@ data class SongsRoute(val title: String)
 @Serializable
 data object SettingsRoute
 
-/** «TV»: the live channels by section, reached from «On Air Now» on Home (the tab bar keeps five tabs). */
+/** «ТВ»: the live channels, a tab of its own (one numbered list, or the guide). */
 @Serializable
 data object ChannelsRoute
 
@@ -63,6 +63,7 @@ enum class NavTab(val route: Any, @StringRes val label: Int, val icon: ImageVect
     Home(HomeRoute, R.string.nav_home, MobileIcons.Home),
     Movies(MoviesRoute, R.string.nav_movies, MobileIcons.Film),
     Shows(ShowsRoute, R.string.nav_tv_shows, MobileIcons.Tv),
+    Tv(ChannelsRoute, R.string.nav_tv, MobileIcons.LiveTv),
     Music(MusicRoute, R.string.nav_music, MobileIcons.Music),
     Books(BooksRoute, R.string.nav_books, MobileIcons.Book),
     Search(SearchRoute, R.string.nav_search, AntresolIcons.Search),

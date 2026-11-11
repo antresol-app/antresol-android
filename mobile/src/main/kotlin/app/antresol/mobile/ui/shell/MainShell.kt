@@ -111,7 +111,9 @@ import app.antresol.mobile.ui.search.SearchViewModel
 import app.antresol.mobile.ui.settings.SettingsScreen
 import app.antresol.mobile.ui.settings.SettingsViewModel
 import app.antresol.ui.R
+import app.antresol.core.channels.ChannelFilter
 import app.antresol.ui.channels.ChannelsViewModel
+import app.antresol.ui.channels.channelsApi
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.AntresolColors
 import kotlinx.coroutines.CancellationException
@@ -209,7 +211,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
 
     val open: (Card) -> Unit = { card -> navController.navigate(DetailRoute(card)) }
     val playVideo: (Long, ResumeMode) -> Unit = { id, mode -> VideoPlayerActivity.start(context, id, mode) }
-    val watchChannel: (Channel) -> Unit = { channel -> LivePlayerActivity.start(context, channel.id) }
+    val watchChannel: (Channel, ChannelFilter) -> Unit = { channel, filter -> LivePlayerActivity.start(context, channel.id, filter) }
     val read: (BookAction) -> Unit = { action ->
         when (action) {
             is BookAction.ReadComic -> navController.navigate(ComicReaderRoute(action.volumeId, action.fromStart))
@@ -278,18 +280,17 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onSeeAll = { shelf -> openGrid(GridSource.forShelf(ShelfPage.Home, shelf.id), shelf.title) },
                         onAir = {
                             OnAirShelf(
-                                viewModel = viewModel(key = "on-air") { ChannelsViewModel({ client.channels().channels }) },
-                                onWatch = watchChannel,
-                                onSeeAll = { navController.navigate(ChannelsRoute) },
+                                viewModel = viewModel(key = "on-air") { ChannelsViewModel(client.channelsApi()) },
+                                onWatch = { channel -> watchChannel(channel, ChannelFilter.All) },
+                                onSeeAll = { selectTab(NavTab.Tv) },
                             )
                         },
                     )
                 }
                 composable<ChannelsRoute> {
                     ChannelsScreen(
-                        viewModel = viewModel { ChannelsViewModel({ client.channels().channels }, lastChannel = app.lastChannels.of(state.session.serverId, state.session.userId)) },
+                        viewModel = viewModel { ChannelsViewModel(client.channelsApi()) },
                         onWatch = watchChannel,
-                        onBack = back,
                     )
                 }
                 composable<MoviesRoute> {

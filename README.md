@@ -34,12 +34,15 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   ExoPlayer player sends the device's codec caps (direct play, or HLS remux/transcode), has audio,
   subtitle and quality menus, keeps the HLS session alive, saves progress every 10 s and counts
   down to the next episode.
-- **TV (live channels)**: the server's channels by section («All» shows every section as a row, a
-  section pill shows only its channels), each card with the programme on air, its live progress and
-  the channel's gradient logo. OK opens the full-screen live player (live edge, no seeking): Up/Down,
-  Channel +/− and Page Up/Down switch to the next/previous channel by number (wrapping); the overlay
-  shows the channel, the programme with its time and progress, and what is next. A starting channel
-  is retried automatically; other server refusals are shown with Try Again.
+- **TV (live channels)**: «Continue» (the channel this profile last watched on this TV) leads the
+  page, then the server's channels by section («All» shows every section as a row, a section pill
+  shows only its channels); each card shows the programme on air with its live progress and what is
+  next. OK opens the full-screen live player (live edge, no seeking): Up/Down, Channel +/− and Page
+  Up/Down switch to the next/previous channel by number (wrapping), holding the last frame until the
+  new channel draws; the channel banner slides in on every switch and on OK. OK with the banner up
+  opens the mini-guide, a row of the section's channels starting at the one on; Back hides the
+  guide, then the banner, then leaves. The media session reports the live programme. A starting
+  channel is retried automatically; other server refusals are shown with Try Again.
 - **Music**: album, artist and playlist pages with Play, Shuffle, Favorite and the track list. A
   Media3 `MediaSessionService` keeps music playing while you browse or leave the app and publishes
   it to the system's now-playing card and remote. Now Playing has an artwork-tinted background,
@@ -71,8 +74,10 @@ Live UI tests (`TvLiveUiTest`, Robolectric with D-pad key events) write screensh
   transcode when it can't. Progress is saved every 10 s, and the next episode starts after a
   countdown.
 - **TV (live channels)**: «On Air Now» on Home (after the first shelf; the tab bar keeps five tabs, as
-  on the web) opens the TV page with section pills and channel cards. The live player is a landscape
-  activity; channel up/down buttons and vertical swipes switch channels, a tap shows the overlay.
+  on the web) opens the TV page: «Continue» on top, section pills and channel cards. The live player
+  is a landscape activity; channel up/down buttons and vertical swipes switch channels without a
+  black frame, a tap shows the banner with the strip of the section's channels. Leaving the app
+  while a channel plays shrinks it to picture-in-picture; the media session reports it as live.
 - **Music & audiobooks**: a Media3 `MediaSessionService` handles background playback, the
   notification and lock-screen controls. A mini-player sits above the tab bar. Now Playing has
   synced lyrics, the queue, shuffle/repeat, star and a sleep timer. Audiobooks also get chapters,

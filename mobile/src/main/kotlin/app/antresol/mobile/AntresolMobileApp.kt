@@ -1,5 +1,7 @@
 package app.antresol.mobile
 
+import app.antresol.core.channels.LastChannels
+import app.antresol.ui.channels.lastChannels
 import android.app.Application
 import android.os.Build
 import app.antresol.core.api.ServerLanguage
@@ -34,6 +36,9 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
 
     /** Final progress writes of closed players and readers, awaited by screens that show progress. */
     val pendingWrites = PendingWrites()
+
+    /** The channel each profile watched last on this device («Continue» on the TV page). */
+    val lastChannels: LastChannels by lazy { lastChannels(this) }
 
     /** Music and audiobook playback (the Media3 service behind a controller). */
     lateinit var playback: PlaybackConnection

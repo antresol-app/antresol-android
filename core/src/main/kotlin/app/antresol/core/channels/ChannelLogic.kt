@@ -9,6 +9,16 @@ import java.time.format.DateTimeParseException
 /** A section of the TV tab: the channels of one category, by number. */
 data class ChannelSection(val category: String, val channels: List<Channel>)
 
+/**
+ * The player's mini-guide: the channels of the current channel's section by number, and where the
+ * strip starts ([startIndex], the channel being watched). Empty while the channels are loading.
+ */
+data class MiniGuide(val category: String, val channels: List<Channel>, val startIndex: Int) {
+    companion object {
+        val Empty = MiniGuide("", emptyList(), 0)
+    }
+}
+
 /** Pure rules of the TV tab and the live player, shared by both apps (mirrors the web's `channels.ts`). */
 object Channels {
     /** How often the channel list and a channel's guide are reloaded while visible. */
@@ -36,6 +46,22 @@ object Channels {
         if (index < 0) return sorted.first()
         val target = Math.floorMod(index + step, sorted.size)
         return sorted[target]
+    }
+
+    /** The last watched channel while the profile can still see it, for «Continue»; else null. */
+    fun continueWith(channels: List<Channel>, lastId: Long?): Channel? =
+        lastId?.let { id -> channels.firstOrNull { it.id == id } }
+
+    /**
+     * The strip of the player's mini-guide for [currentId]: its section's channels by number,
+     * starting at it. A channel that is not in the list (yet) gives every channel from the first.
+     */
+    fun miniGuide(channels: List<Channel>, currentId: Long): MiniGuide {
+        if (channels.isEmpty()) return MiniGuide.Empty
+        val current = channels.firstOrNull { it.id == currentId }
+            ?: return MiniGuide("", sortedByNumber(channels), 0)
+        val section = sortedByNumber(channels.filter { it.category == current.category })
+        return MiniGuide(current.category, section, section.indexOfFirst { it.id == currentId }.coerceAtLeast(0))
     }
 
     /** Epoch milliseconds of an ISO 8601 time from the server, or null when it cannot be read. */

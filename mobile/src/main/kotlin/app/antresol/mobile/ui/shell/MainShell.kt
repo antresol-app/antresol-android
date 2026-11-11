@@ -287,7 +287,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 composable<ChannelsRoute> {
                     ChannelsScreen(
-                        viewModel = viewModel { ChannelsViewModel({ client.channels().channels }) },
+                        viewModel = viewModel { ChannelsViewModel({ client.channels().channels }, lastChannel = app.lastChannels.of(state.session.serverId, state.session.userId)) },
                         onWatch = watchChannel,
                         onBack = back,
                     )

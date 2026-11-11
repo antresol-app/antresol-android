@@ -179,4 +179,9 @@
     <string name="tv_back">Back to Channels</string>
     <string name="tv_empty">No channels yet</string>
     <string name="tv_empty_hint">Channels appear by themselves once the library has at least six movies of a genre or a series with eight episodes.</string>
+    <string name="tv_continue">Continue</string>
+    <string name="tv_continue_watching">Continue Watching “%1$s”</string>
+    <string name="tv_next_at_long">Next at %1$s — %2$s</string>
+    <string name="tv_guide_hint">Channels</string>
+    <string name="tv_watching">Watching</string>
 </resources>

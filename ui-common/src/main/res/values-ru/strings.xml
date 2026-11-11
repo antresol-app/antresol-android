@@ -179,4 +179,9 @@
     <string name="tv_back">К каналам</string>
     <string name="tv_empty">Каналов пока нет</string>
     <string name="tv_empty_hint">Каналы появятся сами, когда в медиатеке наберётся хотя бы шесть фильмов одного жанра или сериал от восьми серий.</string>
+    <string name="tv_continue">Продолжить</string>
+    <string name="tv_continue_watching">Продолжить «%1$s»</string>
+    <string name="tv_next_at_long">Далее в %1$s — %2$s</string>
+    <string name="tv_guide_hint">Каналы</string>
+    <string name="tv_watching">Сейчас смотрите</string>
 </resources>

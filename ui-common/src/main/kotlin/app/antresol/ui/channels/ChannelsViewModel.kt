@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.channels.ChannelSection
 import app.antresol.core.channels.Channels
+import app.antresol.core.channels.LastChannel
 import app.antresol.core.model.Channel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -18,10 +19,12 @@ import kotlinx.coroutines.launch
  * The channels of the TV tab (and the phone's «On Air Now» shelf), by section. While a page shows
  * them ([startRefreshing]) the list is reloaded every [Channels.REFRESH_MS] so what is on air stays
  * current; a failed refresh keeps the channels shown. [section] is the picked category, null for «All».
+ * With [lastChannel] the page offers «Continue» with the channel the profile watched last.
  */
 class ChannelsViewModel(
     private val fetch: suspend () -> List<Channel>,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val lastChannel: LastChannel? = null,
 ) : ViewModel() {
     /** Every section, or null until the first load succeeded. */
     var sections: List<ChannelSection>? by mutableStateOf(null)
@@ -38,13 +41,21 @@ class ChannelsViewModel(
     var refreshing: Boolean by mutableStateOf(false)
         private set
 
+    /** The id of the channel the profile watched last on this device. */
+    private var lastChannelId: Long? by mutableStateOf(lastChannel?.id?.value)
+
     private var loadedAt = 0L
     private var job: Job? = null
     private var refreshJob: Job? = null
 
     init {
         reload()
+        lastChannel?.let { last -> viewModelScope.launch { last.id.collect { lastChannelId = it } } }
     }
+
+    /** «Continue»: the last watched channel while it is still in the list, else null. */
+    val continueChannel: Channel?
+        get() = Channels.continueWith(sections.orEmpty().flatMap { it.channels }, lastChannelId)
 
     /** The picked section while it exists, else null («All»). */
     val selectedSection: String?

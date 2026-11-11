@@ -47,7 +47,8 @@ import app.antresol.ui.theme.AntresolColors
 
 /**
  * «TV»: the live channels. The section pills pick «All» (every section as a row of channel cards)
- * or one section (its channels as a grid). A card opens the live player. The list refreshes every
+ * or one section (its channels as a grid), under «Continue» (the channel this profile watched
+ * last). A card opens the live player. The list refreshes every
  * 30 s while the page is on screen, and on pull.
  */
 @Composable
@@ -96,15 +97,27 @@ fun ChannelsScreen(
                 error != null -> fullWidth("error") { ErrorView(error, onRetry = viewModel::reload) }
                 loaded == null -> fullWidth("loading") { LoadingView() }
                 sections.isEmpty() -> fullWidth("empty") { EmptyChannels() }
-                selected == null -> viewModel.shown.forEach { section ->
-                    fullWidth("row/${section.category}") {
-                        ChannelShelf(section.category, section.channels, nowMs, onWatch, Modifier.fullBleed(PageGutter))
+                else -> {
+                    viewModel.continueChannel?.let { channel ->
+                        fullWidth("continue") { ContinueChannel(channel, nowMs, onClick = { onWatch(channel) }, modifier = Modifier.padding(bottom = 4.dp)) }
                     }
-                }
-                else -> items(viewModel.shown.first().channels, key = { "channel/${it.id}" }) { channel ->
-                    ChannelCard(channel, nowMs, onClick = { onWatch(channel) })
+                    channelSections(viewModel, selected, nowMs, onWatch)
                 }
             }
+        }
+    }
+}
+
+/** «All»: every section as a row; one picked section: its channels as a grid. */
+private fun LazyGridScope.channelSections(viewModel: ChannelsViewModel, selected: String?, nowMs: Long, onWatch: (Channel) -> Unit) {
+    when {
+        selected == null -> viewModel.shown.forEach { section ->
+            fullWidth("row/${section.category}") {
+                ChannelShelf(section.category, section.channels, nowMs, onWatch, Modifier.fullBleed(PageGutter))
+            }
+        }
+        else -> items(viewModel.shown.first().channels, key = { "channel/${it.id}" }) { channel ->
+            ChannelCard(channel, nowMs, onClick = { onWatch(channel) })
         }
     }
 }

@@ -57,6 +57,28 @@ data class LiveTvState(
     val stream: LiveStream,
 ) {
     val channel: Channel? get() = channels.firstOrNull { it.id == channelId }
+
+    /**
+     * The programme on air at [nowMs] and the one after it: from the guide once loaded, else from
+     * the channel list's now/next.
+     */
+    fun onAir(nowMs: Long): Pair<ChannelProgram?, ChannelProgram?> {
+        val (guideNow, guideNext) = Channels.onAir(programs, nowMs)
+        if (guideNow != null) return guideNow to guideNext
+        val channel = channel ?: return null to null
+        return Channels.showing(channel, nowMs) to channel.next?.takeIf { it != Channels.showing(channel, nowMs) }
+    }
+}
+
+/**
+ * The mini-guide of [state] at [nowMs]: the channel on screen shows what its guide says is on now
+ * and next (the channel list is up to 30 s older), the others what the list says.
+ */
+fun liveMiniGuide(state: LiveTvState, nowMs: Long): MiniGuide {
+    val guide = Channels.miniGuide(state.channels, state.channelId)
+    val (now, next) = Channels.onAir(state.programs, nowMs)
+    if (now == null) return guide
+    return guide.copy(channels = guide.channels.map { if (it.id == state.channelId) it.copy(now = now, next = next) else it })
 }
 
 /**
@@ -109,8 +131,13 @@ class LiveTvSession(
     /** Switches to the channel [step] numbers away (+1 up, −1 down), wrapping. False when there is none. */
     fun zap(step: Int): Boolean {
         val target = Channels.neighbour(_state.value.channels, _state.value.channelId, step) ?: return false
-        if (target.id == _state.value.channelId) return false
-        _state.update { it.copy(channelId = target.id, programs = emptyList()) }
+        return tune(target.id)
+    }
+
+    /** Switches to [channelId] (the mini-guide). False when it is already on. */
+    fun tune(channelId: Long): Boolean {
+        if (channelId == _state.value.channelId) return false
+        _state.update { it.copy(channelId = channelId, programs = emptyList()) }
         failures = 0
         open()
         reloadGuide()

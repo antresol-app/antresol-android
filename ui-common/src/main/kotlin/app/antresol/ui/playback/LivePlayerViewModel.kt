@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -20,11 +21,16 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.channels.Channels
+import app.antresol.core.channels.LastChannel
 import app.antresol.core.channels.LiveApi
+import app.antresol.core.channels.MiniGuide
+import app.antresol.core.channels.liveMiniGuide
 import app.antresol.core.channels.LiveStream
 import app.antresol.core.channels.LiveTvSession
 import app.antresol.core.channels.LiveTvState
 import app.antresol.core.channels.liveApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -38,7 +44,9 @@ class LivePlayerViewModel(
     private val context: Context,
     client: AntresolClient,
     channelId: Long,
+    private val lastChannel: LastChannel? = null,
     api: LiveApi = client.liveApi(),
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
     private val client: AntresolClient = client.pinned()
 
@@ -56,6 +64,22 @@ class LivePlayerViewModel(
     var isBuffering: Boolean by mutableStateOf(false)
         private set
 
+    /**
+     * A channel switch is waiting for the new channel's first frame. The previous channel's last
+     * frame stays on screen meanwhile (the surface keeps it, see `keepContentOnPlayerReset`); the
+     * apps dim it while [hasPicture] says there is one.
+     */
+    var awaitingPicture: Boolean by mutableStateOf(true)
+        private set
+
+    /** Some channel has drawn a frame on the surface since the player opened. */
+    var hasPicture: Boolean by mutableStateOf(false)
+        private set
+
+    /** The mini-guide's strip: the current section's channels, starting at the one on. */
+    val miniGuide: MiniGuide
+        get() = liveMiniGuide(state, clock())
+
     private var loaded: LiveStream.Ready? = null
     private var backgrounded = false
     private var released = false
@@ -64,6 +88,12 @@ class LivePlayerViewModel(
         override fun onIsPlayingChanged(playing: Boolean) {
             isPlaying = playing
             if (playing) session.streamPlaying()
+        }
+
+        override fun onRenderedFirstFrame() {
+            hasPicture = true
+            awaitingPicture = false
+            lastChannel?.remember(state.channelId)
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -84,6 +114,7 @@ class LivePlayerViewModel(
             }
             isPlaying = false
             loaded = null
+            player.stop()
             session.streamFailed()
         }
     }
@@ -92,12 +123,25 @@ class LivePlayerViewModel(
         player.addListener(listener)
         viewModelScope.launch {
             session.state.collect { next ->
+                val switched = next.channelId != state.channelId
                 state = next
+                if (switched) awaitingPicture = true
                 apply(next.stream)
+                updateMetadata()
+            }
+        }
+        // The programme changes between refreshes (short ones every minute or so).
+        viewModelScope.launch {
+            while (true) {
+                delay(METADATA_TICK_MS)
+                updateMetadata()
             }
         }
         session.start()
     }
+
+    /** Switches to [channelId] (from the mini-guide). False when it is already on. */
+    fun tune(channelId: Long): Boolean = session.tune(channelId)
 
     /** Channel up (+1, the next number) or down (−1), wrapping. False when there is no other channel. */
     fun zap(step: Int): Boolean = session.zap(step)
@@ -111,7 +155,6 @@ class LivePlayerViewModel(
         backgrounded = true
         session.stop()
         player.stop()
-        player.clearMediaItems()
         loaded = null
         isPlaying = false
     }
@@ -127,23 +170,56 @@ class LivePlayerViewModel(
         when (stream) {
             is LiveStream.Ready -> if (stream != loaded) {
                 loaded = stream
-                player.setMediaItem(
-                    MediaItem.Builder()
-                        .setUri(stream.url)
-                        .setMimeType(MimeTypes.APPLICATION_M3U8)
-                        .build(),
-                )
+                awaitingPicture = true
+                player.setMediaItem(mediaItem(stream.url, metadata()))
                 player.prepare()
                 player.play()
             }
-            // A new channel or a retry: the old picture goes at once.
-            is LiveStream.Starting, is LiveStream.Failed -> if (loaded != null || player.mediaItemCount > 0) {
+            // A new channel or a retry: the old stream stops (it would keep its encoder busy on the
+            // server), but its last frame stays on the surface until the new one draws.
+            is LiveStream.Starting, is LiveStream.Failed -> if (loaded != null) {
                 loaded = null
                 isPlaying = false
                 player.stop()
-                player.clearMediaItems()
             }
         }
+    }
+
+    /** What the system's media controls show: the programme as the title, the channel as the artist. */
+    private fun metadata(): MediaMetadata {
+        val channel = state.channel
+        val (onAir, _) = state.onAir(clock())
+        return MediaMetadata.Builder()
+            .setTitle(onAir?.let(Channels::programLine) ?: channel?.name)
+            .setArtist(channel?.name)
+            .setDisplayTitle(onAir?.title ?: channel?.name)
+            .setSubtitle(channel?.name)
+            .setIsPlayable(true)
+            .setIsBrowsable(false)
+            .setMediaType(MediaMetadata.MEDIA_TYPE_TV_CHANNEL)
+            .build()
+    }
+
+    private fun updateMetadata() {
+        if (released || backgrounded) return
+        val current = player.currentMediaItem ?: return
+        val url = loaded?.url ?: return
+        if (current.localConfiguration?.uri?.toString() != url) return
+        val next = metadata()
+        if (next == current.mediaMetadata) return
+        // Same URI: ExoPlayer updates the item in place without reloading the stream.
+        player.replaceMediaItem(player.currentMediaItemIndex, mediaItem(url, next))
+    }
+
+    private fun mediaItem(url: String, metadata: MediaMetadata): MediaItem = MediaItem.Builder()
+        .setUri(url)
+        .setMimeType(MimeTypes.APPLICATION_M3U8)
+        .setMediaMetadata(metadata)
+        .build()
+
+    companion object {
+        /** How often the media session's title is checked against the programme on air. */
+        const val METADATA_TICK_MS = 10_000L
     }
 
     override fun onCleared() {

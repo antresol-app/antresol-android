@@ -82,7 +82,10 @@ class VideoPlayerActivity : ComponentActivity() {
             previous.closePlayer()
             previous.finish()
         }
-        if (savedInstanceState == null) app.playback.pause()
+        if (savedInstanceState == null) {
+            LivePlayerActivity.closeCurrent()
+            app.playback.pause()
+        }
         current = WeakReference(this)
         // The video belongs to the profile that started it: a profile switch or sign-out closes it.
         val owner = (app.session.state.value as? AuthState.SignedIn)?.session?.let { it.serverId to it.userId }

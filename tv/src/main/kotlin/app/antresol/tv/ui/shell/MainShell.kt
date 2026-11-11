@@ -152,6 +152,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val client = session.requireClient()
     val app = LocalContext.current.applicationContext as AntresolTvApp
     val audio = app.audio
+    val lastChannel = remember(state.session) { app.lastChannels.of(state.session.serverId, state.session.userId) }
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val backStack by navController.currentBackStackEntryAsState()
@@ -264,7 +265,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 page<ChannelsRoute>(contentFocus) {
                     ChannelsScreen(
-                        viewModel = viewModel { ChannelsViewModel({ client.channels().channels }) },
+                        viewModel = viewModel { ChannelsViewModel({ client.channels().channels }, lastChannel = lastChannel) },
                         onWatch = { channel ->
                             // Live TV takes over the screen and the speakers, like a video.
                             audio.pause()
@@ -395,7 +396,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 composable<LiveRoute> { entry ->
                     val route = entry.toRoute<LiveRoute>()
-                    LivePlayerScreen(viewModel = viewModel { LivePlayerViewModel(app, client, route.channelId) })
+                    LivePlayerScreen(viewModel = viewModel { LivePlayerViewModel(app, client, route.channelId, lastChannel) })
                 }
                 composable<PlayerRoute> { entry ->
                     val route = entry.toRoute<PlayerRoute>()

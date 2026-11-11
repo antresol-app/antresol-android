@@ -1,6 +1,8 @@
 package app.antresol.ui.channels
 
 import app.antresol.core.channels.Channels
+import app.antresol.core.channels.InMemoryLastChannelStorage
+import app.antresol.core.channels.LastChannels
 import app.antresol.core.model.Channel
 import app.antresol.core.model.ChannelProgram
 import kotlinx.coroutines.Dispatchers
@@ -100,5 +102,21 @@ class ChannelsViewModelTest {
         runCurrent()
         assertNull(vm.error)
         assertEquals(2, vm.sections?.size)
+    }
+
+    @Test
+    fun continueFollowsTheLastWatchedChannel() = runTest(dispatcher) {
+        val last = LastChannels(InMemoryLastChannelStorage()).of("server", 1)
+        val vm = ChannelsViewModel(fetch = { channels }, clock = { dispatcher.scheduler.currentTime }, lastChannel = last)
+        runCurrent()
+        assertNull(vm.continueChannel)
+        // The player remembers a channel while the page is behind it.
+        last.remember(2)
+        runCurrent()
+        assertEquals("Comedy", vm.continueChannel?.name)
+        // A channel that is gone (or hidden from this profile) is not offered.
+        last.remember(42)
+        runCurrent()
+        assertNull(vm.continueChannel)
     }
 }

@@ -929,4 +929,63 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
   test for the channels screens yet.
 - A server keeps a channel's encoder running for a while after the viewer leaves, and allows 3 at once, so
   quick zapping through many channels shows "too many channels" (server behaviour, same on the web).
-- The live player has no MediaSession (headset buttons / system now-playing) and no picture-in-picture.
+- The live player has no MediaSession (headset buttons / system now-playing) and no picture-in-picture
+  (done in the next round, below).
+
+## Live TV, second round (continue, zap without black, mini-guide, PiP)
+
+### `:core`
+- `channels/LastChannel.kt`: `LastChannels` (per server + profile, a `StateFlow` per key) over a
+  `LastChannelStorage`; `InMemoryLastChannelStorage` for tests. `Channels.continueWith` (the last
+  channel while it is still listed), `Channels.miniGuide` (the current channel's section by number,
+  `startIndex` = the channel on; unknown channel → every channel from 0). `LiveTvSession.tune(id)` (the
+  guide), `LiveTvState.onAir(nowMs)` (guide first, else the list's now/next), `liveMiniGuide` (the
+  channel on screen shows its guide's now/next, the list is up to 30 s older). Tests in
+  `LastChannelsTest`, `ChannelLogicTest`, `LiveTvSessionTest`.
+
+### `:ui-common`
+- `PrefsLastChannelStorage` (SharedPreferences `last_channels`), `lastChannels(context)`; both apps keep
+  one `LastChannels` in their Application. `ChannelsViewModel(lastChannel = …)` exposes `continueChannel`.
+- `LivePlayerViewModel(…, lastChannel)`: remembers the channel on its first rendered frame; `tune`,
+  `miniGuide`, `awaitingPicture` / `hasPicture`. A switch or reopen now only `stop()`s the player (no
+  `clearMediaItems`), and both apps' `VideoSurface(keepLastFrame = true)` set
+  `keepContentOnPlayerReset`, so the old frame stays (dimmed 45 % with a spinner) until the new
+  channel's first frame. The media item carries metadata (title = programme, artist = channel,
+  `MEDIA_TYPE_TV_CHANNEL`), updated in place with `replaceMediaItem` as programmes change.
+- `LiveMediaSession.build`: a Media3 session over a `ForwardingPlayer` without seek/skip/speed commands
+  and without a duration, so the platform session has no scrubber (verified: actions 17031, no
+  ACTION_SEEK_TO). `LiveBadge` («● LIVE»). Strings `tv_continue`, `tv_continue_watching`,
+  `tv_next_at_long` («Далее в HH:MM — …»), `tv_guide_hint`, `tv_watching`.
+
+### TV
+- `ContinueChannel` (392 dp card + eyebrow, programme title, «● N · name», time, next) first on the page
+  and the initial focus. Cards gained the «Next at» line, `width`, `watching` (red dot), `showNext`.
+- `LivePlayerScreen`: one bottom banner (logo, «N · name ● LIVE», programme, start–progress–end,
+  next, an «OK Channels» hint) sliding in on every switch and on OK, hiding after 5 s; OK with the
+  banner up — or Down after OK — opens the mini-guide (section title + 172 dp cards, focus on the
+  channel on, OK tunes, Up/Back closes, auto-hides after 15 s idle); Back: guide → banner → leave.
+  Channel±/Page±/Media Next/Previous zap everywhere; Up/Down zap when the guide is closed.
+  The media session lives while the screen is composed.
+
+### Phone
+- `ContinueChannel` on top of the TV page (stacked; side by side from 600 dp). Player: banner at the
+  top (back, logo, channel + live, programme, progress, next, up/down buttons), a tap opens it with
+  the bottom strip of the section (164 dp cards, a tap tunes), another tap hides; swipes zap as
+  before. Picture-in-picture (auto-enter on Android 12+, `onUserLeaveHint` before), overlays hidden in
+  PiP, closing the PiP window ends the channel; one live activity at a time, and a video closes it
+  (and vice versa). `LocalMediaUrls` is provided in the activity so the strip shows programme art.
+
+### Verified
+- `./gradlew :core:test :ui-common:testDebugUnitTest :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug`.
+- Emulators (API 36 Google APIs; TV app on a 1920×1080/320 dpi D-pad AVD, phone on a Pixel 8 AVD)
+  against a test server: Continue after watching, focus, banner on open and on zap, the held frame
+  right after a zap (dimmed, never black), mini-guide open/move/tune, Back order, phone strip, swipe
+  zap, picture-in-picture, media session state and metadata (`dumpsys media_session`).
+
+### Known gaps
+- Not run on a real Android TV image or device; the emulator image is a phone image (status bar and
+  gesture handle visible in captures).
+- Other channels' cards in the strip use the 30 s channel list, so with very short programmes a card
+  can show a programme that just ended for up to 30 s (the channel on screen uses its guide).
+- No PiP actions (channel up/down buttons in the PiP window); headset next/previous don't zap.
+- No Robolectric UI test for the new player overlays.

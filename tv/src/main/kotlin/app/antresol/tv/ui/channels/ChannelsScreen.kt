@@ -59,7 +59,8 @@ private const val SECTION_COLUMNS = 3
 /**
  * The «TV» tab: page title with the section pills («All» and every category), then either every
  * section as a row of channel cards or the picked section as rows of three. OK on a card opens the
- * live player. Focus starts on the first channel and comes back to the opened one.
+ * live player. «Continue» (the channel this profile watched last) leads the page when there is
+ * one. Focus starts on it (or the first channel) and comes back to the opened one.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -82,7 +83,8 @@ fun ChannelsScreen(
     val sections = loaded.orEmpty()
     val shown = viewModel.shown
     val selected = viewModel.selectedSection
-    val first = shown.firstOrNull()?.let { channelKey(it, it.channels.first()) }
+    val resume = viewModel.continueChannel
+    val first = if (resume != null) CONTINUE_KEY else shown.firstOrNull()?.let { channelKey(it, it.channels.first()) }
     LaunchedEffect(first != null) {
         if (first != null && canTakeFocus()) focus.restore(first)
     }
@@ -126,28 +128,41 @@ fun ChannelsScreen(
                     ErrorView(error, onRetry = viewModel::reload, modifier = Modifier.padding(top = 60.dp), takeFocus = canTakeFocus())
                 }
                 loaded == null -> item(key = "loading") { LoadingView(Modifier.padding(top = 120.dp)) }
-                else -> when {
-                    sections.isEmpty() -> item(key = "empty") { EmptyChannels(Modifier.padding(top = 100.dp)) }
-                    selected == null -> items(shown, key = { "row/${it.category}" }) { section ->
-                        ChannelRow(section, nowMs, focus, onWatch)
+                sections.isEmpty() -> item(key = "empty") { EmptyChannels(Modifier.padding(top = 100.dp)) }
+                else -> {
+                    if (resume != null) {
+                        item(key = "continue") {
+                            ContinueChannel(
+                                channel = resume,
+                                nowMs = nowMs,
+                                onClick = { onWatch(resume) },
+                                surfaceModifier = Modifier.remembersFocus(focus, CONTINUE_KEY),
+                                modifier = Modifier.padding(vertical = 6.dp),
+                            )
+                        }
                     }
-                    else -> {
-                        val section = shown.first()
-                        items(section.channels.chunked(SECTION_COLUMNS), key = { row -> "grid/${row.first().id}" }) { row ->
-                            Row(
-                                modifier = Modifier
-                                    .padding(horizontal = ScreenPaddingH)
-                                    .trapHorizontalFocus()
-                                    .focusRestorer(),
-                                horizontalArrangement = Arrangement.spacedBy(18.dp),
-                            ) {
-                                row.forEach { channel ->
-                                    ChannelCard(
-                                        channel = channel,
-                                        nowMs = nowMs,
-                                        onClick = { onWatch(channel) },
-                                        surfaceModifier = Modifier.remembersFocus(focus, channelKey(section, channel)),
-                                    )
+                    when {
+                        selected == null -> items(shown, key = { "row/${it.category}" }) { section ->
+                            ChannelRow(section, nowMs, focus, onWatch)
+                        }
+                        else -> {
+                            val section = shown.first()
+                            items(section.channels.chunked(SECTION_COLUMNS), key = { row -> "grid/${row.first().id}" }) { row ->
+                                Row(
+                                    modifier = Modifier
+                                        .padding(horizontal = ScreenPaddingH)
+                                        .trapHorizontalFocus()
+                                        .focusRestorer(),
+                                    horizontalArrangement = Arrangement.spacedBy(18.dp),
+                                ) {
+                                    row.forEach { channel ->
+                                        ChannelCard(
+                                            channel = channel,
+                                            nowMs = nowMs,
+                                            onClick = { onWatch(channel) },
+                                            surfaceModifier = Modifier.remembersFocus(focus, channelKey(section, channel)),
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -207,5 +222,7 @@ private fun EmptyChannels(modifier: Modifier = Modifier) {
         )
     }
 }
+
+private const val CONTINUE_KEY = "continue"
 
 private fun channelKey(section: ChannelSection, channel: Channel) = "channel/${section.category}/${channel.id}"

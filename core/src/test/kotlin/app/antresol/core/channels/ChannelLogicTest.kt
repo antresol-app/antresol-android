@@ -102,4 +102,40 @@ class ChannelLogicTest {
         assertEquals(LiveRetry.After(2_000), LiveStartPolicy.decide(IOException("reset"), 3))
         assertEquals(LiveRetry.Fail(null), LiveStartPolicy.decide(IOException("reset"), LiveStartPolicy.MAX_ATTEMPTS))
     }
+
+    @Test
+    fun continueIsTheLastChannelWhileItIsVisible() {
+        val channels = listOf(channel(1, 1, "a"), channel(2, 2, "b"))
+        assertEquals(2L, Channels.continueWith(channels, 2)?.id)
+        assertNull(Channels.continueWith(channels, null))
+        // Gone, or no longer visible to the profile (a kid's age limit).
+        assertNull(Channels.continueWith(channels, 9))
+    }
+
+    @Test
+    fun miniGuideIsTheSectionByNumberStartingAtTheCurrentChannel() {
+        val channels = listOf(
+            channel(1, 30, "Films"),
+            channel(2, 1, "Kids"),
+            channel(3, 10, "Films"),
+            channel(4, 20, "Films"),
+            channel(5, 2, "Kids"),
+        )
+        val guide = Channels.miniGuide(channels, 4)
+        assertEquals("Films", guide.category)
+        assertEquals(listOf(3L, 4L, 1L), guide.channels.map { it.id })
+        assertEquals(1, guide.startIndex)
+
+        assertEquals(0, Channels.miniGuide(channels, 2).startIndex)
+        assertEquals(listOf(2L, 5L), Channels.miniGuide(channels, 2).channels.map { it.id })
+    }
+
+    @Test
+    fun miniGuideOfAnUnknownChannelShowsEveryChannel() {
+        val channels = listOf(channel(1, 30, "Films"), channel(2, 1, "Kids"))
+        val guide = Channels.miniGuide(channels, 99)
+        assertEquals(listOf(2L, 1L), guide.channels.map { it.id })
+        assertEquals(0, guide.startIndex)
+        assertEquals(MiniGuide.Empty, Channels.miniGuide(emptyList(), 1))
+    }
 }

@@ -52,6 +52,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
@@ -125,9 +126,14 @@ fun VideoPlayerScreen(
     }
 }
 
-/** The video picture of [player] (shared with the live player); Compose draws every control. */
+/**
+ * The video picture of [player] (shared with the live player); Compose draws every control.
+ * With [keepLastFrame] (the live player) the last frame stays on screen when the player stops or
+ * switches streams, until the next stream draws its first one: a channel switch never goes black.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-internal fun VideoSurface(player: Player) {
+internal fun VideoSurface(player: Player, keepLastFrame: Boolean = false) {
     AndroidView(
         factory = { context ->
             PlayerView(context).apply {
@@ -136,6 +142,7 @@ internal fun VideoSurface(player: Player) {
                 keepScreenOn = true
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 setShutterBackgroundColor(AndroidColor.BLACK)
+                setKeepContentOnPlayerReset(keepLastFrame)
                 setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                 subtitleView?.apply {
                     setApplyEmbeddedStyles(false)

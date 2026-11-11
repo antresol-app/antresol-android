@@ -153,4 +153,49 @@ class LiveTvSessionTest {
         assertEquals(3, api.channelLoads)
         assertEquals(2, api.opens.size)
     }
+
+    @Test
+    fun tunesToAChannelFromTheGuide() = runTest {
+        val session = session()
+        session.start()
+        runCurrent()
+        assertTrue(session.tune(2))
+        runCurrent()
+        val state = session.state.value
+        assertEquals(2L, state.channelId)
+        assertEquals(LiveStream.Ready("live/2", 2), state.stream)
+        assertEquals("On 2", state.programs.single().title)
+        assertEquals(listOf(1L, 2L), api.opens)
+        // Already on: nothing reopens.
+        assertFalse(session.tune(2))
+        runCurrent()
+        assertEquals(listOf(1L, 2L), api.opens)
+    }
+
+    @Test
+    fun onAirComesFromTheGuideElseFromTheChannelList() {
+        val now = ChannelProgram(title = "Now", start = "2026-11-10T22:00:00Z", end = "2026-11-10T22:30:00Z")
+        val next = ChannelProgram(title = "Next", start = "2026-11-10T22:30:00Z", end = "2026-11-10T23:00:00Z")
+        val later = ChannelProgram(title = "Later", start = "2026-11-10T23:00:00Z", end = "2026-11-10T23:30:00Z")
+        val at = java.time.Instant.parse("2026-11-10T22:40:00Z").toEpochMilli()
+        val listOnly = LiveTvState(listOf(Channel(id = 1, now = now, next = next)), 1, emptyList(), LiveStream.Starting(0))
+        // The list is a refresh behind: "now" ended, so its "next" is on and nothing is known after it.
+        assertEquals("Next" to null, listOnly.onAir(at).let { it.first?.title to it.second?.title })
+        val withGuide = listOnly.copy(programs = listOf(now, next, later))
+        assertEquals("Next" to "Later", withGuide.onAir(at).let { it.first?.title to it.second?.title })
+    }
+
+    @Test
+    fun theMiniGuideShowsTheGuideOfTheChannelOnScreen() {
+        val stale = ChannelProgram(title = "Stale", start = "2026-11-10T22:00:00Z", end = "2026-11-10T22:30:00Z")
+        val fresh = ChannelProgram(title = "Fresh", start = "2026-11-10T22:30:00Z", end = "2026-11-10T23:00:00Z")
+        val channels = listOf(
+            Channel(id = 1, number = 1, category = "a", now = stale),
+            Channel(id = 2, number = 2, category = "a", now = stale),
+        )
+        val at = java.time.Instant.parse("2026-11-10T22:40:00Z").toEpochMilli()
+        val guide = liveMiniGuide(LiveTvState(channels, 2, listOf(fresh), LiveStream.Starting(0)), at)
+        assertEquals(listOf("Stale", "Fresh"), guide.channels.map { it.now?.title })
+        assertEquals(1, guide.startIndex)
+    }
 }

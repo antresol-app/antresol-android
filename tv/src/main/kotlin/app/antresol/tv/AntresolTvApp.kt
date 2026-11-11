@@ -1,5 +1,7 @@
 package app.antresol.tv
 
+import app.antresol.core.channels.LastChannels
+import app.antresol.ui.channels.lastChannels
 import android.app.Application
 import android.content.Context
 import android.os.Build
@@ -44,6 +46,9 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
 
     /** Final progress writes of closed players, awaited by screens that show progress. */
     val pendingWrites = PendingWrites()
+
+    /** The channel each profile watched last on this device («Continue» on the TV page). */
+    val lastChannels: LastChannels by lazy { lastChannels(this) }
 
     /** Set when the system asks to show the now-playing screen (tap on the media session). */
     val nowPlayingRequested = MutableStateFlow(false)

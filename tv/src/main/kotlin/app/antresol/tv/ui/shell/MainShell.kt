@@ -91,7 +91,9 @@ import app.antresol.tv.ui.settings.SettingsScreen
 import app.antresol.tv.ui.settings.SettingsViewModel
 import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
+import app.antresol.core.channels.ChannelFilter
 import app.antresol.ui.channels.ChannelsViewModel
+import app.antresol.ui.channels.channelsApi
 import app.antresol.ui.playback.LivePlayerViewModel
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.AntresolColors
@@ -152,7 +154,6 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val client = session.requireClient()
     val app = LocalContext.current.applicationContext as AntresolTvApp
     val audio = app.audio
-    val lastChannel = remember(state.session) { app.lastChannels.of(state.session.serverId, state.session.userId) }
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val backStack by navController.currentBackStackEntryAsState()
@@ -265,11 +266,11 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 page<ChannelsRoute>(contentFocus) {
                     ChannelsScreen(
-                        viewModel = viewModel { ChannelsViewModel({ client.channels().channels }, lastChannel = lastChannel) },
-                        onWatch = { channel ->
+                        viewModel = viewModel { ChannelsViewModel(client.channelsApi()) },
+                        onWatch = { channel, filter ->
                             // Live TV takes over the screen and the speakers, like a video.
                             audio.pause()
-                            navController.navigate(LiveRoute(channel.id))
+                            navController.navigate(LiveRoute(channel.id, filter.key))
                         },
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = canTakeFocus,
@@ -396,7 +397,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 composable<LiveRoute> { entry ->
                     val route = entry.toRoute<LiveRoute>()
-                    LivePlayerScreen(viewModel = viewModel { LivePlayerViewModel(app, client, route.channelId, lastChannel) })
+                    LivePlayerScreen(viewModel = viewModel { LivePlayerViewModel(app, client, route.channelId, ChannelFilter.fromKey(route.filter)) })
                 }
                 composable<PlayerRoute> { entry ->
                     val route = entry.toRoute<PlayerRoute>()

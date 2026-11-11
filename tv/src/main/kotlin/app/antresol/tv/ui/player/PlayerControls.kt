@@ -135,7 +135,11 @@ fun TrackMenu(menu: PlayerMenu, viewModel: PlayerViewModel, onDismiss: () -> Uni
     )
     val options = when (menu) {
         PlayerMenu.Audio -> viewModel.audioTracks.map { track ->
-            MenuOption(TrackLabels.audio(resources, track), track.index == viewModel.selectedAudioIndex) { viewModel.selectAudio(track) }
+            MenuOption(
+                TrackLabels.audio(resources, track),
+                track.index == viewModel.selectedAudioIndex,
+                badge = if (track.isCleaned) resources.getString(R.string.track_cleaned) else null,
+            ) { viewModel.selectAudio(track) }
         }
         PlayerMenu.Subtitles -> listOf(
             MenuOption(stringResource(R.string.detail_subtitles_off), viewModel.selectedSubtitle == null) { viewModel.selectSubtitle(null) },

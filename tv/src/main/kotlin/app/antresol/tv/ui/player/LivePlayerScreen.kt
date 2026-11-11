@@ -2,6 +2,10 @@ package app.antresol.tv.ui.player
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -9,7 +13,31 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import app.antresol.ui.components.AntresolIcons
+import app.antresol.ui.channels.programmeArt
+import app.antresol.ui.channels.ProgrammeStill
+import app.antresol.tv.ui.components.listRowColors
+import app.antresol.tv.ui.components.VerticalShelfScrolling
+import app.antresol.tv.ui.components.RoundIconButton
+import app.antresol.tv.ui.components.OptionsPanel
+import app.antresol.tv.ui.components.MenuOption
+import app.antresol.tv.ui.channels.filterTitle
+import app.antresol.tv.ui.channels.LiveProgressBar
+import app.antresol.tv.ui.channels.KeyHint
+import app.antresol.tv.ui.channels.FavoriteMark
+import app.antresol.tv.ui.LocalMediaUrls
+import app.antresol.core.channels.ChannelFilter
+import androidx.tv.material3.Surface
+import androidx.tv.material3.LocalContentColor
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,7 +48,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -59,15 +86,12 @@ import app.antresol.core.channels.LiveStream
 import app.antresol.core.channels.LiveTvState
 import app.antresol.core.channels.MiniGuide
 import app.antresol.core.model.Channel
-import app.antresol.tv.ui.channels.ChannelCard
-import app.antresol.tv.ui.components.HorizontalRowScrolling
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.tv.ui.components.trapHorizontalFocus
 import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.ui.R
-import app.antresol.ui.channels.ChannelLogoBadge
 import app.antresol.ui.channels.LiveBadge
 import app.antresol.ui.channels.programClock
 import app.antresol.ui.channels.rememberNowMs
@@ -81,21 +105,29 @@ import app.antresol.ui.theme.AntresolShapes
 import kotlinx.coroutines.delay
 
 private const val BANNER_HIDE_MS = 5_000L
+private const val ACTIONS_HIDE_MS = 8_000L
 private const val GUIDE_HIDE_MS = 15_000L
 
-/** Width of a channel card in the mini-guide: five fit the screen, the picture stays in view above. */
-private val GuideCardWidth = 172.dp
-
-/** Why the channel banner is up: a channel switch, or OK / another key asking what is on. */
-private enum class Banner { Hidden, Zap, Info }
+/** Width of the channel list panel on the left (TiviMate). */
+private val GuidePanelWidth = 380.dp
 
 /**
- * A channel live, full screen. Up/Down (and Channel+/−, Page Up/Down, Next/Previous) switch to the
- * next or previous channel by number, wrapping; the previous channel's last frame holds, dimmed,
- * until the new one draws. The banner (logo, channel, «Live», the programme with its progress, what
- * is next) slides in on every switch and on OK, and fades after 5 s. OK with the banner up (or Down
- * after OK) opens the mini-guide: the section's channels in a row, focus on the one on; OK switches.
- * Back hides the guide, then the banner, then leaves. Live: no seeking, no pause.
+ * Why the banner is up: a channel switch ([Zap], info only), or OK ([Actions]: info with the
+ * favourite, audio, subtitles and channel-list buttons focused).
+ */
+private enum class Banner { Hidden, Zap, Actions }
+
+/** A track picker over the player. */
+private enum class TrackPanel { Audio, Subtitles }
+
+/**
+ * A channel live, full screen (Android TV Live Channels / TiviMate). Up/Down (and Channel+/−, Page
+ * Up/Down) switch to the next/previous channel of the list the player was opened from, by number,
+ * wrapping; the previous channel's last frame holds, dimmed, until the new one draws. The info bar
+ * (number · name, the programme with its progress, what is next) slides in on every switch and
+ * fades after 5 s. OK shows it with its buttons: favourite, audio, subtitles, channel list. Left
+ * (or the list button) opens the channel list on the left, focus on the channel on; OK switches.
+ * Back closes a panel, then the bar, then leaves. Live: no seeking, no pause, nothing remembered.
  */
 @Composable
 fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
@@ -109,25 +141,30 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
     val state = viewModel.state
     val stream = state.stream
     val failed = stream is LiveStream.Failed
-    var banner by remember { mutableStateOf(Banner.Info) }
+    var banner by remember { mutableStateOf(Banner.Zap) }
     var guideOpen by remember { mutableStateOf(false) }
+    var trackPanel by remember { mutableStateOf<TrackPanel?>(null) }
     var interactions by remember { mutableIntStateOf(0) }
-    // The OK press that opened the guide must not also switch to the focused channel on release.
+    // The OK press that opened something must not also act on the focused button on release.
     var swallowCenterUp by remember { mutableStateOf(false) }
     val rootFocus = remember { FocusRequester() }
     val retryFocus = remember { FocusRequester() }
     val guideFocus = remember { FocusRequester() }
+    val actionsFocus = remember { FocusRequester() }
+    val panelOpen = guideOpen || trackPanel != null
 
-    LaunchedEffect(failed, guideOpen) {
+    LaunchedEffect(failed, guideOpen, trackPanel, banner) {
         when {
+            trackPanel != null -> Unit // The panel takes focus itself.
             guideOpen -> guideFocus.tryRequestFocus()
             failed -> retryFocus.tryRequestFocus()
+            banner == Banner.Actions -> actionsFocus.tryRequestFocus()
             else -> rootFocus.tryRequestFocus()
         }
     }
-    LaunchedEffect(banner, interactions, viewModel.isPlaying, state.channelId, guideOpen) {
-        if (banner != Banner.Hidden && viewModel.isPlaying && !guideOpen) {
-            delay(BANNER_HIDE_MS)
+    LaunchedEffect(banner, interactions, viewModel.isPlaying, state.channelId, panelOpen) {
+        if (banner != Banner.Hidden && viewModel.isPlaying && !panelOpen) {
+            delay(if (banner == Banner.Actions) ACTIONS_HIDE_MS else BANNER_HIDE_MS)
             banner = Banner.Hidden
         }
     }
@@ -137,37 +174,34 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             guideOpen = false
         }
     }
-    BackHandler(enabled = guideOpen) {
-        guideOpen = false
-        banner = Banner.Info
-    }
-    BackHandler(enabled = !guideOpen && banner != Banner.Hidden && viewModel.isPlaying) { banner = Banner.Hidden }
+    BackHandler(enabled = guideOpen) { guideOpen = false }
+    BackHandler(enabled = !panelOpen && banner != Banner.Hidden && viewModel.isPlaying) { banner = Banner.Hidden }
 
     val controls = object : LiveControls {
-        override val guideOpen get() = guideOpen
+        override val panelOpen get() = panelOpen
         override val banner get() = banner
         override val failed get() = failed
 
         override fun zap(step: Int) {
             if (viewModel.zap(step)) {
                 guideOpen = false
-                banner = Banner.Zap
+                if (banner != Banner.Actions) banner = Banner.Zap
             }
         }
 
-        override fun showInfo() {
-            if (banner == Banner.Hidden) banner = Banner.Info
-        }
-
-        override fun openGuide() {
-            if (state.channels.isEmpty()) return
-            guideOpen = true
+        override fun showActions() {
+            banner = Banner.Actions
             swallowCenterUp = true
         }
 
-        override fun closeGuide() {
-            guideOpen = false
-            banner = Banner.Info
+        override fun showInfo() {
+            if (banner == Banner.Hidden) banner = Banner.Zap
+        }
+
+        override fun openGuide() {
+            if (state.listed.isEmpty()) return
+            guideOpen = true
+            banner = Banner.Hidden
         }
 
         override fun touched() {
@@ -206,16 +240,24 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             exit = slideOutVertically(tween(AntresolMotion.MEDIUM_MS)) { it / 4 } + fadeOut(tween(AntresolMotion.MEDIUM_MS)),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            ChannelBanner(state, showGuideHint = state.channels.size > 1)
+            ChannelBanner(
+                viewModel = viewModel,
+                actions = banner == Banner.Actions,
+                actionsFocus = actionsFocus,
+                onGuide = { controls.openGuide() },
+                onTracks = { trackPanel = it },
+                onTouch = { interactions++ },
+            )
         }
         AnimatedVisibility(
             visible = guideOpen,
-            enter = slideInVertically(tween(AntresolMotion.MEDIUM_MS)) { it / 2 } + fadeIn(tween(AntresolMotion.MEDIUM_MS)),
-            exit = slideOutVertically(tween(AntresolMotion.MEDIUM_MS)) { it / 2 } + fadeOut(tween(AntresolMotion.MEDIUM_MS)),
-            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = slideInHorizontally(tween(AntresolMotion.MEDIUM_MS)) { -it } + fadeIn(tween(AntresolMotion.MEDIUM_MS)),
+            exit = slideOutHorizontally(tween(AntresolMotion.MEDIUM_MS)) { -it } + fadeOut(tween(AntresolMotion.MEDIUM_MS)),
+            modifier = Modifier.align(Alignment.CenterStart),
         ) {
-            MiniGuideStrip(
+            ChannelListPanel(
                 guide = viewModel.miniGuide,
+                title = filterTitle(state.filter),
                 currentId = state.channelId,
                 startFocus = guideFocus,
                 onTune = { channel ->
@@ -223,6 +265,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
                     guideOpen = false
                     banner = Banner.Zap
                 },
+                onClose = { guideOpen = false },
             )
         }
         when (stream) {
@@ -230,22 +273,26 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             is LiveStream.Ready -> if (viewModel.awaitingPicture || viewModel.isBuffering) Spinner()
             is LiveStream.Failed -> FailedView(stream.message, onRetry = viewModel::retry, retryFocus = retryFocus)
         }
+        trackPanel?.let { panel ->
+            LiveTrackPanel(panel, viewModel, onDismiss = { trackPanel = null })
+            BackHandler { trackPanel = null }
+        }
     }
 }
 
 /** What the player's keys act on. */
 private interface LiveControls {
-    val guideOpen: Boolean
+    val panelOpen: Boolean
     val banner: Banner
     val failed: Boolean
 
     fun zap(step: Int)
 
+    fun showActions()
+
     fun showInfo()
 
     fun openGuide()
-
-    fun closeGuide()
 
     fun touched()
 
@@ -255,88 +302,90 @@ private interface LiveControls {
 private val CenterKeys = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 
 /**
- * Channel keys switch channels everywhere. With the guide open, Up closes it and the rest moves
- * through the strip. Otherwise Up/Down switch, OK shows the banner and, with it up, opens the guide
- * (Down too after OK); other keys show the banner. Back goes to the [BackHandler]s.
+ * Channel keys switch channels everywhere but in a panel. Up/Down switch (also while the buttons are
+ * up: Left/Right and OK belong to them). With nothing up, OK shows the bar with its buttons, Left
+ * opens the channel list, Menu the audio choices; other keys show the info. Back goes to the
+ * [BackHandler]s.
  */
 private fun handleLiveKey(event: KeyEvent, controls: LiveControls): Boolean {
     val down = event.type == KeyEventType.KeyDown
     if (down) controls.touched()
     if (event.key == Key.Back) return false
     if (event.key in CenterKeys && event.type == KeyEventType.KeyUp && controls.swallowCenterUp()) return true
+    if (controls.panelOpen) return false
     val channelStep = when (event.key) {
-        Key.ChannelUp, Key.PageUp, Key.MediaNext -> 1
-        Key.ChannelDown, Key.PageDown, Key.MediaPrevious -> -1
+        Key.ChannelUp, Key.PageUp, Key.MediaNext, Key.DirectionUp -> 1
+        Key.ChannelDown, Key.PageDown, Key.MediaPrevious, Key.DirectionDown -> -1
         else -> 0
     }
     if (channelStep != 0) {
         if (down) controls.zap(channelStep)
         return true
     }
-    if (controls.guideOpen) {
-        if (event.key == Key.DirectionUp) {
-            if (down) controls.closeGuide()
-            return true
-        }
-        return false
-    }
+    // The error panel's Try Again takes OK; the bar's buttons take Left/Right/OK.
+    if (controls.failed || controls.banner == Banner.Actions) return false
     when (event.key) {
-        Key.DirectionUp -> {
-            if (down) controls.zap(1)
+        in CenterKeys -> {
+            if (down) controls.showActions()
             return true
         }
-        Key.DirectionDown -> {
-            if (down) {
-                if (controls.banner == Banner.Info && !controls.failed) controls.openGuide() else controls.zap(-1)
-            }
+        Key.DirectionLeft -> {
+            if (down) controls.openGuide()
             return true
         }
-    }
-    // The error panel's Try Again takes OK.
-    if (controls.failed) return false
-    if (event.key in CenterKeys) {
-        if (down) {
-            if (controls.banner == Banner.Hidden) controls.showInfo() else controls.openGuide()
-        }
-        return true
     }
     if (down) controls.showInfo()
     return true
 }
 
 /**
- * The channel banner at the bottom: logo, «10 · Comedy» with the live dot, the programme on air,
- * its start and end around the live progress, and what is next.
+ * The info bar at the bottom: the channel's number large with its name, the programme on air (still,
+ * title, episode), its start and end around the live progress, what is next; with [actions] the
+ * buttons favourite, audio, subtitles, channel list.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun ChannelBanner(state: LiveTvState, showGuideHint: Boolean) {
+private fun ChannelBanner(
+    viewModel: LivePlayerViewModel,
+    actions: Boolean,
+    actionsFocus: FocusRequester,
+    onGuide: () -> Unit,
+    onTracks: (TrackPanel) -> Unit,
+    onTouch: () -> Unit,
+) {
     val context = LocalContext.current
+    val urls = LocalMediaUrls.current
     val nowMs = rememberNowMs(1_000L)
+    val state = viewModel.state
     val channel = state.channel ?: return
     val (onAir, next) = state.onAir(nowMs)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color.Black.copy(alpha = 0.6f), 1f to Color.Black.copy(alpha = 0.9f)))
-            .padding(start = ScreenPaddingH, end = ScreenPaddingH, top = 96.dp, bottom = 36.dp),
+            .background(Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color.Black.copy(alpha = 0.65f), 1f to Color.Black.copy(alpha = 0.92f)))
+            .padding(start = ScreenPaddingH, end = ScreenPaddingH, top = 80.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            ChannelLogoBadge(name = channel.name, logo = channel.logo, width = 116.dp)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(
-                        stringResource(R.string.tv_channel_number, channel.number, channel.name),
-                        style = Antresol.typography.title,
-                        color = AntresolColors.LabelSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    LiveBadge()
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+            Column(Modifier.width(132.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    channel.number.toString(),
+                    style = Antresol.typography.heroTitle.copy(fontFeatureSettings = "tnum"),
+                    color = AntresolColors.Label,
+                    maxLines = 1,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(channel.name, style = Antresol.typography.title, color = AntresolColors.LabelSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (channel.favorite) FavoriteMark()
                 }
+            }
+            ProgrammeStill(
+                url = urls?.image(programmeArt(onAir)),
+                shape = AntresolShapes.smallCard,
+                modifier = Modifier.width(148.dp).aspectRatio(AntresolMotion.BACKDROP_ASPECT),
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                LiveBadge()
                 Text(
                     onAir?.title ?: stringResource(R.string.tv_nothing),
                     style = Antresol.typography.pageTitle,
@@ -347,7 +396,6 @@ private fun ChannelBanner(state: LiveTvState, showGuideHint: Boolean) {
                     Text(onAir.subtitle, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            if (showGuideHint) KeyHint(key = "OK", label = stringResource(R.string.tv_guide_hint))
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (onAir != null) {
@@ -357,75 +405,173 @@ private fun ChannelBanner(state: LiveTvState, showGuideHint: Boolean) {
                     Text(programClock(context, onAir.end), style = Antresol.typography.caption)
                 }
             }
-            if (next != null) {
-                Text(
-                    stringResource(R.string.tv_next_at_long, programClock(context, next.start), Channels.programLine(next)),
-                    style = Antresol.typography.caption,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (next != null) {
+                    Text(
+                        stringResource(R.string.tv_next_short, programClock(context, next.start), Channels.programLine(next)),
+                        style = Antresol.typography.caption,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                if (!actions) {
+                    KeyHint("OK", stringResource(R.string.tv_audio_subtitles) + " · " + stringResource(R.string.tv_favorite))
+                    Spacer(Modifier.width(20.dp))
+                    if (state.listed.size > 1) KeyHint("◀", stringResource(R.string.tv_channel_list))
+                }
             }
         }
-    }
-}
-
-/** «[OK] Channels»: a remote key and what it does, in the banner's corner. */
-@Composable
-private fun KeyHint(key: String, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            key,
-            style = Antresol.typography.badge,
-            color = AntresolColors.Label,
-            modifier = Modifier
-                .border(1.dp, AntresolColors.LabelTertiary, AntresolShapes.badge)
-                .padding(horizontal = 7.dp, vertical = 3.dp),
-        )
-        Text(label, style = Antresol.typography.caption, maxLines = 1)
-    }
-}
-
-/** The mini-guide: the section's title and its channels in a row, focus starting at the one on. */
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-private fun MiniGuideStrip(guide: MiniGuide, currentId: Long, startFocus: FocusRequester, onTune: (Channel) -> Unit) {
-    val nowMs = rememberNowMs()
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = guide.startIndex)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Brush.verticalGradient(0f to Color.Transparent, 0.25f to Color.Black.copy(alpha = 0.65f), 1f to Color.Black.copy(alpha = 0.92f)))
-            .padding(top = 72.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            guide.category.ifEmpty { stringResource(R.string.nav_tv) },
-            style = Antresol.typography.sectionTitle,
-            modifier = Modifier.padding(horizontal = ScreenPaddingH),
-        )
-        HorizontalRowScrolling {
-            LazyRow(
-                state = listState,
-                contentPadding = PaddingValues(horizontal = ScreenPaddingH, vertical = 6.dp),
+        if (actions) {
+            Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .trapHorizontalFocus()
-                    .focusRestorer(),
+                    .focusProperties { exit = { FocusRequester.Cancel } }
+                    .focusGroup(),
             ) {
-                itemsIndexed(guide.channels, key = { _, channel -> channel.id }) { index, channel ->
-                    ChannelCard(
-                        channel = channel,
-                        nowMs = nowMs,
-                        onClick = { onTune(channel) },
-                        width = GuideCardWidth,
-                        watching = channel.id == currentId,
-                        showNext = false,
-                        surfaceModifier = if (index == guide.startIndex) Modifier.focusRequester(startFocus) else Modifier,
-                    )
+                val favorite = channel.favorite
+                RoundIconButton(
+                    icon = if (favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
+                    contentDescription = stringResource(if (favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),
+                    onClick = { onTouch(); viewModel.toggleFavorite() },
+                    size = 46.dp,
+                    modifier = Modifier.focusRequester(actionsFocus),
+                )
+                if (viewModel.audioOptions.isNotEmpty()) {
+                    RoundIconButton(AntresolIcons.Audio, stringResource(R.string.detail_audio), { onTouch(); onTracks(TrackPanel.Audio) }, size = 46.dp)
+                }
+                if (viewModel.subtitleOptions.isNotEmpty()) {
+                    RoundIconButton(AntresolIcons.Subtitles, stringResource(R.string.detail_subtitles), { onTouch(); onTracks(TrackPanel.Subtitles) }, size = 46.dp)
+                }
+                if (state.listed.size > 1) {
+                    RoundIconButton(AntresolIcons.List, stringResource(R.string.tv_channel_list), onGuide, size = 46.dp)
                 }
             }
         }
     }
+}
+
+/**
+ * The channel list over the left of the picture (TiviMate): the list the player was opened from by
+ * number — number, name with the star, the programme and its progress — focus on the channel on.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun ChannelListPanel(
+    guide: MiniGuide,
+    title: String,
+    currentId: Long,
+    startFocus: FocusRequester,
+    onTune: (Channel) -> Unit,
+    onClose: () -> Unit,
+) {
+    val nowMs = rememberNowMs()
+    val context = LocalContext.current
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (guide.currentIndex - 3).coerceAtLeast(0))
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(GuidePanelWidth + ScreenPaddingH)
+            .background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.92f), 0.85f to Color.Black.copy(alpha = 0.8f), 1f to Color.Transparent))
+            .padding(start = ScreenPaddingH - 12.dp, top = 36.dp)
+            .onPreviewKeyEvent { event ->
+                if (event.key == Key.DirectionRight && event.type == KeyEventType.KeyDown) {
+                    onClose()
+                    true
+                } else {
+                    false
+                }
+            },
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(title, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(start = 12.dp))
+        VerticalShelfScrolling(leadingFraction = 0.25f, trailingFraction = 0.25f) {
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(end = 12.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier
+                    .width(GuidePanelWidth)
+                    .focusRestorer { startFocus },
+            ) {
+                itemsIndexed(guide.channels, key = { _, channel -> channel.id }) { index, channel ->
+                    val program = Channels.showing(channel, nowMs)
+                    var focused by remember { mutableStateOf(false) }
+                    Surface(
+                        onClick = { onTune(channel) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (index == guide.currentIndex) Modifier.focusRequester(startFocus) else Modifier)
+                            .onFocusChanged { focused = it.isFocused },
+                        shape = ClickableSurfaceDefaults.shape(AntresolShapes.control),
+                        colors = listRowColors(),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
+                    ) {
+                        val content = LocalContentColor.current
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                channel.number.toString(),
+                                style = Antresol.typography.title.copy(fontFeatureSettings = "tnum"),
+                                color = if (focused) content else AntresolColors.LabelSecondary,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier.width(28.dp),
+                            )
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    if (channel.id == currentId) {
+                                        Box(Modifier.size(7.dp).background(AntresolColors.Red, CircleShape))
+                                    }
+                                    Text(channel.name, style = Antresol.typography.title, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                    if (channel.favorite) FavoriteMark(tint = if (focused) content else AntresolColors.Orange)
+                                }
+                                Text(
+                                    program?.let(Channels::programLine) ?: stringResource(R.string.tv_nothing),
+                                    style = Antresol.typography.caption,
+                                    color = content.copy(alpha = 0.75f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (program != null) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 2.dp)) {
+                                        LiveProgressBar(Channels.progress(program, nowMs), content, Modifier.weight(1f))
+                                        Text(stringResource(R.string.tv_until, programClock(context, program.end)), style = Antresol.typography.badge, color = content.copy(alpha = 0.75f))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** «Звук» or «Субтитры» for the programme on air: the renditions the server names for it. */
+@Composable
+private fun LiveTrackPanel(panel: TrackPanel, viewModel: LivePlayerViewModel, onDismiss: () -> Unit) {
+    val selection = viewModel.trackSelection
+    val options = when (panel) {
+        TrackPanel.Audio -> viewModel.audioOptions.map { track ->
+            MenuOption(track.label.ifBlank { track.name }, track.slot == selection.audio?.slot) { viewModel.selectAudio(track) }
+        }
+        TrackPanel.Subtitles -> listOf(
+            MenuOption(stringResource(R.string.detail_subtitles_off), selection.subtitles == null) { viewModel.selectSubtitles(null) },
+        ) + viewModel.subtitleOptions.map { track ->
+            MenuOption(track.label.ifBlank { track.name }, track.slot == selection.subtitles?.slot) { viewModel.selectSubtitles(track) }
+        }
+    }
+    OptionsPanel(
+        title = stringResource(if (panel == TrackPanel.Audio) R.string.detail_audio else R.string.detail_subtitles),
+        options = options,
+        onDismiss = onDismiss,
+    )
 }
 
 @Composable

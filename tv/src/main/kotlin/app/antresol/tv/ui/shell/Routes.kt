@@ -58,9 +58,9 @@ data class DetailRoute(val kind: String, val id: Long) {
 @Serializable
 data class PlayerRoute(val itemId: Long, val resume: String)
 
-/** A live channel, full screen; Up/Down switch channels inside the player. */
+/** A live channel, full screen; Up/Down switch channels inside the list of [filter] (a [ChannelFilter] key). */
 @Serializable
-data class LiveRoute(val channelId: Long)
+data class LiveRoute(val channelId: Long, val filter: String = "all")
 
 /** The top navigation pills, in display order. The search pill shows only its icon ([label] is its description). */
 enum class NavTab(val route: Any, @StringRes val label: Int, val iconOnly: Boolean = false) {

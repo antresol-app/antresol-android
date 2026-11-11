@@ -1,6 +1,7 @@
 package app.antresol.tv.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,8 +44,8 @@ import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 
-/** One choice of an [OptionsPanel]. */
-data class MenuOption(val label: String, val selected: Boolean, val onSelect: () -> Unit)
+/** One choice of an [OptionsPanel]; [badge] is a small capsule after the label («Очищено»). */
+data class MenuOption(val label: String, val selected: Boolean, val badge: String? = null, val onSelect: () -> Unit)
 
 /**
  * An opaque panel on the right, over a dimmed page, with a list of choices; picking one applies it
@@ -123,7 +124,25 @@ private fun MenuRow(option: MenuOption, onClick: () -> Unit, modifier: Modifier 
             Box(Modifier.size(20.dp)) {
                 if (option.selected) Icon(AntresolIcons.Check, contentDescription = null, tint = LocalContentColor.current)
             }
-            Text(option.label, style = Antresol.typography.bodyEmphasis, color = LocalContentColor.current, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                option.label,
+                style = Antresol.typography.bodyEmphasis,
+                color = LocalContentColor.current,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            option.badge?.let { badge ->
+                Text(
+                    badge,
+                    style = Antresol.typography.badge,
+                    color = LocalContentColor.current,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .border(1.dp, LocalContentColor.current.copy(alpha = 0.5f), AntresolShapes.badge)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
         }
     }
 }

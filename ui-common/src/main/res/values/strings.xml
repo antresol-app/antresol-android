@@ -162,7 +162,6 @@
 
     <!-- Live TV channels -->
     <string name="nav_tv">TV</string>
-    <string name="tv_sections">Sections</string>
     <string name="tv_all_sections">All</string>
     <string name="tv_on_air">On Air Now</string>
     <string name="tv_live">Live</string>
@@ -179,9 +178,36 @@
     <string name="tv_back">Back to Channels</string>
     <string name="tv_empty">No channels yet</string>
     <string name="tv_empty_hint">Channels appear by themselves once the library has at least six movies of a genre or a series with eight episodes.</string>
-    <string name="tv_continue">Continue</string>
-    <string name="tv_continue_watching">Continue Watching “%1$s”</string>
     <string name="tv_next_at_long">Next at %1$s — %2$s</string>
     <string name="tv_guide_hint">Channels</string>
     <string name="tv_watching">Watching</string>
+    <string name="tv_favorites">Favourites</string>
+    <string name="tv_view_channels">Channels</string>
+    <string name="tv_view_guide">Guide</string>
+    <string name="tv_view">View</string>
+    <string name="tv_filter">Channels to show</string>
+    <string name="tv_until">until %1$s</string>
+    <string name="tv_next_short">Next %1$s %2$s</string>
+    <string name="tv_favorite_add">Add to Favourites</string>
+    <string name="tv_favorite_remove">Remove from Favourites</string>
+    <string name="tv_favorite">Favourite</string>
+    <string name="tv_favorites_empty">No favourite channels yet</string>
+    <string name="tv_favorites_empty_hint">Touch and hold a channel, or hold OK on it, to add it to Favourites.</string>
+    <string name="tv_last_channel">Last channel</string>
+    <string name="tv_back_to_last">Back to %1$d · %2$s</string>
+    <string name="tv_watch_now">Watch</string>
+    <string name="tv_now">Now</string>
+    <string name="tv_tomorrow">Tomorrow</string>
+    <string name="tv_yesterday">Yesterday</string>
+    <string name="tv_today">Today</string>
+    <string name="tv_minutes">%1$d min</string>
+    <string name="tv_audio_subtitles">Audio and Subtitles</string>
+    <string name="tv_channel_list">Channel List</string>
+    <string name="tv_details">Details</string>
+    <string name="tv_on_air_until">On air until %1$s</string>
+    <string name="tv_starts_at">Starts at %1$s</string>
+    <string name="tv_ended">Ended at %1$s</string>
+    <string name="tv_guide_empty">No programmes in this window</string>
+    <string name="track_cleaned">Cleaned</string>
+    <string name="track_cleaned_hint">The voice-over with the original voices taken out</string>
 </resources>

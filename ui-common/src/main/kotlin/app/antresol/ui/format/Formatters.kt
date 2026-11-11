@@ -72,8 +72,16 @@ object TrackLabels {
         else -> "${count}ch"
     }
 
+    /**
+     * «Русский — LostFilm», «English», «Русский — Кураж-Бамбей» (a voice-over file): the language
+     * with the track's title when the title adds something; the cleaned mark is drawn separately.
+     */
     fun audio(resources: Resources, track: AudioTrack, locale: Locale = Locale.getDefault()): String {
-        if (track.title.isNotBlank()) return track.title
+        val title = track.title.trim()
+        if (title.isNotEmpty()) {
+            val lang = language(track.lang, locale)
+            return if (lang == null || title.contains(lang, ignoreCase = true)) title else "$lang — $title"
+        }
         val parts = listOfNotNull(language(track.lang, locale), track.codec.uppercase(Locale.ROOT).ifBlank { null }, channels(track.channels))
         return parts.joinToString(" · ").ifBlank { resources.getString(R.string.track_number, track.index) }
     }

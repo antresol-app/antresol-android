@@ -27,6 +27,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.ApiException
 import app.antresol.core.model.AudioTrack
+import app.antresol.core.playback.AudioMenu
 import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.FileInfo
 import app.antresol.core.model.ItemDetail
@@ -177,7 +178,11 @@ open class VideoPlayerViewModel(
     /** A string resource to show briefly (subtitle download failed); the screen clears it. */
     var notice: Int? by mutableStateOf(null)
 
-    val audioTracks: List<AudioTrack> get() = source?.play?.audio.orEmpty()
+    /**
+     * The audio menu: the file's tracks, the voice-over files beside it and the cleaned ones
+     * («Очищено», each under its source), as the server lists them (see [AudioMenu.order]).
+     */
+    val audioTracks: List<AudioTrack> get() = AudioMenu.order(source?.play?.audio.orEmpty())
     val selectedAudioIndex: Int? get() = source?.play?.audioIndex
     val subtitleTracks: List<SubTrack> get() = source?.play?.subtitles.orEmpty().filter { it.url != null }
     val quality: String get() = source?.play?.quality?.selected?.ifEmpty { null } ?: Quality.AUTO
@@ -481,9 +486,10 @@ open class VideoPlayerViewModel(
         return targetMs.coerceIn(0, upper)
     }
 
+    /** Plays [track]: a new stream at the current position (external tracks carry their `src`). */
     fun selectAudio(track: AudioTrack) {
         if (track.index == selectedAudioIndex) return
-        reopen(currentFileMs(), audioIndex = track.index)
+        reopen(currentFileMs(), audioIndex = track.index, audioSrc = track.src.ifEmpty { null })
     }
 
     fun selectQuality(value: String) {
@@ -684,7 +690,13 @@ open class VideoPlayerViewModel(
 
     // region Streams
 
-    private data class ReopenRequest(val fileMs: Long, val quality: String?, val audioIndex: Int?, val playWhenReady: Boolean)
+    private data class ReopenRequest(
+        val fileMs: Long,
+        val quality: String?,
+        val audioIndex: Int?,
+        val audioSrc: String?,
+        val playWhenReady: Boolean,
+    )
 
     /**
      * Opens the stream again at [fileMs] (new session replacing the current one). Requests made while
@@ -695,6 +707,7 @@ open class VideoPlayerViewModel(
         fileMs: Long,
         quality: String? = null,
         audioIndex: Int? = null,
+        audioSrc: String? = null,
         playWhenReady: Boolean = player.playWhenReady,
     ) {
         if (session == null || closed) return
@@ -704,7 +717,11 @@ open class VideoPlayerViewModel(
         pendingSeekMs = fileMs
         positionMs = fileMs
         val queued = pendingReopen
-        pendingReopen = ReopenRequest(fileMs, quality ?: queued?.quality, audioIndex ?: queued?.audioIndex, playWhenReady)
+        pendingReopen = if (audioIndex != null) {
+            ReopenRequest(fileMs, quality ?: queued?.quality, audioIndex, audioSrc, playWhenReady)
+        } else {
+            ReopenRequest(fileMs, quality ?: queued?.quality, queued?.audioIndex, queued?.audioSrc, playWhenReady)
+        }
         if (reopenJob?.isActive == true) return
         reopenJob = viewModelScope.launch {
             try {
@@ -723,7 +740,11 @@ open class VideoPlayerViewModel(
             val current = session ?: return
             try {
                 val opened = openOrStop(current) {
-                    current.open(request.fileMs, request.quality ?: current.quality, request.audioIndex ?: current.audioIndex)
+                    if (request.audioIndex != null) {
+                        current.open(request.fileMs, request.quality ?: current.quality, request.audioIndex, request.audioSrc)
+                    } else {
+                        current.open(request.fileMs, request.quality ?: current.quality)
+                    }
                 }
                 if (pendingReopen != null) continue // Superseded: the next open replaces this session.
                 reporter?.attachSession(opened.session)
@@ -820,7 +841,8 @@ open class VideoPlayerViewModel(
         val play = source?.play ?: return
         if (play.isHls) return
         val wanted = play.audioIndex ?: return
-        val ordinal = play.audio.sortedBy { it.index }.indexOfFirst { it.index == wanted }
+        // Voice-over files beside the video are never in a direct stream: only the file's own count.
+        val ordinal = play.audio.filter { it.index < AudioTrack.EXTERNAL_BASE }.sortedBy { it.index }.indexOfFirst { it.index == wanted }
         val group = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.getOrNull(ordinal) ?: return
         if (group.isSelected || !group.isTrackSupported(0)) return
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()

@@ -234,6 +234,82 @@ object AntresolIcons {
         lineTo(9.8f, 8.6f)
     }
 
+    /** A television: the placeholder of a programme without a picture, and the «ТВ» tab. */
+    val Tv: ImageVector = lineIcon("Tv") {
+        moveTo(5f, 5f)
+        lineTo(19f, 5f)
+        quadTo(21f, 5f, 21f, 7f)
+        lineTo(21f, 14.5f)
+        quadTo(21f, 16.5f, 19f, 16.5f)
+        lineTo(5f, 16.5f)
+        quadTo(3f, 16.5f, 3f, 14.5f)
+        lineTo(3f, 7f)
+        quadTo(3f, 5f, 5f, 5f)
+        close()
+        moveTo(8.5f, 20f)
+        lineTo(15.5f, 20f)
+    }
+
+    /** The programme guide: a time grid. */
+    val Guide: ImageVector = lineIcon("Guide") {
+        moveTo(4f, 5f)
+        lineTo(20f, 5f)
+        moveTo(4f, 10f)
+        lineTo(11f, 10f)
+        moveTo(14f, 10f)
+        lineTo(20f, 10f)
+        moveTo(4f, 15f)
+        lineTo(8f, 15f)
+        moveTo(11f, 15f)
+        lineTo(20f, 15f)
+        moveTo(4f, 20f)
+        lineTo(14f, 20f)
+        moveTo(17f, 20f)
+        lineTo(20f, 20f)
+    }
+
+    /** A list of rows: the channel list. */
+    val List: ImageVector = lineIcon("List") {
+        moveTo(8f, 6f)
+        lineTo(20f, 6f)
+        moveTo(8f, 12f)
+        lineTo(20f, 12f)
+        moveTo(8f, 18f)
+        lineTo(20f, 18f)
+        moveTo(4f, 6f)
+        lineTo(4.1f, 6f)
+        moveTo(4f, 12f)
+        lineTo(4.1f, 12f)
+        moveTo(4f, 18f)
+        lineTo(4.1f, 18f)
+    }
+
+    val Star: ImageVector = lineIcon("Star") { star() }
+
+    val StarFilled: ImageVector = ImageVector.Builder("StarFilled", 24.dp, 24.dp, 24f, 24f).apply {
+        path(
+            fill = SolidColor(Color.Black),
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 1.9f,
+            strokeLineJoin = StrokeJoin.Round,
+            pathBuilder = { star() },
+        )
+    }.build()
+
+    private fun PathBuilder.star() {
+        moveTo(12f, 3.6f)
+        lineTo(14.29f, 9.44f)
+        lineTo(20.56f, 9.82f)
+        lineTo(15.71f, 13.81f)
+        lineTo(17.29f, 19.88f)
+        lineTo(12f, 16.5f)
+        lineTo(6.71f, 19.88f)
+        lineTo(8.29f, 13.81f)
+        lineTo(3.44f, 9.82f)
+        lineTo(9.71f, 9.44f)
+        close()
+    }
+
     private fun lineIcon(name: String, block: PathBuilder.() -> Unit): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
             path(

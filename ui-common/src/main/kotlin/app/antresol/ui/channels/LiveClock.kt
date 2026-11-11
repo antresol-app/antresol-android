@@ -30,3 +30,20 @@ fun programClock(context: Context, iso: String): String {
     val ms = Channels.epochMs(iso) ?: return ""
     return DateFormat.getTimeFormat(context).format(Date(ms))
 }
+
+/**
+ * The guide's day for the time at its left edge: «Сегодня», «Завтра», «Вчера», or the date
+ * («Чт, 13 нояб.») further away.
+ */
+@Composable
+fun guideDayLabel(atMs: Long, nowMs: Long): String {
+    val zone = java.time.ZoneId.systemDefault()
+    val day = java.time.Instant.ofEpochMilli(atMs).atZone(zone).toLocalDate()
+    val today = java.time.Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate()
+    return when (java.time.temporal.ChronoUnit.DAYS.between(today, day)) {
+        0L -> androidx.compose.ui.res.stringResource(app.antresol.ui.R.string.tv_today)
+        1L -> androidx.compose.ui.res.stringResource(app.antresol.ui.R.string.tv_tomorrow)
+        -1L -> androidx.compose.ui.res.stringResource(app.antresol.ui.R.string.tv_yesterday)
+        else -> DateFormat.format("EEE, d MMM", Date(atMs)).toString()
+    }
+}

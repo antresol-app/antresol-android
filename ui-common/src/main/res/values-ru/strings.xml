@@ -162,7 +162,6 @@
 
     <!-- Live TV channels -->
     <string name="nav_tv">ТВ</string>
-    <string name="tv_sections">Разделы</string>
     <string name="tv_all_sections">Все</string>
     <string name="tv_on_air">Сейчас в эфире</string>
     <string name="tv_live">Прямой эфир</string>
@@ -179,9 +178,36 @@
     <string name="tv_back">К каналам</string>
     <string name="tv_empty">Каналов пока нет</string>
     <string name="tv_empty_hint">Каналы появятся сами, когда в медиатеке наберётся хотя бы шесть фильмов одного жанра или сериал от восьми серий.</string>
-    <string name="tv_continue">Продолжить</string>
-    <string name="tv_continue_watching">Продолжить «%1$s»</string>
     <string name="tv_next_at_long">Далее в %1$s — %2$s</string>
     <string name="tv_guide_hint">Каналы</string>
     <string name="tv_watching">Сейчас смотрите</string>
+    <string name="tv_favorites">Избранное</string>
+    <string name="tv_view_channels">Каналы</string>
+    <string name="tv_view_guide">Телегид</string>
+    <string name="tv_view">Вид</string>
+    <string name="tv_filter">Какие каналы показывать</string>
+    <string name="tv_until">до %1$s</string>
+    <string name="tv_next_short">Далее %1$s %2$s</string>
+    <string name="tv_favorite_add">Добавить в избранное</string>
+    <string name="tv_favorite_remove">Убрать из избранного</string>
+    <string name="tv_favorite">В избранном</string>
+    <string name="tv_favorites_empty">В избранном пока нет каналов</string>
+    <string name="tv_favorites_empty_hint">Удерживайте канал пальцем или кнопкой OK, чтобы добавить его в избранное.</string>
+    <string name="tv_last_channel">Последний канал</string>
+    <string name="tv_back_to_last">Вернуться на %1$d · %2$s</string>
+    <string name="tv_watch_now">Смотреть</string>
+    <string name="tv_now">Сейчас</string>
+    <string name="tv_tomorrow">Завтра</string>
+    <string name="tv_yesterday">Вчера</string>
+    <string name="tv_today">Сегодня</string>
+    <string name="tv_minutes">%1$d мин</string>
+    <string name="tv_audio_subtitles">Звук и субтитры</string>
+    <string name="tv_channel_list">Список каналов</string>
+    <string name="tv_details">Подробнее</string>
+    <string name="tv_on_air_until">В эфире до %1$s</string>
+    <string name="tv_starts_at">Начало в %1$s</string>
+    <string name="tv_ended">Закончилась в %1$s</string>
+    <string name="tv_guide_empty">В этом окне передач нет</string>
+    <string name="track_cleaned">Очищено</string>
+    <string name="track_cleaned_hint">Озвучка без оригинальных голосов</string>
 </resources>

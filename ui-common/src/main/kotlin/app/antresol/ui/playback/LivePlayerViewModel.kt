@@ -13,6 +13,8 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
@@ -21,22 +23,35 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.channels.ChannelFilter
 import app.antresol.core.channels.Channels
-import app.antresol.core.channels.LastChannel
 import app.antresol.core.channels.LiveApi
+import app.antresol.core.channels.LiveTrackChoice
+import app.antresol.core.channels.LiveTrackSelection
+import app.antresol.core.channels.LiveTracks
+import app.antresol.core.channels.SubtitleChoice
 import app.antresol.core.channels.MiniGuide
 import app.antresol.core.channels.liveMiniGuide
 import app.antresol.core.channels.LiveStream
 import app.antresol.core.channels.LiveTvSession
 import app.antresol.core.channels.LiveTvState
 import app.antresol.core.channels.liveApi
+import app.antresol.core.model.ChannelProgram
+import app.antresol.core.model.ProgramTrack
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
  * The live channel player shared by the TV and phone apps: ExoPlayer on the channel's live HLS
  * (started at the live edge; no seeking, no progress), driven by [LiveTvSession], which opens the
- * stream with retries while the channel starts, switches channels ([zap]) and refreshes the guide.
+ * stream with retries while the channel starts, switches channels inside the list it was opened
+ * from ([filter], [zap]) and refreshes the guide. Audio and subtitles are the master playlist's
+ * renditions, picked by NAME from the programme's `audio`/`subtitles` ([LiveTracks]).
+ *
+ * TV is TV: this player sends no progress, playback reports, watched flags, track memory or
+ * scrobbles. Its only server calls are those of [LiveApi] (channel list, guide, stream, the last
+ * channel, favourites, the profile's languages read-only) and the media key; it never touches
+ * [app.antresol.core.playback.PlaybackReporter], `/api/play` or `/api/progress`.
  * Each app draws its own overlay from [state].
  */
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -44,7 +59,7 @@ class LivePlayerViewModel(
     private val context: Context,
     client: AntresolClient,
     channelId: Long,
-    private val lastChannel: LastChannel? = null,
+    filter: ChannelFilter = ChannelFilter.All,
     api: LiveApi = client.liveApi(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
@@ -52,7 +67,15 @@ class LivePlayerViewModel(
 
     val player: ExoPlayer = buildPlayer()
 
-    private val session = LiveTvSession(api, viewModelScope, channelId)
+    private val session = LiveTvSession(api, viewModelScope, channelId, filter)
+
+    /** The viewer's audio/subtitle choice for this player only (never sent to the server). */
+    var trackChoice: LiveTrackChoice by mutableStateOf(LiveTrackChoice())
+        private set
+
+    /** The renditions selected for the programme on air (the picker's ticks). */
+    var trackSelection: LiveTrackSelection by mutableStateOf(LiveTrackSelection(null, null))
+        private set
 
     var state: LiveTvState by mutableStateOf(session.state.value)
         private set
@@ -76,7 +99,18 @@ class LivePlayerViewModel(
     var hasPicture: Boolean by mutableStateOf(false)
         private set
 
-    /** The mini-guide's strip: the current section's channels, starting at the one on. */
+    /** The programme on air now (from the guide, else the channel list). */
+    val onAirProgram: ChannelProgram?
+        get() = state.onAir(clock()).first
+
+    /** The picker's audio choices: the programme's renditions with their labels (empty when unknown). */
+    val audioOptions: List<ProgramTrack>
+        get() = onAirProgram?.audio.orEmpty()
+
+    val subtitleOptions: List<ProgramTrack>
+        get() = onAirProgram?.subtitles.orEmpty()
+
+    /** The mini-guide: the list the player was opened from, by number, with the current channel. */
     val miniGuide: MiniGuide
         get() = liveMiniGuide(state, clock())
 
@@ -93,7 +127,10 @@ class LivePlayerViewModel(
         override fun onRenderedFirstFrame() {
             hasPicture = true
             awaitingPicture = false
-            lastChannel?.remember(state.channelId)
+        }
+
+        override fun onTracksChanged(tracks: Tracks) {
+            applyTracks()
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -128,6 +165,7 @@ class LivePlayerViewModel(
                 if (switched) awaitingPicture = true
                 apply(next.stream)
                 updateMetadata()
+                applyTracks()
             }
         }
         // The programme changes between refreshes (short ones every minute or so).
@@ -135,6 +173,7 @@ class LivePlayerViewModel(
             while (true) {
                 delay(METADATA_TICK_MS)
                 updateMetadata()
+                applyTracks()
             }
         }
         session.start()
@@ -145,6 +184,24 @@ class LivePlayerViewModel(
 
     /** Channel up (+1, the next number) or down (−1), wrapping. False when there is no other channel. */
     fun zap(step: Int): Boolean = session.zap(step)
+
+    /** Favourite on/off for [channelId] (the player's star). */
+    fun toggleFavorite(channelId: Long = state.channelId) {
+        val channel = state.channels.firstOrNull { it.id == channelId } ?: return
+        session.setFavorite(channelId, !channel.favorite)
+    }
+
+    /** The viewer picks an audio rendition: it sticks for the rest of this player (same slot). */
+    fun selectAudio(track: ProgramTrack) {
+        trackChoice = trackChoice.copy(audio = track)
+        applyTracks()
+    }
+
+    /** The viewer picks subtitles, or none (null). */
+    fun selectSubtitles(track: ProgramTrack?) {
+        trackChoice = trackChoice.copy(subtitles = track?.let { SubtitleChoice.On(it) } ?: SubtitleChoice.Off)
+        applyTracks()
+    }
 
     /** "Try Again" after the channel could not be shown. */
     fun retry() = session.retry()
@@ -184,6 +241,36 @@ class LivePlayerViewModel(
             }
         }
     }
+
+    /**
+     * Selects the renditions for the programme on air: the HLS `NAME` of an `EXT-X-MEDIA` is the
+     * [androidx.media3.common.Format.label] of its track, so the override picks the group whose
+     * label equals the entry's `name`. Subtitles off disables the text renderer.
+     */
+    private fun applyTracks() {
+        if (released) return
+        val selection = LiveTracks.select(onAirProgram, state.prefs, trackChoice)
+        trackSelection = selection
+        val groups = player.currentTracks.groups
+        val builder = player.trackSelectionParameters.buildUpon()
+        selection.audio?.let { wanted -> groups.byLabel(C.TRACK_TYPE_AUDIO, wanted.name) }?.let { group ->
+            builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+        }
+        val subtitles = selection.subtitles
+        if (subtitles == null) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        } else {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            groups.byLabel(C.TRACK_TYPE_TEXT, subtitles.name)?.let { group ->
+                builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+            }
+        }
+        val next = builder.build()
+        if (next != player.trackSelectionParameters) player.trackSelectionParameters = next
+    }
+
+    private fun List<Tracks.Group>.byLabel(type: Int, label: String): Tracks.Group? =
+        firstOrNull { group -> group.type == type && (0 until group.length).any { group.getTrackFormat(it).label == label } }
 
     /** What the system's media controls show: the programme as the title, the channel as the artist. */
     private fun metadata(): MediaMetadata {

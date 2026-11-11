@@ -24,6 +24,7 @@ import app.antresol.core.model.ChannelProgram
 import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.mobile.ui.components.GlassPillButton
 import app.antresol.mobile.ui.components.PrimaryPillButton
+import app.antresol.mobile.ui.components.RoundIconButton
 import app.antresol.ui.R
 import app.antresol.ui.channels.ProgrammeStill
 import app.antresol.ui.channels.programClock
@@ -99,12 +100,14 @@ fun ProgramSheet(pick: GuidePick, nowMs: Long, onWatch: () -> Unit, onToggleFavo
                         modifier = Modifier.weight(1f).testTag("guide-watch"),
                     )
                 }
-                GlassPillButton(
-                    stringResource(if (pick.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),
-                    onClick = onToggleFavorite,
-                    icon = if (pick.favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
-                    modifier = Modifier.weight(1f),
-                )
+                val favoriteLabel = stringResource(if (pick.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add)
+                val star = if (pick.favorite) AntresolIcons.StarFilled else AntresolIcons.Star
+                if (onAir) {
+                    // Beside «Смотреть» the favourite is a round star, so neither label is cut.
+                    RoundIconButton(star, favoriteLabel, onToggleFavorite, glass = true, size = 50.dp, iconSize = 22.dp)
+                } else {
+                    GlassPillButton(favoriteLabel, onClick = onToggleFavorite, icon = star, modifier = Modifier.weight(1f))
+                }
             }
         }
     }

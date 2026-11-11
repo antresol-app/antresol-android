@@ -79,8 +79,15 @@ object TrackLabels {
     fun audio(resources: Resources, track: AudioTrack, locale: Locale = Locale.getDefault()): String {
         val title = track.title.trim()
         if (title.isNotEmpty()) {
-            val lang = language(track.lang, locale)
-            return if (lang == null || title.contains(lang, ignoreCase = true)) title else "$lang — $title"
+            val lang = language(track.lang, locale) ?: return title
+            // A title that is just the language («English», «Русский», «eng») says nothing more.
+            val code = Locale(track.lang)
+            val names = setOf(lang, code.getDisplayLanguage(code), code.getDisplayLanguage(Locale.ENGLISH), track.lang)
+            return when {
+                names.any { it.equals(title, ignoreCase = true) } -> lang
+                title.contains(lang, ignoreCase = true) -> title
+                else -> "$lang — $title"
+            }
         }
         val parts = listOfNotNull(language(track.lang, locale), track.codec.uppercase(Locale.ROOT).ifBlank { null }, channels(track.channels))
         return parts.joinToString(" · ").ifBlank { resources.getString(R.string.track_number, track.index) }

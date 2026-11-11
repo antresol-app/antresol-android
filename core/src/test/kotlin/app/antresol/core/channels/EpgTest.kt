@@ -49,4 +49,15 @@ class EpgTest {
         val visible = Epg.visible(ChannelEpgRow(1, programs = row), ms("2026-11-11T21:30:00Z"), ms("2026-11-11T22:40:00Z"))
         assertEquals(listOf("b"), visible.map { it.id })
     }
+
+    @Test
+    fun theScaleFollowsTheTypicalProgramme() {
+        val films = listOf(ChannelEpgRow(1, programs = listOf(p("f", "20:00", "21:30"), p("g", "21:30", "23:00"))))
+        val clips = listOf(ChannelEpgRow(1, programs = listOf(p("a", "20:00", "20:06"), p("b", "20:06", "20:12"), p("c", "20:12", "20:19"))))
+        assertEquals(4f, Epg.minuteWidth(films, 140f, 4f, 24f))
+        assertEquals(140f / 6f, Epg.minuteWidth(clips, 140f, 4f, 24f), 0.01f)
+        assertEquals(30 * 60_000L, Epg.tickMs(4f, 90f))
+        assertEquals(5 * 60_000L, Epg.tickMs(23f, 90f))
+        assertEquals(30f, Epg.typicalMinutes(emptyList()))
+    }
 }

@@ -76,6 +76,32 @@ object Epg {
         return start.coerceAtLeast(visibleFromMs).coerceAtMost(end - 1)
     }
 
+    /** The median length of the programmes in [rows], in minutes (30 when unknown). */
+    fun typicalMinutes(rows: List<ChannelEpgRow>): Float {
+        val lengths = rows.flatMap { it.programs }.mapNotNull { program ->
+            val start = Channels.epochMs(program.start) ?: return@mapNotNull null
+            val end = Channels.epochMs(program.end) ?: return@mapNotNull null
+            ((end - start) / 60_000f).takeIf { it > 0f }
+        }.sorted()
+        return if (lengths.isEmpty()) 30f else lengths[lengths.size / 2]
+    }
+
+    /**
+     * The width of a minute (dp): a typical programme gets about [typicalWidth] dp, within
+     * [min]…[max] — films of 90 min at the minimum scale, short clips stretched to stay readable.
+     */
+    fun minuteWidth(rows: List<ChannelEpgRow>, typicalWidth: Float, min: Float, max: Float): Float =
+        (typicalWidth / typicalMinutes(rows)).coerceIn(min, max)
+
+    /** The ruler's tick: the shortest of 5, 10, 15, 30, 60 minutes at least [minSpacing] dp apart. */
+    fun tickMs(minuteWidth: Float, minSpacing: Float): Long {
+        val minutes = listOf(5, 10, 15, 30, 60).firstOrNull { it * minuteWidth >= minSpacing } ?: 60
+        return minutes * 60_000L
+    }
+
+    /** [ms] rounded down to a multiple of [stepMs]. */
+    fun floorTo(ms: Long, stepMs: Long): Long = Math.floorDiv(ms, stepMs) * stepMs
+
     /** The programmes of [row] that overlap `[fromMs, toMs)`. */
     fun visible(row: ChannelEpgRow, fromMs: Long, toMs: Long): List<ChannelProgram> = row.programs.filter { program ->
         val start = Channels.epochMs(program.start) ?: return@filter false

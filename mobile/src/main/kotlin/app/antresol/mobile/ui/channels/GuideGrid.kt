@@ -50,14 +50,17 @@ import app.antresol.ui.theme.AntresolShapes
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.Instant
 
-private val ChannelColumnWidth = 96.dp
+private val ChannelColumnWidth = 112.dp
 private val RowHeight = 68.dp
 private val RulerHeight = 32.dp
 
-/** Width of one minute: half an hour is 120 dp. */
-private val MinuteWidth = 4.dp
+/** Width of one minute, set per guide (see [Epg.minuteWidth]): a film of 90 min is 360 dp. */
+private val LocalMinuteWidth = androidx.compose.runtime.staticCompositionLocalOf { 4.dp }
 
-private fun Long.minutesToDp(): Dp = MinuteWidth * (this / 60_000f)
+@Composable
+private fun Long.minutesToDp(): Dp = LocalMinuteWidth.current * (this / 60_000f)
+
+private fun Long.minutesToDp(minute: Dp): Dp = minute * (this / 60_000f)
 
 /**
  * «Телегид» on the phone: a sticky channel column (number, name, star), a time ruler with
@@ -80,10 +83,12 @@ fun GuideGrid(
 ) {
     val density = LocalDensity.current
     val scroll = rememberScrollState()
-    val width = (toMs - fromMs).minutesToDp()
-    LaunchedEffect(fromMs) {
-        // Open on now, with half an hour of the past in view.
-        val target = with(density) { (nowMs - Epg.SLOT_MS - fromMs).coerceAtLeast(0).minutesToDp().roundToPx() }
+    val minute = remember(rows.isNotEmpty()) { Epg.minuteWidth(rows, 140f, 4f, 24f).dp }
+    val tick = Epg.tickMs(minute.value, 90f)
+    val width = (toMs - fromMs).minutesToDp(minute)
+    LaunchedEffect(fromMs, minute) {
+        // Open on now, with two ticks of the past in view.
+        val target = with(density) { (nowMs - 2 * tick - fromMs).coerceAtLeast(0).minutesToDp(minute).roundToPx() }
         scroll.scrollTo(target)
     }
     LaunchedEffect(scroll) {
@@ -91,7 +96,8 @@ fun GuideGrid(
             .distinctUntilChanged()
             .collect { near -> if (near && scroll.maxValue > 0) onNearEnd() }
     }
-    val leftMs = fromMs + with(density) { (scroll.value.toDp() / MinuteWidth * 60_000f).toLong() }
+    val leftMs = fromMs + with(density) { (scroll.value.toDp() / minute * 60_000f).toLong() }
+    androidx.compose.runtime.CompositionLocalProvider(LocalMinuteWidth provides minute) {
     Column(modifier) {
         Row(Modifier.height(RulerHeight), verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -101,7 +107,7 @@ fun GuideGrid(
                 modifier = Modifier.width(ChannelColumnWidth).padding(start = 16.dp),
             )
             Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scroll)) {
-                Ruler(fromMs, toMs, nowMs, width)
+                Ruler(fromMs, toMs, nowMs, width, tick)
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(AntresolColors.Hairline))
@@ -110,7 +116,7 @@ fun GuideGrid(
                 Row(Modifier.height(RowHeight)) {
                     GuideChannelCell(row, last = row.id == lastChannelId, onClick = { onWatchChannel(row.id) })
                     Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scroll)) {
-                        Timeline(row, fromMs, toMs, nowMs, width) { program ->
+                        Timeline(row, fromMs, toMs, nowMs, width, leftMs) { program ->
                             onPick(GuidePick(row.id, row.number, row.name, row.favorite, program))
                         }
                     }
@@ -118,6 +124,7 @@ fun GuideGrid(
                 Box(Modifier.fillMaxWidth().height(1.dp).background(AntresolColors.Hairline))
             }
         }
+    }
     }
 }
 
@@ -147,11 +154,11 @@ private fun GuideChannelCell(row: ChannelEpgRow, last: Boolean, onClick: () -> U
 
 /** Half-hour ticks with their times, and the now mark. */
 @Composable
-private fun Ruler(fromMs: Long, toMs: Long, nowMs: Long, width: Dp) {
+private fun Ruler(fromMs: Long, toMs: Long, nowMs: Long, width: Dp, stepMs: Long) {
     val context = LocalContext.current
     Box(Modifier.width(width).fillMaxHeight()) {
-        var tick = Epg.floorSlot(fromMs)
-        if (tick < fromMs) tick += Epg.SLOT_MS
+        var tick = Epg.floorTo(fromMs, stepMs)
+        if (tick < fromMs) tick += stepMs
         while (tick < toMs) {
             val x = (tick - fromMs).minutesToDp()
             Box(Modifier.offset(x = x).align(Alignment.BottomStart).width(1.dp).height(8.dp).background(AntresolColors.LabelTertiary))
@@ -160,7 +167,7 @@ private fun Ruler(fromMs: Long, toMs: Long, nowMs: Long, width: Dp) {
                 style = Antresol.typography.caption,
                 modifier = Modifier.offset(x = x + 5.dp).align(Alignment.CenterStart),
             )
-            tick += Epg.SLOT_MS
+            tick += stepMs
         }
         if (nowMs in fromMs until toMs) {
             Box(
@@ -176,7 +183,7 @@ private fun Ruler(fromMs: Long, toMs: Long, nowMs: Long, width: Dp) {
 }
 
 @Composable
-private fun Timeline(row: ChannelEpgRow, fromMs: Long, toMs: Long, nowMs: Long, width: Dp, onPick: (ChannelProgram) -> Unit) {
+private fun Timeline(row: ChannelEpgRow, fromMs: Long, toMs: Long, nowMs: Long, width: Dp, leftMs: Long, onPick: (ChannelProgram) -> Unit) {
     val programs = remember(row.programs, fromMs, toMs) { Epg.visible(row, fromMs, toMs) }
     Box(Modifier.width(width).fillMaxHeight()) {
         programs.forEach { program ->
@@ -185,6 +192,7 @@ private fun Timeline(row: ChannelEpgRow, fromMs: Long, toMs: Long, nowMs: Long, 
             GuideBlock(
                 program = program,
                 nowMs = nowMs,
+                textInset = stickyInset(start, end, leftMs),
                 onClick = { onPick(program) },
                 modifier = Modifier
                     .offset(x = (start - fromMs).minutesToDp())
@@ -206,7 +214,7 @@ private fun Timeline(row: ChannelEpgRow, fromMs: Long, toMs: Long, nowMs: Long, 
 }
 
 @Composable
-private fun GuideBlock(program: ChannelProgram, nowMs: Long, onClick: () -> Unit, modifier: Modifier) {
+private fun GuideBlock(program: ChannelProgram, nowMs: Long, textInset: Dp, onClick: () -> Unit, modifier: Modifier) {
     val context = LocalContext.current
     val start = Channels.epochMs(program.start) ?: 0L
     val end = Channels.epochMs(program.end) ?: 0L
@@ -228,7 +236,7 @@ private fun GuideBlock(program: ChannelProgram, nowMs: Long, onClick: () -> Unit
             .semantics { contentDescription = description }
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.padding(start = textInset), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 program.title,
                 style = (if (onAir) Antresol.typography.bodyEmphasis else Antresol.typography.body).copy(color = text, fontSize = Antresol.typography.caption.fontSize),
@@ -245,3 +253,15 @@ private fun GuideBlock(program: ChannelProgram, nowMs: Long, onClick: () -> Unit
     }
 }
 
+
+/**
+ * How far a block's title moves right so it stays readable at the visible left edge when the
+ * programme began off-screen (it never runs past the block's last 64 dp).
+ */
+@Composable
+private fun stickyInset(startMs: Long, endMs: Long, leftMs: Long): Dp {
+    if (leftMs <= startMs) return 0.dp
+    val inset = (leftMs - startMs).minutesToDp()
+    val room = (endMs - startMs).minutesToDp() - 64.dp
+    return if (room <= 0.dp) 0.dp else minOf(inset, room)
+}

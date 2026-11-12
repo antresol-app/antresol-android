@@ -202,7 +202,9 @@ class LiveLayoutTest {
     fun aListRowWithALogoStillFits360dp() {
         val withLogo = channel.copy(logoUrl = "/api/channels/3/logo.png?v=1")
         show {
-            Column { ChannelRow(withLogo, now, onClick = {}, onToggleFavorite = {}) }
+            androidx.compose.runtime.CompositionLocalProvider(app.antresol.ui.channels.LocalReserveChannelLogo provides true) {
+                Column { ChannelRow(withLogo, now, onClick = {}, onToggleFavorite = {}) }
+            }
         }
         compose.onAllNodesWithText(channel.name).assertCountEquals(1)
         assertNothingOverflows()
@@ -224,7 +226,7 @@ class LiveLayoutTest {
             }
         }
         compose.waitForIdle()
-        // The row without a logo keeps an empty slot, so both names start at the same x.
+        // The row without a logo keeps an empty logo column, so names and programmes start at the same x.
         compose.onAllNodes(androidx.compose.ui.test.hasTestTag("channel-logo-slot"), useUnmergedTree = true).fetchSemanticsNodes().let {
             assertTrue("no reserved slot", it.isNotEmpty())
         }

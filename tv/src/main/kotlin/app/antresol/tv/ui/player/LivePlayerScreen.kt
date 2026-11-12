@@ -548,12 +548,13 @@ internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, 
                         textAlign = TextAlign.End,
                         modifier = Modifier.width(28.dp),
                     )
+                    // A logo column, as in the list, only when some channel of the panel has a logo.
+                    if (reserveLogo) ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp, reserve = true)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (channel.id == currentId) {
                                 Box(Modifier.size(7.dp).background(AntresolColors.Red, CircleShape))
                             }
-                            ChannelLogo(urls?.image(channel.logoUrl), height = 20.dp, reserve = reserveLogo)
                             Text(channel.name, style = Antresol.typography.title, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                             if (channel.favorite) FavoriteMark(tint = if (isSelected) content else AntresolColors.Orange)
                         }

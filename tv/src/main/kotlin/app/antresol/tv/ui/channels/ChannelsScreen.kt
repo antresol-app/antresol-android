@@ -404,9 +404,10 @@ private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, nowMs: Long, la
                 shape = AntresolShapes.badge,
                 modifier = Modifier.width(80.dp).aspectRatio(AntresolMotion.BACKDROP_ASPECT),
             )
+            // The logo column (as on the web) exists only in a list where some channel has a logo.
+            if (reserveLogo) ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp, reserve = true)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ChannelLogo(urls?.image(channel.logoUrl), height = 20.dp, reserve = reserveLogo)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(channel.name, style = Antresol.typography.title, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     if (channel.favorite) FavoriteMark(tint = if (hasFocus) content else AntresolColors.Orange)
                 }

@@ -129,9 +129,9 @@ private enum class LiveAction { Favorite, Audio, Subtitles, Channels }
  * Up/Down) switch to the next/previous channel of the list the player was opened from, by number,
  * wrapping; the previous channel's last frame holds, dimmed, until the new one draws. The info bar
  * (number · name, the programme's still, title and progress, what is next) slides in on every
- * switch and fades after 5 s. OK shows it with its buttons (favourite, audio, subtitles, channel
- * list; Left/Right pick, OK runs). Left opens the channel list on the left at the channel on; Menu
- * opens the audio choices. Back closes a panel, then the bar, then leaves. The screen handles the
+ * switch and fades after 5 s. OK opens the channel list on the left at the channel on (TiviMate;
+ * Left too). Right or Menu shows the banner's buttons (favourite, audio, subtitles, channel list;
+ * Left/Right pick, OK runs). Back closes a panel, then the bar, then leaves. The screen handles the
  * remote itself (no focus moves between overlays). Live: no seeking, no pause, nothing remembered.
  */
 @Composable
@@ -261,17 +261,22 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             Key.DirectionLeft -> if (down) {
                 if (banner == Banner.Actions) actionIndex = (actionIndex - 1).coerceAtLeast(0) else openPanel(Panel.Channels)
             }
+            // Right (or Menu) brings up the banner's buttons; Right moves through them.
             Key.DirectionRight -> if (down) {
-                if (banner == Banner.Actions) actionIndex = (actionIndex + 1).coerceAtMost(actions.size - 1) else banner = Banner.Zap
-            }
-            Key.Menu -> if (down && audio.isNotEmpty()) openPanel(Panel.Audio)
-            in CenterKeys -> if (up) {
                 if (banner == Banner.Actions) {
-                    actions.getOrNull(actionIndex)?.let(::runAction)
+                    actionIndex = (actionIndex + 1).coerceAtMost(actions.size - 1)
                 } else {
                     banner = Banner.Actions
                     actionIndex = 0
                 }
+            }
+            Key.Menu -> if (down) {
+                banner = Banner.Actions
+                actionIndex = 0
+            }
+            // OK, as in TiviMate: the channel list; with the buttons up, the selected button.
+            in CenterKeys -> if (up) {
+                if (banner == Banner.Actions) actions.getOrNull(actionIndex)?.let(::runAction) else openPanel(Panel.Channels)
             }
             else -> if (down && banner == Banner.Hidden) banner = Banner.Zap
         }
@@ -409,11 +414,11 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                     Spacer(Modifier.weight(1f))
                 }
                 if (actions.isEmpty()) {
-                    KeyHint("OK", stringResource(R.string.tv_ok_actions))
                     if (state.listed.size > 1) {
+                        KeyHint("OK", stringResource(R.string.tv_channel_list))
                         Spacer(Modifier.width(20.dp))
-                        KeyHint("◀", stringResource(R.string.tv_channel_list))
                     }
+                    KeyHint("▶", stringResource(R.string.tv_ok_actions))
                 }
             }
         }

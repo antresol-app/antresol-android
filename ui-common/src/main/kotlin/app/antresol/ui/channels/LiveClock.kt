@@ -25,9 +25,12 @@ fun rememberNowMs(intervalMs: Long = 5_000L): Long {
     return now
 }
 
-/** A programme time ("23:15", or "11:15 PM" with a 12-hour system clock); "" when it cannot be read. */
+/**
+ * A programme time ("23:15", or "11:15 PM" with a 12-hour system clock), rounded to the nearest
+ * minute ([Channels.displayMs]); "" when it cannot be read.
+ */
 fun programClock(context: Context, iso: String): String {
-    val ms = Channels.epochMs(iso) ?: return ""
+    val ms = Channels.displayMs(iso) ?: return ""
     return DateFormat.getTimeFormat(context).format(Date(ms))
 }
 

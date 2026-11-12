@@ -155,6 +155,23 @@ object Channels {
         return nowMs in start until end
     }
 
+    /**
+     * A programme time as shown: rounded to the nearest minute (the server's times carry seconds;
+     * 23:50:38 reads «23:51», so a guide block labelled with it starts where the ruler says).
+     * Positions on the guide stay exact; only the text is rounded.
+     */
+    fun displayMs(ms: Long): Long = Math.floorDiv(ms + 30_000L, 60_000L) * 60_000L
+
+    /** The displayed (rounded) time of an ISO 8601 instant, or null when it cannot be read. */
+    fun displayMs(iso: String): Long? = epochMs(iso)?.let(::displayMs)
+
+    /** A programme's length in whole minutes as shown: between its rounded start and end. */
+    fun displayMinutes(program: ChannelProgram): Int? {
+        val start = displayMs(program.start) ?: return null
+        val end = displayMs(program.end) ?: return null
+        return ((end - start) / 60_000L).toInt()
+    }
+
     /** "Title · S1 E5 · Episode 5": the programme's title with its subtitle, when it has one. */
     fun programLine(program: ChannelProgram): String =
         listOf(program.title, program.subtitle).filter { it.isNotBlank() }.joinToString(" · ")

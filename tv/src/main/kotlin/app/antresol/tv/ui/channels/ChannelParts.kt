@@ -76,9 +76,7 @@ fun KeyHint(key: String, label: String, modifier: Modifier = Modifier) {
 @Composable
 fun ProgramTime(program: ChannelProgram, nowMs: Long, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val start = Channels.epochMs(program.start)
-    val end = Channels.epochMs(program.end)
-    val minutes = if (start != null && end != null) ((end - start) / 60_000L).toInt() else null
+    val minutes = Channels.displayMinutes(program)
     val time = listOfNotNull(
         stringResource(R.string.tv_time, programClock(context, program.start), programClock(context, program.end)),
         minutes?.let { stringResource(R.string.tv_minutes, it) },

@@ -128,4 +128,16 @@ class ChannelLogicTest {
         assertEquals(0, Channels.miniGuide(films, 99).currentIndex)
         assertEquals(MiniGuide.Empty, Channels.miniGuide(emptyList(), 1))
     }
+
+    @Test
+    fun displayedTimesRoundToTheNearestMinute() {
+        assertEquals(ms("2026-11-11T23:51:00Z"), Channels.displayMs("2026-11-11T23:50:38.9Z"))
+        assertEquals(ms("2026-11-11T23:50:00Z"), Channels.displayMs("2026-11-11T23:50:29.999Z"))
+        assertEquals(ms("2026-11-11T23:51:00Z"), Channels.displayMs("2026-11-11T23:50:30Z"))
+        assertEquals(ms("2026-11-12T00:00:00Z"), Channels.displayMs("2026-11-11T23:59:45Z"))
+        assertEquals(ms("2026-11-11T23:50:00Z"), Channels.displayMs("2026-11-11T23:50:00Z"))
+        assertNull(Channels.displayMs(""))
+        // 23:50:38 → 23:56:10 is shown 23:51–23:56: five minutes.
+        assertEquals(5, Channels.displayMinutes(program("2026-11-11T23:50:38Z", "2026-11-11T23:56:10Z")))
+    }
 }

@@ -1,5 +1,6 @@
 package app.antresol.tv.ui.channels
 
+import app.antresol.ui.channels.ChannelLogo
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -354,6 +355,7 @@ private suspend fun reveal(program: ChannelProgram, fromMs: Long, scroll: Scroll
 
 @Composable
 private fun ChannelCell(row: ChannelEpgRow, last: Boolean, focused: Boolean) {
+    val urls = app.antresol.tv.ui.LocalMediaUrls.current
     Row(
         Modifier
             .width(ChannelColumnWidth)
@@ -372,6 +374,7 @@ private fun ChannelCell(row: ChannelEpgRow, last: Boolean, focused: Boolean) {
             },
             modifier = Modifier.width(26.dp),
         )
+        ChannelLogo(urls?.image(row.logoUrl), height = 22.dp)
         Text(
             row.name,
             style = Antresol.typography.caption.copy(hyphens = androidx.compose.ui.text.style.Hyphens.None),

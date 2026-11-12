@@ -1,5 +1,6 @@
 package app.antresol.mobile.ui.channels
 
+import app.antresol.ui.channels.ChannelLogo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -101,7 +102,8 @@ fun ChannelRow(
                     .aspectRatio(AntresolMotion.BACKDROP_ASPECT),
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ChannelLogo(urls?.image(channel.logoUrl), height = 20.dp)
                     Text(
                         channel.name,
                         style = Antresol.typography.title,

@@ -1,5 +1,6 @@
 package app.antresol.mobile.ui.channels
 
+import app.antresol.ui.channels.ChannelLogo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -93,6 +94,7 @@ fun ChannelCard(
                         .background(AntresolColors.Red, CircleShape),
                 )
             }
+            ChannelLogo(urls?.image(channel.logoUrl), height = 18.dp)
             Text(text = label, style = Antresol.typography.title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
             if (channel.favorite) FavoriteMark()
         }

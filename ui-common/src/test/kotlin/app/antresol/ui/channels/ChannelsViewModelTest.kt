@@ -30,7 +30,7 @@ class ChannelsViewModelTest {
     private var failing = false
     private var channels = listOf(
         Channel(id = 1, number = 1, name = "All movies", category = "Movies", now = ChannelProgram(title = "A")),
-        Channel(id = 2, number = 10, name = "Comedy", category = "Genres", now = ChannelProgram(title = "B")),
+        Channel(id = 2, number = 10, name = "Comedy", category = "Genres", now = ChannelProgram(title = "B"), logoUrl = "/api/channels/2/logo.png?v=1"),
         Channel(id = 3, number = 11, name = "Family", category = "Genres"),
     )
 
@@ -105,6 +105,15 @@ class ChannelsViewModelTest {
         assertEquals(2, epgFroms.size)
         assertEquals(to + 6 * 3_600_000L, vm.guideToMs)
         assertEquals(2, vm.shownGuide.first().programs.size)
+    }
+
+    @Test
+    fun theGuideShowsTheChannelListsLogos() = runTest(dispatcher) {
+        val vm = viewModel()
+        runCurrent()
+        vm.showView(ChannelsView.Guide)
+        runCurrent()
+        assertEquals(listOf(null, "/api/channels/2/logo.png?v=1", null), vm.shownGuide.map { it.logoUrl })
     }
 
     @Test

@@ -1,5 +1,6 @@
 package app.antresol.mobile.ui.channels
 
+import app.antresol.ui.channels.ChannelLogo
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -131,6 +132,7 @@ fun GuideGrid(
 
 @Composable
 private fun GuideChannelCell(row: ChannelEpgRow, last: Boolean, onClick: () -> Unit) {
+    val urls = app.antresol.mobile.ui.LocalMediaUrls.current
     Column(
         modifier = Modifier
             .width(ChannelColumnWidth)
@@ -139,7 +141,7 @@ private fun GuideChannelCell(row: ChannelEpgRow, last: Boolean, onClick: () -> U
             .padding(start = 16.dp, end = 8.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp, Alignment.CenterVertically),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 row.number.toString(),
                 style = Antresol.typography.title.copy(
@@ -147,6 +149,7 @@ private fun GuideChannelCell(row: ChannelEpgRow, last: Boolean, onClick: () -> U
                     fontFeatureSettings = "tnum",
                 ),
             )
+            ChannelLogo(urls?.image(row.logoUrl), height = 20.dp)
             if (row.favorite) FavoriteMark()
         }
         Text(

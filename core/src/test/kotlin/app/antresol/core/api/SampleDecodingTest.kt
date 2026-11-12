@@ -137,6 +137,9 @@ class SampleDecodingTest {
         assertTrue(first.name.isNotBlank() && first.category.isNotBlank())
         assertEquals(2L, list.lastChannel)
         assertTrue(list.channels.single { it.id == 3L }.favorite)
+        // An uploaded logo (round 5) only where there is one.
+        assertEquals("/api/channels/2/logo.png?v=3", list.channels.single { it.id == 2L }.logoUrl)
+        assertNull(first.logoUrl)
         val now = requireNotNull(first.now)
         assertEquals("/api/images/local/18/backdrop", now.backdrop)
         assertEquals("1-1", now.id)

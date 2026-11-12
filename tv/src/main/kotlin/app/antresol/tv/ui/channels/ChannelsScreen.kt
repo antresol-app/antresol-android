@@ -1,5 +1,6 @@
 package app.antresol.tv.ui.channels
 
+import app.antresol.ui.channels.ChannelLogo
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -402,7 +403,8 @@ private fun TvChannelRow(channel: Channel, nowMs: Long, last: Boolean, onClick: 
                 modifier = Modifier.width(80.dp).aspectRatio(AntresolMotion.BACKDROP_ASPECT),
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ChannelLogo(urls?.image(channel.logoUrl), height = 20.dp)
                     Text(channel.name, style = Antresol.typography.title, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     if (channel.favorite) FavoriteMark(tint = if (hasFocus) content else AntresolColors.Orange)
                 }
@@ -439,7 +441,8 @@ private fun ChannelPreview(channel: Channel, nowMs: Long, modifier: Modifier = M
                 shape = AntresolShapes.card,
                 modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(AntresolMotion.BACKDROP_ASPECT),
             )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                ChannelLogo(urls?.image(channel.logoUrl), height = 24.dp)
                 Text(
                     stringResource(R.string.tv_channel_number, channel.number, channel.name),
                     style = Antresol.typography.caption.copy(fontFeatureSettings = "tnum"),

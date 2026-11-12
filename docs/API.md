@@ -1121,7 +1121,7 @@ Kid profiles get only the channels allowed for their age (the server filters).
     {
       "id": 2, "number": 10, "name": "Comedy", "category": "Movies by Genre",
       "personal": false, "auto": true, "enabled": true, "canEdit": true,
-      "logo": 1,
+      "logo": 1, "logoUrl": "/api/channels/2/logo.png?v=3",
       "rules": { "kinds": ["movie"], "genres": ["comedy"], "order": "shuffle" },
       "now":  { "itemId": 6, "title": "Funny People", "subtitle": "S1 E5 · Episode 5", "overview": "…", "year": 1993,
                 "start": "2026-11-10T22:44:00Z", "end": "2026-11-10T23:15:00Z",
@@ -1139,6 +1139,10 @@ Kid profiles get only the channels allowed for their age (the server filters).
 - `logo` (0…6) is the index of the avatar gradient (`grad-1` … `grad-7`, 145°) the channel's logo tile
   is drawn in, with the channel's name centred in bold white. `GET /api/channels/{id}/logo.png` (Bearer)
   is the same tile as a 480×270 PNG.
+- `logoUrl` is present only when someone uploaded a logo for the channel (web editor); `v` changes
+  with every upload. Apps show it small, fitted in a neutral rounded box, next to the number and
+  name (list rows, guide, player banner, mini-guide). Without it they show number and name only
+  (never the gradient tile).
 - `now`/`next` may be absent. `subtitle` exists for episodes. `start`/`end` are ISO 8601 with 0–9
   fraction digits. Programme progress = (now − start) / (end − start).
 - `rules`, `canEdit`, `canManage`, `canCreate` are for the web editor. The list changes over time:
@@ -1167,6 +1171,15 @@ The first request starts the channel's encoder. The server may hold it for up to
 | 503 | — | Nothing to show on the channel / live channels unavailable | Show `error` |
 | 403 | — | A kid's screen time is over | Show `error` |
 | 404 | — | The channel is gone or not visible | Show `error` |
+
+The master lists up to 8 audio (`audio-<n>.m3u8`) and 6 WebVTT subtitle (`subs-<n>.m3u8`)
+renditions in no fixed order. Their `NAME` is what a person reads («Дубляж», «LostFilm»,
+«Оригинал (English)», «English»), unique within its group; `LANGUAGE` is BCP 47. A programme's
+`audio`/`subtitles` (in `now`/`next` and the guide) list `{slot, name, label, lang}` for the renditions
+it really has: select the rendition whose `NAME` equals `name` and show `label`. Do not rely on the
+names, the count or the order. Default audio = the first of the profile's audio languages present;
+a viewer's pick sticks by `name` across programmes and channels, falling back by language. A
+programme without a rendition's track plays a same-language fallback there (subtitles: empty cues).
 
 A channel keeps running on the server for a while after its last viewer left, so switching through
 many channels quickly can hit the "too many channels" limit.

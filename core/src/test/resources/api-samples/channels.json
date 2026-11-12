@@ -59,6 +59,7 @@
       "canEdit": true,
       "favorite": false,
       "logo": 2,
+      "logoUrl": "/api/channels/2/logo.png?v=3",
       "now": {
         "id": "2-2",
         "itemId": 2,

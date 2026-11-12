@@ -1,5 +1,6 @@
 package app.antresol.tv.ui.player
 
+import app.antresol.ui.channels.ChannelLogo
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.shape.CircleShape
@@ -363,13 +364,18 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(22.dp)) {
-            Column(Modifier.width(132.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    channel.number.toString(),
-                    style = Antresol.typography.heroTitle.copy(fontFeatureSettings = "tnum"),
-                    color = AntresolColors.Label,
-                    maxLines = 1,
-                )
+            val logo = urls?.image(channel.logoUrl)
+            // With a logo the column widens by the logo's box, so the name keeps its two lines.
+            Column(Modifier.width(if (logo != null) 132.dp + BannerLogoHeight * 1.5f + 12.dp else 132.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        channel.number.toString(),
+                        style = Antresol.typography.heroTitle.copy(fontFeatureSettings = "tnum"),
+                        color = AntresolColors.Label,
+                        maxLines = 1,
+                    )
+                    ChannelLogo(logo, height = BannerLogoHeight)
+                }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(channel.name, style = Antresol.typography.title, color = AntresolColors.LabelSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     if (channel.favorite) FavoriteMark()
@@ -455,6 +461,9 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
     }
 }
 
+/** The height of the logo box beside the banner's channel number. */
+private val BannerLogoHeight = 36.dp
+
 /** A round banner button: white with a black glyph when selected, dark glass otherwise. */
 @Composable
 private fun ActionButton(icon: ImageVector, selected: Boolean) {
@@ -475,6 +484,7 @@ private fun ActionButton(icon: ImageVector, selected: Boolean) {
  */
 @Composable
 private fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, selected: Int) {
+    val urls = LocalMediaUrls.current
     val nowMs = rememberNowMs()
     val context = LocalContext.current
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (selected - 3).coerceAtLeast(0))
@@ -522,6 +532,7 @@ private fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, s
                             if (channel.id == currentId) {
                                 Box(Modifier.size(7.dp).background(AntresolColors.Red, CircleShape))
                             }
+                            ChannelLogo(urls?.image(channel.logoUrl), height = 20.dp)
                             Text(channel.name, style = Antresol.typography.title, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                             if (channel.favorite) FavoriteMark(tint = if (isSelected) content else AntresolColors.Orange)
                         }

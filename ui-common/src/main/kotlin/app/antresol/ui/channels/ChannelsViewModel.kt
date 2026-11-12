@@ -117,8 +117,11 @@ class ChannelsViewModel(
     val shownGuide: List<ChannelEpgRow>
         get() {
             val ids = shown.map { it.id }.toSet()
-            val favorites = channels.orEmpty().associate { it.id to it.favorite }
-            return guideRows.orEmpty().filter { it.id in ids }.map { row -> row.copy(favorite = favorites[row.id] ?: row.favorite) }
+            val byId = channels.orEmpty().associateBy { it.id }
+            return guideRows.orEmpty().filter { it.id in ids }.map { row ->
+                val channel = byId[row.id]
+                row.copy(favorite = channel?.favorite ?: row.favorite, logoUrl = row.logoUrl ?: channel?.logoUrl)
+            }
         }
 
     fun select(filter: ChannelFilter) {

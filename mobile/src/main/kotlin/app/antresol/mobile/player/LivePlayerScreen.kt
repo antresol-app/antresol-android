@@ -1,5 +1,6 @@
 package app.antresol.mobile.player
 
+import app.antresol.ui.channels.ChannelLogo
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -421,6 +422,7 @@ internal fun LiveTopBar(
 @Composable
 internal fun InfoBar(state: LiveTvState) {
     val context = LocalContext.current
+    val urls = app.antresol.mobile.ui.LocalMediaUrls.current
     val nowMs = rememberNowMs(1_000L)
     val channel = state.channel
     val (onAir, next) = state.onAir(nowMs)
@@ -434,6 +436,7 @@ internal fun InfoBar(state: LiveTvState) {
     ) {
         if (channel != null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp)
                 Text(
                     stringResource(R.string.tv_channel_number, channel.number, channel.name),
                     style = Antresol.typography.title.copy(color = AntresolColors.LabelSecondary, fontFeatureSettings = "tnum"),

@@ -20,6 +20,8 @@ data class Channel(
     val enabled: Boolean = true,
     val now: ChannelProgram? = null,
     val next: ChannelProgram? = null,
+    /** The channel's uploaded logo (`/api/channels/{id}/logo.png?v=N`), null when none was uploaded. */
+    val logoUrl: String? = null,
 )
 
 /**
@@ -92,6 +94,8 @@ data class ChannelEpgRow(
     val category: String = "",
     val favorite: Boolean = false,
     val programs: List<ChannelProgram> = emptyList(),
+    /** The uploaded logo when the server sends it with the guide; else taken from the channel list. */
+    val logoUrl: String? = null,
 )
 
 /** `PUT /api/channels/last`. */

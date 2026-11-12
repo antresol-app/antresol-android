@@ -989,3 +989,29 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
   can show a programme that just ended for up to 30 s (the channel on screen uses its guide).
 - No PiP actions (channel up/down buttons in the PiP window); headset next/previous don't zap.
 - No Robolectric UI test for the new player overlays.
+
+## Live TV: external IPTV channels
+
+- The server merges channels of external IPTV sources into `GET /api/channels` and the guide by
+  number (from 100): `external: true`, `stream {url, userAgent, referrer, fallbacks, unsupported}`;
+  their programmes have `kind: "external"`, `itemId: 0` (no item page).
+- `LiveTvSession` plays them straight from the provider (never the own live route): the stream,
+  then the fallbacks in order, skipping ones marked unsupported on `android`/`androidtv`. A source
+  that fails before playing hands over at once; one that broke while playing is reopened up to twice.
+  When none plays: `LiveStream.Failed(external = true)` («Канал сейчас не открывается»), no automatic
+  retry; Try Again starts over, zapping works.
+- The server's hidden-address form `/api/channels/live/ext/{id}/{n}` (a 302) gets `?mk=`; provider
+  URLs never do. The player loads external streams through a plain `DefaultHttpDataSource`
+  (`setUserAgent`, `setDefaultRequestProperties(Referer)`, cross-protocol redirects), never the
+  authorised OkHttp client. A URL without an extension is tried as HLS, then as a plain stream.
+- Audio/subtitles of an external channel: the stream's own track groups with their labels
+  (`ExternalTracks`, duplicates get «(CC)»/«5.1»/a number); the choice is kept per channel in the
+  device's preferences (`live_external_tracks`, language + label); default = the profile's language.
+- «ТВ» calls `POST /api/channels/opened` when it opens (at most every 10 minutes) and reloads the list.
+- Verified on emulators (phone 360 dp and Pixel 9 Pro XL on API 36, Android TV API 34 image): the three
+  demo HLS streams, alternate audio and subtitles, the per-channel memory, a failing channel and
+  zapping out of it, the hidden-address form. Fallback order and TV-is-TV are unit-tested
+  (`ExternalChannelSessionTest`, `LiveTvNoHistoryTest`).
+- Not verified: real providers (User-Agent/Referer requirements, MPEG-TS without extension),
+  fallbacks with real duplicate channels; on the TV emulator the Apple «advanced» stream rendered
+  zoomed (goldfish decoder), the other two were fine.

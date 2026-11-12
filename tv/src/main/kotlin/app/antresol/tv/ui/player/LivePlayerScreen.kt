@@ -191,8 +191,8 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         panel = next
         panelIndex = when (next) {
             Panel.Channels -> guide.currentIndex
-            Panel.Audio -> audio.indexOfFirst { it.slot == selection.audio?.slot }.coerceAtLeast(0)
-            Panel.Subtitles -> subtitles.indexOfFirst { it.slot == selection.subtitles?.slot } + 1
+            Panel.Audio -> audio.indexOfFirst { it.name == selection.audio?.name }.coerceAtLeast(0)
+            Panel.Subtitles -> subtitles.indexOfFirst { it.name == selection.subtitles?.name } + 1
             Panel.None -> 0
         }
         if (next == Panel.Channels) banner = Banner.Hidden
@@ -326,10 +326,10 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         }
         if (panel == Panel.Audio || panel == Panel.Subtitles) {
             val options = if (panel == Panel.Audio) {
-                audio.map { track -> PanelAction(track.label.ifBlank { track.name }, AntresolIcons.Check.takeIf { track.slot == selection.audio?.slot }) {} }
+                audio.map { track -> PanelAction(track.label.ifBlank { track.name }, AntresolIcons.Check.takeIf { track.name == selection.audio?.name }) {} }
             } else {
                 listOf(PanelAction(stringResource(R.string.detail_subtitles_off), AntresolIcons.Check.takeIf { selection.subtitles == null }) {}) +
-                    subtitles.map { track -> PanelAction(track.label.ifBlank { track.name }, AntresolIcons.Check.takeIf { track.slot == selection.subtitles?.slot }) {} }
+                    subtitles.map { track -> PanelAction(track.label.ifBlank { track.name }, AntresolIcons.Check.takeIf { track.name == selection.subtitles?.name }) {} }
             }
             KeyPanel(
                 title = stringResource(if (panel == Panel.Audio) R.string.detail_audio else R.string.detail_subtitles),

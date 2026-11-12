@@ -530,12 +530,12 @@ private fun TrackSheet(menu: TrackMenu, viewModel: LivePlayerViewModel, onDismis
     val selection = viewModel.trackSelection
     val options: List<Triple<String, Boolean, () -> Unit>> = when (menu) {
         TrackMenu.Audio -> viewModel.audioOptions.map { track ->
-            Triple(track.label.ifBlank { track.name }, track.slot == selection.audio?.slot) { viewModel.selectAudio(track) }
+            Triple(track.label.ifBlank { track.name }, track.name == selection.audio?.name) { viewModel.selectAudio(track) }
         }
         TrackMenu.Subtitles -> listOf(
             Triple(stringResource(R.string.detail_subtitles_off), selection.subtitles == null) { viewModel.selectSubtitles(null) },
         ) + viewModel.subtitleOptions.map { track: ProgramTrack ->
-            Triple(track.label.ifBlank { track.name }, track.slot == selection.subtitles?.slot) { viewModel.selectSubtitles(track) }
+            Triple(track.label.ifBlank { track.name }, track.name == selection.subtitles?.name) { viewModel.selectSubtitles(track) }
         }
     }
     ModalBottomSheet(

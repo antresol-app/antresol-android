@@ -191,7 +191,10 @@ class LivePlayerViewModel(
         session.setFavorite(channelId, !channel.favorite)
     }
 
-    /** The viewer picks an audio rendition: it sticks for the rest of this player (same slot). */
+    /**
+     * The viewer picks an audio rendition: it sticks for the rest of this player by its `name`
+     * (across programmes and channel switches), falling back by language ([LiveTracks.select]).
+     */
     fun selectAudio(track: ProgramTrack) {
         trackChoice = trackChoice.copy(audio = track)
         applyTracks()
@@ -253,7 +256,7 @@ class LivePlayerViewModel(
         trackSelection = selection
         val groups = player.currentTracks.groups
         val builder = player.trackSelectionParameters.buildUpon()
-        selection.audio?.let { wanted -> groups.byLabel(C.TRACK_TYPE_AUDIO, wanted.name) }?.let { group ->
+        selection.audio?.let { wanted -> groups.rendition(C.TRACK_TYPE_AUDIO, wanted) }?.let { group ->
             builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
         }
         val subtitles = selection.subtitles
@@ -261,7 +264,7 @@ class LivePlayerViewModel(
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
         } else {
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            groups.byLabel(C.TRACK_TYPE_TEXT, subtitles.name)?.let { group ->
+            groups.rendition(C.TRACK_TYPE_TEXT, subtitles)?.let { group ->
                 builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
             }
         }
@@ -269,8 +272,20 @@ class LivePlayerViewModel(
         if (next != player.trackSelectionParameters) player.trackSelectionParameters = next
     }
 
-    private fun List<Tracks.Group>.byLabel(type: Int, label: String): Tracks.Group? =
-        firstOrNull { group -> group.type == type && (0 until group.length).any { group.getTrackFormat(it).label == label } }
+    /**
+     * The master's rendition for [track]: the group whose label (the `NAME`) equals its `name`; a
+     * name the master does not have (a key that joined after this run started) falls back to the
+     * first rendition in the track's language. Nothing depends on the master's order or count.
+     */
+    private fun List<Tracks.Group>.rendition(type: Int, track: ProgramTrack): Tracks.Group? {
+        val ofType = filter { it.type == type }
+        ofType.firstOrNull { group -> group.formats().any { it.label == track.name || it.labels.any { l -> l.value == track.name } } }
+            ?.let { return it }
+        val lang = LiveTracks.langOf(track).ifEmpty { return null }
+        return ofType.firstOrNull { group -> group.formats().any { format -> format.language?.let(LiveTracks::lang) == lang } }
+    }
+
+    private fun Tracks.Group.formats() = (0 until length).map(::getTrackFormat)
 
     /** What the system's media controls show: the programme as the title, the channel as the artist. */
     private fun metadata(): MediaMetadata {

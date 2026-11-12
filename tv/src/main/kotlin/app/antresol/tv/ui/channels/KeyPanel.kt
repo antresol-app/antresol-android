@@ -12,7 +12,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,7 +43,9 @@ data class PanelAction(val label: String, val icon: ImageVector? = null, val onC
  * A panel over the page whose choices are driven by the remote directly (the page's root passes its
  * keys to [handlePanelKey]), so it never depends on moving focus out of the list under it. It looks
  * like the app's OptionsPanel: an opaque column on the right over a dimmed page, the selected choice
- * white with black text. [content] goes above the choices (programme details).
+ * white with black text. [content] goes above the choices (programme details). However many choices
+ * there are (a live programme can have 8 audio renditions), they scroll inside the panel and the
+ * selected one is kept in view, one row from the edge while there is more.
  */
 @Composable
 fun KeyPanel(
@@ -64,8 +71,27 @@ fun KeyPanel(
         ) {
             Text(title, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(horizontal = 12.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
             Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
-            Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                actions.forEachIndexed { index, action -> PanelRow(action, index == selected) }
+            val list = rememberLazyListState(initialFirstVisibleItemIndex = (selected - 1).coerceAtLeast(0))
+            LaunchedEffect(selected, actions.size) {
+                val visible = list.layoutInfo.visibleItemsInfo
+                val viewportEnd = list.layoutInfo.viewportEndOffset
+                // Fully visible rows; the selection keeps one row of context on either side.
+                val whole = visible.filter { it.offset >= 0 && it.offset + it.size <= viewportEnd }.map { it.index }
+                val first = whole.firstOrNull() ?: return@LaunchedEffect
+                val last = whole.last()
+                when {
+                    selected <= first && first > 0 -> list.animateScrollToItem((selected - 1).coerceAtLeast(0))
+                    selected >= last && last < actions.size - 1 ->
+                        list.animateScrollToItem((selected + 2 - whole.size).coerceIn(0, actions.size - 1))
+                }
+            }
+            LazyColumn(
+                state = list,
+                userScrollEnabled = false,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(top = 6.dp).testTag("key-panel-choices"),
+            ) {
+                itemsIndexed(actions) { index, action -> PanelRow(action, index == selected) }
             }
         }
     }

@@ -37,4 +37,31 @@ class LiveRenditionsTest {
         assertEquals(listOf("Русский", "Русский 2", "English"), playlist.audios.map { it.format.label })
         assertEquals(listOf("Русские"), playlist.subtitles.map { it.format.label })
     }
+
+    /** Round 5: up to 8 audio and 6 subtitle renditions, any names, URIs by position. */
+    @Test
+    fun everyRoundFiveRenditionKeepsItsName() {
+        val audio = listOf("Дубляж", "LostFilm", "Кубик в Кубе", "Кураж-Бамбей", "LostFilm (очищено)", "Оригинал (English)", "Français", "English 2")
+        val audioLangs = listOf("ru", "ru", "ru", "ru", "ru", "en", "fr", "en")
+        val subs = listOf("Русские", "Русские 2", "English", "Français", "Deutsch", "Українська")
+        val subLangs = listOf("ru", "ru", "en", "fr", "de", "uk")
+        val text = buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXT-X-VERSION:6")
+            audio.forEachIndexed { n, name ->
+                val default = if (n == 0) "YES" else "NO"
+                appendLine("#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"$name\",LANGUAGE=\"${audioLangs[n]}\",DEFAULT=$default,AUTOSELECT=YES,CHANNELS=\"2\",URI=\"audio-$n.m3u8\"")
+            }
+            subs.forEachIndexed { n, name ->
+                appendLine("#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"sub\",NAME=\"$name\",LANGUAGE=\"${subLangs[n]}\",DEFAULT=NO,AUTOSELECT=YES,FORCED=NO,URI=\"subs-$n.m3u8\"")
+            }
+            appendLine("#EXT-X-STREAM-INF:BANDWIDTH=7000000,RESOLUTION=1920x1080,CODECS=\"avc1.640028,mp4a.40.2\",AUDIO=\"aud\",SUBTITLES=\"sub\",CLOSED-CAPTIONS=NONE")
+            appendLine("video.m3u8")
+        }
+        val playlist = HlsPlaylistParser().parse(Uri.parse("http://server/api/channels/live/1/index.m3u8"), text.byteInputStream())
+            as HlsMultivariantPlaylist
+        assertEquals(audio, playlist.audios.map { it.format.label })
+        assertEquals(audioLangs, playlist.audios.map { it.format.language })
+        assertEquals(subs, playlist.subtitles.map { it.format.label })
+    }
 }

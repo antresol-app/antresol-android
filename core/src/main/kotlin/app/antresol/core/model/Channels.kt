@@ -115,3 +115,17 @@ data class PlaybackPrefs(
         const val SUB_FOREIGN = "foreign"
     }
 }
+
+/**
+ * `GET/PUT /api/me/ui-language`: the profile's interface language. [language] is the profile's own
+ * choice ("" = none: «как у профиля»), [effective] what the apps show ("ru", "en", or "" to follow
+ * the device).
+ */
+@Serializable
+data class UiLanguage(
+    val language: String = "",
+    val effective: String = "",
+)
+
+@Serializable
+data class UiLanguageRequest(val language: String)

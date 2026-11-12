@@ -374,9 +374,10 @@ private fun ChannelCell(row: ChannelEpgRow, last: Boolean, focused: Boolean) {
         )
         Text(
             row.name,
-            style = Antresol.typography.caption,
+            style = Antresol.typography.caption.copy(hyphens = androidx.compose.ui.text.style.Hyphens.None),
             color = if (focused) AntresolColors.Label else AntresolColors.LabelSecondary,
-            maxLines = 2,
+            maxLines = 1,
+            softWrap = false,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
         )
@@ -523,8 +524,6 @@ private fun ProgramPanel(row: ChannelEpgRow, program: ChannelProgram, nowMs: Lon
  */
 @Composable
 private fun stickyInset(startMs: Long, endMs: Long, leftMs: Long): Dp {
-    if (leftMs <= startMs) return 0.dp
-    val inset = (leftMs - startMs).minutesToDp()
-    val room = (endMs - startMs).minutesToDp() - 64.dp
-    return if (room <= 0.dp) 0.dp else minOf(inset, room)
+    val minLabelMs = (64.dp / LocalMinuteWidth.current * 60_000f).toLong()
+    return Epg.stickyLabelOffsetMs(startMs, endMs, leftMs, minLabelMs).minutesToDp()
 }

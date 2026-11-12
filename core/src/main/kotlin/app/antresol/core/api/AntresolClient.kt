@@ -42,6 +42,8 @@ import app.antresol.core.model.TokenRequest
 import app.antresol.core.model.TokenResponse
 import app.antresol.core.model.Track
 import app.antresol.core.model.TrackList
+import app.antresol.core.model.UiLanguage
+import app.antresol.core.model.UiLanguageRequest
 import app.antresol.core.model.WatchedRequest
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
@@ -324,6 +326,13 @@ class AntresolClient(
      */
     suspend fun setLastChannel(id: Long) =
         sendNoContent("PUT", url("api/channels/last"), jsonBody(LastChannelRequest(id)))
+
+    /** `GET /api/me/ui-language`: the profile's interface language and the one the apps use. */
+    suspend fun uiLanguage(): UiLanguage = get("api/me/ui-language")
+
+    /** `PUT /api/me/ui-language`: "ru", "en", or "" for the profile's own language. Returns the new state. */
+    suspend fun setUiLanguage(language: String): UiLanguage =
+        send("PUT", url("api/me/ui-language"), jsonBody(UiLanguageRequest(language)))
 
     /** `GET /api/me/playback-prefs`: the profile's audio and subtitle languages. */
     suspend fun playbackPrefs(): PlaybackPrefs = get("api/me/playback-prefs")

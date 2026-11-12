@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -148,7 +149,13 @@ private fun GuideChannelCell(row: ChannelEpgRow, last: Boolean, onClick: () -> U
             )
             if (row.favorite) FavoriteMark()
         }
-        Text(row.name, style = Antresol.typography.caption.copy(color = AntresolColors.Label), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(
+            row.name,
+            style = Antresol.typography.caption.copy(color = AntresolColors.Label, hyphens = Hyphens.None),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -260,8 +267,6 @@ private fun GuideBlock(program: ChannelProgram, nowMs: Long, textInset: Dp, onCl
  */
 @Composable
 private fun stickyInset(startMs: Long, endMs: Long, leftMs: Long): Dp {
-    if (leftMs <= startMs) return 0.dp
-    val inset = (leftMs - startMs).minutesToDp()
-    val room = (endMs - startMs).minutesToDp() - 64.dp
-    return if (room <= 0.dp) 0.dp else minOf(inset, room)
+    val minLabelMs = (64.dp / LocalMinuteWidth.current * 60_000f).toLong()
+    return Epg.stickyLabelOffsetMs(startMs, endMs, leftMs, minLabelMs).minutesToDp()
 }

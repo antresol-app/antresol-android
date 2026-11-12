@@ -412,14 +412,8 @@ private fun TvChannelRow(channel: Channel, nowMs: Long, last: Boolean, onClick: 
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (program != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 3.dp)) {
-                        LiveProgressBar(Channels.progress(program, nowMs), content, Modifier.weight(1f))
-                        Text(
-                            stringResource(R.string.tv_until, programClock(context, program.end)),
-                            style = Antresol.typography.badge,
-                            color = content.copy(alpha = 0.75f),
-                        )
-                    }
+                    // Times and «Далее» are in the preview on the right; the row stays a TV list row.
+                    LiveProgressBar(Channels.progress(program, nowMs), content.copy(alpha = 0.8f), Modifier.padding(top = 4.dp))
                 }
             }
         }

@@ -140,4 +140,14 @@ class ChannelLogicTest {
         // 23:50:38 → 23:56:10 is shown 23:51–23:56: five minutes.
         assertEquals(5, Channels.displayMinutes(program("2026-11-11T23:50:38Z", "2026-11-11T23:56:10Z")))
     }
+
+    @Test
+    fun aRowShowsNumberNameProgrammeAndProgressOnly() {
+        val now = program("2026-11-10T10:00:00Z", "2026-11-10T11:00:00Z", "Film").copy(backdrop = "/b", poster = "/p")
+        val row = Channels.rowContent(channel(1, 7, "x").copy(favorite = true, now = now), ms("2026-11-10T10:30:00Z"))
+        assertEquals(ChannelRowContent(7, "C1", true, "Film", 0.5f, "/b"), row)
+        val empty = Channels.rowContent(channel(2, 8, "x"), 0)
+        assertEquals(ChannelRowContent(8, "C2", false, null, null, null), empty)
+        assertEquals("/p", Channels.rowContent(channel(1, 7, "x").copy(now = now.copy(backdrop = "")), 0).art)
+    }
 }

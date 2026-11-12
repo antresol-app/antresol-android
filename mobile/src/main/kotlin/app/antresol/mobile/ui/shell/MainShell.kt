@@ -114,6 +114,8 @@ import app.antresol.ui.R
 import app.antresol.core.channels.ChannelFilter
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.channelsApi
+import app.antresol.ui.language.UiLanguageModel
+import app.antresol.ui.language.uiLanguageApi
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.AntresolColors
 import kotlinx.coroutines.CancellationException
@@ -208,6 +210,12 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         }
     }
     NotificationPermission(app.settings, asked = playback.current != null)
+    // The interface follows the profile's language: a different one restarts the screens in it.
+    val hostActivity = context.findActivity() as? ComponentActivity
+    val uiLanguage: UiLanguageModel = viewModel(key = "ui-language") {
+        UiLanguageModel(client.uiLanguageApi(), app.settings) { hostActivity?.let(MainActivity::restart) }
+    }
+    LaunchedEffect(uiLanguage) { uiLanguage.refresh() }
 
     val open: (Card) -> Unit = { card -> navController.navigate(DetailRoute(card)) }
     val playVideo: (Long, ResumeMode) -> Unit = { id, mode -> VideoPlayerActivity.start(context, id, mode) }
@@ -404,7 +412,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onSwitchProfile = switchProfile,
                         onSignOut = { confirm = SessionAction.SignOut },
                         onChangeServer = { confirm = SessionAction.ChangeServer },
-                        onLanguageChanged = { activity?.let(MainActivity::restart) },
+                        language = uiLanguage,
                     )
                 }
             }

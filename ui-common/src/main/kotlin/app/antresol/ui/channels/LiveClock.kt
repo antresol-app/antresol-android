@@ -31,7 +31,16 @@ fun rememberNowMs(intervalMs: Long = 5_000L): Long {
  */
 fun programClock(context: Context, iso: String): String {
     val ms = Channels.displayMs(iso) ?: return ""
-    return DateFormat.getTimeFormat(context).format(Date(ms))
+    return timeFormat(context).format(Date(ms))
+}
+
+/**
+ * The clock format of the interface: 24-hour «21:40» when it is in Russian (whatever the device's
+ * 12/24-hour setting, as a Russian interface always reads), else the device's own format.
+ */
+fun timeFormat(context: Context): java.text.DateFormat {
+    val locale = context.resources.configuration.locales[0]
+    return if (locale.language == "ru") java.text.SimpleDateFormat("HH:mm", locale) else DateFormat.getTimeFormat(context)
 }
 
 /**

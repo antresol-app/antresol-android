@@ -60,4 +60,17 @@ class EpgTest {
         assertEquals(5 * 60_000L, Epg.tickMs(23f, 90f))
         assertEquals(30f, Epg.typicalMinutes(emptyList()))
     }
+
+    @Test
+    fun stickyLabelsPinToTheVisibleEdge() {
+        val min = 60_000L
+        // Starts in view: no offset.
+        assertEquals(0L, Epg.stickyLabelOffsetMs(1_000_000, 2_000_000, 900_000, 10 * min))
+        // Started 5 min before the edge, plenty left: pinned to the edge.
+        assertEquals(5 * min, Epg.stickyLabelOffsetMs(0, 60 * min, 5 * min, 10 * min))
+        // Near its end: stops where the label still fits before the end.
+        assertEquals(50 * min, Epg.stickyLabelOffsetMs(0, 60 * min, 58 * min, 10 * min))
+        // Too short for a label anyway: stays at its start.
+        assertEquals(0L, Epg.stickyLabelOffsetMs(0, 8 * min, 5 * min, 10 * min))
+    }
 }

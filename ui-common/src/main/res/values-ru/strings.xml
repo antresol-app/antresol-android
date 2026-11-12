@@ -183,6 +183,8 @@
     <string name="tv_watching">Сейчас смотрите</string>
     <string name="tv_all_channels">Все каналы</string>
     <string name="tv_ok_actions">Звук, субтитры, избранное</string>
+    <string name="ui_language">Язык интерфейса</string>
+    <string name="ui_language_profile">Как у профиля</string>
     <string name="tv_favorites">Избранное</string>
     <string name="tv_view_channels">Каналы</string>
     <string name="tv_view_guide">Телегид</string>

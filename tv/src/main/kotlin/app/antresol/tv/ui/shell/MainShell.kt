@@ -94,6 +94,9 @@ import app.antresol.ui.R
 import app.antresol.core.channels.ChannelFilter
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.channelsApi
+import app.antresol.ui.language.UiLanguageModel
+import app.antresol.ui.language.uiLanguageApi
+import app.antresol.tv.ui.settings.restartInNewLanguage
 import app.antresol.ui.playback.LivePlayerViewModel
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.AntresolColors
@@ -156,6 +159,12 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val audio = app.audio
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
+    // The interface follows the profile's language: a different one restarts the screens in it.
+    val hostActivity = LocalContext.current.findActivity()
+    val uiLanguage: UiLanguageModel = viewModel(key = "ui-language") {
+        UiLanguageModel(client.uiLanguageApi(), app.settings) { hostActivity?.let(::restartInNewLanguage) }
+    }
+    LaunchedEffect(uiLanguage) { uiLanguage.refresh() }
     val backStack by navController.currentBackStackEntryAsState()
     val selectedTab = NavTab.entries.firstOrNull { tab ->
         backStack?.destination?.hierarchy?.any { it.hasRoute(tab.route::class) } == true
@@ -344,6 +353,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onChangeServer = { scope.launch { session.changeServer() } },
                         onScrolledToTop = onScrolledToTop,
                         onMenuOpenChanged = { panelOpen = it },
+                        language = uiLanguage,
                     )
                 }
                 page<GridRoute>(contentFocus) { entry ->

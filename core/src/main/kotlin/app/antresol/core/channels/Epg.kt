@@ -108,4 +108,16 @@ object Epg {
         val end = Channels.epochMs(program.end) ?: return@filter false
         end > fromMs && start < toMs
     }
+
+    /**
+     * How far (ms of timeline) a block's label moves right so it stays readable at the visible left
+     * edge [leftMs] when the programme began before it: pinned to the edge, but never closer than
+     * [minLabelMs] to the block's end (then it stays where it fits). 0 when the block starts in view.
+     */
+    fun stickyLabelOffsetMs(startMs: Long, endMs: Long, leftMs: Long, minLabelMs: Long): Long {
+        if (leftMs <= startMs) return 0L
+        val room = endMs - startMs - minLabelMs
+        if (room <= 0L) return 0L
+        return minOf(leftMs - startMs, room)
+    }
 }

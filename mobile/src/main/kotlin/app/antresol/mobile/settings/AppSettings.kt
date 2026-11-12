@@ -7,30 +7,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.antresol.core.model.Quality
+import app.antresol.ui.language.ProfileLanguageCache
 import java.util.Locale
-
-/** The app's display language: follow the phone, or force English or Russian. */
-enum class AppLanguage(val tag: String?) {
-    System(null),
-    English("en"),
-    Russian("ru"),
-    ;
-
-    companion object {
-        fun fromTag(tag: String?): AppLanguage = entries.firstOrNull { it.tag == tag } ?: System
-    }
-}
 
 /**
  * Device-local preferences (not synced to the server). Backed by SharedPreferences because the
  * language must be known synchronously in `attachBaseContext`; values are Compose state so the
  * settings screen and the players see changes at once.
  */
-class AppSettings(context: Context) {
+class AppSettings(context: Context) : ProfileLanguageCache {
     private val prefs = (context.applicationContext ?: context).getSharedPreferences("antresol_settings", Context.MODE_PRIVATE)
 
-    var language: AppLanguage by mutableStateOf(AppLanguage.fromTag(prefs.getString(KEY_LANGUAGE, null)))
-        private set
+    /**
+     * The interface language the signed-in profile uses (`effective` of `/api/me/ui-language`):
+     * "ru", "en", or "" to follow the phone. Kept here because `attachBaseContext` needs it at once.
+     */
+    override var profileLanguage: String
+        get() = prefs.getString(KEY_PROFILE_LANGUAGE, null).orEmpty()
+        set(value) {
+            prefs.edit().putString(KEY_PROFILE_LANGUAGE, value).commit()
+        }
 
     /** `/api/play` quality for new videos: one of [Quality.ALL]. */
     var videoQuality: String by mutableStateOf(prefs.getString(KEY_QUALITY, null)?.takeIf { it in Quality.ALL } ?: Quality.AUTO)
@@ -47,11 +43,6 @@ class AppSettings(context: Context) {
     /** The notification permission was asked once (Android 13+); never nag again. */
     var notificationsAsked: Boolean by mutableStateOf(prefs.getBoolean(KEY_NOTIFICATIONS_ASKED, false))
         private set
-
-    fun updateLanguage(value: AppLanguage) {
-        language = value
-        prefs.edit().putString(KEY_LANGUAGE, value.tag).apply()
-    }
 
     fun updateVideoQuality(value: String) {
         videoQuality = value
@@ -73,20 +64,20 @@ class AppSettings(context: Context) {
         prefs.edit().putBoolean(KEY_NOTIFICATIONS_ASKED, true).apply()
     }
 
-    /** The locale the UI uses: the forced language, or the phone's. */
-    fun effectiveLocale(): Locale = language.tag?.let { Locale.forLanguageTag(it) } ?: systemLocale()
+    /** The locale the UI uses: the profile's interface language, or the phone's. */
+    fun effectiveLocale(): Locale = profileLanguage.ifEmpty { null }?.let { Locale.forLanguageTag(it) } ?: systemLocale()
 
     /** Returns [base] with the chosen language applied; activities call this from `attachBaseContext`. */
     fun wrap(base: Context): Context {
         val locale = effectiveLocale()
         Locale.setDefault(locale)
-        if (language.tag == null) return base
+        if (profileLanguage.isEmpty()) return base
         val config = Configuration(base.resources.configuration).apply { setLocale(locale) }
         return base.createConfigurationContext(config)
     }
 
     private companion object {
-        const val KEY_LANGUAGE = "language"
+        const val KEY_PROFILE_LANGUAGE = "profile_ui_language"
         const val KEY_QUALITY = "video_quality"
         const val KEY_AUTOPLAY = "autoplay_next"
         const val KEY_SPEED = "audiobook_speed"

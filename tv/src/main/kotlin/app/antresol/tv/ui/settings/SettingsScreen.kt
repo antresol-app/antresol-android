@@ -49,7 +49,8 @@ import app.antresol.core.model.Quality
 import app.antresol.core.session.AuthState
 import app.antresol.tv.BuildConfig
 import app.antresol.tv.R as TvR
-import app.antresol.tv.settings.AppLanguage
+import app.antresol.ui.language.UiLanguageModel
+import app.antresol.ui.language.UiLanguages
 import app.antresol.tv.settings.TvSettings
 import app.antresol.tv.ui.LoadState
 import app.antresol.tv.ui.components.MenuOption
@@ -138,8 +139,10 @@ fun SettingsScreen(
     onChangeServer: () -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
     onMenuOpenChanged: (Boolean) -> Unit,
+    language: UiLanguageModel,
 ) {
     val preferences by settings.preferences.collectAsStateWithLifecycle()
+    LaunchedEffect(language) { language.refresh() }
     var menu by remember { mutableStateOf<SettingsMenu?>(null) }
     var revoking by remember { mutableStateOf<DeviceSession?>(null) }
     LaunchedEffect(menu != null) { onMenuOpenChanged(menu != null) }
@@ -204,8 +207,8 @@ fun SettingsScreen(
                 item { Section(stringResource(TvR.string.settings_language)) }
                 item {
                     SettingRow(
-                        label = stringResource(TvR.string.settings_app_language),
-                        value = languageLabel(preferences.language),
+                        label = stringResource(R.string.ui_language),
+                        value = languageLabel(language.choice ?: UiLanguages.PROFILE),
                         onClick = { menu = SettingsMenu.Language },
                         modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Language)),
                     )
@@ -267,14 +270,10 @@ fun SettingsScreen(
                 onDismiss = { menu = null },
             )
             SettingsMenu.Language -> OptionsPanel(
-                title = stringResource(TvR.string.settings_app_language),
-                options = AppLanguage.entries.map { language ->
-                    MenuOption(languageLabel(language), language == preferences.language) {
-                        if (language != preferences.language) {
-                            settings.update { it.copy(language = language) }
-                            activity?.let(::restartInNewLanguage)
-                        }
-                    }
+                title = stringResource(R.string.ui_language),
+                // The profile's interface language, on the server: it follows the profile to every device.
+                options = UiLanguages.CHOICES.map { choice ->
+                    MenuOption(languageLabel(choice), choice == (language.choice ?: UiLanguages.PROFILE)) { language.choose(choice) }
                 },
                 onDismiss = { menu = null },
             )
@@ -488,14 +487,14 @@ private fun subtitleLabel(code: String): String =
     if (code.isEmpty()) stringResource(TvR.string.settings_off) else TrackLabels.language(code) ?: code
 
 @Composable
-private fun languageLabel(language: AppLanguage): String = when (language) {
-    AppLanguage.System -> stringResource(TvR.string.language_system)
-    AppLanguage.English -> stringResource(TvR.string.language_english)
-    AppLanguage.Russian -> stringResource(TvR.string.language_russian)
+private fun languageLabel(language: String): String = when (language) {
+    UiLanguages.ENGLISH -> stringResource(TvR.string.language_english)
+    UiLanguages.RUSSIAN -> stringResource(TvR.string.language_russian)
+    else -> stringResource(R.string.ui_language_profile)
 }
 
 /** Starts the activity afresh (new ViewModels, so server text is fetched again in the new language). */
-private fun restartInNewLanguage(activity: Activity) {
+fun restartInNewLanguage(activity: Activity) {
     activity.startActivity(
         Intent(activity, activity.javaClass).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
     )

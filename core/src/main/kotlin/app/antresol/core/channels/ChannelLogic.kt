@@ -46,6 +46,20 @@ data class MiniGuide(val channels: List<Channel>, val currentIndex: Int) {
     }
 }
 
+/**
+ * What one row of the channel list shows (a TV's channel list: no times, no «next»): the number,
+ * the channel's name with its favourite star, the programme on air on one line, its progress
+ * (0…1, null without a programme) and the picture.
+ */
+data class ChannelRowContent(
+    val number: Int,
+    val name: String,
+    val favorite: Boolean,
+    val programme: String?,
+    val progress: Float?,
+    val art: String?,
+)
+
 /** Pure rules of the TV tab and the live player, shared by both apps (mirrors the web's `channels.ts`). */
 object Channels {
     /** How often the channel list and a channel's guide are reloaded while visible. */
@@ -170,6 +184,19 @@ object Channels {
         val start = displayMs(program.start) ?: return null
         val end = displayMs(program.end) ?: return null
         return ((end - start) / 60_000L).toInt()
+    }
+
+    /** The content of [channel]'s row in the list at [nowMs]. */
+    fun rowContent(channel: Channel, nowMs: Long): ChannelRowContent {
+        val program = showing(channel, nowMs)
+        return ChannelRowContent(
+            number = channel.number,
+            name = channel.name,
+            favorite = channel.favorite,
+            programme = program?.let(::programLine),
+            progress = program?.let { progress(it, nowMs) },
+            art = program?.let { it.backdrop.ifEmpty { it.poster } }?.ifEmpty { null },
+        )
     }
 
     /** "Title · S1 E5 · Episode 5": the programme's title with its subtitle, when it has one. */

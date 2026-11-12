@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -38,10 +38,7 @@ import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.ui.R
 import app.antresol.ui.channels.ProgrammeStill
-import app.antresol.ui.channels.programClock
-import app.antresol.ui.channels.programmeArt
 import app.antresol.ui.components.AntresolIcons
-import app.antresol.ui.components.ProgressBar
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
@@ -56,7 +53,8 @@ private val NumberWidth = 30.dp
 /**
  * One channel of the list, like a television's channel list (Android TV Live Channels, TiviMate):
  * its number, the still of the programme on air, the channel's name (with a star when it is a
- * favourite), the programme, a live progress bar with «до 21:40» and «Далее 21:40 Название».
+ * favourite), the programme on one line and a thin live progress bar ([Channels.rowContent]); the
+ * times and «Далее» live in the details and the player's banner.
  * [last] marks the profile's last channel. A tap tunes in; a long press offers the favourite.
  */
 @Composable
@@ -68,20 +66,14 @@ fun ChannelRow(
     modifier: Modifier = Modifier,
     last: Boolean = false,
 ) {
-    val context = LocalContext.current
     val urls = LocalMediaUrls.current
-    val program = Channels.showing(channel, nowMs)
-    val next = channel.next?.takeIf { it != program }
-    val title = program?.let(Channels::programLine) ?: stringResource(R.string.tv_nothing)
-    val until = program?.let { stringResource(R.string.tv_until, programClock(context, it.end)) }
-    val nextLine = next?.let { stringResource(R.string.tv_next_short, programClock(context, it.start), Channels.programLine(it)) }
+    val row = Channels.rowContent(channel, nowMs)
+    val title = row.programme ?: stringResource(R.string.tv_nothing)
     val favoriteLabel = stringResource(if (channel.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add)
     val description = listOfNotNull(
         stringResource(R.string.tv_channel_number, channel.number, channel.name),
         stringResource(R.string.tv_favorite).takeIf { channel.favorite },
         title,
-        until,
-        nextLine,
         stringResource(R.string.tv_last_channel).takeIf { last },
     ).joinToString(". ")
     var menu by remember { mutableStateOf(false) }
@@ -103,12 +95,12 @@ fun ChannelRow(
         ) {
             ChannelNumber(channel.number, Modifier.width(NumberWidth), highlighted = last)
             ProgrammeStill(
-                url = urls?.image(programmeArt(program)),
+                url = urls?.image(row.art),
                 modifier = Modifier
                     .width(RowStillWidth)
                     .aspectRatio(AntresolMotion.BACKDROP_ASPECT),
             )
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(
                         channel.name,
@@ -119,21 +111,13 @@ fun ChannelRow(
                     )
                     if (channel.favorite) FavoriteMark()
                 }
-                Text(title, style = Antresol.typography.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (program != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ProgressBar(Channels.progress(program, nowMs), Modifier.weight(1f))
-                        Text(until.orEmpty(), style = Antresol.typography.caption, maxLines = 1)
-                    }
-                }
-                if (nextLine != null) {
-                    Text(
-                        nextLine,
-                        style = Antresol.typography.caption.copy(color = AntresolColors.LabelTertiary),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Text(
+                    title,
+                    style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                row.progress?.let { ThinProgress(it, Modifier.padding(top = 2.dp)) }
             }
         }
         DropdownMenu(
@@ -185,4 +169,24 @@ fun FavoriteMark(modifier: Modifier = Modifier) {
         tint = AntresolColors.Orange,
         modifier = modifier.size(12.dp),
     )
+}
+
+/** A 2 dp live progress line on a faint track, for list rows. */
+@Composable
+fun ThinProgress(fraction: Float, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(2.dp)
+            .clip(AntresolShapes.pill)
+            .background(AntresolColors.FillSecondary),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .height(2.dp)
+                .clip(AntresolShapes.pill)
+                .background(AntresolColors.LabelSecondary),
+        )
+    }
 }

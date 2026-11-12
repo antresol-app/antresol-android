@@ -25,6 +25,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +49,8 @@ import app.antresol.core.session.StoredSession
 import app.antresol.mobile.BuildConfig
 import app.antresol.mobile.R
 import app.antresol.mobile.player.qualityLabel
-import app.antresol.mobile.settings.AppLanguage
+import app.antresol.ui.language.UiLanguageModel
+import app.antresol.ui.language.UiLanguages
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LoadViewModel
@@ -119,8 +121,9 @@ fun SettingsScreen(
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
     onChangeServer: () -> Unit,
-    onLanguageChanged: () -> Unit,
+    language: UiLanguageModel,
 ) {
+    LaunchedEffect(language) { language.refresh() }
     var qualitySheet by remember { mutableStateOf(false) }
     var revoking by remember { mutableStateOf<DeviceSession?>(null) }
     val snackbar = remember { SnackbarHostState() }
@@ -182,18 +185,14 @@ fun SettingsScreen(
                 SwitchRow(stringResource(R.string.settings_autoplay), stringResource(R.string.settings_autoplay_detail), settings.autoplayNext, settings::updateAutoplayNext, "settings-autoplay")
             }
 
-            header(R.string.settings_language)
+            header(UiR.string.ui_language)
             item("language") {
+                // The profile's interface language, on the server: it follows the profile to every device.
                 SegmentedPills(
-                    options = AppLanguage.entries,
-                    selected = settings.language,
+                    options = UiLanguages.CHOICES,
+                    selected = language.choice ?: UiLanguages.PROFILE,
                     label = { languageLabel(it) },
-                    onSelect = { language ->
-                        if (language != settings.language) {
-                            settings.updateLanguage(language)
-                            onLanguageChanged()
-                        }
-                    },
+                    onSelect = language::choose,
                     modifier = Modifier.padding(vertical = 4.dp).testTag("settings-language"),
                 )
             }
@@ -237,11 +236,11 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun languageLabel(language: AppLanguage): String = when (language) {
-    AppLanguage.System -> stringResource(R.string.settings_language_system)
+private fun languageLabel(language: String): String = when (language) {
     // Each language is named in itself so it can be found whatever the current one is.
-    AppLanguage.English -> "English"
-    AppLanguage.Russian -> "Русский"
+    UiLanguages.ENGLISH -> "English"
+    UiLanguages.RUSSIAN -> "Русский"
+    else -> stringResource(UiR.string.ui_language_profile)
 }
 
 private fun LazyListScope.header(title: Int) {

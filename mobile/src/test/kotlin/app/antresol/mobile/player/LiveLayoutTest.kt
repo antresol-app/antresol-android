@@ -152,8 +152,19 @@ class LiveLayoutTest {
         "Русский — LostFilm (очищено)", "Оригинал (English)", "Français", "English — Commentary by the director and the whole cast",
     )
 
-    private fun trackSheet() = show {
-        LiveTrackSheet("Audio", eightVoices.mapIndexed { i, name -> TrackOption(name, i == 1) {} }, onDismiss = {})
+    private fun trackSheet(selected: Int = 1) = show {
+        LiveTrackSheet("Audio", eightVoices.mapIndexed { i, name -> TrackOption(name, i == selected) {} }, onDismiss = {})
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w640dp-h360dp-land")
+    fun theTickedLastVoiceOpensInView() {
+        trackSheet(selected = 7)
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.waitForIdle()
+        val root = screen()
+        val b = compose.onNodeWithText(eightVoices[7], useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("the ticked voice at $b is not on the screen $root", b.height > 0f && b.top >= root.top && b.bottom <= root.bottom + 0.5f)
     }
 
     /** Every choice can be scrolled to and then lies inside the screen, both ways. */
@@ -163,7 +174,7 @@ class LiveLayoutTest {
             compose.onNodeWithTag("live-track-list").performScrollToNode(androidx.compose.ui.test.hasText(name))
             compose.waitForIdle()
             val b = compose.onNodeWithText(name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-            assertTrue("$name at $b is off the screen $root", b.top >= root.top - 0.5f && b.bottom <= root.bottom + 0.5f && b.left >= root.left && b.right <= root.right + 0.5f)
+            assertTrue("$name at $b is off the screen $root", b.height > 0f && b.top >= root.top - 0.5f && b.bottom <= root.bottom + 0.5f && b.left >= root.left && b.right <= root.right + 0.5f)
         }
     }
 

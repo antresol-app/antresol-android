@@ -67,6 +67,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -558,13 +560,23 @@ private fun TrackSheet(menu: TrackMenu, viewModel: LivePlayerViewModel, onDismis
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun LiveTrackSheet(title: String, options: List<TrackOption>, onDismiss: () -> Unit) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = AntresolColors.BackgroundElevated,
         shape = AntresolShapes.sheet,
     ) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp).testTag("live-track-list")) {
+        val scroll = rememberScrollState()
+        // The ticked choice opens in view (the 8th voice is below the fold on a landscape phone).
+        var selectedTop by remember { mutableIntStateOf(-1) }
+        LaunchedEffect(selectedTop, scroll.viewportSize) {
+            if (selectedTop >= 0 && scroll.viewportSize > 0) {
+                val row = with(density) { 52.dp.roundToPx() }
+                if (selectedTop + row > scroll.value + scroll.viewportSize) scroll.scrollTo(selectedTop + row - scroll.viewportSize + row / 2)
+            }
+        }
+        Column(Modifier.fillMaxWidth().verticalScroll(scroll).padding(bottom = 16.dp).testTag("live-track-list")) {
             Text(
                 title,
                 style = Antresol.typography.sectionTitle,
@@ -573,6 +585,7 @@ internal fun LiveTrackSheet(title: String, options: List<TrackOption>, onDismiss
             options.forEach { option ->
                 Row(
                     modifier = Modifier
+                        .then(if (option.selected) Modifier.onGloballyPositioned { selectedTop = it.positionInParent().y.toInt() } else Modifier)
                         .fillMaxWidth()
                         .clickable {
                             option.onSelect()

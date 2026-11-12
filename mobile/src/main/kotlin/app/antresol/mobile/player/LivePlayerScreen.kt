@@ -279,7 +279,7 @@ fun LivePlayerScreen(
                 Box(Modifier.align(Alignment.Center)) { Spinner() }
             }
             is LiveStream.Failed -> if (overlays) {
-                FailedPanel(stream.message, onRetry = viewModel::retry, onBack = onExit, modifier = Modifier.align(Alignment.Center))
+                FailedPanel(stream.message, stream.external, onRetry = viewModel::retry, onBack = onExit, modifier = Modifier.align(Alignment.Center))
             }
         }
     }
@@ -611,8 +611,9 @@ internal fun LiveTrackSheet(title: String, options: List<TrackOption>, onDismiss
 }
 
 @Composable
-private fun FailedPanel(message: String?, onRetry: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    val failed = stringResource(R.string.tv_failed)
+private fun FailedPanel(message: String?, external: Boolean, onRetry: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val failed = stringResource(if (external) R.string.tv_failed_external else R.string.tv_failed)
+    val detail = if (external) stringResource(R.string.tv_failed_external_hint) else message
     Column(
         modifier = modifier
             .widthIn(max = 420.dp)
@@ -622,8 +623,8 @@ private fun FailedPanel(message: String?, onRetry: () -> Unit, onBack: () -> Uni
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(failed, style = Antresol.typography.sectionTitle, textAlign = TextAlign.Center)
-        if (message != null && message != failed) {
-            Text(message, style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary), textAlign = TextAlign.Center)
+        if (detail != null && detail != failed) {
+            Text(detail, style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary), textAlign = TextAlign.Center)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {
             PrimaryPillButton(stringResource(R.string.action_retry), onClick = onRetry, modifier = Modifier.testTag("live-retry"))

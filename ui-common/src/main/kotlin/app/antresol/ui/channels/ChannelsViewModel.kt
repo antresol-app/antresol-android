@@ -26,6 +26,9 @@ interface ChannelsApi {
     suspend fun setFavorite(channelId: Long, favorite: Boolean)
 
     suspend fun epg(fromIso: String, hours: Int): ChannelEpg
+
+    /** `POST /api/channels/opened`: «ТВ» opened (the server refreshes «при открытии» sources). */
+    suspend fun opened() {}
 }
 
 fun AntresolClient.channelsApi(): ChannelsApi = object : ChannelsApi {
@@ -34,6 +37,8 @@ fun AntresolClient.channelsApi(): ChannelsApi = object : ChannelsApi {
     override suspend fun setFavorite(channelId: Long, favorite: Boolean) = setChannelFavorite(channelId, favorite)
 
     override suspend fun epg(fromIso: String, hours: Int) = channelEpg(fromIso, hours)
+
+    override suspend fun opened() = channelsOpened()
 }
 
 /** «Каналы | Телегид». */
@@ -197,6 +202,29 @@ class ChannelsViewModel(
         }
     }
 
+    /**
+     * The «ТВ» page opened: tells the server (it refreshes the external sources marked «при
+     * открытии» when their last refresh is over an hour old), at most every [OPENED_EVERY_MS], and
+     * reloads the list afterwards when the server answered. Best effort.
+     */
+    fun opened() {
+        val now = clock()
+        openedAt?.let { if (now - it < OPENED_EVERY_MS) return }
+        openedAt = now
+        viewModelScope.launch {
+            try {
+                api.opened()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@launch
+            }
+            if (job?.isActive != true) job = viewModelScope.launch { fetchNow() }
+        }
+    }
+
+    private var openedAt: Long? = null
+
     fun stopRefreshing() {
         refreshJob?.cancel()
         refreshJob = null
@@ -257,5 +285,6 @@ class ChannelsViewModel(
 
     private companion object {
         const val RETURN_REFRESH_MS = 3_000L
+        const val OPENED_EVERY_MS = 10 * 60_000L
     }
 }

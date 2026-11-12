@@ -172,6 +172,9 @@
     <string name="tv_time">%1$s–%2$s</string>
     <string name="tv_starting">Starting the channel…</string>
     <string name="tv_failed">The channel can’t be shown</string>
+    <string name="tv_failed_external">This channel won’t open right now</string>
+    <string name="tv_failed_external_hint">The provider isn’t sending the stream. Try again later or switch to another channel.</string>
+    <string name="tv_track_n">Track %1$d</string>
     <string name="tv_channel_up">Next Channel</string>
     <string name="tv_channel_down">Previous Channel</string>
     <string name="tv_watch">Watch “%1$s”</string>

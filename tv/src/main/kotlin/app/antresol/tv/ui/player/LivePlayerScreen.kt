@@ -331,7 +331,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         when (stream) {
             is LiveStream.Starting -> StartingView(showText = !viewModel.hasPicture || stream.attempt > 0)
             is LiveStream.Ready -> if (viewModel.awaitingPicture || viewModel.isBuffering) Spinner()
-            is LiveStream.Failed -> FailedView(stream.message)
+            is LiveStream.Failed -> FailedView(stream.message, stream.external)
         }
         if (panel == Panel.Audio || panel == Panel.Subtitles) {
             val options = if (panel == Panel.Audio) {
@@ -598,8 +598,9 @@ private fun StartingView(showText: Boolean) {
 
 /** The channel can't be shown: the reason and «Повторить» (OK). */
 @Composable
-private fun FailedView(message: String?) {
-    val failed = stringResource(R.string.tv_failed)
+private fun FailedView(message: String?, external: Boolean) {
+    val failed = stringResource(if (external) R.string.tv_failed_external else R.string.tv_failed)
+    val detail = if (external) stringResource(R.string.tv_failed_external_hint) else message
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier
@@ -610,8 +611,8 @@ private fun FailedView(message: String?) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(failed, style = Antresol.typography.sectionTitle, textAlign = TextAlign.Center)
-            if (message != null && message != failed) {
-                Text(message, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, textAlign = TextAlign.Center)
+            if (detail != null && detail != failed) {
+                Text(detail, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, textAlign = TextAlign.Center)
             }
             KeyHint("OK", stringResource(R.string.action_retry), Modifier.padding(top = 8.dp))
         }

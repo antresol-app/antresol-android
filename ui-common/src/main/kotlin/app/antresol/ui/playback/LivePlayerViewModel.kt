@@ -16,7 +16,9 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -24,6 +26,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.channels.ChannelFilter
+import app.antresol.core.channels.ExternalTrackMemory
+import app.antresol.core.channels.ExternalTracks
+import app.antresol.core.channels.StreamTrack
+import app.antresol.core.channels.forMemory
 import app.antresol.core.channels.Channels
 import app.antresol.core.channels.LiveApi
 import app.antresol.core.channels.LiveTrackChoice
@@ -48,6 +54,12 @@ import kotlinx.coroutines.launch
  * from ([filter], [zap]) and refreshes the guide. Audio and subtitles are the master playlist's
  * renditions, picked by NAME from the programme's `audio`/`subtitles` ([LiveTracks]).
  *
+ * An external channel ([LiveStream.Ready.external]) is played straight from its provider with the
+ * headers its playlist asked for (User-Agent, Referer) through a plain HTTP data source — never the
+ * app's authorised client, so no Antresol credential reaches the provider. Its audio and subtitle
+ * options are the stream's own tracks ([ExternalTracks]); the choice is remembered per channel on
+ * the device ([ExternalTrackMemory]), the default is the profile's language.
+ *
  * TV is TV: this player sends no progress, playback reports, watched flags, track memory or
  * scrobbles. Its only server calls are those of [LiveApi] (channel list, guide, stream, the last
  * channel, favourites, the profile's languages read-only) and the media key; it never touches
@@ -62,16 +74,29 @@ class LivePlayerViewModel(
     filter: ChannelFilter = ChannelFilter.All,
     api: LiveApi = client.liveApi(),
     private val clock: () -> Long = System::currentTimeMillis,
+    platform: String = LiveTvSession.PLATFORM_ANDROID,
+    private val trackMemory: ExternalTrackMemory = DeviceExternalTrackMemory(context),
 ) : ViewModel() {
     private val client: AntresolClient = client.pinned()
 
     val player: ExoPlayer = buildPlayer()
 
-    private val session = LiveTvSession(api, viewModelScope, channelId, filter)
+    private val session = LiveTvSession(api, viewModelScope, channelId, filter, platform)
 
     /** The viewer's audio/subtitle choice for this player only (never sent to the server). */
     var trackChoice: LiveTrackChoice by mutableStateOf(LiveTrackChoice())
         private set
+
+    /** The choice on the external channel on screen (remembered per channel on the device). */
+    private var externalChoice: LiveTrackChoice by mutableStateOf(LiveTrackChoice())
+
+    /** The external stream's own audio / subtitle tracks (empty for Antresol's channels). */
+    private var streamAudio: List<ProgramTrack> by mutableStateOf(emptyList())
+    private var streamSubtitles: List<ProgramTrack> by mutableStateOf(emptyList())
+
+    /** The channel on screen is external (its tracks come from the stream). */
+    val isExternal: Boolean
+        get() = (state.stream as? LiveStream.Ready)?.external ?: (state.channel?.external == true)
 
     /** The renditions selected for the programme on air (the picker's ticks). */
     var trackSelection: LiveTrackSelection by mutableStateOf(LiveTrackSelection(null, null))
@@ -105,16 +130,19 @@ class LivePlayerViewModel(
 
     /** The picker's audio choices: the programme's renditions with their labels (empty when unknown). */
     val audioOptions: List<ProgramTrack>
-        get() = onAirProgram?.audio.orEmpty()
+        get() = if (isExternal) streamAudio else onAirProgram?.audio.orEmpty()
 
     val subtitleOptions: List<ProgramTrack>
-        get() = onAirProgram?.subtitles.orEmpty()
+        get() = if (isExternal) streamSubtitles else onAirProgram?.subtitles.orEmpty()
 
     /** The mini-guide: the list the player was opened from, by number, with the current channel. */
     val miniGuide: MiniGuide
         get() = liveMiniGuide(state, clock())
 
     private var loaded: LiveStream.Ready? = null
+
+    /** The MIME type the loaded external stream was given (HLS guessed for a URL without extension). */
+    private var loadedMime: String? = null
     private var backgrounded = false
     private var released = false
 
@@ -130,6 +158,7 @@ class LivePlayerViewModel(
         }
 
         override fun onTracksChanged(tracks: Tracks) {
+            readStreamTracks(tracks)
             applyTracks()
         }
 
@@ -142,6 +171,14 @@ class LivePlayerViewModel(
                 // Fell out of the sliding window (a long stall): jump back to the live edge.
                 player.seekToDefaultPosition()
                 player.prepare()
+                return
+            }
+            val current = loaded
+            if (current?.external == true && loadedMime == MimeTypes.APPLICATION_M3U8 && guessedHls(current.url) &&
+                error.errorCode in NOT_A_PLAYLIST
+            ) {
+                // A URL without an extension that is not an HLS playlist: try it as a plain stream (MPEG-TS).
+                loadExternal(current, null)
                 return
             }
             val http = error.cause as? HttpDataSource.InvalidResponseCodeException
@@ -162,7 +199,12 @@ class LivePlayerViewModel(
             session.state.collect { next ->
                 val switched = next.channelId != state.channelId
                 state = next
-                if (switched) awaitingPicture = true
+                if (switched) {
+                    awaitingPicture = true
+                    streamAudio = emptyList()
+                    streamSubtitles = emptyList()
+                    externalChoice = trackMemory.get(next.channelId) ?: LiveTrackChoice()
+                }
                 apply(next.stream)
                 updateMetadata()
                 applyTracks()
@@ -196,14 +238,28 @@ class LivePlayerViewModel(
      * (across programmes and channel switches), falling back by language ([LiveTracks.select]).
      */
     fun selectAudio(track: ProgramTrack) {
-        trackChoice = trackChoice.copy(audio = track)
+        if (isExternal) {
+            rememberExternal(externalChoice.copy(audio = track))
+        } else {
+            trackChoice = trackChoice.copy(audio = track)
+        }
         applyTracks()
     }
 
     /** The viewer picks subtitles, or none (null). */
     fun selectSubtitles(track: ProgramTrack?) {
-        trackChoice = trackChoice.copy(subtitles = track?.let { SubtitleChoice.On(it) } ?: SubtitleChoice.Off)
+        val subtitles = track?.let { SubtitleChoice.On(it) } ?: SubtitleChoice.Off
+        if (isExternal) {
+            rememberExternal(externalChoice.copy(subtitles = subtitles))
+        } else {
+            trackChoice = trackChoice.copy(subtitles = subtitles)
+        }
         applyTracks()
+    }
+
+    private fun rememberExternal(choice: LiveTrackChoice) {
+        externalChoice = choice.forMemory()
+        trackMemory.put(state.channelId, externalChoice)
     }
 
     /** "Try Again" after the channel could not be shown. */
@@ -229,11 +285,16 @@ class LivePlayerViewModel(
         if (released || backgrounded) return
         when (stream) {
             is LiveStream.Ready -> if (stream != loaded) {
-                loaded = stream
-                awaitingPicture = true
-                player.setMediaItem(mediaItem(stream.url, metadata()))
-                player.prepare()
-                player.play()
+                if (stream.external) {
+                    loadExternal(stream, mimeFor(stream.url))
+                } else {
+                    loaded = stream
+                    loadedMime = MimeTypes.APPLICATION_M3U8
+                    awaitingPicture = true
+                    player.setMediaItem(mediaItem(stream.url, metadata()))
+                    player.prepare()
+                    player.play()
+                }
             }
             // A new channel or a retry: the old stream stops (it would keep its encoder busy on the
             // server), but its last frame stays on the surface until the new one draws.
@@ -246,12 +307,96 @@ class LivePlayerViewModel(
     }
 
     /**
+     * Loads an external stream with its own HTTP headers: a plain [DefaultHttpDataSource] (not the
+     * app's client, which would add Antresol's credentials), User-Agent and Referer as the playlist
+     * asked, redirects across http/https followed (the hidden-address form is a 302).
+     */
+    private fun loadExternal(stream: LiveStream.Ready, mime: String?) {
+        loaded = stream
+        loadedMime = mime
+        awaitingPicture = true
+        streamAudio = emptyList()
+        streamSubtitles = emptyList()
+        val http = DefaultHttpDataSource.Factory()
+            .setUserAgent(stream.userAgent?.takeIf { it.isNotBlank() } ?: Util.getUserAgent(context, USER_AGENT_APP))
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(EXTERNAL_TIMEOUT_MS)
+            .setReadTimeoutMs(EXTERNAL_TIMEOUT_MS)
+        stream.referrer?.takeIf { it.isNotBlank() }?.let { http.setDefaultRequestProperties(mapOf("Referer" to it)) }
+        val source = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http))
+            .createMediaSource(mediaItem(stream.url, metadata(), mime))
+        player.setMediaSource(source)
+        player.prepare()
+        player.play()
+    }
+
+    /** The external stream's audio and subtitle groups, as the picker's options. */
+    private fun readStreamTracks(tracks: Tracks) {
+        if (loaded?.external != true) {
+            streamAudio = emptyList()
+            streamSubtitles = emptyList()
+            return
+        }
+        streamAudio = ExternalTracks.options(tracks.streamTracks(C.TRACK_TYPE_AUDIO), ::trackName)
+        streamSubtitles = ExternalTracks.options(tracks.streamTracks(C.TRACK_TYPE_TEXT), ::trackName)
+    }
+
+    private fun Tracks.streamTracks(type: Int): List<StreamTrack> =
+        groups.filter { it.type == type }.mapIndexedNotNull { index, group ->
+            val supported = (0 until group.length).firstOrNull(group::isTrackSupported) ?: return@mapIndexedNotNull null
+            val format = group.getTrackFormat(supported)
+            StreamTrack(index, format.label, format.language?.takeIf { it != C.LANGUAGE_UNDETERMINED }, format.channelCount.coerceAtLeast(0), format.sampleMimeType)
+        }
+
+    /** A track the stream gave no name: its language's name, else «Дорожка N». */
+    private fun trackName(index: Int, language: String?): String {
+        val locale = language?.let(java.util.Locale::forLanguageTag)
+        val name = locale?.getDisplayLanguage(context.resources.configuration.locales[0])?.takeIf { it.isNotBlank() && it != language }
+        return name?.replaceFirstChar { it.titlecase() } ?: context.getString(app.antresol.ui.R.string.tv_track_n, index + 1)
+    }
+
+    /** The external track options' selection: the remembered choice, else the profile's language. */
+    private fun applyExternalTracks() {
+        val program = ChannelProgram(audio = streamAudio, subtitles = streamSubtitles)
+        val selection = LiveTracks.select(program, state.prefs, externalChoice)
+        trackSelection = selection
+        val groups = player.currentTracks.groups
+        val builder = player.trackSelectionParameters.buildUpon()
+        selection.audio?.let { wanted -> groups.byIndex(C.TRACK_TYPE_AUDIO, wanted) }?.let { (group, track) ->
+            builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, track))
+        }
+        val subtitles = selection.subtitles
+        if (subtitles == null) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        } else {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            groups.byIndex(C.TRACK_TYPE_TEXT, subtitles)?.let { (group, track) ->
+                builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, track))
+            }
+        }
+        val next = builder.build()
+        if (next != player.trackSelectionParameters) player.trackSelectionParameters = next
+    }
+
+    /** The group of an [ExternalTracks] option and its first supported track. */
+    private fun List<Tracks.Group>.byIndex(type: Int, track: ProgramTrack): Pair<Tracks.Group, Int>? {
+        val index = ExternalTracks.group(track) ?: return null
+        val group = filter { it.type == type }.getOrNull(index) ?: return null
+        val supported = (0 until group.length).firstOrNull(group::isTrackSupported) ?: return null
+        return group to supported
+    }
+
+    /**
      * Selects the renditions for the programme on air: the HLS `NAME` of an `EXT-X-MEDIA` is the
      * [androidx.media3.common.Format.label] of its track, so the override picks the group whose
      * label equals the entry's `name`. Subtitles off disables the text renderer.
      */
     private fun applyTracks() {
         if (released) return
+        if (loaded?.external == true || (loaded == null && isExternal)) {
+            applyExternalTracks()
+            return
+        }
         val selection = LiveTracks.select(onAirProgram, state.prefs, trackChoice)
         trackSelection = selection
         val groups = player.currentTracks.groups
@@ -310,16 +455,41 @@ class LivePlayerViewModel(
         val next = metadata()
         if (next == current.mediaMetadata) return
         // Same URI: ExoPlayer updates the item in place without reloading the stream.
-        player.replaceMediaItem(player.currentMediaItemIndex, mediaItem(url, next))
+        player.replaceMediaItem(player.currentMediaItemIndex, mediaItem(url, next, loadedMime))
     }
 
-    private fun mediaItem(url: String, metadata: MediaMetadata): MediaItem = MediaItem.Builder()
-        .setUri(url)
-        .setMimeType(MimeTypes.APPLICATION_M3U8)
-        .setMediaMetadata(metadata)
-        .build()
+    private fun mediaItem(url: String, metadata: MediaMetadata, mime: String? = MimeTypes.APPLICATION_M3U8): MediaItem =
+        MediaItem.Builder()
+            .setUri(url)
+            .setMimeType(mime)
+            .setMediaMetadata(metadata)
+            .build()
+
+    /**
+     * An external URL's type: by its extension (`.m3u8`, `.mpd`, `.ts`, `.mp4`…), and HLS for a URL
+     * without one (most IPTV streams; the hidden-address form) — retried as a plain stream if it
+     * turns out not to be a playlist.
+     */
+    private fun mimeFor(url: String): String? = if (guessedHls(url)) MimeTypes.APPLICATION_M3U8 else null
+
+    private fun guessedHls(url: String): Boolean =
+        Util.inferContentType(android.net.Uri.parse(url)) == C.CONTENT_TYPE_OTHER && !hasMediaExtension(url) ||
+            Util.inferContentType(android.net.Uri.parse(url)) == C.CONTENT_TYPE_HLS
+
+    private fun hasMediaExtension(url: String): Boolean {
+        val last = android.net.Uri.parse(url).lastPathSegment.orEmpty().lowercase()
+        return last.contains('.') && last.substringAfterLast('.') in MEDIA_EXTENSIONS
+    }
 
     companion object {
+        private const val USER_AGENT_APP = "Antresol"
+        private const val EXTERNAL_TIMEOUT_MS = 15_000
+        private val MEDIA_EXTENSIONS = setOf("ts", "mp4", "m4v", "mkv", "mp3", "aac", "flv", "mov", "webm", "mpd", "ism", "isml")
+        private val NOT_A_PLAYLIST = setOf(
+            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+            PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+        )
+
         /** How often the media session's title is checked against the programme on air. */
         const val METADATA_TICK_MS = 10_000L
     }

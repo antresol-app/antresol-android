@@ -59,6 +59,7 @@ fun ChannelsScreen(
     onBack: (() -> Unit)? = null,
 ) {
     LifecycleStartEffect(viewModel) {
+        viewModel.opened()
         viewModel.startRefreshing()
         onStopOrDispose { viewModel.stopRefreshing() }
     }

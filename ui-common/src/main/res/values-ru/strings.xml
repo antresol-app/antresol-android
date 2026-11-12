@@ -172,6 +172,9 @@
     <string name="tv_time">%1$s–%2$s</string>
     <string name="tv_starting">Канал запускается…</string>
     <string name="tv_failed">Канал не показывается</string>
+    <string name="tv_failed_external">Канал сейчас не открывается</string>
+    <string name="tv_failed_external_hint">Провайдер не отдаёт поток. Попробуйте позже или переключите канал.</string>
+    <string name="tv_track_n">Дорожка %1$d</string>
     <string name="tv_channel_up">Следующий канал</string>
     <string name="tv_channel_down">Предыдущий канал</string>
     <string name="tv_watch">Смотреть «%1$s»</string>

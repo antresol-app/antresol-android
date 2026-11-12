@@ -102,7 +102,10 @@ fun ChannelsScreen(
     canTakeFocus: () -> Boolean,
     onPanelOpenChanged: (Boolean) -> Unit = {},
 ) {
-    LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.startRefreshing() }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) {
+        viewModel.opened()
+        viewModel.startRefreshing()
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.stopRefreshing() }
     val nowMs = rememberNowMs()
     val loaded = viewModel.channels

@@ -54,7 +54,13 @@ class ChannelsViewModelTest {
             epgFroms += fromIso
             return ChannelEpg(channels = channels.map { ChannelEpgRow(it.id, it.number, it.name, programs = listOf(ChannelProgram(id = "${it.id}-$fromIso"))) })
         }
+
+        override suspend fun opened() {
+            openedCalls++
+        }
     }
+
+    private var openedCalls = 0
 
     private fun viewModel() = ChannelsViewModel(api, clock = { dispatcher.scheduler.currentTime })
 
@@ -63,6 +69,25 @@ class ChannelsViewModelTest {
 
     @After
     fun tearDown() = Dispatchers.resetMain()
+
+    @Test
+    fun openingTheTvPageTellsTheServerAtMostEveryTenMinutesAndReloads() = runTest(dispatcher) {
+        val vm = viewModel()
+        runCurrent()
+        val loads = calls
+        vm.opened()
+        runCurrent()
+        assertEquals(1, openedCalls)
+        // The server may have refreshed «при открытии» sources: the list is read again.
+        assertEquals(loads + 1, calls)
+        vm.opened()
+        runCurrent()
+        assertEquals(1, openedCalls)
+        advanceTimeBy(10 * 60_000L + 1)
+        vm.opened()
+        runCurrent()
+        assertEquals(2, openedCalls)
+    }
 
     @Test
     fun oneListFilteredByThemeOrFavourites() = runTest(dispatcher) {

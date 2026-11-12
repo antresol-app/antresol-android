@@ -92,6 +92,7 @@ import app.antresol.tv.ui.settings.SettingsViewModel
 import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.core.channels.ChannelFilter
+import app.antresol.core.channels.LiveTvSession
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.channelsApi
 import app.antresol.ui.language.UiLanguageModel
@@ -408,7 +409,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 composable<LiveRoute> { entry ->
                     val route = entry.toRoute<LiveRoute>()
-                    LivePlayerScreen(viewModel = viewModel { LivePlayerViewModel(app, client, route.channelId, ChannelFilter.fromKey(route.filter)) })
+                    LivePlayerScreen(viewModel = viewModel { LivePlayerViewModel(app, client, route.channelId, ChannelFilter.fromKey(route.filter), platform = LiveTvSession.PLATFORM_ANDROID_TV) })
                 }
                 composable<PlayerRoute> { entry ->
                     val route = entry.toRoute<PlayerRoute>()

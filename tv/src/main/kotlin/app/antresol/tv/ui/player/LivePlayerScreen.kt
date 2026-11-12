@@ -493,7 +493,11 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                     Spacer(Modifier.weight(1f))
                 }
                 if (actions.isEmpty()) {
-                    if (state.listed.size > 1) {
+                    // OK plays a paused channel; otherwise it opens the channel list.
+                    if (viewModel.paused) {
+                        KeyHint("OK", stringResource(R.string.action_play))
+                        Spacer(Modifier.width(20.dp))
+                    } else if (state.listed.size > 1) {
                         KeyHint("OK", stringResource(R.string.tv_channel_list))
                         Spacer(Modifier.width(20.dp))
                     }
@@ -556,7 +560,7 @@ private fun CenterPlayPause(paused: Boolean) {
     }
 }
 
-/** «В эфир» in the place of «Прямой эфир», more than 10 s behind the edge: a glass capsule with ⏩. */
+/** «В эфир» in the place of «Прямой эфир», more than 10 s behind the edge (the banner's button or ⏩ jumps). */
 @Composable
 private fun GoLivePill() {
     Row(
@@ -568,7 +572,6 @@ private fun GoLivePill() {
     ) {
         Icon(AntresolIcons.Tv, contentDescription = null, tint = AntresolColors.Label, modifier = Modifier.size(16.dp))
         Text(stringResource(R.string.tv_go_live), style = Antresol.typography.eyebrow, color = AntresolColors.Label, maxLines = 1)
-        Text("⏩", style = Antresol.typography.eyebrow, color = AntresolColors.LabelSecondary, maxLines = 1)
     }
 }
 

@@ -208,6 +208,39 @@ class LiveLayoutTest {
         assertNothingOverflows()
     }
 
+    @Test
+    @Config(sdk = [35], qualifiers = "w360dp-h640dp-port")
+    fun namesLineUpWhenSomeChannelOfTheListHasALogo() {
+        val withLogo = channel.copy(id = 5, number = 5, name = "Кино", logoUrl = "/api/channels/5/logo.png?v=1")
+        val plain = channel.copy(id = 6, number = 6, name = "Драмы", logoUrl = null)
+        show {
+            androidx.compose.runtime.CompositionLocalProvider(
+                app.antresol.ui.channels.LocalReserveChannelLogo provides app.antresol.ui.channels.reserveLogoSlot(listOf(withLogo.logoUrl, plain.logoUrl)),
+            ) {
+                Column {
+                    ChannelRow(withLogo, now, onClick = {}, onToggleFavorite = {})
+                    ChannelRow(plain, now, onClick = {}, onToggleFavorite = {})
+                }
+            }
+        }
+        compose.waitForIdle()
+        // The row without a logo keeps an empty slot, so both names start at the same x.
+        compose.onAllNodes(androidx.compose.ui.test.hasTestTag("channel-logo-slot"), useUnmergedTree = true).fetchSemanticsNodes().let {
+            assertTrue("no reserved slot", it.isNotEmpty())
+        }
+        val a = compose.onNodeWithText("Кино", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val b = compose.onNodeWithText("Драмы", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(a.left, b.left, 0.5f)
+        assertNothingOverflows()
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w360dp-h640dp-port")
+    fun aListWithoutLogosReservesNothing() {
+        show { Column { ChannelRow(channel, now, onClick = {}, onToggleFavorite = {}) } }
+        assertEquals(0, compose.onAllNodes(androidx.compose.ui.test.hasTestTag("channel-logo-slot"), useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
     private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountEquals(n: Int) =
         assertEquals(n, fetchSemanticsNodes().size)
 

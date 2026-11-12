@@ -99,7 +99,10 @@ fun GuideGrid(
             .collect { near -> if (near && scroll.maxValue > 0) onNearEnd() }
     }
     val leftMs = fromMs + with(density) { (scroll.value.toDp() / minute * 60_000f).toLong() }
-    androidx.compose.runtime.CompositionLocalProvider(LocalMinuteWidth provides minute) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalMinuteWidth provides minute,
+        app.antresol.ui.channels.LocalReserveChannelLogo provides app.antresol.ui.channels.reserveLogoSlot(rows.map { it.logoUrl }),
+    ) {
     Column(modifier) {
         Row(Modifier.height(RulerHeight), verticalAlignment = Alignment.CenterVertically) {
             Text(

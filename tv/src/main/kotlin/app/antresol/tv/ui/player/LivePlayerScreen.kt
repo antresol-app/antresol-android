@@ -1,6 +1,9 @@
 package app.antresol.tv.ui.player
 
 import app.antresol.ui.channels.ChannelLogo
+import app.antresol.ui.channels.reserveLogoSlot
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.platform.testTag
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.shape.CircleShape
@@ -253,7 +256,12 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             return@handler true
         }
         if (failed) {
-            if (event.key in CenterKeys && up) viewModel.retry()
+            // A channel that cannot be shown still zaps with Up/Down, as a working one does.
+            when (event.key) {
+                Key.DirectionUp -> if (down) zap(1)
+                Key.DirectionDown -> if (down) zap(-1)
+                in CenterKeys -> if (up) viewModel.retry()
+            }
             return@handler true
         }
         when (event.key) {
@@ -461,6 +469,10 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
     }
 }
 
+/** One row of the player's channel list (number, name, programme, progress) and the gap between rows. */
+private val PanelRowHeight = 66.dp
+private val PanelRowGap = 2.dp
+
 /** The height of the logo box beside the banner's channel number. */
 private val BannerLogoHeight = 36.dp
 
@@ -483,8 +495,9 @@ private fun ActionButton(icon: ImageVector, selected: Boolean) {
  * channel on screen has the live dot.
  */
 @Composable
-private fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, selected: Int) {
+internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, selected: Int) {
     val urls = LocalMediaUrls.current
+    val reserveLogo = reserveLogoSlot(guide.channels.map { it.logoUrl })
     val nowMs = rememberNowMs()
     val context = LocalContext.current
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (selected - 3).coerceAtLeast(0))
@@ -501,12 +514,19 @@ private fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, s
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(title, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(start = 12.dp))
+        // Rows have one height and the list shows a whole number of them, so every scroll position
+        // (the end included) starts on a row: no sliver of the previous row under the title.
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).padding(bottom = 16.dp)) {
+        val rows = ((maxHeight + PanelRowGap) / (PanelRowHeight + PanelRowGap)).toInt().coerceAtLeast(1)
         LazyColumn(
             state = listState,
             userScrollEnabled = false,
-            contentPadding = PaddingValues(end = 12.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-            modifier = Modifier.width(GuidePanelWidth),
+            contentPadding = PaddingValues(end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(PanelRowGap),
+            modifier = Modifier
+                .width(GuidePanelWidth)
+                .height(PanelRowHeight * rows + PanelRowGap * (rows - 1))
+                .testTag("mini-guide-list"),
         ) {
             itemsIndexed(guide.channels, key = { _, channel -> channel.id }) { index, channel ->
                 val program = Channels.showing(channel, nowMs)
@@ -515,6 +535,7 @@ private fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, s
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .height(PanelRowHeight)
                         .background(if (isSelected) AntresolColors.Label else Color.Transparent, AntresolShapes.control)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -532,7 +553,7 @@ private fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, s
                             if (channel.id == currentId) {
                                 Box(Modifier.size(7.dp).background(AntresolColors.Red, CircleShape))
                             }
-                            ChannelLogo(urls?.image(channel.logoUrl), height = 20.dp)
+                            ChannelLogo(urls?.image(channel.logoUrl), height = 20.dp, reserve = reserveLogo)
                             Text(channel.name, style = Antresol.typography.title, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                             if (channel.favorite) FavoriteMark(tint = if (isSelected) content else AntresolColors.Orange)
                         }
@@ -552,6 +573,7 @@ private fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, s
                     }
                 }
             }
+        }
         }
     }
 }

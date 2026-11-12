@@ -512,6 +512,9 @@ private fun ChannelStrip(guide: MiniGuide, title: String, currentId: Long, onScr
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(guide.channels, key = { it.id }) { channel ->
+                androidx.compose.runtime.CompositionLocalProvider(
+                    app.antresol.ui.channels.LocalReserveChannelLogo provides app.antresol.ui.channels.reserveLogoSlot(guide.channels.map { it.logoUrl }),
+                ) {
                 ChannelCard(
                     channel = channel,
                     nowMs = nowMs,
@@ -520,6 +523,7 @@ private fun ChannelStrip(guide: MiniGuide, title: String, currentId: Long, onScr
                     watching = channel.id == currentId,
                     showNext = false,
                 )
+                }
             }
         }
     }

@@ -1,6 +1,7 @@
 package app.antresol.tv.ui.channels
 
 import app.antresol.ui.channels.ChannelLogo
+import app.antresol.ui.channels.reserveLogoSlot
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -310,6 +311,7 @@ private fun ChannelList(
                 itemsIndexed(shown, key = { _, channel -> channel.id }) { index, channel ->
                     TvChannelRow(
                         channel = channel,
+                        reserveLogo = reserveLogoSlot(shown.map { it.logoUrl }),
                         nowMs = nowMs,
                         last = channel.id == last?.id,
                         onClick = { onWatch(channel) },
@@ -358,7 +360,7 @@ private val PreviewWidth = 960.dp - ScreenPaddingH * 2 - ListWidth - 28.dp
 
 /** One row of the TV list: number, a small still, name with the star, the programme and its progress. */
 @Composable
-private fun TvChannelRow(channel: Channel, nowMs: Long, last: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, nowMs: Long, last: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
     val urls = LocalMediaUrls.current
     val context = LocalContext.current
     val program = Channels.showing(channel, nowMs)
@@ -404,7 +406,7 @@ private fun TvChannelRow(channel: Channel, nowMs: Long, last: Boolean, onClick: 
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ChannelLogo(urls?.image(channel.logoUrl), height = 20.dp)
+                    ChannelLogo(urls?.image(channel.logoUrl), height = 20.dp, reserve = reserveLogo)
                     Text(channel.name, style = Antresol.typography.title, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     if (channel.favorite) FavoriteMark(tint = if (hasFocus) content else AntresolColors.Orange)
                 }

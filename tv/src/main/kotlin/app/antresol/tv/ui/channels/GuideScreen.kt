@@ -1,6 +1,7 @@
 package app.antresol.tv.ui.channels
 
 import app.antresol.ui.channels.ChannelLogo
+import app.antresol.ui.channels.reserveLogoSlot
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -295,7 +296,7 @@ private fun GuideGrid(
             }
             itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
                 Row(Modifier.height(RowHeight).padding(start = ScreenPaddingH)) {
-                    ChannelCell(row, last = row.id == lastChannelId, focused = index == focusedRow)
+                    ChannelCell(row, reserveLogo = reserveLogoSlot(rows.map { it.logoUrl }), last = row.id == lastChannelId, focused = index == focusedRow)
                     Box(
                         Modifier
                             .weight(1f)
@@ -354,7 +355,7 @@ private suspend fun reveal(program: ChannelProgram, fromMs: Long, scroll: Scroll
 }
 
 @Composable
-private fun ChannelCell(row: ChannelEpgRow, last: Boolean, focused: Boolean) {
+private fun ChannelCell(row: ChannelEpgRow, reserveLogo: Boolean, last: Boolean, focused: Boolean) {
     val urls = app.antresol.tv.ui.LocalMediaUrls.current
     Row(
         Modifier
@@ -374,7 +375,7 @@ private fun ChannelCell(row: ChannelEpgRow, last: Boolean, focused: Boolean) {
             },
             modifier = Modifier.width(26.dp),
         )
-        ChannelLogo(urls?.image(row.logoUrl), height = 22.dp)
+        ChannelLogo(urls?.image(row.logoUrl), height = 22.dp, reserve = reserveLogo)
         Text(
             row.name,
             style = Antresol.typography.caption.copy(hyphens = androidx.compose.ui.text.style.Hyphens.None),

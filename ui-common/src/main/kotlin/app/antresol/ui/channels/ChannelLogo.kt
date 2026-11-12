@@ -2,6 +2,8 @@ package app.antresol.ui.channels
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,15 +33,28 @@ val ChannelLogoBox = Color(0xFF2C2C2E)
 const val CHANNEL_LOGO_ASPECT = 3f / 2f
 
 /**
+ * True inside a list where some channel has a logo (rows, the guide's column, the mini-guide): a
+ * channel without one then keeps an empty slot of the logo's size, so the names line up down the
+ * list, as the web does. Single-channel places (banner, preview) leave it false.
+ */
+val LocalReserveChannelLogo = compositionLocalOf { false }
+
+/** Whether any of [logoUrls] is set: the list should reserve the logo slot ([LocalReserveChannelLogo]). */
+fun reserveLogoSlot(logoUrls: List<String?>): Boolean = logoUrls.any { !it.isNullOrEmpty() }
+
+/**
  * A channel's uploaded logo ([url], resolved by the caller from `logoUrl`), small, fitted inside a
- * neutral rounded box of [height] (3:2). Nothing is drawn without a logo, or when it cannot be
- * loaded: the channel then shows its number and name only (never a generated tile).
+ * neutral rounded box of [height] (3:2). Without a logo, or when it cannot be loaded, nothing is
+ * drawn (the channel shows its number and name only, never a generated tile), or just an empty slot
+ * of the same size where the list reserves one ([LocalReserveChannelLogo]).
  */
 @Composable
-fun ChannelLogo(url: String?, height: Dp, modifier: Modifier = Modifier) {
-    if (url == null) return
+fun ChannelLogo(url: String?, height: Dp, modifier: Modifier = Modifier, reserve: Boolean = LocalReserveChannelLogo.current) {
     var failed by remember(url) { mutableStateOf(false) }
-    if (failed) return
+    if (url == null || failed) {
+        if (reserve) Spacer(modifier.size(width = height * CHANNEL_LOGO_ASPECT, height = height).testTag("channel-logo-slot"))
+        return
+    }
     Box(
         modifier
             .size(width = height * CHANNEL_LOGO_ASPECT, height = height)

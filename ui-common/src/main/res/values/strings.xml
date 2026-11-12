@@ -185,6 +185,7 @@
     <string name="tv_ok_actions">Audio, subtitles, favourite</string>
     <string name="ui_language">Interface Language</string>
     <string name="ui_language_profile">Same as profile</string>
+    <string name="action_more">More</string>
     <string name="tv_favorites">Favourites</string>
     <string name="tv_view_channels">Channels</string>
     <string name="tv_view_guide">Guide</string>

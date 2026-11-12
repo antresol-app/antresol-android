@@ -9,6 +9,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import app.antresol.mobile.R as MobileR
@@ -260,7 +264,18 @@ private fun filterTitle(filter: ChannelFilter): String = when (filter) {
     is ChannelFilter.Theme -> filter.category
 }
 
-/** The top bar: back on the left; favourite, audio, subtitles, channel list and PiP on the right. */
+/** What the player's top bar offers; [favorite] null hides the star (no channel yet). */
+internal data class TopBarActions(
+    val favorite: Boolean?,
+    val audio: Boolean,
+    val subtitles: Boolean,
+    val channels: Boolean,
+    val pictureInPicture: Boolean,
+)
+
+/** Below this width the secondary buttons go into «…» (a portrait split screen, a small phone). */
+private val TopBarFullWidth = 440.dp
+
 @Composable
 private fun TopBar(
     viewModel: LivePlayerViewModel,
@@ -272,39 +287,102 @@ private fun TopBar(
     onTouch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val channel = viewModel.state.channel
-    Row(
+    LiveTopBar(
+        actions = TopBarActions(
+            favorite = viewModel.state.channel?.favorite,
+            audio = viewModel.audioOptions.isNotEmpty(),
+            subtitles = viewModel.subtitleOptions.isNotEmpty(),
+            channels = viewModel.state.listed.size > 1,
+            pictureInPicture = canPictureInPicture,
+        ),
+        onExit = onExit,
+        onFavorite = { onTouch(); viewModel.toggleFavorite() },
+        onAudio = { onMenu(TrackMenu.Audio) },
+        onSubtitles = { onMenu(TrackMenu.Subtitles) },
+        onGuide = onGuide,
+        onPictureInPicture = onPictureInPicture,
+        onTouch = onTouch,
+        modifier = modifier,
+    )
+}
+
+/**
+ * The top bar: back on the left; favourite, audio, subtitles, channel list and picture-in-picture on
+ * the right, inside the safe area. When they don't fit ([TopBarFullWidth]), all but the star go into
+ * a «…» menu, so nothing runs off the screen.
+ */
+@Composable
+internal fun LiveTopBar(
+    actions: TopBarActions,
+    onExit: () -> Unit,
+    onFavorite: () -> Unit,
+    onAudio: () -> Unit,
+    onSubtitles: () -> Unit,
+    onGuide: () -> Unit,
+    onPictureInPicture: () -> Unit,
+    onTouch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        GlassIconButton(MobileIcons.ChevronLeft, stringResource(R.string.tv_back), onExit)
-        Spacer(Modifier.weight(1f))
-        if (channel != null) {
-            val favorite = channel.favorite
-            RoundIconButton(
-                if (favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
-                stringResource(if (favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),
-                { onTouch(); viewModel.toggleFavorite() },
-                glass = true, size = 44.dp, iconSize = 22.dp,
-                modifier = Modifier.testTag("live-favorite"),
-            )
-        }
-        if (viewModel.audioOptions.isNotEmpty()) {
-            RoundIconButton(AntresolIcons.Audio, stringResource(R.string.detail_audio), { onMenu(TrackMenu.Audio) }, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-audio"))
-        }
-        if (viewModel.subtitleOptions.isNotEmpty()) {
-            RoundIconButton(AntresolIcons.Subtitles, stringResource(R.string.detail_subtitles), { onMenu(TrackMenu.Subtitles) }, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-subtitles"))
-        }
-        if (viewModel.state.listed.size > 1) {
-            RoundIconButton(AntresolIcons.List, stringResource(R.string.tv_channel_list), onGuide, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-guide"))
-        }
-        if (canPictureInPicture) {
-            RoundIconButton(MobileIcons.Pip, stringResource(MobileR.string.player_pip), onPictureInPicture, glass = true, size = 44.dp, iconSize = 22.dp)
+        val compact = maxWidth < TopBarFullWidth
+        var more by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            GlassIconButton(MobileIcons.ChevronLeft, stringResource(R.string.tv_back), onExit, modifier = Modifier.testTag("live-back"))
+            Spacer(Modifier.weight(1f))
+            actions.favorite?.let { favorite ->
+                RoundIconButton(
+                    if (favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
+                    stringResource(if (favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),
+                    onFavorite,
+                    glass = true, size = 44.dp, iconSize = 22.dp,
+                    modifier = Modifier.testTag("live-favorite"),
+                )
+            }
+            if (!compact) {
+                if (actions.audio) {
+                    RoundIconButton(AntresolIcons.Audio, stringResource(R.string.detail_audio), onAudio, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-audio"))
+                }
+                if (actions.subtitles) {
+                    RoundIconButton(AntresolIcons.Subtitles, stringResource(R.string.detail_subtitles), onSubtitles, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-subtitles"))
+                }
+                if (actions.channels) {
+                    RoundIconButton(AntresolIcons.List, stringResource(R.string.tv_channel_list), onGuide, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-guide"))
+                }
+                if (actions.pictureInPicture) {
+                    RoundIconButton(MobileIcons.Pip, stringResource(MobileR.string.player_pip), onPictureInPicture, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-pip"))
+                }
+            } else if (actions.audio || actions.subtitles || actions.channels || actions.pictureInPicture) {
+                Box {
+                    RoundIconButton(MobileIcons.More, stringResource(R.string.action_more), { onTouch(); more = true }, glass = true, size = 44.dp, iconSize = 22.dp, modifier = Modifier.testTag("live-more"))
+                    DropdownMenu(
+                        expanded = more,
+                        onDismissRequest = { more = false },
+                        containerColor = AntresolColors.BackgroundElevated,
+                        shape = AntresolShapes.control,
+                    ) {
+                        @Composable
+                        fun item(label: String, icon: ImageVector, action: () -> Unit) = DropdownMenuItem(
+                            text = { Text(label, style = Antresol.typography.body) },
+                            leadingIcon = { Icon(icon, null, tint = AntresolColors.Label, modifier = Modifier.size(20.dp)) },
+                            onClick = { more = false; action() },
+                        )
+                        if (actions.audio) item(stringResource(R.string.detail_audio), AntresolIcons.Audio, onAudio)
+                        if (actions.subtitles) item(stringResource(R.string.detail_subtitles), AntresolIcons.Subtitles, onSubtitles)
+                        if (actions.channels) item(stringResource(R.string.tv_channel_list), AntresolIcons.List, onGuide)
+                        if (actions.pictureInPicture) item(stringResource(MobileR.string.player_pip), MobileIcons.Pip, onPictureInPicture)
+                    }
+                }
+            }
         }
     }
 }
@@ -314,7 +392,7 @@ private fun TopBar(
  * programme on air with its episode, its start and end around the live progress, and what is next.
  */
 @Composable
-private fun InfoBar(state: LiveTvState) {
+internal fun InfoBar(state: LiveTvState) {
     val context = LocalContext.current
     val nowMs = rememberNowMs(1_000L)
     val channel = state.channel

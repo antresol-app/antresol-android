@@ -60,6 +60,16 @@ object MobileIcons {
         lineTo(16f, 3.5f)
     }
 
+    /** «…»: more actions. */
+    val More: ImageVector = lineIcon("More") {
+        for (x in listOf(5f, 12f, 19f)) {
+            moveTo(x - 0.9f, 12f)
+            arcToRelative(0.9f, 0.9f, 0f, true, true, 1.8f, 0f)
+            arcToRelative(0.9f, 0.9f, 0f, true, true, -1.8f, 0f)
+            close()
+        }
+    }
+
     val Music: ImageVector = lineIcon("Music") {
         moveTo(9f, 17.5f)
         lineTo(9f, 5.5f)

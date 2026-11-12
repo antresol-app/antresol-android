@@ -181,6 +181,8 @@
     <string name="tv_next_at_long">Next at %1$s — %2$s</string>
     <string name="tv_guide_hint">Channels</string>
     <string name="tv_watching">Watching</string>
+    <string name="tv_all_channels">All Channels</string>
+    <string name="tv_ok_actions">Audio, subtitles, favourite</string>
     <string name="tv_favorites">Favourites</string>
     <string name="tv_view_channels">Channels</string>
     <string name="tv_view_guide">Guide</string>

@@ -181,6 +181,8 @@
     <string name="tv_next_at_long">Далее в %1$s — %2$s</string>
     <string name="tv_guide_hint">Каналы</string>
     <string name="tv_watching">Сейчас смотрите</string>
+    <string name="tv_all_channels">Все каналы</string>
+    <string name="tv_ok_actions">Звук, субтитры, избранное</string>
     <string name="tv_favorites">Избранное</string>
     <string name="tv_view_channels">Каналы</string>
     <string name="tv_view_guide">Телегид</string>

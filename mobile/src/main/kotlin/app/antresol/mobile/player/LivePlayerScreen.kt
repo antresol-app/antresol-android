@@ -255,7 +255,7 @@ fun LivePlayerScreen(
 /** «Все каналы», «Избранное» or the theme: the list the player zaps through. */
 @Composable
 private fun filterTitle(filter: ChannelFilter): String = when (filter) {
-    ChannelFilter.All -> stringResource(R.string.nav_tv)
+    ChannelFilter.All -> stringResource(R.string.tv_all_channels)
     ChannelFilter.Favorites -> stringResource(R.string.tv_favorites)
     is ChannelFilter.Theme -> filter.category
 }

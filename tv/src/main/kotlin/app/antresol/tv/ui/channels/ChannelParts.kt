@@ -104,7 +104,7 @@ fun programFacts(program: ChannelProgram): String = listOfNotNull(
 /** The list a filter shows, by name: «ТВ», «Избранное» or the theme. */
 @Composable
 fun filterTitle(filter: ChannelFilter): String = when (filter) {
-    ChannelFilter.All -> stringResource(R.string.nav_tv)
+    ChannelFilter.All -> stringResource(R.string.tv_all_channels)
     ChannelFilter.Favorites -> stringResource(R.string.tv_favorites)
     is ChannelFilter.Theme -> filter.category
 }

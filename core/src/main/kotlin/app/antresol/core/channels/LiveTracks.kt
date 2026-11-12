@@ -5,10 +5,10 @@ import app.antresol.core.model.PlaybackPrefs
 import app.antresol.core.model.ProgramTrack
 
 /**
- * The viewer's own audio / subtitle choice in the live player, for this player session only: it
- * sticks across programmes and channel switches by the rendition's `name` (falling back by
- * language), and is never sent to the server (TV is TV: no track memory). Null fields mean «the
- * profile's default».
+ * The viewer's own audio / subtitle choice on a channel: kept per channel on the device (an
+ * [ExternalTrackMemory], for Antresol's channels and external ones alike), it sticks across the
+ * channel's programmes by the rendition's `name` (falling back by language), and is never sent to
+ * the server (TV is TV: no track memory there). Null fields mean «the default».
  */
 data class LiveTrackChoice(
     /** The audio rendition picked (its `name` and `lang` are what sticks). */
@@ -31,8 +31,9 @@ data class LiveTrackSelection(val audio: ProgramTrack?, val subtitles: ProgramTr
  * track»). The master carries up to 8 audio and 6 subtitle renditions with arbitrary names, in no
  * fixed order; the programme's `audio`/`subtitles` list the ones it really has. Nothing here
  * assumes a name, a count or a position:
- * - audio = the first of the profile's `audioLangs` the programme has (its first track in that
- *   language), else its first Russian track, else its first;
+ * - audio = the first of the device's languages ([select]'s `system`: the system locale list) the
+ *   programme has, else the first of the profile's `audioLangs`, else the original (a track named
+ *   so), else its first — the interface language stays the profile's;
  * - subtitles by `subMode` (`off`; `always`: the first of `subLangs` present; `foreign`: when the
  *   audio's language is not one of `audioLangs`);
  * - the viewer's [LiveTrackChoice] wins: the programme's rendition with the same `name`, else its
@@ -49,13 +50,13 @@ object LiveTracks {
     /** The language of [track] (its BCP 47 `lang`; older servers only had the slot). */
     fun langOf(track: ProgramTrack): String = lang(track.lang.ifEmpty { track.slot })
 
-    fun defaultAudio(program: ChannelProgram?, prefs: PlaybackPrefs?): ProgramTrack? {
+    fun defaultAudio(program: ChannelProgram?, prefs: PlaybackPrefs?, system: List<String> = emptyList()): ProgramTrack? {
         val audio = program?.audio.orEmpty()
         if (audio.isEmpty()) return null
-        prefs?.audioLangs.orEmpty().map(::lang).forEach { wanted ->
+        (system + prefs?.audioLangs.orEmpty()).map(::lang).filter { it.isNotEmpty() }.forEach { wanted ->
             audio.firstOrNull { langOf(it) == wanted }?.let { return it }
         }
-        return audio.firstOrNull { langOf(it) == RU } ?: audio.first()
+        return audio.firstOrNull { ORIGINAL.containsMatchIn(it.name) || ORIGINAL.containsMatchIn(it.label) } ?: audio.first()
     }
 
     fun defaultSubtitles(program: ChannelProgram?, prefs: PlaybackPrefs?, audio: ProgramTrack?): ProgramTrack? {
@@ -83,12 +84,12 @@ object LiveTracks {
         tracks.firstOrNull { it.name == picked.name }
             ?: langOf(picked).takeIf { it.isNotEmpty() }?.let { wanted -> tracks.firstOrNull { langOf(it) == wanted } }
 
-    fun select(program: ChannelProgram?, prefs: PlaybackPrefs?, choice: LiveTrackChoice): LiveTrackSelection {
+    fun select(program: ChannelProgram?, prefs: PlaybackPrefs?, choice: LiveTrackChoice, system: List<String> = emptyList()): LiveTrackSelection {
         val audioTracks = program?.audio
         val audio = choice.audio?.let { picked ->
             // Unknown tracks (no programme, or an older server): keep the pick as it is.
             if (audioTracks.isNullOrEmpty()) picked else match(audioTracks, picked)
-        } ?: defaultAudio(program, prefs)
+        } ?: defaultAudio(program, prefs, system)
         val subtitleTracks = program?.subtitles
         val subtitles = when (val picked = choice.subtitles) {
             SubtitleChoice.Off -> null
@@ -100,6 +101,8 @@ object LiveTracks {
     }
 
     const val RU = "ru"
+
+    private val ORIGINAL = Regex("оригинал|original", RegexOption.IGNORE_CASE)
 
     private val THREE_LETTER = mapOf(
         "rus" to "ru", "eng" to "en", "fra" to "fr", "fre" to "fr", "deu" to "de", "ger" to "de", "ukr" to "uk",

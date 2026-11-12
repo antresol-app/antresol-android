@@ -13,6 +13,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
@@ -32,6 +33,8 @@ import app.antresol.core.channels.StreamTrack
 import app.antresol.core.channels.forMemory
 import app.antresol.core.channels.Channels
 import app.antresol.core.channels.LiveApi
+import app.antresol.core.channels.LiveClock
+import app.antresol.core.channels.LiveEdge
 import app.antresol.core.channels.LiveTrackChoice
 import app.antresol.core.channels.LiveTrackSelection
 import app.antresol.core.channels.LiveTracks
@@ -49,7 +52,7 @@ import kotlinx.coroutines.launch
 
 /**
  * The live channel player shared by the TV and phone apps: ExoPlayer on the channel's live HLS
- * (started at the live edge; no seeking, no progress), driven by [LiveTvSession], which opens the
+ * (started at the live edge; no progress), driven by [LiveTvSession], which opens the
  * stream with retries while the channel starts, switches channels inside the list it was opened
  * from ([filter], [zap]) and refreshes the guide. Audio and subtitles are the master playlist's
  * renditions, picked by NAME from the programme's `audio`/`subtitles` ([LiveTracks]).
@@ -57,8 +60,17 @@ import kotlinx.coroutines.launch
  * An external channel ([LiveStream.Ready.external]) is played straight from its provider with the
  * headers its playlist asked for (User-Agent, Referer) through a plain HTTP data source — never the
  * app's authorised client, so no Antresol credential reaches the provider. Its audio and subtitle
- * options are the stream's own tracks ([ExternalTracks]); the choice is remembered per channel on
- * the device ([ExternalTrackMemory]), the default is the profile's language.
+ * options are the stream's own tracks ([ExternalTracks]).
+ *
+ * The voice, on every channel: the viewer's choice on that channel (remembered per channel on the
+ * device, [ExternalTrackMemory]), else the device's language (the system locale list), else the
+ * profile's audio languages, else the original ([LiveTracks.select]).
+ *
+ * Live may be paused ([togglePause]; the media session's play/pause, picture-in-picture's and a
+ * remote's key go through the same player). A resume picks up where it stopped while the stream
+ * still holds that picture (a minute on our channels, the seekable window on an external one), else
+ * at the live edge; more than 10 s behind the edge [behindLive] is set and [goLive] jumps back
+ * ([LiveEdge]).
  *
  * TV is TV: this player sends no progress, playback reports, watched flags, track memory or
  * scrobbles. Its only server calls are those of [LiveApi] (channel list, guide, stream, the last
@@ -83,12 +95,23 @@ class LivePlayerViewModel(
 
     private val session = LiveTvSession(api, viewModelScope, channelId, filter, platform)
 
-    /** The viewer's audio/subtitle choice for this player only (never sent to the server). */
-    var trackChoice: LiveTrackChoice by mutableStateOf(LiveTrackChoice())
+    /** The viewer's audio/subtitle choice on the channel on screen (remembered per channel on the device, never sent). */
+    var trackChoice: LiveTrackChoice by mutableStateOf(trackMemory.get(channelId) ?: LiveTrackChoice())
         private set
 
-    /** The choice on the external channel on screen (remembered per channel on the device). */
-    private var externalChoice: LiveTrackChoice by mutableStateOf(LiveTrackChoice())
+    /** The device's languages, most wanted first (the system locale list). */
+    private val systemLanguages: List<String> = deviceLanguages()
+
+    /** Paused by the viewer (the centre button, a key, the system's controls). */
+    var paused: Boolean by mutableStateOf(false)
+        private set
+
+    /** More than 10 s behind the live edge: «В эфир» instead of «Прямой эфир». */
+    var behindLive: Boolean by mutableStateOf(false)
+        private set
+
+    private var pausedAt = 0L
+    private var behindAtPause = 0L
 
     /** The external stream's own audio / subtitle tracks (empty for Antresol's channels). */
     private var streamAudio: List<ProgramTrack> by mutableStateOf(emptyList())
@@ -166,6 +189,25 @@ class LivePlayerViewModel(
             isBuffering = playbackState == Player.STATE_BUFFERING
         }
 
+        // A pause from anywhere (the centre button, a key, the media session, picture-in-picture);
+        // the resume decides between the stopped picture and the live edge.
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            if (!playWhenReady) {
+                if (!paused) {
+                    paused = true
+                    pausedAt = clock()
+                    behindAtPause = LiveEdge.behind(liveClock())
+                }
+                return
+            }
+            if (!paused) return
+            paused = false
+            val pausedFor = clock() - pausedAt
+            if (LiveEdge.resumeAtEdge(own = loaded?.external != true, pausedMs = pausedFor, behindAtPauseMs = behindAtPause, clock = liveClock())) {
+                player.seekToDefaultPosition()
+            }
+        }
+
         override fun onPlayerError(error: PlaybackException) {
             if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                 // Fell out of the sliding window (a long stall): jump back to the live edge.
@@ -203,7 +245,8 @@ class LivePlayerViewModel(
                     awaitingPicture = true
                     streamAudio = emptyList()
                     streamSubtitles = emptyList()
-                    externalChoice = trackMemory.get(next.channelId) ?: LiveTrackChoice()
+                    trackChoice = trackMemory.get(next.channelId) ?: LiveTrackChoice()
+                    behindLive = false
                 }
                 apply(next.stream)
                 updateMetadata()
@@ -218,7 +261,40 @@ class LivePlayerViewModel(
                 applyTracks()
             }
         }
+        // «В эфир»: how far the picture is behind the live edge.
+        viewModelScope.launch {
+            while (true) {
+                delay(EDGE_TICK_MS)
+                if (!released) behindLive = LiveEdge.showGoLive(liveClock())
+            }
+        }
         session.start()
+    }
+
+    /** Where the player stands against the live edge (ExoPlayer's window: its start, default position and the position). */
+    fun liveClock(): LiveClock {
+        if (released || !player.isCurrentMediaItemLive) return LiveClock.NotLive
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return LiveClock.NotLive
+        val window = timeline.getWindow(player.currentMediaItemIndex, Timeline.Window())
+        return LiveClock(live = true, positionMs = player.currentPosition, edgeMs = window.defaultPositionMs, startMs = 0)
+    }
+
+    /** Pause, or resume (from the stopped picture while the stream holds it, else at the live edge). */
+    fun togglePause() {
+        if (released) return
+        if (player.playWhenReady) player.pause() else player.play()
+    }
+
+    /** «В эфир»: back to the live edge (and playing). */
+    fun goLive() {
+        if (released) return
+        player.seekToDefaultPosition()
+        if (!player.playWhenReady) {
+            paused = false
+            player.play()
+        }
+        behindLive = false
     }
 
     /** Switches to [channelId] (from the mini-guide). False when it is already on. */
@@ -234,32 +310,24 @@ class LivePlayerViewModel(
     }
 
     /**
-     * The viewer picks an audio rendition: it sticks for the rest of this player by its `name`
-     * (across programmes and channel switches), falling back by language ([LiveTracks.select]).
+     * The viewer picks an audio rendition: it sticks on this channel by its `name` (across its
+     * programmes, remembered on the device), falling back by language ([LiveTracks.select]).
      */
     fun selectAudio(track: ProgramTrack) {
-        if (isExternal) {
-            rememberExternal(externalChoice.copy(audio = track))
-        } else {
-            trackChoice = trackChoice.copy(audio = track)
-        }
+        remember(trackChoice.copy(audio = track))
         applyTracks()
     }
 
     /** The viewer picks subtitles, or none (null). */
     fun selectSubtitles(track: ProgramTrack?) {
         val subtitles = track?.let { SubtitleChoice.On(it) } ?: SubtitleChoice.Off
-        if (isExternal) {
-            rememberExternal(externalChoice.copy(subtitles = subtitles))
-        } else {
-            trackChoice = trackChoice.copy(subtitles = subtitles)
-        }
+        remember(trackChoice.copy(subtitles = subtitles))
         applyTracks()
     }
 
-    private fun rememberExternal(choice: LiveTrackChoice) {
-        externalChoice = choice.forMemory()
-        trackMemory.put(state.channelId, externalChoice)
+    private fun remember(choice: LiveTrackChoice) {
+        trackChoice = choice.forMemory()
+        trackMemory.put(state.channelId, trackChoice)
     }
 
     /** "Try Again" after the channel could not be shown. */
@@ -355,10 +423,10 @@ class LivePlayerViewModel(
         return name?.replaceFirstChar { it.titlecase() } ?: context.getString(app.antresol.ui.R.string.tv_track_n, index + 1)
     }
 
-    /** The external track options' selection: the remembered choice, else the profile's language. */
+    /** The external track options' selection: the remembered choice, else the device's language, else the profile's. */
     private fun applyExternalTracks() {
         val program = ChannelProgram(audio = streamAudio, subtitles = streamSubtitles)
-        val selection = LiveTracks.select(program, state.prefs, externalChoice)
+        val selection = LiveTracks.select(program, state.prefs, trackChoice, systemLanguages)
         trackSelection = selection
         val groups = player.currentTracks.groups
         val builder = player.trackSelectionParameters.buildUpon()
@@ -397,7 +465,7 @@ class LivePlayerViewModel(
             applyExternalTracks()
             return
         }
-        val selection = LiveTracks.select(onAirProgram, state.prefs, trackChoice)
+        val selection = LiveTracks.select(onAirProgram, state.prefs, trackChoice, systemLanguages)
         trackSelection = selection
         val groups = player.currentTracks.groups
         val builder = player.trackSelectionParameters.buildUpon()
@@ -492,6 +560,15 @@ class LivePlayerViewModel(
 
         /** How often the media session's title is checked against the programme on air. */
         const val METADATA_TICK_MS = 10_000L
+
+        /** How often the distance to the live edge is read. */
+        const val EDGE_TICK_MS = 500L
+
+        /** The device's languages (the system locale list), as BCP 47 tags. */
+        fun deviceLanguages(): List<String> {
+            val list = android.os.LocaleList.getDefault()
+            return (0 until list.size()).map { list[it].toLanguageTag() }
+        }
     }
 
     override fun onCleared() {

@@ -113,6 +113,9 @@ import app.antresol.ui.theme.AntresolShapes
 import kotlinx.coroutines.delay
 
 private const val BANNER_HIDE_MS = 5_000L
+
+/** The centre play/pause after a play/pause key: shown this long (it stays while paused). */
+private const val CENTER_HIDE_MS = app.antresol.core.channels.LiveEdge.CONTROLS_HIDE_MS
 private const val ACTIONS_HIDE_MS = 8_000L
 private const val PANEL_HIDE_MS = 15_000L
 
@@ -126,7 +129,7 @@ private enum class Banner { Hidden, Zap, Actions }
 private enum class Panel { None, Channels, Audio, Subtitles }
 
 /** A button of the banner. */
-private enum class LiveAction { Favorite, Audio, Subtitles, Channels }
+private enum class LiveAction { PlayPause, GoLive, Favorite, Audio, Subtitles, Channels }
 
 /**
  * A channel live, full screen (Android TV Live Channels / TiviMate). Up/Down (and Channel+/−, Page
@@ -136,7 +139,12 @@ private enum class LiveAction { Favorite, Audio, Subtitles, Channels }
  * switch and fades after 5 s. OK opens the channel list on the left at the channel on (TiviMate;
  * Left too). Right or Menu shows the banner's buttons (favourite, audio, subtitles, channel list;
  * Left/Right pick, OK runs). Back closes a panel, then the bar, then leaves. The screen handles the
- * remote itself (no focus moves between overlays). Live: no seeking, no pause, nothing remembered.
+ * remote itself (no focus moves between overlays). Live may be paused: the remote's play/pause key
+ * (or the banner's first button) pauses and resumes, and OK resumes a paused channel; the centre
+ * play/pause shows on the picture for a few seconds after the key and stays while paused. A resume
+ * continues from the stopped picture while the stream holds it, else at the live edge; more than
+ * 10 s behind the edge «В эфир» replaces «Прямой эфир» in the banner and its button (or ⏩) jumps
+ * back. No seeking otherwise, nothing sent to the server.
  */
 @Composable
 fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
@@ -159,6 +167,8 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
     LaunchedEffect(Unit) { rootFocus.tryRequestFocus() }
 
     val actions = buildList {
+        add(LiveAction.PlayPause)
+        if (viewModel.behindLive) add(LiveAction.GoLive)
         add(LiveAction.Favorite)
         if (viewModel.audioOptions.isNotEmpty()) add(LiveAction.Audio)
         if (viewModel.subtitleOptions.isNotEmpty()) add(LiveAction.Subtitles)
@@ -180,6 +190,25 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             delay(PANEL_HIDE_MS)
             panel = Panel.None
         }
+    }
+    // The centre play/pause: a few seconds after the key, always while paused.
+    var centerFlash by remember { mutableIntStateOf(0) }
+    var centerUp by remember { mutableStateOf(false) }
+    LaunchedEffect(centerFlash) {
+        if (centerFlash > 0) {
+            centerUp = true
+            delay(CENTER_HIDE_MS)
+            centerUp = false
+        }
+    }
+    fun togglePause() {
+        viewModel.togglePause()
+        centerFlash++
+        if (banner == Banner.Hidden) banner = Banner.Zap
+    }
+    fun goLive() {
+        viewModel.goLive()
+        if (banner == Banner.Hidden) banner = Banner.Zap
     }
     BackHandler(enabled = panel != Panel.None) { panel = Panel.None }
     BackHandler(enabled = panel == Panel.None && banner != Banner.Hidden && viewModel.isPlaying) { banner = Banner.Hidden }
@@ -204,6 +233,11 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
 
     fun runAction(action: LiveAction) {
         when (action) {
+            LiveAction.PlayPause -> togglePause()
+            LiveAction.GoLive -> {
+                goLive()
+                actionIndex = 0
+            }
             LiveAction.Favorite -> viewModel.toggleFavorite()
             LiveAction.Audio -> openPanel(Panel.Audio)
             LiveAction.Subtitles -> openPanel(Panel.Subtitles)
@@ -245,6 +279,13 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             if (down) zap(channelStep)
             return@handler true
         }
+        // The remote's play/pause keys, and ⏩ back to the live edge, wherever the focus is.
+        when (event.key) {
+            Key.MediaPlayPause -> { if (down) togglePause(); return@handler true }
+            Key.MediaPlay -> { if (down && viewModel.paused) togglePause(); return@handler true }
+            Key.MediaPause -> { if (down && !viewModel.paused) togglePause(); return@handler true }
+            Key.MediaFastForward, Key.MediaSkipForward -> { if (down && viewModel.behindLive) goLive(); return@handler true }
+        }
         if (panel != Panel.None) {
             when (event.key) {
                 Key.DirectionUp -> if (down) panelIndex = (panelIndex - 1).coerceAtLeast(0)
@@ -283,9 +324,14 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
                 banner = Banner.Actions
                 actionIndex = 0
             }
-            // OK, as in TiviMate: the channel list; with the buttons up, the selected button.
+            // OK, as in TiviMate: the channel list; with the buttons up, the selected button; on a paused
+            // channel it plays again (the centre button is what OK presses then).
             in CenterKeys -> if (up) {
-                if (banner == Banner.Actions) actions.getOrNull(actionIndex)?.let(::runAction) else openPanel(Panel.Channels)
+                when {
+                    banner == Banner.Actions -> actions.getOrNull(actionIndex)?.let(::runAction)
+                    viewModel.paused -> togglePause()
+                    else -> openPanel(Panel.Channels)
+                }
             }
             else -> if (down && banner == Banner.Hidden) banner = Banner.Zap
         }
@@ -338,9 +384,18 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         ) {
             ChannelListPanel(guide = guide, title = filterTitle(state.filter), currentId = state.channelId, selected = panelIndex)
         }
+        val ready = stream is LiveStream.Ready && !viewModel.awaitingPicture
+        AnimatedVisibility(
+            visible = panel == Panel.None && app.antresol.core.channels.LiveEdge.centerShown(controls = centerUp, paused = viewModel.paused, ready = ready),
+            enter = fadeIn(tween(AntresolMotion.MEDIUM_MS)),
+            exit = fadeOut(tween(AntresolMotion.MEDIUM_MS)),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            CenterPlayPause(paused = viewModel.paused)
+        }
         when (stream) {
             is LiveStream.Starting -> StartingView(showText = !viewModel.hasPicture || stream.attempt > 0)
-            is LiveStream.Ready -> if (viewModel.awaitingPicture || viewModel.isBuffering) Spinner()
+            is LiveStream.Ready -> if (viewModel.awaitingPicture || (viewModel.isBuffering && !viewModel.paused)) Spinner()
             is LiveStream.Failed -> FailedView(stream.message, stream.external)
         }
         if (panel == Panel.Audio || panel == Panel.Subtitles) {
@@ -405,7 +460,7 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                 modifier = Modifier.width(148.dp).aspectRatio(AntresolMotion.BACKDROP_ASPECT),
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                LiveBadge()
+                if (viewModel.behindLive) GoLivePill() else LiveBadge()
                 Text(
                     onAir?.title ?: stringResource(R.string.tv_nothing),
                     style = Antresol.typography.pageTitle,
@@ -451,6 +506,8 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                 actions.forEachIndexed { index, action ->
                     ActionButton(
                         icon = when (action) {
+                            LiveAction.PlayPause -> if (viewModel.paused) AntresolIcons.Play else AntresolIcons.Pause
+                            LiveAction.GoLive -> AntresolIcons.Tv
                             LiveAction.Favorite -> if (channel.favorite) AntresolIcons.StarFilled else AntresolIcons.Star
                             LiveAction.Audio -> AntresolIcons.Audio
                             LiveAction.Subtitles -> AntresolIcons.Subtitles
@@ -462,6 +519,8 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                 actions.getOrNull(selected)?.let { action ->
                     Text(
                         when (action) {
+                            LiveAction.PlayPause -> stringResource(if (viewModel.paused) R.string.action_play else R.string.player_pause)
+                            LiveAction.GoLive -> stringResource(R.string.tv_go_live)
                             LiveAction.Favorite -> stringResource(if (channel.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add)
                             LiveAction.Audio -> stringResource(R.string.detail_audio) + (viewModel.trackSelection.audio?.let { " · " + it.label.ifBlank { it.name } } ?: "")
                             LiveAction.Subtitles -> stringResource(R.string.detail_subtitles) + " · " +
@@ -476,6 +535,40 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                 }
             }
         }
+    }
+}
+
+/** The centre play/pause on the picture (the film player's white circle); a sign of the key, not a focus target. */
+@Composable
+private fun CenterPlayPause(paused: Boolean) {
+    Box(
+        Modifier
+            .size(96.dp)
+            .background(AntresolColors.Label, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (paused) AntresolIcons.Play else AntresolIcons.Pause,
+            contentDescription = stringResource(if (paused) R.string.action_play else R.string.player_pause),
+            tint = AntresolColors.LabelInverse,
+            modifier = Modifier.size(42.dp),
+        )
+    }
+}
+
+/** «В эфир» in the place of «Прямой эфир», more than 10 s behind the edge: a glass capsule with ⏩. */
+@Composable
+private fun GoLivePill() {
+    Row(
+        Modifier
+            .background(AntresolColors.Glass, CircleShape)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(AntresolIcons.Tv, contentDescription = null, tint = AntresolColors.Label, modifier = Modifier.size(16.dp))
+        Text(stringResource(R.string.tv_go_live), style = Antresol.typography.eyebrow, color = AntresolColors.Label, maxLines = 1)
+        Text("⏩", style = Antresol.typography.eyebrow, color = AntresolColors.LabelSecondary, maxLines = 1)
     }
 }
 

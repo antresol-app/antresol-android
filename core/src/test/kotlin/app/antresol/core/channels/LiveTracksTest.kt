@@ -35,16 +35,24 @@ class LiveTracksTest {
     private val frenchFilm = ChannelProgram(id = "1-4", audio = listOf(audio(0, "Оригинал (Français)", "fr")), subtitles = listOf(subFr))
 
     @Test
-    fun audioIsTheFirstPreferredLanguageThatTheProgrammeHas() {
+    fun audioIsTheDevicesLanguageThenTheProfilesThenTheOriginal() {
         assertEquals(original, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("eng", "ru"))))
         assertEquals(dub, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("ru"))))
         assertEquals(french, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("fr-FR"))))
         assertEquals(dub, LiveTracks.defaultAudio(dubOnly, PlaybackPrefs(audioLangs = listOf("en"))))
-        assertEquals(dub, LiveTracks.defaultAudio(big, null))
-        // Russian first even when it is not listed first.
-        assertEquals(kubik, LiveTracks.defaultAudio(ChannelProgram(audio = listOf(french, kubik)), PlaybackPrefs(audioLangs = listOf("de"))))
+        // The device's language before the profile's; one the programme lacks falls through.
+        assertEquals(french, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("ru")), system = listOf("fr-FR", "en-US")))
+        assertEquals(original, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("ru")), system = listOf("en-GB")))
+        assertEquals(dub, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("ru")), system = listOf("ja-JP")))
+        // Neither: the original (named so), else the first track.
+        assertEquals(original, LiveTracks.defaultAudio(big, null))
+        assertEquals(original, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("de"))))
+        assertEquals(french, LiveTracks.defaultAudio(ChannelProgram(audio = listOf(french, kubik)), PlaybackPrefs(audioLangs = listOf("de"))))
         assertEquals(french, LiveTracks.defaultAudio(ChannelProgram(audio = listOf(french, commentary)), null))
         assertNull(LiveTracks.defaultAudio(ChannelProgram(), null))
+        // The viewer's choice on the channel beats them all.
+        assertEquals(lostfilm, LiveTracks.select(big, PlaybackPrefs(audioLangs = listOf("en")), LiveTrackChoice(audio = lostfilm), system = listOf("en")).audio)
+        assertEquals(original, LiveTracks.select(big, PlaybackPrefs(audioLangs = listOf("ru")), LiveTrackChoice(), system = listOf("en")).audio)
     }
 
     @Test

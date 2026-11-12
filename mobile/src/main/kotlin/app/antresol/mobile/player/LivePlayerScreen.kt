@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import app.antresol.core.channels.Channels
+import app.antresol.core.channels.LiveEdge
 import app.antresol.core.channels.LiveStream
 import app.antresol.core.channels.LiveTvState
 import app.antresol.core.channels.MiniGuide
@@ -98,7 +99,7 @@ import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 import kotlinx.coroutines.delay
 
-private const val CONTROLS_HIDE_MS = 5_000L
+private const val CONTROLS_HIDE_MS = LiveEdge.CONTROLS_HIDE_MS
 private const val GUIDE_HIDE_MS = 8_000L
 
 /** A vertical swipe at least this long switches the channel. */
@@ -143,8 +144,11 @@ private enum class TrackMenu { Audio, Subtitles }
  * another tap hides them. A vertical swipe switches channels inside the list the player was opened
  * from (up for the next number); the info bar slides in, and the previous channel's last frame
  * holds, dimmed, until the new one draws. Audio and subtitles are the stream's renditions, picked
- * per programme; the choice sticks across programmes and switches. In picture-in-picture only the
- * picture shows. It is live: no seek bar, no pause, nothing remembered.
+ * per programme; the choice sticks on the channel. In picture-in-picture only the picture shows.
+ * It is live: no seek bar and nothing sent to the server, but it may be paused — the centre
+ * play/pause comes with the controls (and stays while paused); a resume continues from the stopped
+ * picture while the stream holds it, else at the live edge; more than 10 s behind the edge «В эфир»
+ * replaces «Прямой эфир» in the info bar and jumps back ([LiveEdge]).
  */
 @Composable
 fun LivePlayerScreen(
@@ -249,13 +253,22 @@ fun LivePlayerScreen(
                 }
             }
         }
+        val ready = stream is LiveStream.Ready && !viewModel.awaitingPicture
+        AnimatedVisibility(
+            visible = overlays && overlay != Overlay.Guide && LiveEdge.centerShown(controls = controls, paused = viewModel.paused, ready = ready),
+            enter = fadeIn(tween(AntresolMotion.MEDIUM_MS)),
+            exit = fadeOut(tween(AntresolMotion.MEDIUM_MS)),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            LivePlayPause(paused = viewModel.paused, onClick = { viewModel.togglePause(); touches++ })
+        }
         AnimatedVisibility(
             visible = infoShown,
             enter = slideInVertically(tween(AntresolMotion.MEDIUM_MS)) { it / 3 } + fadeIn(tween(AntresolMotion.MEDIUM_MS)),
             exit = slideOutVertically(tween(AntresolMotion.MEDIUM_MS)) { it / 4 } + fadeOut(tween(AntresolMotion.MEDIUM_MS)),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            InfoBar(state)
+            InfoBar(state, behindLive = viewModel.behindLive, onGoLive = { viewModel.goLive(); touches++ })
         }
         AnimatedVisibility(
             visible = overlays && overlay == Overlay.Guide,
@@ -285,7 +298,7 @@ fun LivePlayerScreen(
                     Text(stringResource(R.string.tv_starting), style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary))
                 }
             }
-            is LiveStream.Ready -> if (viewModel.awaitingPicture || viewModel.isBuffering) {
+            is LiveStream.Ready -> if (viewModel.awaitingPicture || (viewModel.isBuffering && !viewModel.paused)) {
                 Box(Modifier.align(Alignment.Center)) { Spinner() }
             }
             is LiveStream.Failed -> if (overlays) {
@@ -294,6 +307,30 @@ fun LivePlayerScreen(
         }
     }
     menu?.let { open -> TrackSheet(open, viewModel, onDismiss = { menu = null }) }
+}
+
+/** The centre play/pause on the picture: the film player's white circle. */
+@Composable
+internal fun LivePlayPause(paused: Boolean, onClick: () -> Unit) {
+    RoundIconButton(
+        icon = if (paused) AntresolIcons.Play else AntresolIcons.Pause,
+        contentDescription = stringResource(if (paused) R.string.action_play else R.string.player_pause),
+        onClick = onClick,
+        size = 76.dp,
+        iconSize = 34.dp,
+        filled = true,
+        modifier = Modifier.testTag("live-play-pause"),
+    )
+}
+
+/** «● Прямой эфир» at the live edge; «В эфир» (a glass pill that jumps back) more than 10 s behind it. */
+@Composable
+internal fun LiveEdgeMark(behindLive: Boolean, onGoLive: () -> Unit) {
+    if (behindLive) {
+        GlassPillButton(stringResource(R.string.tv_go_live), onGoLive, icon = MobileIcons.LiveTv, modifier = Modifier.testTag("live-go-live"))
+    } else {
+        LiveBadge()
+    }
 }
 
 /** «Все каналы», «Избранное» or the theme: the list the player zaps through. */
@@ -432,7 +469,7 @@ internal fun LiveTopBar(
  * programme on air with its episode, its start and end around the live progress, and what is next.
  */
 @Composable
-internal fun InfoBar(state: LiveTvState) {
+internal fun InfoBar(state: LiveTvState, behindLive: Boolean = false, onGoLive: () -> Unit = {}) {
     val context = LocalContext.current
     val urls = app.antresol.mobile.ui.LocalMediaUrls.current
     val nowMs = rememberNowMs(1_000L)
@@ -457,7 +494,7 @@ internal fun InfoBar(state: LiveTvState) {
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (channel.favorite) Icon(AntresolIcons.StarFilled, null, tint = AntresolColors.Orange, modifier = Modifier.size(14.dp))
-                LiveBadge()
+                LiveEdgeMark(behindLive, onGoLive)
             }
         }
         Text(

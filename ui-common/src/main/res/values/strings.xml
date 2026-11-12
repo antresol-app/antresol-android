@@ -165,6 +165,7 @@
     <string name="tv_all_sections">All</string>
     <string name="tv_on_air">On Air Now</string>
     <string name="tv_live">Live</string>
+    <string name="tv_go_live">Go Live</string>
     <string name="tv_channel_number">%1$d · %2$s</string>
     <string name="tv_nothing">Nothing on now</string>
     <string name="tv_next">Next: %1$s</string>
@@ -202,7 +203,6 @@
     <string name="tv_favorites_empty">No favourite channels yet</string>
     <string name="tv_favorites_empty_hint">Touch and hold a channel, or hold OK on it, to add it to Favourites.</string>
     <string name="tv_last_channel">Last channel</string>
-    <string name="tv_back_to_last">Back to %1$d · %2$s</string>
     <string name="tv_watch_now">Watch</string>
     <string name="tv_now">Now</string>
     <string name="tv_tomorrow">Tomorrow</string>

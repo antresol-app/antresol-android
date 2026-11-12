@@ -181,7 +181,17 @@ fun LivePlayerScreen(
         }
     }
     val holding = viewModel.awaitingPicture && viewModel.hasPicture
-    val scrim by animateFloatAsState(if (holding) 0.45f else 0f, tween(AntresolMotion.MEDIUM_MS), label = "held-frame")
+    // A channel that could not be opened never shows the previous channel's frame behind its message.
+    val failedHere = viewModel.awaitingPicture && viewModel.state.stream is LiveStream.Failed
+    val scrim by animateFloatAsState(
+        when {
+            failedHere -> 1f
+            holding -> 0.45f
+            else -> 0f
+        },
+        tween(AntresolMotion.MEDIUM_MS),
+        label = "held-frame",
+    )
     val overlays = !inPictureInPicture
     val controls = overlays && overlay == Overlay.Controls
     val infoShown = overlays && (overlay == Overlay.Banner || overlay == Overlay.Controls || (!viewModel.isPlaying && overlay != Overlay.Guide))

@@ -26,9 +26,9 @@ class ExternalTracksTest {
             ),
             ::name,
         )
-        assertEquals(listOf("English", "English (CC)", "Français", "de", "Track 5"), options.map { it.label })
-        assertEquals(listOf("g0", "g1", "g2", "g3", "g4"), options.map { it.slot })
-        assertEquals(1, ExternalTracks.group(options[1]))
+        assertEquals(listOf("English", "Français", "de", "Track 5", "English (CC)"), options.map { it.label })
+        assertEquals(listOf("g0", "g2", "g3", "g4", "g1"), options.map { it.slot })
+        assertEquals(1, ExternalTracks.group(options.last()))
         val audio = ExternalTracks.options(listOf(StreamTrack(0, "English", "en", 2), StreamTrack(1, "English", "en", 6), StreamTrack(2, "English", "en", 2)), ::name)
         assertEquals(listOf("English", "English 5.1", "English 2"), audio.map { it.name })
     }

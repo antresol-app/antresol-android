@@ -20,7 +20,8 @@ data class StreamTrack(
  * channels have no guide entry listing their renditions, so the options come from the stream's
  * track groups, labelled with the stream's own names; two groups with the same name get a
  * distinguishing suffix (closed captions «(CC)», surround «5.1», else a number), so every option
- * is unique by [ProgramTrack.name]. [ProgramTrack.slot] keeps the group index for the override.
+ * is unique by [ProgramTrack.name]; closed captions come after the subtitles. [ProgramTrack.slot]
+ * keeps the group index for the override.
  */
 object ExternalTracks {
     fun options(tracks: List<StreamTrack>, fallbackName: (index: Int, language: String?) -> String): List<ProgramTrack> {
@@ -33,7 +34,7 @@ object ExternalTracks {
             var name = base[index]
             if ((counts[name] ?: 0) > 1) {
                 name = when {
-                    track.mimeType?.contains("cea-608") == true || track.mimeType?.contains("cea-708") == true -> "$name (CC)"
+                    isCaption(track) -> "$name (CC)"
                     track.channels > 2 -> "$name ${surround(track.channels)}"
                     else -> name
                 }
@@ -41,9 +42,12 @@ object ExternalTracks {
             var unique = name
             var n = 2
             while (!used.add(unique)) unique = "$name ${n++}"
-            ProgramTrack(slot = "g${track.group}", name = unique, label = unique, lang = track.language.orEmpty())
-        }
+            ProgramTrack(slot = "g${track.group}", name = unique, label = unique, lang = track.language.orEmpty()) to isCaption(track)
+        }.sortedBy { it.second }.map { it.first } // Closed captions after the real subtitles.
     }
+
+    private fun isCaption(track: StreamTrack): Boolean =
+        track.mimeType?.contains("cea-608") == true || track.mimeType?.contains("cea-708") == true
 
     /** The group index of an option made by [options]. */
     fun group(track: ProgramTrack): Int? = track.slot.removePrefix("g").takeIf { track.slot.startsWith("g") }?.toIntOrNull()

@@ -49,8 +49,11 @@ import app.antresol.ui.theme.AntresolShapes
 /** Width of the programme still in a channel row. */
 private val RowStillWidth = 112.dp
 
-/** Width of the number column: three tabular digits. */
-private val NumberWidth = 30.dp
+/**
+ * Width of the number column: three tabular digits of the bold 20 sp number (external channels are
+ * numbered from 100); a four-digit number is drawn smaller to fit.
+ */
+private val NumberWidth = 40.dp
 
 /**
  * One channel of the list, like a television's channel list (Android TV Live Channels, TiviMate):
@@ -154,12 +157,16 @@ fun ChannelRow(
 fun ChannelNumber(number: Int, modifier: Modifier = Modifier, highlighted: Boolean = false) {
     Text(
         number.toString(),
-        style = Antresol.typography.sectionTitle.copy(
-            color = if (highlighted) AntresolColors.Accent else AntresolColors.LabelSecondary,
-            fontFeatureSettings = "tnum",
-        ),
+        style = Antresol.typography.sectionTitle.let { base ->
+            base.copy(
+                color = if (highlighted) AntresolColors.Accent else AntresolColors.LabelSecondary,
+                fontFeatureSettings = "tnum",
+                fontSize = if (number >= 1000) base.fontSize * 0.78f else base.fontSize,
+            )
+        },
         textAlign = TextAlign.End,
         maxLines = 1,
+        softWrap = false,
         modifier = modifier,
     )
 }

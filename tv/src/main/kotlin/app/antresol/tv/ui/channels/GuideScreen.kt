@@ -373,7 +373,10 @@ private fun ChannelCell(row: ChannelEpgRow, reserveLogo: Boolean, last: Boolean,
                 focused -> AntresolColors.Label
                 else -> AntresolColors.LabelSecondary
             },
-            modifier = Modifier.width(26.dp),
+            maxLines = 1,
+            softWrap = false,
+            // Three digits: external channels are numbered from 100.
+            modifier = Modifier.width(34.dp),
         )
         ChannelLogo(urls?.image(row.logoUrl), height = 22.dp, reserve = reserveLogo)
         Text(

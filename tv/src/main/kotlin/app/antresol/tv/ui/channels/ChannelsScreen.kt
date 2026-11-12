@@ -400,7 +400,10 @@ private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, nowMs: Long, la
                     else -> AntresolColors.LabelSecondary
                 },
                 textAlign = TextAlign.End,
-                modifier = Modifier.width(30.dp),
+                maxLines = 1,
+                softWrap = false,
+                // Three digits: external channels are numbered from 100.
+                modifier = Modifier.width(40.dp),
             )
             ProgrammeStill(
                 url = urls?.image(programmeArt(program)),

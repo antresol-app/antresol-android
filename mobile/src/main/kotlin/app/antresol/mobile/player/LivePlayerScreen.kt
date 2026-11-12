@@ -523,42 +523,59 @@ private fun ChannelStrip(guide: MiniGuide, title: String, currentId: Long, onScr
     }
 }
 
+/** One choice of the track sheet: what it reads, whether it is ticked, what it does. */
+internal data class TrackOption(val label: String, val selected: Boolean, val onSelect: () -> Unit)
+
 /**
- * «Звук» / «Субтитры» for the programme on air: the renditions the server names for it
- * («Русский — LostFilm», «English», «Оригинал (fr)»); the choice sticks for this player only.
+ * «Звук» / «Субтитры» for the programme on air: the renditions the server names for it (up to 8
+ * audio and 6 subtitles, «Русский — LostFilm», «Оригинал (English)»…), ticked by `name`; the
+ * choice sticks for this player only.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrackSheet(menu: TrackMenu, viewModel: LivePlayerViewModel, onDismiss: () -> Unit) {
     val selection = viewModel.trackSelection
-    val options: List<Triple<String, Boolean, () -> Unit>> = when (menu) {
+    val options: List<TrackOption> = when (menu) {
         TrackMenu.Audio -> viewModel.audioOptions.map { track ->
-            Triple(track.label.ifBlank { track.name }, track.name == selection.audio?.name) { viewModel.selectAudio(track) }
+            TrackOption(track.label.ifBlank { track.name }, track.name == selection.audio?.name) { viewModel.selectAudio(track) }
         }
         TrackMenu.Subtitles -> listOf(
-            Triple(stringResource(R.string.detail_subtitles_off), selection.subtitles == null) { viewModel.selectSubtitles(null) },
+            TrackOption(stringResource(R.string.detail_subtitles_off), selection.subtitles == null) { viewModel.selectSubtitles(null) },
         ) + viewModel.subtitleOptions.map { track: ProgramTrack ->
-            Triple(track.label.ifBlank { track.name }, track.name == selection.subtitles?.name) { viewModel.selectSubtitles(track) }
+            TrackOption(track.label.ifBlank { track.name }, track.name == selection.subtitles?.name) { viewModel.selectSubtitles(track) }
         }
     }
+    LiveTrackSheet(
+        title = stringResource(if (menu == TrackMenu.Audio) R.string.detail_audio else R.string.detail_subtitles),
+        options = options,
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * The track sheet: a title and the choices, however many; the list scrolls inside the sheet (a
+ * phone in landscape is 360 dp high), and a long name ends in «…» rather than widening the sheet.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun LiveTrackSheet(title: String, options: List<TrackOption>, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = AntresolColors.BackgroundElevated,
         shape = AntresolShapes.sheet,
     ) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp).testTag("live-track-list")) {
             Text(
-                stringResource(if (menu == TrackMenu.Audio) R.string.detail_audio else R.string.detail_subtitles),
+                title,
                 style = Antresol.typography.sectionTitle,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
-            options.forEach { (label, selected, onSelect) ->
+            options.forEach { option ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            onSelect()
+                            option.onSelect()
                             onDismiss()
                         }
                         .padding(horizontal = 20.dp, vertical = 14.dp)
@@ -567,9 +584,9 @@ private fun TrackSheet(menu: TrackMenu, viewModel: LivePlayerViewModel, onDismis
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Box(Modifier.size(22.dp)) {
-                        if (selected) Icon(AntresolIcons.Check, contentDescription = null, tint = AntresolColors.Accent)
+                        if (option.selected) Icon(AntresolIcons.Check, contentDescription = null, tint = AntresolColors.Accent)
                     }
-                    Text(label, style = Antresol.typography.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(option.label, style = Antresol.typography.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }

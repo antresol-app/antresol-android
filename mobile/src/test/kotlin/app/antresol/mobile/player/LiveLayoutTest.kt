@@ -13,6 +13,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -67,9 +69,15 @@ class LiveLayoutTest {
         }
     }
 
+    /** The screen in pixels (a sheet is its own window, so there may be two roots). */
+    private fun screen(): Rect {
+        val metrics = compose.activity.resources.displayMetrics
+        return Rect(0f, 0f, metrics.widthPixels.toFloat(), metrics.heightPixels.toFloat())
+    }
+
     /** Every laid-out node lies inside the screen horizontally. */
     private fun assertNothingOverflows() {
-        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val root = screen()
         val nodes = compose.onAllNodes(SemanticsMatcher("any") { true }, useUnmergedTree = true).fetchSemanticsNodes()
             .filter { it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Text) || it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription) || it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.TestTag) }
         nodes.forEach { node ->
@@ -136,6 +144,57 @@ class LiveLayoutTest {
         compose.onAllNodesWithText("до ", substring = true).assertCountEquals(0)
         assertNothingOverflows()
         capture("robolectric-list-row-360dp")
+    }
+
+    /** Round 5: eight audio renditions with long names, the case of «Много голосов». */
+    private val eightVoices = listOf(
+        "Русский — Дубляж", "Русский — LostFilm", "Русский — Кубик в Кубе", "Русский — Кураж-Бамбей",
+        "Русский — LostFilm (очищено)", "Оригинал (English)", "Français", "English — Commentary by the director and the whole cast",
+    )
+
+    private fun trackSheet() = show {
+        LiveTrackSheet("Audio", eightVoices.mapIndexed { i, name -> TrackOption(name, i == 1) {} }, onDismiss = {})
+    }
+
+    /** Every choice can be scrolled to and then lies inside the screen, both ways. */
+    private fun assertEveryChoiceReachable() {
+        val root = screen()
+        eightVoices.forEach { name ->
+            compose.onNodeWithTag("live-track-list").performScrollToNode(androidx.compose.ui.test.hasText(name))
+            compose.waitForIdle()
+            val b = compose.onNodeWithText(name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue("$name at $b is off the screen $root", b.top >= root.top - 0.5f && b.bottom <= root.bottom + 0.5f && b.left >= root.left && b.right <= root.right + 0.5f)
+        }
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w640dp-h360dp-land")
+    fun eightAudioRenditionsScrollInTheSheetOnASmallLandscapePhone() {
+        trackSheet()
+        compose.waitForIdle()
+        assertEveryChoiceReachable()
+        assertNothingOverflows()
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w360dp-h640dp-port")
+    fun eightAudioRenditionsFitA360dpPortraitScreen() {
+        trackSheet()
+        compose.waitForIdle()
+        assertEveryChoiceReachable()
+        assertNothingOverflows()
+        capture("robolectric-track-sheet-360dp")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w360dp-h640dp-port")
+    fun aListRowWithALogoStillFits360dp() {
+        val withLogo = channel.copy(logoUrl = "/api/channels/3/logo.png?v=1")
+        show {
+            Column { ChannelRow(withLogo, now, onClick = {}, onToggleFavorite = {}) }
+        }
+        compose.onAllNodesWithText(channel.name).assertCountEquals(1)
+        assertNothingOverflows()
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountEquals(n: Int) =

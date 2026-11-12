@@ -196,10 +196,13 @@ private fun Timeline(row: ChannelEpgRow, fromMs: Long, toMs: Long, nowMs: Long, 
         programs.forEach { program ->
             val start = (Channels.epochMs(program.start) ?: return@forEach).coerceAtLeast(fromMs)
             val end = (Channels.epochMs(program.end) ?: return@forEach).coerceAtMost(toMs)
+            val inset = stickyInset(start, end, leftMs)
             GuideBlock(
                 program = program,
                 nowMs = nowMs,
-                textInset = stickyInset(start, end, leftMs),
+                textInset = inset,
+                // A sliver at the visible edge shows no text rather than «…» over a clipped time.
+                showText = (end - start).minutesToDp() - inset >= MinTextWidth,
                 onClick = { onPick(program) },
                 modifier = Modifier
                     .offset(x = (start - fromMs).minutesToDp())
@@ -221,7 +224,7 @@ private fun Timeline(row: ChannelEpgRow, fromMs: Long, toMs: Long, nowMs: Long, 
 }
 
 @Composable
-private fun GuideBlock(program: ChannelProgram, nowMs: Long, textInset: Dp, onClick: () -> Unit, modifier: Modifier) {
+private fun GuideBlock(program: ChannelProgram, nowMs: Long, textInset: Dp, showText: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val context = LocalContext.current
     val start = Channels.epochMs(program.start) ?: 0L
     val end = Channels.epochMs(program.end) ?: 0L
@@ -243,7 +246,7 @@ private fun GuideBlock(program: ChannelProgram, nowMs: Long, textInset: Dp, onCl
             .semantics { contentDescription = description }
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
-        Column(Modifier.padding(start = textInset), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (showText) Column(Modifier.padding(start = textInset), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 program.title,
                 style = (if (onAir) Antresol.typography.bodyEmphasis else Antresol.typography.body).copy(color = text, fontSize = Antresol.typography.caption.fontSize),
@@ -262,11 +265,12 @@ private fun GuideBlock(program: ChannelProgram, nowMs: Long, textInset: Dp, onCl
 
 
 /**
- * How far a block's title moves right so it stays readable at the visible left edge when the
- * programme began off-screen (it never runs past the block's last 64 dp).
+ * How far a block's title moves right so it stays at the visible left edge when the programme
+ * began off-screen; the same inset in every row (a short remainder shortens the title instead).
  */
+/** Narrowest visible part of a block that still gets its title and time. */
+private val MinTextWidth = 48.dp
+
 @Composable
-private fun stickyInset(startMs: Long, endMs: Long, leftMs: Long): Dp {
-    val minLabelMs = (64.dp / LocalMinuteWidth.current * 60_000f).toLong()
-    return Epg.stickyLabelOffsetMs(startMs, endMs, leftMs, minLabelMs).minutesToDp()
-}
+private fun stickyInset(startMs: Long, endMs: Long, leftMs: Long): Dp =
+    Epg.stickyLabelOffsetMs(startMs, endMs, leftMs).minutesToDp()

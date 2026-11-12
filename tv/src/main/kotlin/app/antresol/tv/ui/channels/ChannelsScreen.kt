@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -31,16 +32,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -55,7 +57,6 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.core.channels.ChannelFilter
-import kotlinx.coroutines.launch
 import app.antresol.core.channels.Channels
 import app.antresol.core.model.Channel
 import app.antresol.tv.ui.LocalMediaUrls
@@ -68,16 +69,17 @@ import app.antresol.tv.ui.components.listRowColors
 import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.ui.R
 import app.antresol.ui.channels.ChannelsView
-import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.ProgrammeStill
 import app.antresol.ui.channels.programClock
 import app.antresol.ui.channels.programmeArt
 import app.antresol.ui.channels.rememberNowMs
+import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
+import kotlinx.coroutines.launch
 
 /** Width of the channel list; the preview of the focused channel takes the rest. */
 private val ListWidth = 430.dp
@@ -427,40 +429,57 @@ private fun ChannelPreview(channel: Channel, nowMs: Long, modifier: Modifier = M
     val context = LocalContext.current
     val program = Channels.showing(channel, nowMs)
     val next = channel.next?.takeIf { it != program }
-    Column(modifier.height(540.dp - 84.dp - HeaderHeight), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // At most 280 dp wide, so the programme's text and «Далее» fit under it on the 540 dp screen.
-        ProgrammeStill(
-            url = urls?.image(programmeArt(program)),
-            shape = AntresolShapes.card,
-            modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(AntresolMotion.BACKDROP_ASPECT),
-        )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
-            Text(
-                stringResource(R.string.tv_channel_number, channel.number, channel.name),
-                style = Antresol.typography.caption.copy(fontFeatureSettings = "tnum"),
-                maxLines = 1,
+    // The key hints are measured first and always get their full height; the programme above takes
+    // what is left (the overview shortens), so a long text never squeezes the «OK» chips.
+    Column(modifier.height(540.dp - 84.dp - HeaderHeight)) {
+        Column(Modifier.weight(1f).clipToBounds(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // At most 280 dp wide, so the programme's text and «Далее» fit under it on the 540 dp screen.
+            ProgrammeStill(
+                url = urls?.image(programmeArt(program)),
+                shape = AntresolShapes.card,
+                modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(AntresolMotion.BACKDROP_ASPECT),
             )
-            if (channel.favorite) FavoriteMark()
-        }
-        Text(program?.let(Channels::programLine) ?: stringResource(R.string.tv_nothing), style = Antresol.typography.sectionTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (program != null) {
-            ProgramTime(program, nowMs)
-            programFacts(program).takeIf { it.isNotEmpty() }?.let { Text(it, style = Antresol.typography.caption) }
-            if (program.overview.isNotBlank()) {
-                Text(program.overview, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+                Text(
+                    stringResource(R.string.tv_channel_number, channel.number, channel.name),
+                    style = Antresol.typography.caption.copy(fontFeatureSettings = "tnum"),
+                    maxLines = 1,
+                )
+                if (channel.favorite) FavoriteMark()
+            }
+            Text(program?.let(Channels::programLine) ?: stringResource(R.string.tv_nothing), style = Antresol.typography.sectionTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (program != null) {
+                ProgramTime(program, nowMs)
+                programFacts(program).takeIf { it.isNotEmpty() }?.let { Text(it, style = Antresol.typography.caption) }
+                if (program.overview.isNotBlank()) {
+                    // Takes what is left after everything else: two lines, one, or none (Compose
+                    // does not shorten text to a height, so the line count steps down instead).
+                    var lines by remember(program.id, program.overview) { mutableIntStateOf(2) }
+                    if (lines > 0) {
+                        Text(
+                            program.overview,
+                            style = Antresol.typography.body,
+                            color = AntresolColors.LabelSecondary,
+                            maxLines = lines,
+                            overflow = TextOverflow.Ellipsis,
+                            // One step per layout made with the current count (a layout can be reported twice).
+                            onTextLayout = { if (it.hasVisualOverflow && it.layoutInput.maxLines == lines && lines > 0) lines-- },
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
+                }
+            }
+            if (next != null) {
+                Text(
+                    stringResource(R.string.tv_next_short, programClock(context, next.start), Channels.programLine(next)),
+                    style = Antresol.typography.caption,
+                    color = AntresolColors.LabelTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
-        if (next != null) {
-            Text(
-                stringResource(R.string.tv_next_short, programClock(context, next.start), Channels.programLine(next)),
-                style = Antresol.typography.caption,
-                color = AntresolColors.LabelTertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(bottom = 20.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(top = 12.dp, bottom = 20.dp)) {
             KeyHint("OK", stringResource(R.string.tv_watch_now))
             KeyHint("OK ⋯", stringResource(if (channel.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add))
         }

@@ -110,14 +110,13 @@ object Epg {
     }
 
     /**
-     * How far (ms of timeline) a block's label moves right so it stays readable at the visible left
-     * edge [leftMs] when the programme began before it: pinned to the edge, but never closer than
-     * [minLabelMs] to the block's end (then it stays where it fits). 0 when the block starts in view.
+     * How far (ms of timeline) a block's label moves right so it stays at the visible left edge
+     * [leftMs] when the programme began before it. Always pinned to the edge, so every row's label
+     * has the same inset; a short remainder shortens the title («…») rather than letting it slide
+     * under the channel column. 0 when the block starts in view; at most the block's length.
      */
-    fun stickyLabelOffsetMs(startMs: Long, endMs: Long, leftMs: Long, minLabelMs: Long): Long {
+    fun stickyLabelOffsetMs(startMs: Long, endMs: Long, leftMs: Long): Long {
         if (leftMs <= startMs) return 0L
-        val room = endMs - startMs - minLabelMs
-        if (room <= 0L) return 0L
-        return minOf(leftMs - startMs, room)
+        return minOf(leftMs - startMs, (endMs - startMs).coerceAtLeast(0L))
     }
 }

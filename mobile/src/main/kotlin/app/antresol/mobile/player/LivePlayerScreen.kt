@@ -111,6 +111,27 @@ private val StripCardWidth = 168.dp
  */
 private enum class Overlay { Hidden, Banner, Controls, Guide }
 
+/**
+ * Back on the live player closes what is open over the picture first: the audio/subtitle sheet,
+ * then the channel strip; only with neither open does it leave the player.
+ */
+@Composable
+internal fun LiveBackHandler(
+    guideOpen: Boolean,
+    menuOpen: Boolean,
+    onCloseMenu: () -> Unit,
+    onCloseGuide: () -> Unit,
+    onExit: () -> Unit,
+) {
+    BackHandler {
+        when {
+            menuOpen -> onCloseMenu()
+            guideOpen -> onCloseGuide()
+            else -> onExit()
+        }
+    }
+}
+
 /** The track picker open over the player. */
 private enum class TrackMenu { Audio, Subtitles }
 
@@ -132,11 +153,17 @@ fun LivePlayerScreen(
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onBackground() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onForeground() }
-    BackHandler(onBack = onExit)
     val state = viewModel.state
     val stream = state.stream
     var overlay by remember { mutableStateOf(Overlay.Banner) }
     var menu by remember { mutableStateOf<TrackMenu?>(null) }
+    LiveBackHandler(
+        guideOpen = overlay == Overlay.Guide,
+        menuOpen = menu != null,
+        onCloseMenu = { menu = null },
+        onCloseGuide = { overlay = Overlay.Hidden },
+        onExit = onExit,
+    )
     var touches by remember { mutableIntStateOf(0) }
     LaunchedEffect(overlay, touches, viewModel.isPlaying, state.channelId, menu) {
         if (overlay != Overlay.Hidden && viewModel.isPlaying && menu == null) {
@@ -431,7 +458,8 @@ internal fun InfoBar(state: LiveTvState) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(top = 8.dp).widthIn(max = 560.dp),
+                // The line runs the bar's full width on every screen, as on the TV and the film player.
+                modifier = Modifier.padding(top = 8.dp).fillMaxWidth().testTag("live-progress"),
             ) {
                 Text(programClock(context, onAir.start), style = Antresol.typography.caption)
                 ProgressBar(fraction = Channels.progress(onAir, nowMs), modifier = Modifier.weight(1f))

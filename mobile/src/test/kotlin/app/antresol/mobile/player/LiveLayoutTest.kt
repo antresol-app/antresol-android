@@ -110,6 +110,19 @@ class LiveLayoutTest {
     }
 
     @Test
+    @Config(sdk = [35], qualifiers = "w997dp-h448dp-land")
+    fun theProgressLineSpansALargePhoneInLandscape() {
+        bars()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val line = compose.onNodeWithTag("live-progress", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val density = compose.activity.resources.displayMetrics.density
+        // The bar's 24 dp side padding is the only space left beside the line.
+        assertEquals(root.width - 48 * density, line.width, density)
+        assertNothingOverflows()
+        capture("robolectric-player-bars-997x448dp-landscape")
+    }
+
+    @Test
     @Config(sdk = [35], qualifiers = "w360dp-h640dp-port")
     fun aListRowIsNumberPictureNameProgrammeAndProgress() {
         show {

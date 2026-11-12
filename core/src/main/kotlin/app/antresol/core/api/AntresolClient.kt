@@ -53,6 +53,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -348,6 +349,24 @@ class AntresolClient(
         execute(buildRequest("GET", url.toHttpUrl(), null))
         return url
     }
+
+    /**
+     * The URL the player opens for an external channel's [url]: a provider URL as it is (the media
+     * key never goes to another host), the server's hidden-address form (`/api/channels/live/ext/…`,
+     * a 302 to the provider) made absolute and signed with the media key like other media URLs.
+     */
+    suspend fun externalStreamUrl(url: String): String {
+        val absolute = requireNotNull(urls.resolve(url)) { "Empty stream url" }
+        val parsed = absolute.toHttpUrlOrNull() ?: return absolute
+        if (!parsed.isSameOrigin(urls.baseUrl.toHttpUrl())) return absolute
+        return urls.withMediaKey(absolute, mediaKeys.get(LIVE_KEY_LIFETIME))
+    }
+
+    /**
+     * `POST /api/channels/opened`: «ТВ» opened, so the server refreshes the external sources marked
+     * «при открытии» (when their last refresh is older than an hour). Writes nothing of the profile.
+     */
+    suspend fun channelsOpened() = sendNoContent("POST", url("api/channels/opened"), null)
 
     // endregion
 

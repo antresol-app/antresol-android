@@ -4,6 +4,7 @@ import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.Channel
 import app.antresol.core.model.ChannelProgram
 import app.antresol.core.model.PlaybackPrefs
+import app.antresol.core.model.StreamSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -11,14 +12,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Every server call the live player may make; [AntresolClient.liveApi] is the real one. TV is TV:
  * the only writes are [setLast] and [setFavorite]; nothing here touches progress, «Continue
- * Watching», watched flags, track memory or scrobbles (see LiveTvNoHistoryTest).
+ * Watching», watched flags, track memory or scrobbles (see LiveTvNoHistoryTest). An external
+ * channel's video comes from its provider, not from these calls (only [externalUrl] may ask the
+ * server for a media key).
  */
 interface LiveApi {
     suspend fun channels(): List<Channel>
@@ -35,6 +40,13 @@ interface LiveApi {
 
     /** The profile's languages, for the default audio and subtitles (read only). */
     suspend fun prefs(): PlaybackPrefs
+
+    /**
+     * The URL to hand the player for an external channel's stream [url] (see
+     * [AntresolClient.externalStreamUrl]): provider URLs as they are, the server's hidden-address
+     * form signed with the media key.
+     */
+    suspend fun externalUrl(url: String): String = url
 }
 
 fun AntresolClient.liveApi(): LiveApi {
@@ -51,6 +63,8 @@ fun AntresolClient.liveApi(): LiveApi {
         override suspend fun setFavorite(channelId: Long, favorite: Boolean) = client.setChannelFavorite(channelId, favorite)
 
         override suspend fun prefs(): PlaybackPrefs = client.playbackPrefs()
+
+        override suspend fun externalUrl(url: String): String = client.externalStreamUrl(url)
     }
 }
 
@@ -59,11 +73,26 @@ sealed interface LiveStream {
     /** Opening the stream; [attempt] counts the automatic retries (0 for the first try). */
     data class Starting(val attempt: Int) : LiveStream
 
-    /** Hand [url] to the player. [generation] changes on every reopen, so the same URL is loaded again. */
-    data class Ready(val url: String, val generation: Int) : LiveStream
+    /**
+     * Hand [url] to the player. [generation] changes on every reopen, so the same URL is loaded
+     * again. An [external] channel's stream comes from its provider with the [userAgent] and
+     * [referrer] its playlist asked for; [source] is its index among the stream and its fallbacks.
+     */
+    data class Ready(
+        val url: String,
+        val generation: Int,
+        val external: Boolean = false,
+        val userAgent: String? = null,
+        val referrer: String? = null,
+        val source: Int = 0,
+    ) : LiveStream
 
-    /** The channel can't be shown: the server's [message], or null for a generic one. */
-    data class Failed(val message: String?) : LiveStream
+    /**
+     * The channel can't be shown: the server's [message], or null for a generic one. [external]:
+     * an external channel none of whose streams played («Канал сейчас не открывается»); nothing
+     * retries it by itself.
+     */
+    data class Failed(val message: String?, val external: Boolean = false) : LiveStream
 }
 
 /** What the live player shows: the channels to switch between, the current one and its guide. */
@@ -113,12 +142,19 @@ fun liveMiniGuide(state: LiveTvState, nowMs: Long): MiniGuide {
  * and reloads the channel list and the guide every [Channels.REFRESH_MS] while [start]ed. The
  * player reports back with [streamPlaying] and [streamFailed]; a failed stream is opened again, and
  * that request tells the real reason (starting, busy, screen time over).
+ *
+ * An external channel is played straight from its provider: its stream, then its fallbacks in
+ * order (skipping the ones marked unsupported on [platform]); a source that fails before playing
+ * hands over to the next one at once, a source that broke while playing is reopened once or twice.
+ * When none plays the stream is [LiveStream.Failed] with `external` and stays so until the viewer
+ * retries or switches channel — no endless retrying of a dead provider.
  */
 class LiveTvSession(
     private val api: LiveApi,
     private val scope: CoroutineScope,
     channelId: Long,
     filter: ChannelFilter = ChannelFilter.All,
+    private val platform: String = PLATFORM_ANDROID,
 ) {
     private val _state = MutableStateFlow(LiveTvState(emptyList(), channelId, emptyList(), LiveStream.Starting(0), filter))
     val state: StateFlow<LiveTvState> = _state.asStateFlow()
@@ -129,6 +165,12 @@ class LiveTvSession(
     private var guideJob: Job? = null
     private var refreshJob: Job? = null
     private var lastMarked: Long? = null
+
+    /** The external channel being played: its playable sources, the one on, and its history. */
+    private var externalSources: List<StreamSource> = emptyList()
+    private var externalIndex = 0
+    private var externalPlayed = false
+    private var externalReopens = 0
 
     /** Opens the stream and starts the periodic refresh (again after [stop]). */
     fun start() {
@@ -202,11 +244,16 @@ class LiveTvSession(
     /** The player shows pictures: later failures get the whole retry budget again. */
     fun streamPlaying() {
         failures = 0
+        if ((_state.value.stream as? LiveStream.Ready)?.external == true) externalPlayed = true
     }
 
     /** The player could not load or play the stream: open it again (the request finds out why). */
     fun streamFailed() {
-        if (_state.value.stream !is LiveStream.Ready) return
+        val stream = _state.value.stream as? LiveStream.Ready ?: return
+        if (stream.external) {
+            externalFailed()
+            return
+        }
         failures++
         // The server answers but the player keeps failing (a decoder problem): give up at some point.
         if (failures >= LiveStartPolicy.MAX_ATTEMPTS) {
@@ -222,6 +269,19 @@ class LiveTvSession(
         _state.update { it.copy(stream = LiveStream.Starting(failures)) }
         openJob = scope.launch {
             if (delayMs > 0) delay(delayMs)
+            // Whether the channel is external is in the list: wait for its first load (briefly).
+            if (_state.value.channels.isEmpty()) {
+                withTimeoutOrNull(CHANNELS_WAIT_MS) { _state.first { it.channels.isNotEmpty() } }
+            }
+            val channel = _state.value.channels.firstOrNull { it.id == channelId }
+            if (channel?.external == true) {
+                externalSources = channel.stream?.sources.orEmpty().filter(::playable)
+                externalIndex = 0
+                externalPlayed = false
+                externalReopens = 0
+                openExternal(channelId)
+                return@launch
+            }
             while (isActive) {
                 try {
                     val url = api.open(channelId)
@@ -244,6 +304,48 @@ class LiveTvSession(
                     }
                 }
             }
+        }
+    }
+
+    private fun playable(source: StreamSource): Boolean =
+        source.url.isNotBlank() && source.unsupported.none { it == platform || it == PLATFORM_ANDROID }
+
+    /**
+     * Hands the player the external source [externalIndex] (skipping the ones whose URL cannot be
+     * made), or gives up when there is none left.
+     */
+    private suspend fun openExternal(channelId: Long) {
+        while (externalIndex < externalSources.size) {
+            val source = externalSources[externalIndex]
+            val url = runCatchingNonCancel { api.externalUrl(source.url) }
+            if (url != null) {
+                _state.update {
+                    if (it.channelId != channelId) it
+                    else it.copy(stream = LiveStream.Ready(url, ++generation, true, source.userAgent, source.referrer, externalIndex))
+                }
+                markLast(channelId)
+                return
+            }
+            externalIndex++
+        }
+        _state.update { if (it.channelId != channelId) it else it.copy(stream = LiveStream.Failed(null, external = true)) }
+    }
+
+    /**
+     * The player could not play the external source on: a source that played is reopened (a blip
+     * of the provider, at most [MAX_EXTERNAL_REOPENS] times), one that never played hands over to
+     * the next fallback at once.
+     */
+    private fun externalFailed() {
+        val channelId = _state.value.channelId
+        val reopen = externalPlayed && externalReopens < MAX_EXTERNAL_REOPENS
+        externalPlayed = false
+        if (reopen) externalReopens++ else externalIndex++
+        openJob?.cancel()
+        _state.update { it.copy(stream = LiveStream.Starting(externalIndex)) }
+        openJob = scope.launch {
+            if (reopen) delay(RETRY_AFTER_PLAYER_ERROR_MS)
+            openExternal(channelId)
         }
     }
 
@@ -288,5 +390,15 @@ class LiveTvSession(
     companion object {
         /** A stream that broke while playing is reopened after this pause. */
         const val RETRY_AFTER_PLAYER_ERROR_MS = 1_000L
+
+        /** How long opening a channel waits for the first channel list (is it external?). */
+        const val CHANNELS_WAIT_MS = 10_000L
+
+        /** An external stream that broke while playing is reopened this many times before the next fallback. */
+        const val MAX_EXTERNAL_REOPENS = 2
+
+        /** The `unsupported` platform names of the Android apps (phone; the TV adds its own). */
+        const val PLATFORM_ANDROID = "android"
+        const val PLATFORM_ANDROID_TV = "androidtv"
     }
 }

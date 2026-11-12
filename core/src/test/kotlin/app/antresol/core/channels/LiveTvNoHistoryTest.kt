@@ -35,7 +35,11 @@ class LiveTvNoHistoryTest {
          "now":{"id":"1-1","itemId":18,"kind":"movie","title":"Морской бриз","start":"2026-11-11T22:26:58Z","end":"2099-01-01T00:00:00Z",
                 "audio":[{"slot":"ru","name":"Русский","label":"Русский — LostFilm","lang":"ru"}]}},
         {"id":2,"number":2,"name":"Комедии","category":"Жанры"},
-        {"id":3,"number":3,"name":"Драмы","category":"Жанры","favorite":true}],
+        {"id":3,"number":3,"name":"Драмы","category":"Жанры","favorite":true},
+        {"id":4,"number":100,"name":"Внешний","category":"Новости","favorite":true,"external":true,
+         "stream":{"url":"/api/channels/live/ext/4/0","fallbacks":[{"url":"http://provider.example.test/b.m3u8"}],"unsupported":[]},
+         "now":{"id":"x1-1","itemId":0,"kind":"external","title":"Новости","start":"2026-11-11T22:00:00Z","end":"2099-01-01T00:00:00Z"}},
+        {"id":5,"number":101,"name":"Внешний 2","favorite":true,"external":true,"stream":{"url":"http://provider.example.test/c.m3u8"}}],
         "lastChannel":1,"canManage":false,"canCreate":false}"""
 
     @Before
@@ -87,6 +91,24 @@ class LiveTvNoHistoryTest {
             session.stop()
             session.start()
             awaitReady(session)
+            // External channels: tuned in, failed over to the fallback, favourited, zapped away from.
+            session.tune(4)
+            awaitReady(session)
+            val hidden = (session.state.value.stream as LiveStream.Ready).url
+            assertTrue(hidden, hidden.startsWith(server.url("/api/channels/live/ext/4/0").toString()) && hidden.contains("mk=k"))
+            session.streamPlaying()
+            session.streamFailed()
+            delay(LiveTvSession.RETRY_AFTER_PLAYER_ERROR_MS + 200)
+            awaitReady(session)
+            session.streamFailed()
+            awaitReady(session)
+            val fallback = (session.state.value.stream as LiveStream.Ready).url
+            // The media key never goes to the provider.
+            assertEquals("http://provider.example.test/b.m3u8", fallback)
+            session.setFavorite(4, false)
+            session.zap(1)
+            awaitReady(session)
+            assertEquals(5L, session.state.value.channelId)
             delay(300)
         } finally {
             scope.cancel()
@@ -108,7 +130,12 @@ class LiveTvNoHistoryTest {
         assertTrue(seen.none { forbidden.containsMatchIn(it) })
         // The session did write the last channel and the favourites, and nothing else.
         assertTrue(seen.contains("PUT /api/channels/last"))
-        assertEquals(setOf("PUT /api/channels/last", "PUT /api/channels/2/favorite", "DELETE /api/channels/2/favorite", "POST /api/auth/media-key"), seen.filterNot { it.startsWith("GET ") }.toSet())
+        assertEquals(
+            setOf("PUT /api/channels/last", "PUT /api/channels/2/favorite", "DELETE /api/channels/2/favorite", "DELETE /api/channels/4/favorite", "POST /api/auth/media-key"),
+            seen.filterNot { it.startsWith("GET ") }.toSet(),
+        )
+        // An external channel is never opened through the server's own live route.
+        assertTrue(seen.none { it.startsWith("GET /api/channels/live/4/") || it.startsWith("GET /api/channels/live/5/") })
     }
 
     private suspend fun awaitReady(session: LiveTvSession) = withTimeout(10_000) {

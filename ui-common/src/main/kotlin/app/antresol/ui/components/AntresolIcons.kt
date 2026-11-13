@@ -179,6 +179,30 @@ object AntresolIcons {
         close()
     }
 
+    /** A speaker with two waves: the audio languages of a badge (the web's «speaker»). */
+    val Speaker: ImageVector = ImageVector.Builder("Speaker", 24.dp, 24.dp, 24f, 24f).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(4f, 9.5f)
+            lineTo(7.2f, 9.5f)
+            lineTo(12f, 5.5f)
+            lineTo(12f, 18.5f)
+            lineTo(7.2f, 14.5f)
+            lineTo(4f, 14.5f)
+            close()
+        }
+        path(
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 1.9f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+        ) {
+            moveTo(15.5f, 9f)
+            arcTo(4.2f, 4.2f, 0f, false, true, 15.5f, 15f)
+            moveTo(18f, 6.5f)
+            arcTo(7.8f, 7.8f, 0f, false, true, 18f, 17.5f)
+        }
+    }.build()
+
     /** A screen with two caption lines: subtitles. */
     val Subtitles: ImageVector = lineIcon("Subtitles") {
         moveTo(5f, 5f)

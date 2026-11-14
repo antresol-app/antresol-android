@@ -117,4 +117,30 @@
     <string name="playlist_move_down">Move down</string>
     <string name="playlist_remove">Remove from playlist</string>
     <string name="playlist_empty">This playlist is empty. Long press a song in an album or in Songs to add it.</string>
+
+    <!-- Sign in a TV (scan its QR code) -->
+    <string name="pair_settings_row">Sign In a TV</string>
+    <string name="pair_title">Sign In a TV</string>
+    <string name="pair_scan_hint">Point the camera at the QR code on the TV.</string>
+    <string name="pair_camera_rationale">The camera is used only to read the TV’s QR code. Nothing is recorded or sent anywhere.</string>
+    <string name="pair_camera_allow">Allow Camera</string>
+    <string name="pair_camera_settings">Open Settings</string>
+    <string name="pair_camera_denied">Camera access is off. Turn it on in the app’s settings, or type the code below.</string>
+    <string name="pair_code_title">Or type the code shown on the TV</string>
+    <string name="pair_code_hint">Code, e.g. ABC 234</string>
+    <string name="pair_code_invalid">That isn’t a TV code. It has 6 letters and digits.</string>
+    <string name="pair_continue">Continue</string>
+    <string name="pair_not_a_tv_code">This QR code is not an Antresol TV sign-in.</string>
+    <string name="pair_other_server">This TV is connected to a different Antresol server. Sign in on that server on this phone first.</string>
+    <string name="pair_asks_to_sign_in">wants to sign in</string>
+    <string name="pair_remote_warning">This device is not on your home network. Approve only if you are setting it up yourself.</string>
+    <string name="pair_profile">Profile on the TV</string>
+    <string name="pair_profile_hint">The TV will be signed in to this profile. Its limits and history apply there.</string>
+    <string name="pair_approve">Approve</string>
+    <string name="pair_deny">Decline</string>
+    <string name="pair_done">Done. The TV is signing in.</string>
+    <string name="pair_declined">Declined. The TV can show a new code.</string>
+    <string name="pair_scan_again">Sign In Another TV</string>
+    <string name="pair_checking">Checking the code…</string>
+    <string name="pair_finish">Done</string>
 </resources>

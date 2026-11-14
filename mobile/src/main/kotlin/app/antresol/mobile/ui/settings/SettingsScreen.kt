@@ -121,6 +121,7 @@ fun SettingsScreen(
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
     onChangeServer: () -> Unit,
+    onPairTv: () -> Unit,
     language: UiLanguageModel,
 ) {
     LaunchedEffect(language) { language.refresh() }
@@ -174,6 +175,8 @@ fun SettingsScreen(
                 ValueRow(stringResource(R.string.settings_server_address), host)
                 Divider()
                 ValueRow(stringResource(R.string.settings_server_version), info?.health?.version?.ifBlank { null } ?: "—", tag = "settings-server-version")
+                Divider()
+                ActionRow(AntresolIcons.QrCode, stringResource(R.string.pair_settings_row), onPairTv, "settings-pair-tv")
                 Divider()
                 ActionRow(AntresolIcons.Server, stringResource(UiR.string.server_change), onChangeServer, "settings-change-server")
             }

@@ -21,8 +21,12 @@ Play package `app.antresol.mobile` (the same listing as the phone app, delivered
 Android TV track; the code namespace is `app.antresol.tv`): Compose for TV, D-pad first, English and Russian. It shows in the Leanback
 launcher (banner) and also runs on Google TV and other Android TV devices (minSdk 26).
 
-- **Onboarding**: server address (a bare host gets port 8420), profile picker with gradient avatars
-  and a password step for protected profiles. The session is restored on launch.
+- **Onboarding**: Antresol servers on the home network are found automatically (UDP probe + mDNS,
+  each confirmed with `/api/health`) and listed above the address field (a bare host gets port 8420);
+  focus lands on the first one found. Then the profile picker with gradient avatars and a password
+  step, or «Sign In with Your Phone»: a QR code and a 6-character code that a signed-in phone approves
+  (the TV gets a normal device token; the code renews itself every 5 minutes). The session is restored
+  on launch.
 - **Shell**: a centred glass pill (Search, Home, Movies, TV Shows, TV, Music, Books), the now-playing chip
   while music or an audiobook is loaded, and the avatar, which opens Settings. Down from the pills
   enters the page and returns to the element that was focused there.
@@ -68,7 +72,8 @@ Live UI tests (`TvLiveUiTest`, Robolectric with D-pad key events) write screensh
 
 `app.antresol.mobile`: Compose Material 3, dark only, edge to edge, English and Russian.
 
-- **Onboarding**: server address, then the profile picker. Profiles with a password ask for it.
+- **Onboarding**: servers found on the home network (UDP probe + mDNS) above the address field, then
+  the profile picker. Profiles with a password ask for it.
 - **Browse**: Home hero and shelves, Movies, TV Shows, Music (albums, songs, artists, playlists,
   genres, Shuffle All) and Books (books, audiobooks, manga & comics). There are detail pages for
   every kind of item, plus Search.
@@ -88,5 +93,7 @@ Live UI tests (`TvLiveUiTest`, Robolectric with D-pad key events) write screensh
   15/30 s skips and speeds from 0.75× to 3×, and their whole-book progress is synced.
 - **Readers**: comics and manga (swipe in the reading direction, pinch or double tap to zoom) and
   PDF books. Both save the page to the server. EPUB/FB2 reading is not built yet.
-- **Settings**: switch profile, sign out, server address and version, default video quality,
-  autoplay, app language (System / English / Russian) and signed-in devices.
+- **Settings**: switch profile, sign out, server address and version, «Sign In a TV» (scan the TV's QR
+  code with the camera or type its code, see the device, pick the profile as an admin, Approve or
+  Decline), default video quality, autoplay, app language (System / English / Russian) and signed-in
+  devices.

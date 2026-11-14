@@ -3,6 +3,7 @@ package app.antresol.mobile
 import android.app.Application
 import android.os.Build
 import app.antresol.core.api.ServerLanguage
+import app.antresol.core.discovery.ServerFinder
 import app.antresol.core.model.DeviceInfo
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.session.AuthState
@@ -10,6 +11,7 @@ import app.antresol.core.session.SessionManager
 import app.antresol.mobile.playback.PlaybackConnection
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.data.DataStoreSessionStore
+import app.antresol.ui.discovery.LanDiscovery
 import app.antresol.ui.image.AntresolImageLoader
 import coil.ImageLoader
 import coil.ImageLoaderFactory
@@ -20,6 +22,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.Locale
 
 /** Process-wide objects: the session (API client) and Coil's image loader with the Bearer header. */
@@ -37,6 +41,9 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
 
     /** The channel each profile watched last on this device («Continue» on the TV page). */
 
+    /** Antresol servers on the home network for the server screen (UDP probe + mDNS). Tests replace it. */
+    var serverFinder: ServerFinder = ServerFinder.None
+
     /** Music and audiobook playback (the Media3 service behind a controller). */
     lateinit var playback: PlaybackConnection
         private set
@@ -44,6 +51,7 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         settings = AppSettings(this)
+        serverFinder = LanDiscovery(this, unicastHosts = ::lastServerHost)
         session = SessionManager(
             store = DataStoreSessionStore(this),
             deviceInfo = { id ->
@@ -76,6 +84,10 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
         token = { session.client?.token },
         language = ::serverLanguage,
     )
+
+    /** Runs on the discovery thread: the last server is also probed directly (when it is a private address). */
+    private fun lastServerHost(): List<String> =
+        listOfNotNull(runBlocking { session.lastServerUrl() }?.toHttpUrlOrNull()?.host)
 
     private fun serverLanguage(): String = ServerLanguage.from(settings.effectiveLocale().toLanguageTag())
 

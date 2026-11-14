@@ -1078,3 +1078,77 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
 - Not verified on a real TV: whether Gboard for TV reports IME insets (either way the fallback moves
   the field), and the look of the floating keyboard over the moved page. The TV emulator did not run
   (not enough disk space for its data partition); screenshots are Robolectric renders.
+
+## LAN server discovery and TV sign-in by QR (phone and TV)
+
+Implements the server's client contract for LAN discovery and QR sign-in (server 1.4.0+, the server
+side of the same feature: UDP probe on port 8420, mDNS `_antresol._tcp`, `POST /api/auth/pair/*`).
+
+### `:core`
+- `discovery/`: `DiscoveryProtocol` (probe bytes, UDP answer parsing with the answer's **source address
+  first**, since inside Docker the listed `urls` are container addresses; mDNS TXT parsing, IPv4 only),
+  `Sightings.merge` (by server id; a UDP source address stays first), `UdpProbeSource` (3 probes 300 ms
+  apart to 255.255.255.255, every interface's subnet broadcast and the last server's address when it is
+  a private IPv4 literal, 2 s of answers, repeated every 10 s while collected), `ServerDiscovery` /
+  `ServerFinder` (merges sources, confirms each server with `/api/health` on its candidates in order and
+  lists only confirmed ones; `searching` for the first 4 s).
+- `pairing/`: `PairingFlow` (TV state machine: Starting → Pending(code, url, deadline) → Approved /
+  Denied; expired codes and the end of the countdown start a new code by themselves, one last poll
+  runs at the deadline so a late approval is not lost; network errors keep polling; 429 waits
+  `Retry-After`; a failing `start` is retried every 5 s). The countdown is on the device clock: the
+  server's `expiresAt` is trusted only within 6 min of now (TV clocks are often wrong), else 5 min.
+  `PairCode` / `PairLink` (QR URL `…/pair?code=&sid=`, or a bare typed code; the host is ignored),
+  `QrCodes` (ZXing core encode/decode). `AntresolClient.pairStart/pairPoll/pairLookup/pairApprove/
+  pairDeny` (`pairPoll` maps 410 to denied/expired), `SessionManager.deviceInfo()` and
+  `signInWithPairing(token, user, serverId)` (stores the token as a normal sign-in).
+- Tests: `DiscoveryTest` (parsing, merge, broadcast math, a real UDP round trip on loopback, health
+  confirmation and impostors), `PairingTest` (flow with virtual time, request shapes via MockWebServer,
+  codes/links, QR round trip, sign-in storage). `PairingIntegrationTest` runs against a real server
+  with `ANTRESOL_PAIRING_E2E=<base URL>` (+ `ANTRESOL_PAIRING_E2E_UDP`, `ANTRESOL_PAIRING_E2E_PASSWORD`):
+  unicast UDP probe → health → TV pairing flow → phone lookup/approve → TV token works for `/api/me`
+  and shows in the devices list. Passed 2026-11-14 against the server branch built locally.
+
+### `:ui-common`
+- `discovery/LanDiscovery`: the Android `ServerFinder`: UDP probe + `NsdManager` (resolves one service
+  at a time; any NSD failure only ends that source) and a Wi-Fi `MulticastLock` while collected
+  (`CHANGE_WIFI_MULTICAST_STATE`, declared here). No location permission.
+- `components/QrCodeImage` (black modules on a white rounded tile with a quiet zone, pixel-snapped),
+  icons `Phone` and `QrCode`, shared strings for the server list.
+
+### TV
+- `ServerScreen(session, finder)`: found servers above the field (glass rows, white when focused; at
+  most two rows and a peek, the rest scroll), "Looking…" then a Docker hint when none. The logo folds
+  away while servers are listed. Focus moves to the first server found **only if no key was pressed
+  yet**. Choosing one fills the field and runs the same `connect()`.
+- Profiles: «Sign In with Your Phone» next to «Change Server» opens `PhoneSignInScreen`: a 300 dp QR of
+  the contract's `url` verbatim, the code as `ABC 234`, "open host:port/pair and type the code", a
+  countdown, New Code after a decline, «Sign In with the Remote» / Back return to the picker. The flow
+  is collected with the lifecycle (it stops in the background; on return a new code replaces it).
+- The TV's device name is now the system device name (`Settings.Global.DEVICE_NAME`, e.g. «Гостиная»)
+  when set, else "Android TV (model)" as before; the approving phone shows it.
+- Tests: `LanPairingUiTest` (list states, focus on the first server, D-pad to the field, connect through
+  MockWebServer, focus not stolen after a key; QR screen countdown, **the rendered QR decodes back to
+  the URL**, renewal after 5 min, approval → signed in; decline → New Code focused → new code; Back).
+  `ServerScreenKeyboardTest` waits for the field's focus (it was racing the DataStore read).
+
+### Phone
+- `ServerScreen(session, finder)`: a grouped block of found servers above the field.
+- Settings → «Sign In a TV» (`PairTvRoute`): CameraX preview + ZXing decoding of the Y plane
+  (`QrScanner`), CAMERA asked with a rationale on the screen (Open Settings when permanently denied;
+  `camera.any` not required), a "type the code" field, then the device card (name, model, version,
+  orange warning when `remote`), the profile (admins: every profile from `/api/profiles`, others: their
+  own), Approve / Decline, Done. A QR of another server (`sid` ≠ own) is refused with a message; the
+  phone always calls its own server. The approve call sends `userId: 0` for the own profile.
+- No app link for `/pair`: the contract defines no scheme and https links per user server cannot be
+  verified; the phone camera opens the server's web page instead, which does the same.
+- Tests: `LanPairingPhoneUiTest` (server list → connect; admin approves another profile; other-server
+  QR refused; typed code; non-admin sends 0; permission rationale; invalid code; decline).
+
+### Libraries
+- `com.google.zxing:core` 3.5.3 (Apache-2.0; pure Java, no network) in `:core`.
+- `androidx.camera:camera-camera2/-lifecycle/-view` 1.4.1 (Apache-2.0) in `:mobile` only.
+
+### Not verified (needs a real TV/phone)
+- Broadcast/multicast reception on real Wi-Fi (some routers and TV boxes drop them), NsdManager on TV
+  boxes, the multicast lock's effect, real camera scanning distance/angle of the TV QR, Android 16+
+  local-network permission behaviour (not enforced for target SDK 36 yet).

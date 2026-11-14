@@ -73,11 +73,17 @@ The answers cover the phone and TV builds.
 
 - **Does your app collect or share any of the required user data types?** No.
   - The developer runs no server, analytics, crash reporting or advertising SDK. The apps contain no third-party
-    SDK that sends data (dependencies: AndroidX, Jetpack Compose, Media3/ExoPlayer, OkHttp, Coil,
-    kotlinx.serialization/coroutines).
+    SDK that sends data (dependencies: AndroidX, Jetpack Compose, Media3/ExoPlayer, CameraX, OkHttp, Coil,
+    kotlinx.serialization/coroutines, ZXing core for QR codes; no Google Play services or ML Kit).
   - All network traffic goes only to the server address the user enters (their own Antresol server on their own
     hardware). Play's definition of "collection" covers data sent off the device to the developer or third
     parties; data sent to a server the user controls is not collected by the developer.
+  - Finding servers on the home network: while the "Connect to your server" screen is open, the apps send a
+    UDP probe (`antresol-discover`) to the local broadcast address and to the last server's private address,
+    and browse mDNS (`_antresol._tcp`). This traffic stays on the local network (broadcast/multicast and
+    private addresses only; the server answers only private sources) and carries no user data.
+  - «Sign in a TV» (phone): the camera reads the TV's QR code on the device; no image is stored or sent. The
+    code is then sent to the user's own server only.
   - Stored on the device only: the server address, the device id, sign-in tokens (encrypted with an Android
     Keystore key), app settings, an image cache and downloaded PDF/subtitle cache files.
 - **Is all of the user data collected by your app encrypted in transit?** Not applicable (nothing is
@@ -89,4 +95,6 @@ The answers cover the phone and TV builds.
 - **Privacy policy URL**: https://sidun-av.github.io/antresol/privacy.html
 - Permissions to explain if asked: `INTERNET` (the user's server), `FOREGROUND_SERVICE` /
   `FOREGROUND_SERVICE_MEDIA_PLAYBACK` (music and audiobooks in the background), `POST_NOTIFICATIONS` (phone,
-  playback controls), `WAKE_LOCK` (playback).
+  playback controls), `WAKE_LOCK` (playback), `CHANGE_WIFI_MULTICAST_STATE` (a Wi-Fi multicast lock while
+  looking for servers on the home network; no location permission), `CAMERA` (phone only, asked on the
+  «Sign in a TV» screen to read the TV's QR code; the camera is not required, the code can be typed).

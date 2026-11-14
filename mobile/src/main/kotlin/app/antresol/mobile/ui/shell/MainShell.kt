@@ -108,6 +108,9 @@ import app.antresol.mobile.ui.nowplaying.MiniPlayerSpace
 import app.antresol.mobile.ui.nowplaying.NowPlayingScreen
 import app.antresol.mobile.ui.search.SearchScreen
 import app.antresol.mobile.ui.search.SearchViewModel
+import app.antresol.mobile.ui.pairing.PairTvScreen
+import app.antresol.mobile.ui.pairing.PairTvViewModel
+import app.antresol.mobile.ui.pairing.pairApprover
 import app.antresol.mobile.ui.settings.SettingsScreen
 import app.antresol.mobile.ui.settings.SettingsViewModel
 import app.antresol.ui.R
@@ -412,7 +415,23 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onSwitchProfile = switchProfile,
                         onSignOut = { confirm = SessionAction.SignOut },
                         onChangeServer = { confirm = SessionAction.ChangeServer },
+                        onPairTv = { navController.navigate(PairTvRoute) },
                         language = uiLanguage,
+                    )
+                }
+                composable<PairTvRoute> {
+                    PairTvScreen(
+                        viewModel = viewModel {
+                            PairTvViewModel(
+                                api = client.pairApprover(),
+                                ownServerId = state.session.serverId,
+                                ownUserId = state.session.userId,
+                                isAdmin = user?.isAdmin == true,
+                            )
+                        },
+                        ownName = user?.name ?: state.session.userName,
+                        ownAvatar = user?.avatar ?: state.session.avatar,
+                        onBack = back,
                     )
                 }
             }

@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
             AntresolTheme {
-                AntresolMobileRoot(app.session)
+                AntresolMobileRoot(app.session, app.serverFinder)
             }
         }
     }

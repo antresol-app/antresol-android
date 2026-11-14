@@ -46,6 +46,10 @@ data class SongsRoute(val title: String)
 @Serializable
 data object SettingsRoute
 
+/** «Sign in a TV»: the QR scanner and the approval of a TV's sign-in request. */
+@Serializable
+data object PairTvRoute
+
 /** «ТВ»: the live channels, a tab of its own (one numbered list, or the guide). */
 @Serializable
 data object ChannelsRoute

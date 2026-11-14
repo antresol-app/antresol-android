@@ -9,6 +9,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.antresol.core.discovery.ServerFinder
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
 import app.antresol.mobile.ui.onboarding.ProfilesScreen
@@ -20,7 +21,7 @@ import app.antresol.ui.theme.AntresolMotion
 /** Top-level switch: splash → server address → profile picker → signed-in shell. */
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun AntresolMobileRoot(session: SessionManager) {
+fun AntresolMobileRoot(session: SessionManager, finder: ServerFinder = ServerFinder.None) {
     val state by session.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) {
         if (session.state.value == AuthState.Starting) session.restore()
@@ -31,7 +32,7 @@ fun AntresolMobileRoot(session: SessionManager) {
     ) { current ->
         when (current) {
             AuthState.Starting -> BrandSplash()
-            AuthState.NoServer -> ServerScreen(session)
+            AuthState.NoServer -> ServerScreen(session, finder)
             is AuthState.ChooseProfile -> ProfilesScreen(session, current)
             // A new profile gets a fresh navigation stack.
             is AuthState.SignedIn -> key(current.session.serverId, current.session.userId) { MainShell(session, current) }

@@ -1,16 +1,20 @@
 # Google Play listings
 
-Two apps, two listings, one developer account:
+One Play app, one listing, as on the App Store (iPhone + Apple TV): package `app.antresol.mobile`, listing in
+`mobile/fastlane/metadata/android/{en-US,ru-RU}/`.
 
-| App | Package | Listing text |
-|---|---|---|
-| Phone & tablet | `app.antresol.mobile` | `mobile/fastlane/metadata/android/{en-US,ru-RU}/` |
-| Android TV | `app.antresol.tv` | `tv/fastlane/metadata/android/{en-US,ru-RU}/` |
+| Build | Gradle module | Version code | Play tracks |
+|---|---|---|---|
+| Phone & tablet | `:mobile` | n | main tracks (internal, closed «Alpha», production) |
+| Android TV | `:tv` | 1 000 000 + n | Android TV form-factor tracks (Release → Android TV) |
+
+The TV manifest requires `android.software.leanback`, the phone manifest requires a touchscreen (implicitly), so
+each device can only get its own bundle. The older separate app `app.antresol.tv` (closed test only, never in
+production) is no longer updated.
 
 Each locale folder has `title.txt` (≤ 30 characters), `short_description.txt` (≤ 80), `full_description.txt`
 (≤ 4000) and `changelogs/<versionCode>.txt` (≤ 500). The folders follow fastlane `supply`'s layout, so they can be
-uploaded with `fastlane supply --metadata_path mobile/fastlane/metadata/android --package_name app.antresol.mobile`
-(and the same for `tv`). `changelogs/1.txt` is the first release's text and `changelogs/2.txt` the same text for the first Play upload
+uploaded with `fastlane supply --metadata_path mobile/fastlane/metadata/android --package_name app.antresol.mobile`. `changelogs/1.txt` is the first release's text and `changelogs/2.txt` the same text for the first Play upload
 (versionCode 2, see `antresolVersionCode`); CI builds get the run number as their
 versionCode, so copy the text to `changelogs/<versionCode>.txt` (or `default.txt`) for the build you upload.
 The copy follows the server README: the app needs the user's own Antresol server and provides no content.
@@ -21,13 +25,13 @@ All listing graphics are in the fastlane trees next to the text (`<app>/fastlane
 so `fastlane supply` uploads them with the listing. They are rendered by `scripts/render-store-graphics.js`
 (Playwright + Chromium; `NODE_PATH=<dir containing node_modules/playwright> node scripts/render-store-graphics.js`).
 `--screenshots` renders only the screenshot posters and leaves the icon, feature graphic and TV banner alone;
-`--offline` skips loading Inter from Google Fonts. Both locales (en-US, ru-RU) of both apps have:
+`--offline` skips loading Inter from Google Fonts. Both locales (en-US, ru-RU) have:
 
 - `icon.png` 512×512, 32-bit RGBA PNG, full-bleed square from `docs/design-ref/app-icon.svg` (Play applies the mask).
 - `featureGraphic.png` 1024×500: brand gradient, logo mark, "Antresol" and the localized tagline, centred
   (en "Your films, music and books. One library.", ru "Твои фильмы. Твоя музыка. Твои книги. В одной библиотеке.").
-- **Phone app**: `phoneScreenshots/` — 8 posters 1080×1920; `tenInchScreenshots/` — 8 posters 2560×1600.
-- **TV app**: `tvBanner.png` 1280×720 in the feature-graphic style; `tvScreenshots/` — 8 posters 1920×1080.
+- `phoneScreenshots/` — 8 posters 1080×1920; `tenInchScreenshots/` — 8 posters 2560×1600.
+- `tvBanner.png` 1280×720 in the feature-graphic style; `tvScreenshots/` — 8 posters 1920×1080.
 
 ### Screenshot posters
 
@@ -48,10 +52,10 @@ Play accepts the 10" set for tablets.
 
 ## Android TV review notes
 
-- The manifest declares `android.software.leanback` and `android.hardware.touchscreen` as not required, has a
+- The TV manifest requires `android.software.leanback`, declares `android.hardware.touchscreen` as not required, has a
   `LEANBACK_LAUNCHER` activity and the banner. Everything works with a D-pad; there is no touch-only UI.
-- The TV app is a separate package (`app.antresol.tv`), so TV review and phone review are independent. Opt in to
-  the Android TV form factor in Play Console (Advanced settings → Form factors) for the TV app only.
+- The Android TV form factor is opted in for `app.antresol.mobile` (Test and release → Advanced settings → Form
+  factors). Play reviews TV releases separately from phone releases, so a TV rejection does not hold the phone app.
 - Reviewers need a server to sign in to. Provide a reachable demo server, its address and a profile without a
   password in "App access", or the review fails at the server step.
 
@@ -65,7 +69,7 @@ Play accepts the 10" set for tablets.
 
 ## Data safety form
 
-The answers are the same for both apps.
+The answers cover the phone and TV builds.
 
 - **Does your app collect or share any of the required user data types?** No.
   - The developer runs no server, analytics, crash reporting or advertising SDK. The apps contain no third-party

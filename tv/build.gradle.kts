@@ -12,7 +12,9 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.antresol.tv"
+        // One Play listing for phone and TV: the TV build ships under the phone app's package on Play's
+        // Android TV form-factor track (docs/PLAY_STORE.md). The code namespace stays app.antresol.tv.
+        applicationId = "app.antresol.mobile"
         minSdk = 26
         targetSdk = 36
         // versionName, versionCode, R8 and signing: see the root build.gradle.kts.

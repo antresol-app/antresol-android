@@ -10,7 +10,9 @@ Both apps share one release setup in the root `build.gradle.kts`:
 - **Version**: `versionName` is `antresolVersionName` in `gradle.properties` (1.0.0). `versionCode` is the
   CI run number (`GITHUB_RUN_NUMBER`), or `antresolVersionCode` in `gradle.properties` for local builds
   (2: the first Play upload). Play needs a higher code for every upload, which the
-  run number gives.
+  run number gives. The TV app adds 1 000 000 (`TV_VERSION_CODE_OFFSET`): both apps ship under the one Play
+  package `app.antresol.mobile` (phone bundles on the main tracks, TV bundles on the Android TV tracks), and no
+  two bundles of a package may share a version code.
 - **R8**: minification and resource shrinking. Keep rules: `ui-common/consumer-rules.pro` (API models and
   navigation routes) plus the rules that kotlinx.serialization, Media3, OkHttp, Coil and AndroidX ship in their
   artifacts. The R8 mapping is in `build/outputs/mapping/release/mapping.txt`; keep it for every published build

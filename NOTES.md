@@ -108,7 +108,7 @@ Running log between milestones. Newest entries at the bottom.
 - `image/ArtworkTint` + `rememberArtworkTint(url, fallback)`: vivid, readable tint from artwork (hero glow).
 - New EN/RU strings: server/onboarding errors, password, account, home empty, search sections, detail rows.
 
-### `:tv` (package `app.antresol.tv`)
+### `:tv` (namespace `app.antresol.tv`; since 2026-11-14 the Play package is `app.antresol.mobile`, see Store metadata)
 - `AntresolTvApp` builds the `SessionManager` (DataStore store, device name `Android TV (<Build.MODEL>)`,
   `Accept-Language` from the system locale) and is Coil's `ImageLoaderFactory` (Bearer images).
 - `ui/root/AntresolTvRoot`: crossfades splash → `ServerScreen` → `ProfilesScreen` (avatars, lock icon,
@@ -768,7 +768,12 @@ green, plus `:ui-common:testDebugUnitTest`.
   trigger it); YAML parsed locally.
 
 ### Store metadata
-- Decision: two apps need two listings, so the fastlane folders live per module:
+- 2026-11-14, supersedes the next item: the owner wanted one Play app, as on iOS/tvOS. The TV build now has
+  `applicationId = app.antresol.mobile`, version code + 1 000 000, `leanback` required (so Play never offers the
+  TV bundle to phones) and goes to the Android TV form-factor track of the phone app. One listing:
+  `mobile/fastlane` holds the TV banner and TV screenshots too; `tv/fastlane` is gone. The old Play app
+  `app.antresol.tv` (closed test since 2026-11-10) is no longer fed.
+- Decision (superseded): two apps need two listings, so the fastlane folders live per module:
   `{mobile,tv}/fastlane/metadata/android/{en-US,ru-RU}/` (title, short/full description, `changelogs/1.txt`), within
   Play's length limits. Copy follows the server README (own server required, no content, no data collected) and only
   claims what the Android apps do (no offline downloads, no EPUB reader on Android).

@@ -17,7 +17,8 @@ Create `local.properties` with `sdk.dir=<Android SDK>` in a fresh clone. JDK 17+
 
 ## Android TV app (`:tv`)
 
-`app.antresol.tv`: Compose for TV, D-pad first, English and Russian. It shows in the Leanback
+Play package `app.antresol.mobile` (the same listing as the phone app, delivered to TVs from Play's
+Android TV track; the code namespace is `app.antresol.tv`): Compose for TV, D-pad first, English and Russian. It shows in the Leanback
 launcher (banner) and also runs on Google TV and other Android TV devices (minSdk 26).
 
 - **Onboarding**: server address (a bare host gets port 8420), profile picker with gradient avatars

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Renders the Google Play listing graphics into both fastlane metadata trees
-// (mobile/fastlane and tv/fastlane) for en-US and ru-RU:
-//   icon.png (512x512), featureGraphic.png (1024x500), tvBanner.png (1280x720, TV only),
+// Renders the Google Play listing graphics into the fastlane metadata tree (mobile/fastlane: one listing for the
+// phone and TV apps, which share the package app.antresol.mobile) for en-US and ru-RU:
+//   icon.png (512x512), featureGraphic.png (1024x500), tvBanner.png (1280x720),
 //   phoneScreenshots/ (1080x1920), tenInchScreenshots/ (2560x1600) and tvScreenshots/ (1920x1080): posters with the
 //   brand gradient, an English caption and the capture inside a CSS-drawn phone, tablet or TV frame.
 // Sources: docs/design-ref/{app-icon,logo-mark}.svg and the emulator captures in docs/store-screenshots.
@@ -237,16 +237,16 @@ async function toRgba(browser, file) {
 
 (async () => {
   const browser = await chromium.launch();
-  for (const app of ['mobile', 'tv']) {
+  {
     for (const loc of LOCALES) {
-      const img = path.join(ROOT, app, 'fastlane/metadata/android', loc, 'images');
+      const img = path.join(ROOT, 'mobile/fastlane/metadata/android', loc, 'images');
       if (!ONLY_SCREENSHOTS) {
         await shot(browser, page(512, 512, iconSvg), 512, 512, path.join(img, 'icon.png'));
         await toRgba(browser, path.join(img, 'icon.png'));
         await shot(browser, lockup(1024, 500, loc, 1), 1024, 500, path.join(img, 'featureGraphic.png'));
-        if (app === 'tv') await shot(browser, lockup(1280, 720, loc, 1.3), 1280, 720, path.join(img, 'tvBanner.png'));
+        await shot(browser, lockup(1280, 720, loc, 1.3), 1280, 720, path.join(img, 'tvBanner.png'));
       }
-      const sets = app === 'tv' ? [['tv', 'tvScreenshots']] : [['phone', 'phoneScreenshots'], ['tablet', 'tenInchScreenshots']];
+      const sets = [['phone', 'phoneScreenshots'], ['tablet', 'tenInchScreenshots'], ['tv', 'tvScreenshots']];
       for (const [kind, folder] of sets) {
         const dir = path.join(img, folder);
         fs.rmSync(dir, { recursive: true, force: true });

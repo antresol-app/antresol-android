@@ -12,11 +12,15 @@ plugins {
 /**
  * Release settings shared by the TV and phone apps (see docs/RELEASE.md):
  * - version name from `antresolVersionName` (gradle.properties), version code from `GITHUB_RUN_NUMBER` (CI) or
- *   `antresolVersionCode` (gradle.properties, local builds);
+ *   `antresolVersionCode` (gradle.properties, local builds); the TV app adds [TV_VERSION_CODE_OFFSET], because
+ *   both apps share the package `app.antresol.mobile` on Google Play and every bundle needs its own version code;
  * - R8 minification and resource shrinking;
  * - signing from `ANTRESOL_KEYSTORE_FILE` / `_PASSWORD` / `_KEY_ALIAS` / `_KEY_PASSWORD` (environment variables or
  *   Gradle properties). Without a keystore the release outputs are unsigned.
  */
+/** Added to the TV app's version code: TV bundles are 1_000_000 + n, phone bundles n (one Play package). */
+val TV_VERSION_CODE_OFFSET = 1_000_000
+
 fun Project.setting(name: String): String? =
     (providers.environmentVariable(name).orNull ?: providers.gradleProperty(name).orNull)?.takeIf { it.isNotBlank() }
 
@@ -25,8 +29,9 @@ subprojects {
         extensions.configure<ApplicationExtension> {
             defaultConfig {
                 versionName = providers.gradleProperty("antresolVersionName").get()
-                versionCode = setting("GITHUB_RUN_NUMBER")?.toIntOrNull()
+                val base = setting("GITHUB_RUN_NUMBER")?.toIntOrNull()
                     ?: providers.gradleProperty("antresolVersionCode").get().toInt()
+                versionCode = if (project.name == "tv") TV_VERSION_CODE_OFFSET + base else base
             }
             val keystore = setting("ANTRESOL_KEYSTORE_FILE")?.let { rootProject.file(it) }
             val release = keystore?.let { file ->

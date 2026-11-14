@@ -79,9 +79,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          {
-            echo "## Phone & tablet"; cat mobile/fastlane/metadata/android/en-US/changelogs/1.txt; echo
-            echo "## Android TV"; cat tv/fastlane/metadata/android/en-US/changelogs/1.txt
-          } > notes.md
+          cat mobile/fastlane/metadata/android/en-US/changelogs/1.txt > notes.md
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "Antresol for Android $GITHUB_REF_NAME" --notes-file notes.md \
             dist/release/*.apk dist/release/*.aab dist/debug-apks/*.apk

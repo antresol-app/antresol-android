@@ -24,6 +24,11 @@ Comics, manga and PDF
 Family
 • Profiles with gradient avatars, passwords and kid profiles with age limits set on the server
 
+Android TV and Google TV
+• The same app on the TV, made for the remote: a home screen with Continue Watching and every shelf of your library
+• Direct play when the TV can decode the file, including Dolby audio passthrough
+• Music keeps playing while you browse; comics and manga turn with the remote
+
 Privacy
 The developer collects no data. The app talks only to the server address you enter; the server runs on your hardware and is controlled by you.
 

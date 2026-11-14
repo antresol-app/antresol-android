@@ -143,4 +143,20 @@
     <string name="pair_scan_again">Sign In Another TV</string>
     <string name="pair_checking">Checking the code…</string>
     <string name="pair_finish">Done</string>
+    <string name="pair_setup_title">Set Up a TV</string>
+    <string name="pair_setup_text">The TV will connect to your server and sign in to the profile below. Nothing to type on the TV.</string>
+    <string name="pair_setup_server">Server</string>
+    <string name="pair_setup_button">Set Up</string>
+    <string name="pair_setup_retry">Try Again</string>
+    <string name="pair_setup_cancel">Cancel</string>
+    <string name="pair_setup_sending">Setting up the TV…</string>
+    <string name="pair_setup_done">Done. The TV is connecting and signing in.</string>
+    <string name="pair_setup_expired">The code has expired. Open the setup on the TV again and scan the new code.</string>
+    <string name="pair_setup_tv_unreachable">Can’t reach the TV. The phone and the TV must be on the same Wi-Fi network, and the TV must still show the setup code.</string>
+    <string name="pair_setup_server_unreachable">The TV can’t reach your server at this address. Make sure the server is on the same network as the TV.</string>
+    <string name="pair_setup_not_antresol">The TV found something at this address, but not a ready Antresol server.</string>
+    <string name="pair_setup_mismatch">The TV reached a different Antresol server at this address.</string>
+    <string name="pair_setup_rate_limited">Too many attempts. Wait a minute and try again.</string>
+    <string name="pair_setup_failed">The TV didn’t accept the setup. Scan the code again.</string>
+    <string name="pair_setup_sign_in_failed">The TV is connected to the server, but the sign-in didn’t go through: %1$s</string>
 </resources>

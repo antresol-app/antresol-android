@@ -100,4 +100,10 @@
     <string name="pair_use_remote">Sign In with the Remote</string>
     <string name="pair_qr_description">QR code to sign in on this TV</string>
     <string name="pair_signing_in">Signing in…</string>
+    <string name="setup_title">Set Up with Your Phone</string>
+    <string name="setup_hint">Scan the code with your phone’s camera or in the Antresol app. The phone tells the TV which server to use and signs it in.</string>
+    <string name="setup_no_network">This TV isn’t connected to a home network, so a phone can’t reach it. Enter the server’s address with the remote.</string>
+    <string name="setup_servers_title">Servers on this network</string>
+    <string name="setup_enter_address">Enter the Address with the Remote</string>
+    <string name="setup_qr_description">QR code to set up this TV with your phone</string>
 </resources>

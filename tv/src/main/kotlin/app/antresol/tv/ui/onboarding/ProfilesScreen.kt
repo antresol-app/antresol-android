@@ -45,6 +45,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.core.model.Profile
 import app.antresol.core.pairing.PairingApi
+import app.antresol.core.pairing.PairingTicket
 import app.antresol.core.pairing.pairingApi
 import app.antresol.core.session.AuthNotice
 import app.antresol.core.session.AuthState
@@ -73,14 +74,17 @@ import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
- * "Who's watching?": the profiles of the server, then a password step for protected profiles.
- * «Sign in with your phone» next to them opens the QR sign-in ([PhoneSignInScreen]).
+ * Sign-in on a known server. The default is the QR sign-in with the phone ([PhoneSignInScreen]);
+ * «Sign In with the Remote» there opens "Who's watching?" (the profiles, then a password step for
+ * protected profiles), whose «Sign In with Your Phone» and Back return to the QR.
+ * [ticket] carries a code the TV already started when the phone set it up.
  */
 @Composable
 fun ProfilesScreen(
     session: SessionManager,
     state: AuthState.ChooseProfile,
     pairing: () -> PairingApi = { session.requireClient().pairingApi() },
+    ticket: PairingTicket? = null,
 ) {
     val resources = LocalContext.current.resources
     val scope = rememberCoroutineScope()
@@ -90,13 +94,24 @@ fun ProfilesScreen(
     var lastFocused by rememberSaveable { mutableStateOf<Long?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var phoneSignIn by rememberSaveable { mutableStateOf(false) }
+    var phoneSignIn by rememberSaveable { mutableStateOf(true) }
+    val initial = remember(state.serverId) { ticket?.take(state.serverId) }
 
     if (phoneSignIn) {
         val api = remember(state.serverUrl) { pairing() }
-        PhoneSignInScreen(session, state, api, onBack = { phoneSignIn = false })
+        PhoneSignInScreen(
+            session = session,
+            chooser = state,
+            pairing = api,
+            onUseRemote = { phoneSignIn = false },
+            onChangeServer = { scope.launch { session.changeServer() } },
+            initial = initial,
+            notice = state.notice?.let { stringResource(R.string.error_session_expired) },
+        )
         return
     }
+    // Back in the picker returns to the QR (the password step closes first).
+    BackHandler(enabled = passwordFor == null) { phoneSignIn = true }
 
     LaunchedEffect(state.serverUrl, reload) {
         profiles = LoadState.Loading

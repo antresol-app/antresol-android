@@ -33,6 +33,7 @@ tasks.test {
     // ("1" for http://127.0.0.1:8420, or a base URL). Track it so toggling re-runs the tests.
     inputs.property("antresolTestServer", System.getenv("ANTRESOL_TEST_SERVER") ?: "")
     inputs.property("antresolPairingE2e", System.getenv("ANTRESOL_PAIRING_E2E") ?: "")
+    inputs.property("antresolTvSetupE2e", System.getenv("ANTRESOL_TVSETUP_E2E") ?: "")
     testLogging {
         events("failed", "skipped")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

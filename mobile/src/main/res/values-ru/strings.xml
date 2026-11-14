@@ -141,4 +141,20 @@
     <string name="pair_scan_again">Войти на другом телевизоре</string>
     <string name="pair_checking">Проверяем код…</string>
     <string name="pair_finish">Готово</string>
+    <string name="pair_setup_title">Настроить телевизор</string>
+    <string name="pair_setup_text">Телевизор подключится к вашему серверу и войдёт в выбранный профиль. На телевизоре ничего вводить не нужно.</string>
+    <string name="pair_setup_server">Сервер</string>
+    <string name="pair_setup_button">Настроить</string>
+    <string name="pair_setup_retry">Повторить</string>
+    <string name="pair_setup_cancel">Отмена</string>
+    <string name="pair_setup_sending">Настраиваем телевизор…</string>
+    <string name="pair_setup_done">Готово. Телевизор подключается и входит.</string>
+    <string name="pair_setup_expired">Код устарел — откройте настройку на телевизоре заново и отсканируйте новый код.</string>
+    <string name="pair_setup_tv_unreachable">Не удаётся связаться с телевизором. Телефон и телевизор должны быть в одной сети Wi-Fi, а на телевизоре должен быть открыт код настройки.</string>
+    <string name="pair_setup_server_unreachable">Телевизор не может связаться с вашим сервером по этому адресу. Проверьте, что сервер в одной сети с телевизором.</string>
+    <string name="pair_setup_not_antresol">Телевизор нашёл что-то по этому адресу, но не готовый сервер Antresol.</string>
+    <string name="pair_setup_mismatch">По этому адресу телевизор нашёл другой сервер Antresol.</string>
+    <string name="pair_setup_rate_limited">Слишком много попыток. Подождите минуту и попробуйте снова.</string>
+    <string name="pair_setup_failed">Телевизор не принял настройку. Отсканируйте код ещё раз.</string>
+    <string name="pair_setup_sign_in_failed">Телевизор подключён к серверу, но вход не выполнен: %1$s</string>
 </resources>

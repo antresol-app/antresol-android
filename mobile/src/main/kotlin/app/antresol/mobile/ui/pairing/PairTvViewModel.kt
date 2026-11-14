@@ -9,6 +9,13 @@ import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.PairApproved
 import app.antresol.core.model.PairLookup
 import app.antresol.core.model.Profile
+import app.antresol.core.tvsetup.ScannedTvCode
+import app.antresol.core.tvsetup.TvSetupAnswer
+import app.antresol.core.tvsetup.TvSetupApprover
+import app.antresol.core.tvsetup.TvSetupLink
+import app.antresol.core.tvsetup.TvSetupOtherServerException
+import app.antresol.core.tvsetup.TvSetupSender
+import app.antresol.core.tvsetup.approveTvCode
 import app.antresol.core.pairing.PairLink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -23,6 +30,12 @@ interface PairApprover {
 
     /** The profile picker (admins may sign the TV in to another profile). */
     suspend fun profiles(): List<Profile>
+}
+
+internal fun PairApprover.asTvSetupApprover(): TvSetupApprover = object : TvSetupApprover {
+    override suspend fun lookup(code: String): PairLookup = this@asTvSetupApprover.lookup(code)
+
+    override suspend fun approve(code: String, userId: Long): PairApproved = this@asTvSetupApprover.approve(code, userId)
 }
 
 fun AntresolClient.pairApprover(): PairApprover = object : PairApprover {
@@ -54,8 +67,23 @@ sealed interface PairStep {
         val error: Throwable? = null,
     ) : PairStep
 
-    /** Approved ([approved]) or declined: nothing more to do, the TV picks it up. */
-    data class Done(val approved: Boolean) : PairStep
+    /**
+     * A TV without a server showed its setup QR: «Set Up a TV» with this phone's server
+     * ([serverUrl]) and the profile ([profiles] non-empty only for admins). [code] is set once the
+     * TV took the server: a retry then only approves that code. [error]: the last failure.
+     */
+    data class SetupConfirm(
+        val link: TvSetupLink,
+        val serverUrl: String,
+        val profiles: List<Profile>,
+        val selectedUserId: Long,
+        val sending: Boolean = false,
+        val error: Throwable? = null,
+        val code: String? = null,
+    ) : PairStep
+
+    /** Approved ([approved]) or declined: nothing more to do, the TV picks it up. [setup]: the TV was set up. */
+    data class Done(val approved: Boolean, val setup: Boolean = false) : PairStep
 }
 
 sealed interface PairNotice {
@@ -69,6 +97,10 @@ sealed interface PairNotice {
  * «Sign in a TV»: a scanned QR (or a typed code) → `lookup` → show the device → Approve (as this
  * profile, or for admins another one) / Decline. The phone always calls its own signed-in server
  * ([ownServerId]); a QR naming another server is refused with a message.
+ *
+ * The QR of a TV that has no server yet («TV setup by phone») → «Set Up a TV» card → `POST /setup`
+ * to the TV with this phone's server ([ownServerUrl]) → `lookup` + `approve` of the code it
+ * answers ([sendSetup] is the TV call, replaced in tests).
  */
 class PairTvViewModel(
     private val api: PairApprover,
@@ -76,6 +108,8 @@ class PairTvViewModel(
     private val ownUserId: Long,
     private val isAdmin: Boolean,
     initialLink: String? = null,
+    private val ownServerUrl: String = "",
+    private val sendSetup: suspend (TvSetupLink, String, String) -> TvSetupAnswer = TvSetupSender()::send,
 ) : ViewModel() {
     var step: PairStep by mutableStateOf(PairStep.Scan())
         private set
@@ -89,11 +123,10 @@ class PairTvViewModel(
     /** A QR the camera read. Repeats of a rejected one are ignored (the camera keeps reading it). */
     fun onScanned(text: String) {
         if (step !is PairStep.Scan || text == lastRejectedScan) return
-        val link = PairLink.parse(text)
-        when {
-            link == null -> reject(text, PairNotice.NotATvCode)
-            !link.belongsTo(ownServerId) -> reject(text, PairNotice.OtherServer)
-            else -> lookup(link.code)
+        when (val scanned = ScannedTvCode.parse(text)) {
+            null -> reject(text, PairNotice.NotATvCode)
+            is ScannedTvCode.Setup -> confirmSetup(scanned.link)
+            is ScannedTvCode.SignIn -> if (scanned.link.belongsTo(ownServerId)) lookup(scanned.link.code) else reject(text, PairNotice.OtherServer)
         }
     }
 
@@ -105,8 +138,58 @@ class PairTvViewModel(
     }
 
     fun select(userId: Long) {
-        val confirm = step as? PairStep.Confirm ?: return
-        step = confirm.copy(selectedUserId = userId, error = null)
+        when (val current = step) {
+            is PairStep.Confirm -> if (!current.sending) step = current.copy(selectedUserId = userId, error = null)
+            // Once the TV took the server, the profile is what the retry approves: still free to change.
+            is PairStep.SetupConfirm -> if (!current.sending) step = current.copy(selectedUserId = userId, error = null)
+            else -> Unit
+        }
+    }
+
+    /**
+     * «Set Up»: tell the TV to use this phone's server, check that it joined this server, then
+     * look its code up and approve it for the chosen profile. A retry after the TV already took
+     * the server only approves.
+     */
+    fun setUp() {
+        val confirm = step as? PairStep.SetupConfirm ?: return
+        if (confirm.sending) return
+        step = confirm.copy(sending = true, error = null)
+        viewModelScope.launch {
+            var code = confirm.code
+            step = try {
+                if (code == null) {
+                    val answer = sendSetup(confirm.link, confirm.serverUrl, ownServerId)
+                    if (!answer.sid.equals(ownServerId, ignoreCase = true)) throw TvSetupOtherServerException()
+                    code = answer.code
+                }
+                val target = if (confirm.selectedUserId == ownUserId) 0 else confirm.selectedUserId
+                approveTvCode(api.asTvSetupApprover(), code, target)
+                PairStep.Done(approved = true, setup = true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                confirm.copy(sending = false, error = e, code = code)
+            }
+        }
+    }
+
+    private fun confirmSetup(link: TvSetupLink) {
+        step = PairStep.Checking
+        viewModelScope.launch {
+            val profiles = if (isAdmin) {
+                try {
+                    api.profiles()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } else {
+                emptyList()
+            }
+            step = PairStep.SetupConfirm(link, ownServerUrl, profiles, ownUserId)
+        }
     }
 
     fun approve() = send { confirm ->

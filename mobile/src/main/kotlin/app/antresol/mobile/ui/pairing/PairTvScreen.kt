@@ -52,7 +52,14 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import android.content.res.Resources
+import app.antresol.core.api.ApiException
 import app.antresol.core.model.Profile
+import app.antresol.core.tvsetup.TvSetupError
+import app.antresol.core.tvsetup.TvSetupFailure
+import app.antresol.core.tvsetup.TvSetupOtherServerException
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.io.IOException
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.components.BackBar
@@ -111,6 +118,7 @@ fun PairTvScreen(
                         modifier = Modifier.padding(vertical = 24.dp),
                     )
                     is PairStep.Confirm -> ConfirmStep(step, viewModel, ownName, ownAvatar)
+                    is PairStep.SetupConfirm -> SetupConfirmStep(step, viewModel, ownName, ownAvatar)
                     is PairStep.Done -> DoneStep(step, onAgain = viewModel::again, onBack = onBack)
                 }
             }
@@ -333,6 +341,133 @@ private fun ProfileChoice(profile: Profile, selected: Boolean, selectable: Boole
     }
 }
 
+/**
+ * «Set Up a TV»: the TV that showed its setup QR gets this phone's server and signs in to the
+ * chosen profile (admins may pick another one). Cancel goes back to the scanner.
+ */
+@Composable
+private fun SetupConfirmStep(step: PairStep.SetupConfirm, viewModel: PairTvViewModel, ownName: String, ownAvatar: String) {
+    val resources = LocalContext.current.resources
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(AntresolShapes.card)
+            .background(AntresolColors.BackgroundElevated)
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(AntresolIcons.Tv, contentDescription = null, tint = AntresolColors.Accent, modifier = Modifier.size(44.dp))
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(R.string.pair_setup_title),
+            style = Antresol.typography.sectionTitle,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.testTag("pair-setup-title"),
+        )
+        Text(
+            stringResource(R.string.pair_setup_text),
+            style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary),
+            textAlign = TextAlign.Center,
+        )
+    }
+
+    Text(stringResource(R.string.pair_setup_server).uppercase(), style = Antresol.typography.eyebrow, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(AntresolShapes.card)
+            .background(AntresolColors.BackgroundElevated)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(AntresolIcons.Server, contentDescription = null, tint = AntresolColors.LabelSecondary, modifier = Modifier.size(24.dp))
+        Text(
+            serverLabel(step.serverUrl),
+            style = Antresol.typography.body,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).testTag("pair-setup-server"),
+        )
+    }
+
+    Text(stringResource(R.string.pair_profile).uppercase(), style = Antresol.typography.eyebrow, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(AntresolShapes.card)
+            .background(AntresolColors.BackgroundElevated),
+    ) {
+        val choices = step.profiles.ifEmpty { listOf(Profile(step.selectedUserId, ownName, ownAvatar)) }
+        choices.forEachIndexed { index, profile ->
+            if (index > 0) HorizontalDivider(color = AntresolColors.Hairline, modifier = Modifier.padding(start = 64.dp))
+            ProfileChoice(
+                profile = profile,
+                selected = profile.id == step.selectedUserId,
+                selectable = step.profiles.isNotEmpty() && !step.sending,
+                onSelect = { viewModel.select(profile.id) },
+            )
+        }
+    }
+    Text(stringResource(R.string.pair_profile_hint), style = Antresol.typography.caption, modifier = Modifier.padding(horizontal = 4.dp))
+
+    if (step.sending) {
+        Text(
+            stringResource(R.string.pair_setup_sending),
+            style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary),
+            modifier = Modifier.testTag("pair-setup-sending"),
+        )
+    }
+    step.error?.let { error ->
+        Text(
+            setupErrorMessage(error, step.code != null, resources),
+            style = Antresol.typography.body.copy(color = AntresolColors.Red),
+            modifier = Modifier.testTag("pair-error"),
+        )
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        GlassPillButton(
+            text = stringResource(R.string.pair_setup_cancel),
+            onClick = viewModel::again,
+            enabled = !step.sending,
+            modifier = Modifier.weight(1f).testTag("pair-setup-cancel"),
+        )
+        PrimaryPillButton(
+            text = stringResource(if (step.error != null) R.string.pair_setup_retry else R.string.pair_setup_button),
+            onClick = viewModel::setUp,
+            enabled = !step.sending,
+            modifier = Modifier.weight(1f).testTag("pair-setup"),
+        )
+    }
+}
+
+/** `host:port` (or the host of an https address) of the phone's server, as the card shows it. */
+private fun serverLabel(url: String): String {
+    val parsed = url.toHttpUrlOrNull() ?: return url
+    val default = (parsed.scheme == "http" && parsed.port == 80) || (parsed.scheme == "https" && parsed.port == 443)
+    return if (default) parsed.host else "${parsed.host}:${parsed.port}"
+}
+
+/** What went wrong setting up the TV. [tvJoined]: the TV already took the server; only the sign-in failed. */
+private fun setupErrorMessage(error: Throwable, tvJoined: Boolean, resources: Resources): String {
+    val message = when (error) {
+        is TvSetupFailure -> when (error.error) {
+            TvSetupError.ExpiredNonce -> resources.getString(R.string.pair_setup_expired)
+            TvSetupError.Unreachable -> resources.getString(R.string.pair_setup_server_unreachable)
+            TvSetupError.NotAntresol -> resources.getString(R.string.pair_setup_not_antresol)
+            TvSetupError.ServerMismatch -> resources.getString(R.string.pair_setup_mismatch)
+            TvSetupError.RateLimited -> resources.getString(R.string.pair_setup_rate_limited)
+            TvSetupError.BadRequest, null -> resources.getString(R.string.pair_setup_failed)
+        }
+        is TvSetupOtherServerException -> resources.getString(R.string.pair_setup_mismatch)
+        // The TV itself did not answer (another network, or it left the setup screen).
+        is IOException -> if (error is ApiException) error.userMessage(resources) else resources.getString(R.string.pair_setup_tv_unreachable)
+        else -> error.userMessage(resources)
+    }
+    return if (tvJoined) resources.getString(R.string.pair_setup_sign_in_failed, message) else message
+}
+
 @Composable
 private fun DoneStep(step: PairStep.Done, onAgain: () -> Unit, onBack: () -> Unit) {
     Column(
@@ -347,7 +482,13 @@ private fun DoneStep(step: PairStep.Done, onAgain: () -> Unit, onBack: () -> Uni
             modifier = Modifier.size(56.dp),
         )
         Text(
-            stringResource(if (step.approved) R.string.pair_done else R.string.pair_declined),
+            stringResource(
+                when {
+                    step.setup -> R.string.pair_setup_done
+                    step.approved -> R.string.pair_done
+                    else -> R.string.pair_declined
+                },
+            ),
             style = Antresol.typography.sectionTitle,
             textAlign = TextAlign.Center,
             modifier = Modifier.testTag("pair-done"),

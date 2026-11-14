@@ -427,6 +427,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                                 ownServerId = state.session.serverId,
                                 ownUserId = state.session.userId,
                                 isAdmin = user?.isAdmin == true,
+                                ownServerUrl = state.session.serverUrl,
                             )
                         },
                         ownName = user?.name ?: state.session.userName,

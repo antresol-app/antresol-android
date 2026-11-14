@@ -94,4 +94,10 @@
     <string name="pair_use_remote">Войти пультом</string>
     <string name="pair_qr_description">QR-код для входа на этом телевизоре</string>
     <string name="pair_signing_in">Входим…</string>
+    <string name="setup_title">Настройте с телефона</string>
+    <string name="setup_hint">Отсканируйте код камерой телефона или в приложении Antresol. Телефон сам укажет телевизору сервер и выполнит вход.</string>
+    <string name="setup_no_network">Телевизор не подключён к домашней сети, поэтому телефон его не найдёт. Введите адрес сервера пультом.</string>
+    <string name="setup_servers_title">Серверы в этой сети</string>
+    <string name="setup_enter_address">Ввести адрес пультом</string>
+    <string name="setup_qr_description">QR-код для настройки телевизора с телефона</string>
 </resources>

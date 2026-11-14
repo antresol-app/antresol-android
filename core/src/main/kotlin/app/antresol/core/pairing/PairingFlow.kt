@@ -28,6 +28,30 @@ fun AntresolClient.pairingApi(): PairingApi = object : PairingApi {
     override suspend fun poll(secret: String): PairPoll = pairPoll(secret)
 }
 
+/** A `start` answer the TV got before its QR screen opened, and when ([PairingFlow]'s clock). */
+data class StartedPairing(val start: PairStart, val receivedAtMs: Long)
+
+/**
+ * Hands a [StartedPairing] from the TV setup listener to the pairing QR screen of the same
+ * server. [take] returns it once.
+ */
+class PairingTicket {
+    private var pending: StartedPairing? = null
+
+    @Synchronized
+    fun offer(started: StartedPairing) {
+        pending = started
+    }
+
+    /** The handed-over code for [serverId] (or none), and forgets it. */
+    @Synchronized
+    fun take(serverId: String): StartedPairing? {
+        val started = pending ?: return null
+        pending = null
+        return started.takeIf { it.start.serverId.isBlank() || it.start.serverId.equals(serverId, ignoreCase = true) }
+    }
+}
+
 /** What the TV's QR screen shows. Times are on [PairingFlow]'s clock (milliseconds). */
 sealed interface PairingState {
     /** Asking the server for a code. */
@@ -68,12 +92,20 @@ class PairingFlow(
     private val now: () -> Long = System::currentTimeMillis,
     private val retryMs: Long = 5_000,
     private val maxTtlMs: Long = DEFAULT_TTL_MS + 60_000,
+    initial: StartedPairing? = null,
 ) {
+    /**
+     * A code the TV already started (setup by phone): the first collection shows and polls it
+     * without a new `start` (that would cancel the code the phone is approving right now).
+     */
+    private val handedOver = java.util.concurrent.atomic.AtomicReference(initial)
+
     fun states(): Flow<PairingState> = flow {
         while (true) {
-            emit(PairingState.Starting)
-            val started = startOrNull() ?: continue
-            val receivedAt = now()
+            val handedOver = handedOver.getAndSet(null)
+            if (handedOver == null) emit(PairingState.Starting)
+            val started = handedOver?.start ?: startOrNull() ?: continue
+            val receivedAt = handedOver?.receivedAtMs ?: now()
             val deadline = receivedAt + ttlMs(started.expiresAt, receivedAt)
             emit(PairingState.Pending(normalizedCode(started.code), started.url, started.serverId, deadline))
             when (val outcome = pollUntilDone(started, deadline)) {

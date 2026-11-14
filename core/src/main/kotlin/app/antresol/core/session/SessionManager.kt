@@ -39,6 +39,9 @@ sealed interface AuthState {
 /** Why the app went back to the profile picker on its own. */
 enum class AuthNotice { SessionExpired }
 
+/** A server address that answered `/api/health` as Antresol and is set up ([SessionManager.check]). */
+data class CheckedServer(val baseUrl: String, val health: Health)
+
 /** The address was valid and reachable, but the server has no admin yet (finish setup in a browser). */
 class ServerNeedsSetupException : IOException("The server is not set up yet")
 
@@ -108,6 +111,16 @@ class SessionManager(
      * [ServerNeedsSetupException], or [IOException] when the server cannot be reached.
      */
     suspend fun connect(address: String): Health {
+        val checked = check(address)
+        use(checked)
+        return checked.health
+    }
+
+    /**
+     * The checks of [connect] without switching servers: normalises [address] (bare host gets
+     * `http://` and port 8420), asks `/api/health` and `/api/setup`. Same exceptions as [connect].
+     */
+    suspend fun check(address: String): CheckedServer {
         val baseUrl = MediaUrls.normalizeBaseUrl(address)
         val probe = AntresolClient(baseUrl, httpClient, language)
         val health = try {
@@ -117,13 +130,18 @@ class SessionManager(
         }
         if (!health.ok || health.serverId.isBlank()) throw NotAntresolServerException()
         if (probe.setup().needsSetup) throw ServerNeedsSetupException()
-        mutex.withLock {
-            store.update { it.connected(baseUrl, health.serverId) }
-            clientFor(baseUrl).token = null
-            _state.value = AuthState.ChooseProfile(baseUrl, health.serverId)
-        }
-        return health
+        return CheckedServer(baseUrl, health)
     }
+
+    /** Makes a [check]ed server the current one, exactly like a typed address: the profile picker follows. */
+    suspend fun use(server: CheckedServer) = mutex.withLock {
+        store.update { it.connected(server.baseUrl, server.health.serverId) }
+        clientFor(server.baseUrl).token = null
+        _state.value = AuthState.ChooseProfile(server.baseUrl, server.health.serverId)
+    }
+
+    /** An unauthenticated client for [baseUrl] on this manager's HTTP client (the TV's pairing start before [use]). */
+    fun anonymousClient(baseUrl: String): AntresolClient = AntresolClient(baseUrl, httpClient, language)
 
     /** The last server address used, to pre-fill the address field after "Change Server". */
     suspend fun lastServerUrl(): String? = store.load().let { it.serverUrl ?: it.saved.lastOrNull()?.serverUrl }

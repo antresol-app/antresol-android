@@ -1,5 +1,6 @@
 package app.antresol.tv.ui.onboarding
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -59,10 +60,11 @@ import java.io.IOException
  * with `/api/health`) above the address field. Choosing one connects exactly like typing its
  * address. The address is checked with `/api/health` before moving on to the profile picker; a
  * bare host gets `http://` and port 8420. Focus starts on the field and moves to the first server
- * when one is found before the user did anything.
+ * when one is found before the user did anything. [onBack] (Back) returns to the setup-by-phone
+ * screen it was opened from.
  */
 @Composable
-fun ServerScreen(session: SessionManager, finder: ServerFinder) {
+fun ServerScreen(session: SessionManager, finder: ServerFinder, onBack: (() -> Unit)? = null) {
     val resources = LocalContext.current.resources
     val scope = rememberCoroutineScope()
     var address by rememberSaveable { mutableStateOf("") }
@@ -73,6 +75,8 @@ fun ServerScreen(session: SessionManager, finder: ServerFinder) {
     val discovery by remember(finder) { finder.states() }.collectAsStateWithLifecycle(DiscoveryState())
     // Until the user presses a key the screen may move focus to the first server found.
     var untouched by rememberSaveable { mutableStateOf(true) }
+
+    if (onBack != null) BackHandler(onBack = onBack)
 
     LaunchedEffect(Unit) {
         if (address.isEmpty()) address = session.lastServerUrl().orEmpty()

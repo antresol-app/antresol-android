@@ -21,12 +21,14 @@ Play package `app.antresol.mobile` (the same listing as the phone app, delivered
 Android TV track; the code namespace is `app.antresol.tv`): Compose for TV, D-pad first, English and Russian. It shows in the Leanback
 launcher (banner) and also runs on Google TV and other Android TV devices (minSdk 26).
 
-- **Onboarding**: Antresol servers on the home network are found automatically (UDP probe + mDNS,
-  each confirmed with `/api/health`) and listed above the address field (a bare host gets port 8420);
-  focus lands on the first one found. Then the profile picker with gradient avatars and a password
-  step, or «Sign In with Your Phone»: a QR code and a 6-character code that a signed-in phone approves
-  (the TV gets a normal device token; the code renews itself every 5 minutes). The session is restored
-  on launch.
+- **Onboarding by phone**: the first screen is «Set Up with Your Phone», a QR code that the Antresol
+  phone app (or the phone camera, which opens a small form served by the TV) scans to tell the TV which
+  server to use and sign it in; the TV then lands on Home without typing anything. The remote fallbacks
+  sit next to it: Antresol servers found on the home network (UDP probe + mDNS, each confirmed with
+  `/api/health`) and the typed address (a bare host gets port 8420). On a known server the default is
+  «Sign In with Your Phone» (a QR and a 6-character code a signed-in phone approves; the TV gets a
+  normal device token; the code renews itself every 5 minutes), with «Sign In with the Remote» (profile
+  picker, password step) as the fallback. The session is restored on launch.
 - **Shell**: a centred glass pill (Search, Home, Movies, TV Shows, TV, Music, Books), the now-playing chip
   while music or an audiobook is loaded, and the avatar, which opens Settings. Down from the pills
   enters the page and returns to the element that was focused there.
@@ -95,5 +97,6 @@ Live UI tests (`TvLiveUiTest`, Robolectric with D-pad key events) write screensh
   PDF books. Both save the page to the server. EPUB/FB2 reading is not built yet.
 - **Settings**: switch profile, sign out, server address and version, «Sign In a TV» (scan the TV's QR
   code with the camera or type its code, see the device, pick the profile as an admin, Approve or
-  Decline), default video quality, autoplay, app language (System / English / Russian) and signed-in
+  Decline; a TV that has no server yet is set up from the same scanner: «Set Up a TV» sends it this
+  phone's server and approves its sign-in), default video quality, autoplay, app language (System / English / Russian) and signed-in
   devices.

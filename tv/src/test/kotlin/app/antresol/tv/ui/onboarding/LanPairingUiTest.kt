@@ -78,6 +78,8 @@ class LanPairingUiTest {
                 "/api/health" -> json("""{"ok":true,"serverId":"$serverId","version":"1.4.0"}""")
                 "/api/setup" -> json("""{"needsSetup":false}""")
                 "/api/profiles" -> json("""[{"id":1,"name":"Alex","avatar":"grad-1","hasPassword":true},{"id":2,"name":"Kiddo","avatar":"grad-4"}]""")
+                "/api/auth/pair/start" -> json("""{"code":"ABC234","secret":"s","expiresAt":"","interval":2,"url":"http://192.168.1.10:8420/pair?code=ABC234&sid=$serverId","serverId":"$serverId"}""")
+                "/api/auth/pair/poll" -> json("""{"status":"pending","interval":2}""")
                 else -> MockResponse().setResponseCode(404)
             }
         }
@@ -104,7 +106,7 @@ class LanPairingUiTest {
         runBlocking { session.restore() }
         val state = MutableStateFlow(DiscoveryState(emptyList(), searching = true))
         val finder = ServerFinder { state }
-        compose.setContent { AntresolTvTheme { AntresolTvRoot(session, finder) } }
+        compose.setContent { AntresolTvTheme { AntresolTvRoot(session, finder, lanAddress = { null }) } }
         settle()
         compose.onNodeWithText("Looking for servers", substring = true).assertExists()
         shot("lan-tv-server-searching")
@@ -118,24 +120,33 @@ class LanPairingUiTest {
         val home = DiscoveredServer(serverId, "Home Media", "1.4.0", baseUrl)
         state.value = DiscoveryState(listOf(home, other), searching = false)
         settle()
-        compose.onNodeWithText("ON YOUR NETWORK").assertExists()
+        compose.onNodeWithText("SERVERS ON THIS NETWORK").assertExists()
         compose.onNodeWithText("Dacha").assertExists()
         compose.onNodeWithText("192.168.1.77:8420 · version 1.3.2").assertExists()
         compose.onNode(isFocused()).assert(hasText("Home Media"))
         shot("lan-tv-server-found")
 
-        // Down twice reaches the field: the list is above it and the manual path stays.
+        // Down twice reaches the typed-address button: the list is above it and the manual path stays.
         key(KeyEvent.KEYCODE_DPAD_DOWN)
         compose.onNode(isFocused()).assert(hasText("Dacha"))
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        compose.onNode(isFocused()).assert(hasText("Enter the Address with the Remote"))
         key(KeyEvent.KEYCODE_DPAD_UP)
+        key(KeyEvent.KEYCODE_DPAD_UP)
+        compose.onNode(isFocused()).assert(hasText("Home Media"))
         key(KeyEvent.KEYCODE_DPAD_CENTER)
-        waitFor(hasText("Who’s watching?"))
+        // A known server: the phone sign-in QR is the default now.
+        waitFor(hasText("ABC 234"))
         val chooser = session.state.value as AuthState.ChooseProfile
         assertEquals(baseUrl, chooser.serverUrl)
         assertEquals(serverId, chooser.serverId)
         // Connecting validated the address exactly like a typed one.
         val paths = List(server.requestCount) { server.takeRequest().path }
         assertTrue(paths.toString(), paths.containsAll(listOf("/api/health", "/api/setup")))
+        compose.onNodeWithText("Sign In with Your Phone").assertExists()
+        compose.onNode(isFocused()).assert(hasText("Sign In with the Remote"))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("Who’s watching?"))
         compose.onNodeWithText("Sign In with Your Phone").assertExists()
         shot("lan-tv-profiles-with-phone")
     }
@@ -146,12 +157,13 @@ class LanPairingUiTest {
         val session = manager()
         runBlocking { session.restore() }
         val state = MutableStateFlow(DiscoveryState(emptyList(), searching = true))
-        compose.setContent { AntresolTvTheme { AntresolTvRoot(session, ServerFinder { state }) } }
+        compose.setContent { AntresolTvTheme { AntresolTvRoot(session, ServerFinder { state }, lanAddress = { null }) } }
         settle()
-        key(KeyEvent.KEYCODE_DPAD_DOWN) // field → Connect
+        compose.onNode(isFocused()).assert(hasText("Enter the Address with the Remote"))
+        key(KeyEvent.KEYCODE_DPAD_UP) // the user is moving around
         state.value = DiscoveryState(listOf(DiscoveredServer(serverId, "Home Media", "1.4.0", baseUrl)), searching = false)
         settle()
-        compose.onNode(isFocused()).assert(hasText("Connect"))
+        compose.onNode(isFocused()).assert(hasText("Enter the Address with the Remote"))
     }
 
     private class FakePairing(var nextPoll: () -> PairPoll = { PairPoll.Pending(2) }) : PairingApi {
@@ -182,7 +194,7 @@ class LanPairingUiTest {
         compose.setContent {
             AntresolTvTheme {
                 val chooser = session.state.value as? AuthState.ChooseProfile ?: return@AntresolTvTheme
-                PhoneSignInScreen(session, chooser, pairing, onBack = {}, now = SystemClock::uptimeMillis)
+                PhoneSignInScreen(session, chooser, pairing, onUseRemote = {}, onChangeServer = {}, now = SystemClock::uptimeMillis)
             }
         }
         waitFor(hasText("ABC 234"))
@@ -213,7 +225,7 @@ class LanPairingUiTest {
     }
 
     @Test
-    fun declinedOffersANewCodeAndBackLeaves() {
+    fun declinedOffersANewCodeAndTheRemoteLeaves() {
         val session = manager()
         runBlocking { session.connect(baseUrl) }
         val pairing = FakePairing { PairPoll.Denied("Sign-in declined") }
@@ -221,7 +233,7 @@ class LanPairingUiTest {
         compose.setContent {
             AntresolTvTheme {
                 val chooser = session.state.value as? AuthState.ChooseProfile ?: return@AntresolTvTheme
-                if (!left) PhoneSignInScreen(session, chooser, pairing, onBack = { left = true }, now = SystemClock::uptimeMillis)
+                if (!left) PhoneSignInScreen(session, chooser, pairing, onUseRemote = { left = true }, onChangeServer = {}, now = SystemClock::uptimeMillis)
             }
         }
         waitFor(hasText("ABC 234"))
@@ -236,7 +248,9 @@ class LanPairingUiTest {
         waitFor(hasText("XYZ 789"))
         assertEquals(2, pairing.starts)
 
-        key(KeyEvent.KEYCODE_BACK)
+        // A new code gives focus back to the remote fallback.
+        compose.onNode(isFocused()).assert(hasText("Sign In with the Remote"))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
         assertTrue(left)
     }
 

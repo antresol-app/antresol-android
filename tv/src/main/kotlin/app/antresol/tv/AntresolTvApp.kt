@@ -7,6 +7,7 @@ import android.provider.Settings
 import app.antresol.core.api.ServerLanguage
 import app.antresol.core.discovery.ServerFinder
 import app.antresol.core.model.DeviceInfo
+import app.antresol.core.pairing.PairingTicket
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
@@ -52,6 +53,9 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
      * the last server used directly when it is a private address. Tests replace it.
      */
     var serverFinder: ServerFinder = ServerFinder.None
+
+    /** A sign-in code the TV started when a phone set it up, on its way to the sign-in QR screen. */
+    val pairingTicket = PairingTicket()
 
     /** Final progress writes of closed players, awaited by screens that show progress. */
     val pendingWrites = PendingWrites()

@@ -39,7 +39,8 @@ import app.antresol.ui.theme.AntresolShapes
 /**
  * The servers found on the network, above the address field: glass rows (white when focused) with
  * the server's name, address and version. While nothing is found: "Looking…", then the hint that a
- * server in Docker needs its address typed. [firstFocus] goes on the first row.
+ * server in Docker needs its address typed. [firstFocus] goes on the first row. [title] replaces
+ * the list's eyebrow; [centered] = false aligns the status text to the start (a left column).
  */
 @Composable
 fun DiscoveredServerList(
@@ -48,6 +49,8 @@ fun DiscoveredServerList(
     onChoose: (DiscoveredServer) -> Unit,
     firstFocus: FocusRequester,
     modifier: Modifier = Modifier,
+    title: String? = null,
+    centered: Boolean = true,
 ) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (state.servers.isEmpty()) {
@@ -55,13 +58,13 @@ fun DiscoveredServerList(
                 text = stringResource(if (state.searching) R.string.server_searching else R.string.server_none_found),
                 style = Antresol.typography.caption,
                 color = AntresolColors.LabelTertiary,
-                textAlign = TextAlign.Center,
+                textAlign = if (centered) TextAlign.Center else TextAlign.Start,
                 modifier = Modifier.fillMaxWidth().testTag("discovery-status"),
             )
             return@Column
         }
         Text(
-            stringResource(R.string.server_found_title).uppercase(),
+            (title ?: stringResource(R.string.server_found_title)).uppercase(),
             style = Antresol.typography.eyebrow,
             modifier = Modifier.padding(start = 4.dp),
         )

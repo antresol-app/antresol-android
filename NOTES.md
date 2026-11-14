@@ -1152,3 +1152,65 @@ side of the same feature: UDP probe on port 8420, mDNS `_antresol._tcp`, `POST /
 - Broadcast/multicast reception on real Wi-Fi (some routers and TV boxes drop them), NsdManager on TV
   boxes, the multicast lock's effect, real camera scanning distance/angle of the TV QR, Android 16+
   local-network permission behaviour (not enforced for target SDK 36 yet).
+
+## TV setup by phone (one QR for the server and the sign-in)
+
+2026-11-14: the TV is set up from the phone: one QR carries the server address and the sign-in, the
+remote is the fallback. Builds on the server's pairing contract; no server change. The Apple apps
+implement the same wire format.
+
+### `:core` (`tvsetup/`)
+- `TvSetupLink` (`http://<private IPv4>:<port>/setup?n=<nonce>&v=1`; plain http, private/link-local IPv4
+  literal only; `v` absent or `1`), `ScannedTvCode` (setup link or the server's `/pair` link / bare code).
+- `SetupNonces`: 128-bit base64url (22 chars), 10 min, one at a time; a POST claims it, a failed POST
+  gives it back (the person can fix the address on the same page), a successful one consumes it.
+- `TvSetupListener`: hand-written HTTP/1.1 on a `ServerSocket` (one request per connection, Connection:
+  close, 10 s socket timeout, ≤ 4 concurrent). Clients not on private/link-local/loopback get the socket
+  closed without an answer. ≤ 10 requests to `/setup` per minute in total (429 `rate_limited`), body
+  ≤ 4 KB, no chunked bodies. `GET /setup?n=` → HTML form (ru/en by `Accept-Language`, inline CSS, no
+  scripts, CSP, `Referrer-Policy: no-referrer`), wrong nonce → 404 «Код устарел…». `POST /setup`: JSON
+  (`n, server, serverId?`) → `200 {code, sid, server, device}` or `{"error": "<code>"}` with the spec's
+  statuses; form → `303` to `<server>/pair?code=&sid=` or the form again with the message. After a
+  successful answer it runs the handler's commit and closes itself.
+- `TvSetupCoordinator` (the TV's handler): `SessionManager.check` (health + setup, same as a typed
+  address), `serverId` comparison (409), `pairStart`, answer; commit = `PairingTicket.offer` then
+  `SessionManager.use` (state → ChooseProfile). A server that still needs setup answers `422
+  not_antresol` (not in the spec's list); the TV's HTML page says "not set up yet".
+- `PairingFlow(initial = StartedPairing)`: shows and polls the handed-over code first, no second `start`
+  (that would cancel the code the phone is approving). Used once per flow instance.
+- `TvSetupSender` (phone POST, 40 s read timeout since the TV checks the server first), `setUpTv` /
+  `approveTvCode` (sid check, lookup, approve).
+- Tests: `TvSetupTest` (links, nonces, validation, JSON contract, listener on loopback incl. rate limit,
+  form redirect, error pages; coordinator vs MockWebServer; sender; flow with a handed-over code).
+  `TvSetupIntegrationTest` with `ANTRESOL_TVSETUP_E2E=<base URL>` (+ `ANTRESOL_PAIRING_E2E_PASSWORD`):
+  TV listener on loopback ← phone POST → real server pair start → phone lookup/approve → TV flow gets the
+  token → `/api/me`, devices list, nonce single use. Passed 2026-11-14 against `feat/lan-pairing` built
+  locally (fresh data dir, admin created with `POST /api/setup`).
+
+### TV
+- `AuthState.NoServer` → `TvSetupScreen` (QR right; title, hint, «Серверы в этой сети», «Ввести адрес
+  пультом» left; focus on the button, or on the first server found before any key). «Ввести адрес
+  пультом» → the old `ServerScreen`, Back returns. No LAN IPv4 → orange note, no QR.
+- Listener lifecycle: `repeatOnLifecycle(STARTED)`; `LocalAddresses.lanIpv4()` (private before
+  link-local, eth/wlan first); renewed at nonce expiry; stopped in `finally`.
+- `ChooseProfile` → `PhoneSignInScreen` by default (Apple TV layout via `QrScreenLayout`), «Sign In with
+  the Remote» → profile picker (Back → QR), «Change Server» on the QR screen. A declined code shows New
+  Code under the status on the right. Session-expired notice shows on the QR screen.
+- `AntresolTvApp.pairingTicket` carries the started code from the listener to the QR screen.
+- Tests: `TvSetupUiTest` (screenshots to `$ANTRESOL_SHOTS_DIR`, default `tv/build/tv-setup-shots`),
+  `LanPairingUiTest` / `TvLiveUiTest` adjusted to the new defaults.
+
+### Phone
+- The scanner recognises the setup QR → `PairStep.SetupConfirm` («Настроить телевизор»: server =
+  the address the phone uses now, profile; admins pick) → POST → sid check → lookup + approve →
+  «Готово». If the TV took the server but approve failed, «Повторить» only approves.
+- Cleartext to a LAN IP: `android:usesCleartextTraffic="true"` and no network security config in
+  `:mobile` (and `:tv`), so plain http to the TV's listener is allowed. Android 16+ local-network
+  permission is not enforced for target SDK 36 yet (same open item as discovery).
+- Tests: `TvSetupPhoneUiTest`.
+
+### Not verified (needs a real TV/phone)
+- The TV's LAN address choice on real boxes (Ethernet + Wi-Fi, VPN interfaces), whether some TV
+  firewalls/ROMs block inbound connections to an app port, phone camera scanning of the setup QR, the
+  phone browser path (form → 303 → server `/pair` page with its sign-in gate), and the phone on a public
+  https address (the TV then uses that address too).

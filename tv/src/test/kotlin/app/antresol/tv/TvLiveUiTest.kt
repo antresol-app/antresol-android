@@ -94,8 +94,11 @@ class TvLiveUiTest {
             if (session.state.value is AuthState.SignedIn) session.switchProfile()
             if (session.state.value !is AuthState.NoServer) session.changeServer()
         }
-        compose.setContent { AntresolTvTheme { AntresolTvRoot(session) } }
+        compose.setContent { AntresolTvTheme { AntresolTvRoot(session, lanAddress = { null }) } }
 
+        // First run: set up with the phone, or type the address with the remote.
+        waitFor(hasText("Set Up with Your Phone"))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
         // Server address: a bad address shows an error, the real one opens the profile picker.
         waitFor(hasText("Connect to your server"))
         shot("00-server")
@@ -107,6 +110,9 @@ class TvLiveUiTest {
         field.performTextReplacement(serverUrl!!.removePrefix("http://"))
         field.performImeAction()
 
+        // The phone QR is the default; the remote opens the profile picker.
+        waitFor(hasText("Sign In with the Remote"))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
         // Profile picker: the first profile (Admin, password) is focused; OK asks for the password.
         waitFor(hasText("Who’s watching?"))
         waitFor(isFocused() and hasAnyDescendant(hasContentDescription("Admin")))
@@ -175,7 +181,7 @@ class TvLiveUiTest {
         shot("06-music")
 
         runBlocking { session.switchProfile() }
-        waitFor(hasText("Who’s watching?"))
+        waitFor(hasText("Sign In with the Remote"))
     }
 
     @Test

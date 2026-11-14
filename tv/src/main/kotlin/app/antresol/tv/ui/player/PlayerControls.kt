@@ -134,12 +134,19 @@ fun TrackMenu(menu: PlayerMenu, viewModel: PlayerViewModel, onDismiss: () -> Uni
         },
     )
     val options = when (menu) {
-        PlayerMenu.Audio -> viewModel.audioTracks.map { track ->
-            MenuOption(
-                TrackLabels.audio(resources, track),
-                track.index == viewModel.selectedAudioIndex,
-                badge = if (track.isCleaned) resources.getString(R.string.track_cleaned) else null,
-            ) { viewModel.selectAudio(track) }
+        PlayerMenu.Audio -> viewModel.audioMenu.let { m ->
+            // a cleaned voice-over is not a row: «Очищенный перевод» under the voices
+            m.rows.map { row ->
+                MenuOption(
+                    TrackLabels.audio(resources, row.track),
+                    row.checked,
+                    badge = if (row.track.isCleaned) resources.getString(R.string.track_cleaned) else null,
+                ) { viewModel.selectAudio(row.plays) }
+            } + listOfNotNull(
+                m.toggle?.let { t ->
+                    MenuOption(resources.getString(R.string.track_cleaned_toggle), t.on, badge = null) { viewModel.selectAudio(t.target) }
+                },
+            )
         }
         PlayerMenu.Subtitles -> listOf(
             MenuOption(stringResource(R.string.detail_subtitles_off), viewModel.selectedSubtitle == null) { viewModel.selectSubtitle(null) },

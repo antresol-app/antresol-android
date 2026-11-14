@@ -271,7 +271,7 @@ private fun Controls(
         ) {
             GlassIconButton(MobileIcons.ChevronLeft, stringResource(UiR.string.player_back), onExit)
             TitleBlock(viewModel.item, Modifier.weight(1f))
-            if (viewModel.audioTracks.size > 1) {
+            if (viewModel.audioMenu.rows.size > 1 || viewModel.audioMenu.toggle != null) {
                 RoundIconButton(AntresolIcons.Audio, stringResource(UiR.string.detail_audio), { onTouch(); onMenu(PlayerMenu.Audio) }, glass = true, size = 44.dp, iconSize = 22.dp)
             }
             if (viewModel.subtitleTracks.isNotEmpty()) {
@@ -443,12 +443,19 @@ private fun MenuSheet(menu: PlayerMenu, viewModel: VideoPlayerViewModel, onDismi
         },
     )
     val options = when (menu) {
-        PlayerMenu.Audio -> viewModel.audioTracks.map { track ->
-            MenuOption(
-                TrackLabels.audio(resources, track),
-                track.index == viewModel.selectedAudioIndex,
-                badge = if (track.isCleaned) resources.getString(UiR.string.track_cleaned) else null,
-            ) { viewModel.selectAudio(track) }
+        PlayerMenu.Audio -> viewModel.audioMenu.let { m ->
+            // a cleaned voice-over is not a row: «Очищенный перевод» under the voices
+            m.rows.map { row ->
+                MenuOption(
+                    TrackLabels.audio(resources, row.track),
+                    row.checked,
+                    badge = if (row.track.isCleaned) resources.getString(UiR.string.track_cleaned) else null,
+                ) { viewModel.selectAudio(row.plays) }
+            } + listOfNotNull(
+                m.toggle?.let { t ->
+                    MenuOption(resources.getString(UiR.string.track_cleaned_toggle), t.on, badge = null) { viewModel.selectAudio(t.target) }
+                },
+            )
         }
         PlayerMenu.Subtitles -> listOf(
             MenuOption(stringResource(UiR.string.detail_subtitles_off), viewModel.selectedSubtitle == null) { viewModel.selectSubtitle(null) },

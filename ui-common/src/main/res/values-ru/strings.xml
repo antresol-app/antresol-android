@@ -216,6 +216,7 @@
     <string name="tv_starts_at">Начало в %1$s</string>
     <string name="tv_ended">Закончилась в %1$s</string>
     <string name="tv_guide_empty">В этом окне передач нет</string>
+    <string name="track_cleaned_toggle">Очищенный перевод</string>
     <string name="track_cleaned">Очищено</string>
     <string name="track_cleaned_hint">Озвучка без оригинальных голосов</string>
 </resources>

@@ -184,6 +184,9 @@ open class VideoPlayerViewModel(
      */
     val audioTracks: List<AudioTrack> get() = AudioMenu.order(source?.play?.audio.orEmpty())
     val selectedAudioIndex: Int? get() = source?.play?.audioIndex
+
+    /** The audio menu with «Очищенный перевод» as a switch on the chosen voice (see [AudioMenu.cleanedSwitch]). */
+    val audioMenu: AudioMenu.CleanedSwitch get() = AudioMenu.cleanedSwitch(source?.play?.audio.orEmpty(), selectedAudioIndex)
     val subtitleTracks: List<SubTrack> get() = source?.play?.subtitles.orEmpty().filter { it.url != null }
     val quality: String get() = source?.play?.quality?.selected?.ifEmpty { null } ?: Quality.AUTO
 

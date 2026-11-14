@@ -19,4 +19,26 @@ object AudioMenu {
         }
         return out
     }
+
+    /** A row of the audio menu: the track shown, the track a press plays, whether it is the chosen one. */
+    data class Row(val track: AudioTrack, val plays: AudioTrack, val checked: Boolean)
+
+    /** «Очищенный перевод»: on or off, and the track it turns to. */
+    data class Toggle(val on: Boolean, val target: AudioTrack)
+
+    /** The menu with a cleaned voice-over as a switch on its voice, not a row of its own (as on the web). */
+    data class CleanedSwitch(val rows: List<Row>, val toggle: Toggle?)
+
+    fun cleanedSwitch(audio: List<AudioTrack>, selectedIndex: Int?): CleanedSwitch {
+        fun paired(t: AudioTrack) = t.isCleaned && audio.any { it.index == t.cleanedFrom && !it.isCleaned }
+        fun twin(base: Int) = audio.firstOrNull { it.isCleaned && it.cleanedFrom == base }
+        val current = audio.firstOrNull { it.index == selectedIndex }
+        val on = current != null && paired(current)
+        val base = if (on) current?.cleanedFrom else selectedIndex
+        val rows = order(audio).filterNot(::paired).map { t ->
+            Row(t, if (on) twin(t.index) ?: t else t, t.index == base)
+        }
+        val toggle = base?.let { b -> twin(b)?.let { tw -> Toggle(on, if (on) audio.first { it.index == b } else tw) } }
+        return CleanedSwitch(rows, toggle)
+    }
 }

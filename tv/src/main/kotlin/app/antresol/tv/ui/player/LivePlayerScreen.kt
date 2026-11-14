@@ -1,5 +1,6 @@
 package app.antresol.tv.ui.player
 
+import app.antresol.core.channels.liveAudioEntries
 import app.antresol.ui.channels.ChannelLogo
 import app.antresol.ui.channels.reserveLogoSlot
 import androidx.compose.foundation.layout.height
@@ -176,6 +177,8 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
     }
     val guide = viewModel.miniGuide
     val selection = viewModel.trackSelection
+    // a cleaned voice is not a row: «Очищенный перевод» last (core liveAudioEntries)
+    val audioEntries = liveAudioEntries(viewModel.audioOptions, viewModel.trackSelection.audio?.name)
     val audio = viewModel.audioOptions
     val subtitles = viewModel.subtitleOptions
 
@@ -224,7 +227,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         panel = next
         panelIndex = when (next) {
             Panel.Channels -> guide.currentIndex
-            Panel.Audio -> audio.indexOfFirst { it.name == selection.audio?.name }.coerceAtLeast(0)
+            Panel.Audio -> audioEntries.indexOfFirst { it.checked && !it.isToggle }.coerceAtLeast(0)
             Panel.Subtitles -> subtitles.indexOfFirst { it.name == selection.subtitles?.name } + 1
             Panel.None -> 0
         }
@@ -258,7 +261,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
                 viewModel.tune(channel.id)
                 banner = Banner.Zap
             }
-            Panel.Audio -> audio.getOrNull(panelIndex)?.let(viewModel::selectAudio)
+            Panel.Audio -> audioEntries.getOrNull(panelIndex)?.let { viewModel.selectAudio(it.plays) }
             Panel.Subtitles -> viewModel.selectSubtitles(subtitles.getOrNull(panelIndex - 1))
             Panel.None -> Unit
         }
@@ -400,7 +403,10 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         }
         if (panel == Panel.Audio || panel == Panel.Subtitles) {
             val options = if (panel == Panel.Audio) {
-                audio.map { track -> PanelAction(track.label.ifBlank { track.name }, AntresolIcons.Check.takeIf { track.name == selection.audio?.name }) {} }
+                audioEntries.map { e ->
+                    val label = if (e.isToggle) stringResource(R.string.track_cleaned_toggle) else e.track.label.ifBlank { e.track.name }
+                    PanelAction(label, AntresolIcons.Check.takeIf { e.checked }) {}
+                }
             } else {
                 listOf(PanelAction(stringResource(R.string.detail_subtitles_off), AntresolIcons.Check.takeIf { selection.subtitles == null }) {}) +
                     subtitles.map { track -> PanelAction(track.label.ifBlank { track.name }, AntresolIcons.Check.takeIf { track.name == selection.subtitles?.name }) {} }

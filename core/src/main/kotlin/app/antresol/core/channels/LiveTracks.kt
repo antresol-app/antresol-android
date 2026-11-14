@@ -109,3 +109,23 @@ object LiveTracks {
         "spa" to "es", "ita" to "it", "jpn" to "ja", "kor" to "ko", "chi" to "zh", "zho" to "zh", "por" to "pt",
     )
 }
+
+/**
+ * The live audio menu with a cleaned voice-over as «Очищенный перевод» on its voice, not a row of
+ * its own (as on the web): each entry is a voice (or, last, the switch — [isToggle]) with the
+ * rendition a press plays and whether it is ticked.
+ */
+data class LiveAudioEntry(val track: ProgramTrack, val plays: ProgramTrack, val checked: Boolean, val isToggle: Boolean = false)
+
+fun liveAudioEntries(audio: List<ProgramTrack>, selectedName: String?): List<LiveAudioEntry> {
+    val current = audio.firstOrNull { it.name == selectedName }
+    val on = current?.cleanedOf != null
+    val base = current?.cleanedOf ?: selectedName
+    fun twin(name: String?) = audio.firstOrNull { it.cleanedOf != null && it.cleanedOf == name }
+    val rows = audio.filter { it.cleanedOf == null }.map { t ->
+        LiveAudioEntry(t, if (on) twin(t.name) ?: t else t, t.name == base)
+    }
+    val tw = twin(base) ?: return rows
+    val back = audio.firstOrNull { it.name == base } ?: tw
+    return rows + LiveAudioEntry(tw, if (on) back else tw, on, isToggle = true)
+}

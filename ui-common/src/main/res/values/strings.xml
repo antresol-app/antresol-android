@@ -216,6 +216,7 @@
     <string name="tv_starts_at">Starts at %1$s</string>
     <string name="tv_ended">Ended at %1$s</string>
     <string name="tv_guide_empty">No programmes in this window</string>
+    <string name="track_cleaned_toggle">Clean voice-over</string>
     <string name="track_cleaned">Cleaned</string>
     <string name="track_cleaned_hint">The voice-over with the original voices taken out</string>
 </resources>

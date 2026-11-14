@@ -104,6 +104,8 @@ data class ProgramTrack(
     val name: String = "",
     val label: String = "",
     val lang: String = "",
+    /** A cleaned voice-over: the `name` of the voice-over it is the cleaned version of (null: none). */
+    val cleanedOf: String? = null,
 )
 
 @Serializable

@@ -1,5 +1,6 @@
 package app.antresol.mobile.player
 
+import app.antresol.core.channels.liveAudioEntries
 import app.antresol.ui.channels.ChannelLogo
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -588,8 +589,10 @@ internal data class TrackOption(val label: String, val selected: Boolean, val on
 private fun TrackSheet(menu: TrackMenu, viewModel: LivePlayerViewModel, onDismiss: () -> Unit) {
     val selection = viewModel.trackSelection
     val options: List<TrackOption> = when (menu) {
-        TrackMenu.Audio -> viewModel.audioOptions.map { track ->
-            TrackOption(track.label.ifBlank { track.name }, track.name == selection.audio?.name) { viewModel.selectAudio(track) }
+        // a cleaned voice is not a row: «Очищенный перевод» under the voices
+        TrackMenu.Audio -> liveAudioEntries(viewModel.audioOptions, selection.audio?.name).map { e ->
+            val label = if (e.isToggle) stringResource(R.string.track_cleaned_toggle) else e.track.label.ifBlank { e.track.name }
+            TrackOption(label, e.checked) { viewModel.selectAudio(e.plays) }
         }
         TrackMenu.Subtitles -> listOf(
             TrackOption(stringResource(R.string.detail_subtitles_off), selection.subtitles == null) { viewModel.selectSubtitles(null) },

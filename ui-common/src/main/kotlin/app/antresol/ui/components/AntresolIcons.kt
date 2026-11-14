@@ -274,6 +274,36 @@ object AntresolIcons {
         lineTo(15.5f, 20f)
     }
 
+    /** A phone: «Sign in with your phone» on the TV. */
+    val Phone: ImageVector = lineIcon("Phone") {
+        moveTo(8.5f, 3f)
+        lineTo(15.5f, 3f)
+        quadTo(17.5f, 3f, 17.5f, 5f)
+        lineTo(17.5f, 19f)
+        quadTo(17.5f, 21f, 15.5f, 21f)
+        lineTo(8.5f, 21f)
+        quadTo(6.5f, 21f, 6.5f, 19f)
+        lineTo(6.5f, 5f)
+        quadTo(6.5f, 3f, 8.5f, 3f)
+        close()
+        moveTo(11f, 18f)
+        lineTo(13f, 18f)
+    }
+
+    /** A QR code: «Sign in a TV» on the phone (scan the TV's code). */
+    val QrCode: ImageVector = lineIcon("QrCode") {
+        // Three finder squares
+        moveTo(4f, 4f); lineTo(10f, 4f); lineTo(10f, 10f); lineTo(4f, 10f); close()
+        moveTo(14f, 4f); lineTo(20f, 4f); lineTo(20f, 10f); lineTo(14f, 10f); close()
+        moveTo(4f, 14f); lineTo(10f, 14f); lineTo(10f, 20f); lineTo(4f, 20f); close()
+        // Data modules
+        moveTo(14f, 14f); lineTo(16.5f, 14f)
+        moveTo(19.5f, 14f); lineTo(20f, 14f)
+        moveTo(14f, 17f); lineTo(14f, 20f)
+        moveTo(17f, 17f); lineTo(20f, 17f)
+        moveTo(17f, 20f); lineTo(20f, 20f)
+    }
+
     /** The programme guide: a time grid. */
     val Guide: ImageVector = lineIcon("Guide") {
         moveTo(4f, 5f)

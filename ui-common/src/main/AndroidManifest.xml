@@ -1,2 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- LAN server discovery (both apps): a Wi-Fi multicast lock while the server list is shown, so
+         mDNS answers and UDP broadcast replies are not filtered by the Wi-Fi chip. Normal permission. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+</manifest>

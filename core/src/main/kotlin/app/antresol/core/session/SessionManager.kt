@@ -175,6 +175,30 @@ class SessionManager(
         activate(session, response.user)
     }
 
+    /** The `device` block this install sends with a sign-in (also the TV's QR sign-in request). */
+    suspend fun deviceInfo(): DeviceInfo = deviceInfo(store.deviceId())
+
+    /**
+     * Finishes a QR sign-in: [token] came from `/api/auth/pair/poll` and is exactly a device token of
+     * `/api/auth/token`, so it is stored and used the same way. [serverId] (the pairing answer's) must
+     * be the current server's, or the token is not taken.
+     */
+    suspend fun signInWithPairing(token: String, user: Me, serverId: String? = null) {
+        val chooser = _state.value as? AuthState.ChooseProfile ?: error("Not choosing a profile")
+        require(serverId.isNullOrBlank() || serverId.equals(chooser.serverId, ignoreCase = true)) { "Token of another server" }
+        activate(
+            StoredSession(
+                serverUrl = chooser.serverUrl,
+                serverId = chooser.serverId,
+                userId = user.id,
+                token = token,
+                userName = user.name,
+                avatar = user.avatar,
+            ),
+            user,
+        )
+    }
+
     /** Returns to the profile picker, keeping the token for a quick switch back. */
     suspend fun switchProfile() = mutex.withLock {
         val signedIn = _state.value as? AuthState.SignedIn ?: return@withLock

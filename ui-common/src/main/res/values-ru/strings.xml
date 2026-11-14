@@ -226,4 +226,11 @@
     <string name="track_cleaned_toggle">Очищенный перевод</string>
     <string name="track_cleaned">Очищено</string>
     <string name="track_cleaned_hint">Озвучка без оригинальных голосов</string>
+    <!-- Поиск серверов в локальной сети -->
+    <string name="server_subtitle_discovery">Выберите сервер, найденный в вашей сети, или введите адрес компьютера, на котором работает Antresol.</string>
+    <string name="server_found_title">В вашей сети</string>
+    <string name="server_searching">Ищем серверы в вашей сети…</string>
+    <string name="server_none_found">В этой сети серверы не найдены. Если Antresol работает в Docker без сети хоста, введите его адрес ниже.</string>
+    <string name="server_manual_title">Или введите адрес</string>
+    <string name="server_found_detail">%1$s · версия %2$s</string>
 </resources>

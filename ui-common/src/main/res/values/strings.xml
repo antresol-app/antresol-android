@@ -226,4 +226,11 @@
     <string name="track_cleaned_toggle">Clean voice-over</string>
     <string name="track_cleaned">Cleaned</string>
     <string name="track_cleaned_hint">The voice-over with the original voices taken out</string>
+    <!-- LAN discovery on the "Connect to your server" screens -->
+    <string name="server_subtitle_discovery">Choose a server found on your network, or enter the address of the computer running Antresol.</string>
+    <string name="server_found_title">On your network</string>
+    <string name="server_searching">Looking for servers on your network…</string>
+    <string name="server_none_found">No servers found on this network. If Antresol runs in Docker without host networking, enter its address below.</string>
+    <string name="server_manual_title">Or enter the address</string>
+    <string name="server_found_detail">%1$s · version %2$s</string>
 </resources>

@@ -23,6 +23,15 @@ import app.antresol.core.model.Lyrics
 import app.antresol.core.model.Me
 import app.antresol.core.model.MediaKey
 import app.antresol.core.model.Page
+import app.antresol.core.model.PairApproveRequest
+import app.antresol.core.model.PairApproved
+import app.antresol.core.model.PairCodeRequest
+import app.antresol.core.model.PairLookup
+import app.antresol.core.model.PairPoll
+import app.antresol.core.model.PairPollBody
+import app.antresol.core.model.PairPollRequest
+import app.antresol.core.model.PairStart
+import app.antresol.core.model.PairStartRequest
 import app.antresol.core.model.PlayRecord
 import app.antresol.core.model.PlayRequest
 import app.antresol.core.model.PlayResponse
@@ -135,6 +144,41 @@ class AntresolClient(
     suspend fun devices(): DeviceSessions = get("api/me/devices")
 
     suspend fun revokeDevice(sessionId: Long) = delete("api/me/devices/$sessionId")
+
+    // endregion
+
+    // region QR sign-in (TV pairing)
+
+    /** TV, no auth: opens a pairing request. 429 (with `Retry-After`) when this address already has 3 open. */
+    suspend fun pairStart(device: DeviceInfo): PairStart =
+        post("api/auth/pair/start", jsonBody(PairStartRequest(device)), reportUnauthorized = false)
+
+    /** TV, no auth: one poll. 410 is an answer here (denied / expired), not an error. */
+    suspend fun pairPoll(secret: String): PairPoll {
+        val request = buildRequest("POST", url("api/auth/pair/poll"), jsonBody(PairPollRequest(secret)))
+        val response = httpClient.newCall(request).awaitRaw()
+        val body = runCatching { json.decodeFromString(PairPollBody.serializer(), response.body) }.getOrNull()
+        return when {
+            response.status == 200 && body?.status == "approved" && body.token != null && body.user != null ->
+                PairPoll.Approved(body.token, body.user)
+            response.status == 200 && body?.status == "pending" -> PairPoll.Pending(body.interval)
+            response.status == 410 && body?.status == "denied" -> PairPoll.Denied(body.error)
+            response.status == 410 -> PairPoll.Expired(body?.error)
+            response.status == 429 -> PairPoll.Throttled(response.headers["Retry-After"]?.trim()?.toLongOrNull() ?: 30)
+            response.status == 200 -> throw ApiException(status = 200, message = "Unexpected pairing answer")
+            else -> throw errorFrom(response)
+        }
+    }
+
+    /** Signed in: what asks to sign in with [code] (any case, spaces and dashes ignored). 404 = unknown or used. */
+    suspend fun pairLookup(code: String): PairLookup = post("api/auth/pair/lookup", jsonBody(PairCodeRequest(code)))
+
+    /** Signed in: lets the TV in as [userId] (0 = this profile; another profile only for admins). */
+    suspend fun pairApprove(code: String, userId: Long = 0): PairApproved =
+        post("api/auth/pair/approve", jsonBody(PairApproveRequest(code, userId)))
+
+    /** Signed in: refuses the request; the TV shows "declined". */
+    suspend fun pairDeny(code: String) = sendNoContent("POST", url("api/auth/pair/deny"), jsonBody(PairCodeRequest(code)))
 
     // endregion
 

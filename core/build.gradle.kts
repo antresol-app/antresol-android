@@ -20,6 +20,8 @@ dependencies {
     api(libs.okhttp)
     api(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.serialization.json)
+    // QR codes for TV sign-in (encode on the TV, decode on the phone). Apache-2.0, pure Java, no network.
+    implementation(libs.zxing.core)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -30,6 +32,7 @@ tasks.test {
     // Integration tests against a live server run only when ANTRESOL_TEST_SERVER is set
     // ("1" for http://127.0.0.1:8420, or a base URL). Track it so toggling re-runs the tests.
     inputs.property("antresolTestServer", System.getenv("ANTRESOL_TEST_SERVER") ?: "")
+    inputs.property("antresolPairingE2e", System.getenv("ANTRESOL_PAIRING_E2E") ?: "")
     testLogging {
         events("failed", "skipped")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

@@ -410,7 +410,7 @@ flattened at the top level**, plus these fields:
 | next | EpisodeCard *(opt)* | Series only: the episode to play next (resume or next unwatched). |
 | inWatchlist | bool | |
 | actions | `{play: bool, toServer: bool, toDevice: bool, watchNow: bool}` | `play`: something is playable. `toDevice`: an offline copy is possible. The others are online features. |
-| tmdbId | int *(opt)* | |
+| tmdbId | int *(opt)* | The title's TMDB id; a series' episode guide ([§4.6](#46-get-apitrackingkindtmdbidepisodes-episode-guide)) is asked by it. |
 
 SeasonInfo:
 
@@ -496,6 +496,37 @@ Samples: `search.json`, `search-music.json`.
 - The counts are library totals.
 
 Sample: `library-status.json`.
+
+### 4.6 `GET /api/tracking/{kind}/{tmdbId}/episodes`: episode guide
+
+Server 0.5.0+. `kind` is `series` or `movie`, `tmdbId` the item's `tmdbId`. Every episode TMDB knows
+(aired and announced), plus library files TMDB does not list (specials, absolute numbering; these
+have an empty `airDate`), in season then episode order:
+
+```json
+{ "title": { "kind": "series", "tmdbId": 1399, "name": "…", "poster": "…", "status": "Returning Series", "itemId": 2 },
+  "episodes": [
+    { "season": 1, "number": 2, "name": "…", "airDate": "2026-01-12", "watched": false, "positionSec": 300, "new": false,
+      "sources": [ { "kind": "library", "ref": "item:5", "quality": "720p", "labels": [], "firstSeen": "2026-01-13T10:00:00Z",
+                     "meta": { "itemId": 5, "fileId": 8 } } ] }
+  ] }
+```
+
+- `sources[].kind` is `library`, `pinned`, `torrent` or `online`; the apps use only `library`, whose
+  `meta.itemId` is the episode item to play (as from SeasonInfo). Kids get library sources only.
+- `airDate` is `YYYY-MM-DD` or `""` (unknown). `watched`/`positionSec` merge the profile's watch
+  states; `positionSec` is omitted when 0. `new`: unwatched news with a non-library source.
+- 404 when the age filter hides the title; servers before 0.5.0 answer 404/405. Either way the apps
+  show the library's episodes (SeasonInfo) as before.
+
+How the apps use it (`EpisodeGuide` in `:core`): a library series page lists every guide episode.
+One with a library source, or a library episode at the same season and number, plays as before
+(«Скачана» / Downloaded). An aired one without it is dimmed («Не скачана» / Not downloaded) and does
+not play («Серии нет в медиатеке» / Not in the library); one airing after today or without a date is
+greyed («Выйдет 21 ноября» / «Ещё не вышла») and not selectable. Library episodes the guide misses
+are kept. The guide is not waited for longer than 6 s.
+
+Sample: `tracking-episodes.json`.
 
 ---
 

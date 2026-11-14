@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.library.EpisodeGuide
+import app.antresol.core.library.GuideSeason
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.model.AlbumDetail
 import app.antresol.core.model.ArtistDetail
@@ -14,12 +16,12 @@ import app.antresol.core.model.AudioTrack
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
 import app.antresol.core.model.CastMember
+import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
 import app.antresol.core.model.Playlist
 import app.antresol.core.model.PlaylistDetail
 import app.antresol.core.model.Progress
-import app.antresol.core.model.SeasonInfo
 import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.SubTrack
 import app.antresol.core.model.Track
@@ -36,6 +38,7 @@ import app.antresol.ui.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 /** A row of related cards on a detail page; the title is server text or a string resource. */
 data class DetailRow(
@@ -107,8 +110,11 @@ data class VideoInfo(
     val audio: List<AudioTrack> = emptyList(),
     val subtitles: List<SubTrack> = emptyList(),
     val cast: List<CastMember> = emptyList(),
-    val seasons: List<SeasonInfo> = emptyList(),
-)
+    /** The seasons a series page lists: the server's episode guide, or the library's episodes. */
+    val guide: EpisodeGuide = EpisodeGuide(emptyList(), fromServer = false),
+) {
+    val seasons: List<GuideSeason> get() = guide.seasons
+}
 
 /** Loads the detail of any card kind through the matching endpoint. */
 class DetailViewModel(
@@ -295,12 +301,12 @@ class DetailViewModel(
         else -> {
             val item = client.item(id)
             val progress = if (item.files.isNotEmpty()) runCatching { client.progress(item.id) }.getOrNull() else null
-            item.toModel(progress)
+            item.toModel(progress, EpisodeGuide.fetch(client, item))
         }
     }
 }
 
-private fun ItemDetail.toModel(progress: Progress?): DetailModel {
+private fun ItemDetail.toModel(progress: Progress?, guide: EpisodeGuideResponse?): DetailModel {
     val fileDuration = files.firstOrNull()?.durationMs
     return DetailModel(
         card = toCard(),
@@ -309,11 +315,15 @@ private fun ItemDetail.toModel(progress: Progress?): DetailModel {
         rating = rating,
         genres = genres,
         overview = overview,
-        video = videoInfo(progress),
+        video = videoInfo(progress, guide),
     )
 }
 
-internal fun ItemDetail.videoInfo(progress: Progress?): VideoInfo {
+internal fun ItemDetail.videoInfo(
+    progress: Progress?,
+    guide: EpisodeGuideResponse? = null,
+    today: LocalDate = LocalDate.now(),
+): VideoInfo {
     val episodes = Episodes.ordered(this)
     val target = when {
         files.isNotEmpty() -> PlayTarget(
@@ -334,7 +344,7 @@ internal fun ItemDetail.videoInfo(progress: Progress?): VideoInfo {
         audio = file?.audio.orEmpty(),
         subtitles = file?.subs.orEmpty(),
         cast = cast,
-        seasons = seasons.filter { it.episodes.isNotEmpty() }.sortedBy { it.number },
+        guide = EpisodeGuide.build(this, guide, today),
     )
 }
 

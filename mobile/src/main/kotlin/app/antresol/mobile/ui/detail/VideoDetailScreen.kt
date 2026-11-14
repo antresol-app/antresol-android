@@ -26,7 +26,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -51,7 +51,8 @@ import app.antresol.core.model.CastMember
 import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.FileInfo
 import app.antresol.core.model.Kind
-import app.antresol.core.model.SeasonInfo
+import app.antresol.core.library.EpisodeState
+import app.antresol.core.library.GuideEpisode
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
@@ -70,10 +71,14 @@ import app.antresol.mobile.ui.components.kindLabel
 import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
+import app.antresol.ui.components.Badge
 import app.antresol.ui.components.BadgeRow
 import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.components.ProgressBar
 import app.antresol.ui.format.Durations
+import app.antresol.ui.format.EpisodeLabels
+import app.antresol.ui.format.episodeStateLabel
+import app.antresol.ui.format.seasonLabel
 import app.antresol.ui.format.TrackLabels
 import app.antresol.ui.format.spokenDuration
 import app.antresol.ui.playback.ResumeMode
@@ -130,10 +135,16 @@ private fun VideoDetailContent(
     val urls = LocalMediaUrls.current
     val configuration = LocalConfiguration.current
     val bottom = LocalBottomBarPadding.current
-    val seasons = item.seasons.filter { it.episodes.isNotEmpty() }
-    val initialSeason = item.next?.let { next -> seasons.firstOrNull { s -> s.episodes.any { it.id == next.id } } } ?: seasons.firstOrNull()
-    var selectedSeasonId by rememberSaveable(item.id) { mutableLongStateOf(initialSeason?.id ?: 0L) }
-    val season = seasons.firstOrNull { it.id == selectedSeasonId } ?: seasons.firstOrNull()
+    val librarySeasons = item.seasons.filter { it.episodes.isNotEmpty() }
+    // Every episode of the guide (or the library's when the server has none); recomputed after
+    // each watched toggle, which changes the item.
+    val guide = remember(detail) { detail.episodeGuide() }
+    val seasons = guide.seasons
+    val initialSeason = item.next?.let { next -> seasons.firstOrNull { s -> s.libraryEpisodes.any { it.id == next.id } } }
+        ?: seasons.firstOrNull { it.libraryEpisodes.isNotEmpty() }
+        ?: seasons.firstOrNull()
+    var selectedSeason by rememberSaveable(item.id) { mutableIntStateOf(initialSeason?.number ?: 0) }
+    val season = seasons.firstOrNull { it.number == selectedSeason } ?: seasons.firstOrNull()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -207,7 +218,7 @@ private fun VideoDetailContent(
                         modifier = buttonModifier.testTag("toggle-watchlist"),
                     )
                 }
-                if (item.kind != Kind.SERIES || seasons.isNotEmpty()) {
+                if (item.kind != Kind.SERIES || librarySeasons.isNotEmpty()) {
                     GlassPillButton(
                         text = stringResource(R.string.detail_watched),
                         icon = if (detail.watched) MobileIcons.CheckCircle else MobileIcons.Circle,
@@ -232,16 +243,41 @@ private fun VideoDetailContent(
                         SegmentedPills(
                             options = seasons,
                             selected = season,
-                            label = { it.title.ifBlank { stringResource(UiR.string.detail_season_number, it.number) } },
-                            onSelect = { selectedSeasonId = it.id },
+                            label = { seasonLabel(it) },
+                            onSelect = { selectedSeason = it.number },
                             modifier = Modifier.padding(vertical = 4.dp),
                         )
                     }
-                    SeasonWatchedToggle(season) { viewModel.toggleSeasonWatched(season) }
+                    val seasonId = season.libraryId
+                    val libraryEpisodes = season.libraryEpisodes
+                    if (seasonId != null && libraryEpisodes.isNotEmpty()) {
+                        SeasonWatchedToggle(libraryEpisodes) { viewModel.toggleSeasonWatched(seasonId, libraryEpisodes) }
+                    }
                 }
             }
-            items(season.episodes, key = { "episode-${it.id}" }) { episode ->
-                EpisodeRow(episode, onOpen = { onOpen(episode.toCard()) }, onPlay = { onPlay(episode.id, ResumeMode.Ask) }, onToggleWatched = { viewModel.toggleEpisodeWatched(episode) })
+            items(season.episodes, key = { it.key }) { episode ->
+                val card = episode.card
+                val mark = episodeStateLabel(episode, guide.fromServer)
+                if (card != null && episode.isPlayable) {
+                    EpisodeRow(
+                        card,
+                        onOpen = { onOpen(card.toCard()) },
+                        onPlay = { onPlay(card.id, ResumeMode.Ask) },
+                        onToggleWatched = { viewModel.toggleEpisodeWatched(card) },
+                        code = episode.season to episode.number,
+                        mark = mark,
+                    )
+                } else {
+                    UnavailableEpisodeRow(
+                        episode,
+                        mark = mark,
+                        onClick = if (episode.state == EpisodeState.NotDownloaded) {
+                            { viewModel.showNotice(UiR.string.episode_not_in_library) }
+                        } else {
+                            null
+                        },
+                    )
+                }
             }
         }
         item.files.firstOrNull()?.let { file -> item("file") { FileDetails(file) } }
@@ -250,8 +286,8 @@ private fun VideoDetailContent(
 }
 
 @Composable
-private fun SeasonWatchedToggle(season: SeasonInfo, onToggle: () -> Unit) {
-    val allWatched = season.episodes.all { it.watched }
+private fun SeasonWatchedToggle(episodes: List<EpisodeCard>, onToggle: () -> Unit) {
+    val allWatched = episodes.all { it.watched }
     Text(
         text = stringResource(if (allWatched) R.string.detail_mark_season_unwatched else R.string.detail_mark_season_watched),
         style = Antresol.typography.bodyEmphasis.copy(color = AntresolColors.Accent),
@@ -298,10 +334,18 @@ private fun PlayRow(target: PlayTarget, onPlay: (itemId: Long, mode: ResumeMode)
 
 /**
  * An episode: still with progress (tap to play), "S1 · E2", title, length and overview (tap for
- * the episode page), and a watched toggle.
+ * the episode page), and a watched toggle. [code] is the season and number to show (the episode's
+ * own by default), [mark] the guide's «Скачана».
  */
 @Composable
-private fun EpisodeRow(episode: EpisodeCard, onOpen: () -> Unit, onPlay: () -> Unit, onToggleWatched: () -> Unit) {
+private fun EpisodeRow(
+    episode: EpisodeCard,
+    onOpen: () -> Unit,
+    onPlay: () -> Unit,
+    onToggleWatched: () -> Unit,
+    code: Pair<Int, Int> = episode.seasonNo to episode.episodeNo,
+    mark: String? = null,
+) {
     val urls = LocalMediaUrls.current
     val wide = LocalConfiguration.current.screenWidthDp >= 600
     val toggleLabel = stringResource(if (episode.watched) UiR.string.action_mark_unwatched else UiR.string.action_mark_watched)
@@ -339,11 +383,12 @@ private fun EpisodeRow(episode: EpisodeCard, onOpen: () -> Unit, onPlay: () -> U
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                stringResource(R.string.detail_episode_code, episode.seasonNo, episode.episodeNo),
+                stringResource(R.string.detail_episode_code, code.first, code.second),
                 style = Antresol.typography.eyebrow,
             )
             Text(episode.title, style = Antresol.typography.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
             episode.durationMs?.takeIf { it > 0 }?.let { Text(spokenDuration(it), style = Antresol.typography.caption) }
+            mark?.let { Badge(it, Modifier.padding(top = 2.dp)) }
             episode.overview?.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = Antresol.typography.caption, maxLines = if (wide) 3 else 2, overflow = TextOverflow.Ellipsis)
             }
@@ -362,6 +407,58 @@ private fun EpisodeRow(episode: EpisodeCard, onOpen: () -> Unit, onPlay: () -> U
                 tint = if (episode.watched) AntresolColors.Accent else AntresolColors.LabelTertiary,
                 modifier = Modifier.size(24.dp),
             )
+        }
+    }
+}
+
+/**
+ * An episode the library does not have: the same row as [EpisodeRow] without the still, Play and
+ * watched toggle, dimmed (not downloaded) or greyed (not aired yet, [onClick] null), with its mark.
+ */
+@Composable
+private fun UnavailableEpisodeRow(episode: GuideEpisode, mark: String?, onClick: (() -> Unit)?) {
+    val wide = LocalConfiguration.current.screenWidthDp >= 600
+    val tag = if (episode.state == EpisodeState.Upcoming) "episode-upcoming" else "episode-missing"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.focusClickable(AntresolShapes.control, onClick = onClick) else Modifier)
+            .padding(horizontal = PageGutter, vertical = 8.dp)
+            .alpha(EpisodeLabels.alpha(episode.state))
+            .testTag("$tag-${episode.season}-${episode.number}"),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ArtworkImage(
+            url = null,
+            title = episode.title,
+            shape = AntresolShapes.smallCard,
+            modifier = Modifier
+                .width(if (wide) 200.dp else 136.dp)
+                .aspectRatio(AntresolMotion.BACKDROP_ASPECT),
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                stringResource(R.string.detail_episode_code, episode.season, episode.number),
+                style = Antresol.typography.eyebrow,
+            )
+            Text(
+                episode.title.ifBlank { stringResource(UiR.string.detail_episode_number, episode.number) },
+                style = Antresol.typography.title,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            mark?.let { Badge(it, Modifier.padding(top = 2.dp)) }
+        }
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            if (episode.watched) {
+                Icon(
+                    imageVector = MobileIcons.CheckCircle,
+                    contentDescription = stringResource(UiR.string.detail_watched),
+                    tint = AntresolColors.Accent,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
         }
     }
 }

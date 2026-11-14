@@ -120,6 +120,13 @@
         <item quantity="one">%1$d song</item>
         <item quantity="other">%1$d songs</item>
     </plurals>
+    <!-- Episode guide of a series page -->
+    <string name="detail_specials">Specials</string>
+    <string name="episode_downloaded">Downloaded</string>
+    <string name="episode_not_downloaded">Not downloaded</string>
+    <string name="episode_airs">Airs %1$s</string>
+    <string name="episode_not_aired">Not aired yet</string>
+    <string name="episode_not_in_library">Not in the library</string>
     <!-- Detail actions and player -->
     <string name="detail_play_episode">Play S%1$d E%2$d</string>
     <string name="detail_resume_episode">Resume S%1$d E%2$d</string>

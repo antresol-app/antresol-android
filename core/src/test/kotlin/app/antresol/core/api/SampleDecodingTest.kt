@@ -9,6 +9,7 @@ import app.antresol.core.model.ChannelGuide
 import app.antresol.core.model.ChannelList
 import app.antresol.core.model.ComicPages
 import app.antresol.core.model.DeviceSessions
+import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.ErrorBody
 import app.antresol.core.model.GenresResponse
 import app.antresol.core.model.Health
@@ -101,6 +102,7 @@ class SampleDecodingTest {
         "search-music" to serializer<SearchResults>(),
         "search" to serializer<SearchResults>(),
         "setup-get" to serializer<SetupStatus>(),
+        "tracking-episodes" to serializer<EpisodeGuideResponse>(),
         "users-create" to serializer<UserAccount>(),
         "users-list" to ListSerializer(serializer<UserAccount>()),
     )
@@ -125,6 +127,25 @@ class SampleDecodingTest {
             assertTrue("Failed to decode $name: ${decoded.exceptionOrNull()}", decoded.isSuccess)
         }
         assertEquals(files.map { it.nameWithoutExtension }.toSet(), decoders.keys)
+    }
+
+    @Test
+    fun episodeGuide() {
+        val guide = sample<EpisodeGuideResponse>("tracking-episodes")
+        assertEquals(1399L, guide.title.tmdbId)
+        assertEquals(2L, guide.title.itemId)
+        assertEquals(5, guide.episodes.size)
+        val first = guide.episodes.first()
+        assertTrue(first.watched)
+        assertEquals(4L, first.librarySource?.meta?.itemId)
+        assertEquals(7L, first.librarySource?.meta?.fileId)
+        assertEquals(300, guide.episodes[1].positionSec)
+        val torrent = guide.episodes[2]
+        assertNull(torrent.librarySource)
+        assertTrue(torrent.new)
+        assertEquals(listOf("LostFilm"), torrent.sources.single().labels)
+        assertTrue(guide.episodes[3].sources.isEmpty())
+        assertEquals("", guide.episodes[4].airDate)
     }
 
     @Test

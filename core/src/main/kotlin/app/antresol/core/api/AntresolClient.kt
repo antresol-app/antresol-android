@@ -10,6 +10,7 @@ import app.antresol.core.model.ChannelList
 import app.antresol.core.model.ComicPages
 import app.antresol.core.model.DeviceInfo
 import app.antresol.core.model.DeviceSessions
+import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.ErrorBody
 import app.antresol.core.model.GenresResponse
 import app.antresol.core.model.Health
@@ -155,6 +156,13 @@ class AntresolClient(
     suspend fun search(query: String): SearchResults = get("api/search") { addQueryParameter("q", query) }
 
     suspend fun libraryStatus(): LibraryStatus = get("api/library/status")
+
+    /**
+     * Every episode of a title by its TMDB id ([kind] `series` or `movie`), server 0.5.0+. Older
+     * servers answer 404/405; 404 also when the age filter hides the title.
+     * [app.antresol.core.library.EpisodeGuide.fetch] turns every failure into "no guide".
+     */
+    suspend fun episodeGuide(kind: String, tmdbId: Long): EpisodeGuideResponse = get("api/tracking/$kind/$tmdbId/episodes")
 
     // endregion
 

@@ -30,7 +30,9 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
 - **Browse**: Movies and TV Shows grids with sort pills; Music (All Albums, Artists, Songs,
   Playlists, Shuffle All, genre chips, shelves); Books (All Books, Audiobooks, Manga & Comics,
   shelves); album, artist and book grids; debounced Search.
-- **Video**: detail pages with Play/Resume, watchlist and watched toggles, seasons and episodes. The
+- **Video**: detail pages with Play/Resume, watchlist and watched toggles, seasons and episodes
+  (with the server's episode guide every episode shows: ones not in the library dimmed, ones not
+  aired yet greyed with their air date; only library episodes play). The
   ExoPlayer player sends the device's codec caps (direct play, or HLS remux/transcode), has audio,
   subtitle and quality menus, keeps the HLS session alive, saves progress every 10 s and counts
   down to the next episode.
@@ -72,7 +74,8 @@ Live UI tests (`TvLiveUiTest`, Robolectric with D-pad key events) write screensh
 - **Video**: a landscape player with picture-in-picture, double-tap to skip, and audio, subtitle
   and quality menus. It uses direct play when the phone can decode the file, and HLS remux or
   transcode when it can't. Progress is saved every 10 s, and the next episode starts after a
-  countdown.
+  countdown. A series page lists every episode of the server's guide, marked downloaded or not;
+  ones not aired yet are greyed with their air date.
 - **TV (live channels)**: «On Air Now» on Home (after the first shelf; the tab bar keeps five tabs, as
   on the web) opens the TV page: «Continue» on top, section pills and channel cards. The live player
   is a landscape activity; channel up/down buttons and vertical swipes switch channels without a

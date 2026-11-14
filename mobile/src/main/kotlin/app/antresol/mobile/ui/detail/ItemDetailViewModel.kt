@@ -5,10 +5,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.library.EpisodeGuide
 import app.antresol.core.model.EpisodeCard
+import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
-import app.antresol.core.model.SeasonInfo
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.PendingWrites
 import app.antresol.mobile.R
@@ -16,6 +17,7 @@ import app.antresol.core.playback.Resume
 import app.antresol.mobile.ui.LoadViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 /** What the Play button starts: [itemId] (a movie or episode), [episode] for a series or season. */
 data class PlayTarget(val itemId: Long, val episode: EpisodeCard?, val resume: Boolean)
@@ -27,7 +29,12 @@ data class VideoDetail(
     val watched: Boolean,
     /** Movie/episode: the saved position (0 when none or finished). */
     val positionMs: Long = 0,
+    /** Series: the server's episode guide, null when it has none (the library's list then). */
+    val guide: EpisodeGuideResponse? = null,
 ) {
+    /** The seasons the page lists: every episode of the guide, or the library's (watched toggles show at once). */
+    fun episodeGuide(today: LocalDate = LocalDate.now()): EpisodeGuide = EpisodeGuide.build(item, guide, today)
+
     val canWatchlist: Boolean get() = item.kind == Kind.MOVIE || item.kind == Kind.SERIES
 
     /** Movies and episodes play themselves; a series or season plays its next (or first) episode. */
@@ -54,6 +61,11 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
         notice = null
     }
 
+    /** Shows string resource [res] once (an episode that is not in the library was tapped). */
+    fun showNotice(res: Int) {
+        notice = res
+    }
+
     fun toggleWatchlist() = mutate(
         change = { it.copy(item = it.item.copy(inWatchlist = !it.item.inWatchlist)) },
         write = { before -> if (before.item.inWatchlist) client.removeFromWatchlist(id) else client.addToWatchlist(id) },
@@ -68,14 +80,15 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
         write = { before -> client.setWatched(id, !before.watched) },
     )
 
-    fun toggleSeasonWatched(season: SeasonInfo) {
-        val watched = !season.episodes.all { it.watched }
+    /** Marks the library episodes of season item [seasonId] ([episodes]) watched, or unwatched when all are. */
+    fun toggleSeasonWatched(seasonId: Long, episodes: List<EpisodeCard>) {
+        val watched = !episodes.all { it.watched }
         mutate(
             change = { detail ->
-                val item = detail.item.withEpisodes(season.id) { it.copy(watched = watched, progress = 0.0) }
+                val item = detail.item.withEpisodes(seasonId) { it.copy(watched = watched, progress = 0.0) }
                 detail.copy(item = item, watched = item.allEpisodesWatched())
             },
-            write = { client.setWatched(season.id, watched) },
+            write = { client.setWatched(seasonId, watched) },
         )
     }
 
@@ -110,7 +123,7 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
                     val progress = client.progress(id)
                     VideoDetail(item, progress.finished, (Resume.videoStartSec(progress) * 1000).toLong())
                 }
-                else -> VideoDetail(item, item.allEpisodesWatched())
+                else -> VideoDetail(item, item.allEpisodesWatched(), guide = EpisodeGuide.fetch(client, item))
             }
         }
     }

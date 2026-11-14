@@ -120,6 +120,13 @@
         <item quantity="many">%1$d песен</item>
         <item quantity="other">%1$d песни</item>
     </plurals>
+    <!-- Episode guide of a series page -->
+    <string name="detail_specials">Спецвыпуски</string>
+    <string name="episode_downloaded">Скачана</string>
+    <string name="episode_not_downloaded">Не скачана</string>
+    <string name="episode_airs">Выйдет %1$s</string>
+    <string name="episode_not_aired">Ещё не вышла</string>
+    <string name="episode_not_in_library">Серии нет в медиатеке</string>
     <!-- Detail actions and player -->
     <string name="detail_play_episode">Смотреть S%1$d E%2$d</string>
     <string name="detail_resume_episode">Продолжить S%1$d E%2$d</string>

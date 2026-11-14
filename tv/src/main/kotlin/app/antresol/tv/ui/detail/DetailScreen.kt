@@ -288,7 +288,7 @@ private fun DetailContent(
                     item(key = "seasons") {
                         SeasonsSection(
                             modifier = Modifier.padding(top = SectionGap),
-                            seasons = video.seasons,
+                            guide = video.guide,
                             initialEpisodeId = video.playTarget?.itemId,
                             focus = focus,
                             onPlayEpisode = { onPlay(it.id, ResumeMode.Ask) },

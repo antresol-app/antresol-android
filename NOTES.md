@@ -1015,3 +1015,28 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
 - Not verified: real providers (User-Agent/Referer requirements, MPEG-TS without extension),
   fallbacks with real duplicate channels; on the TV emulator the Apple «advanced» stream rendered
   zoomed (goldfish decoder), the other two were fine.
+
+## Episode guide on series pages
+
+- `:core`: `AntresolClient.episodeGuide(kind, tmdbId)` (`GET /api/tracking/{kind}/{tmdbId}/episodes`,
+  server 0.5.0+, docs/API.md §4.6), models in `model/EpisodeGuide.kt`, and `library/EpisodeGuide`:
+  `fetch` (null for anything but a series with a `tmdbId`, for every failure — 404 from the age
+  filter, 404/405 from older servers, network, decoding — and after 6 s) and `build`, which merges the
+  series detail with the guide into `GuideSeason`s of `GuideEpisode`s (`Downloaded` / `NotDownloaded`
+  / `Upcoming`). A library source's `meta.itemId` picks the library card (so title, still, progress,
+  watched and the watched toggles stay the library's); a library episode at the same season and number
+  also counts as downloaded; library episodes the guide misses are kept; a library source the detail
+  does not list becomes a minimal card that still plays. Upcoming = air date after today or none.
+  No guide = the library's seasons, unchanged, and no «Скачана» marks.
+- `:ui-common`: `EpisodeLabels` (marks, localized air date «21 ноября» / "November 21", the year only
+  when it is another year's, «Спецвыпуски» for season 0, the dim levels) and the strings.
+- Phone: not-downloaded rows are dimmed without still/Play/watched toggle and tapping one shows «Серии
+  нет в медиатеке»; upcoming rows are greyed and not clickable. The season watched toggle shows only
+  for seasons the library has, and marks the library season item as before.
+- TV: every guide episode is a card in the season row; library ones play on OK and open on hold as
+  before. The others stay focusable so the row scrolls to them, but OK does nothing; the hint under
+  the row says «Серии нет в медиатеке» / «Ещё не вышла» while one is focused.
+- Tests: `EpisodeGuideTest` (states, numbering mismatches, fallback, fetch failures and timeout),
+  `SampleDecodingTest.episodeGuide` (`tracking-episodes.json`), `VideoInfoTest` (TV), `EpisodeLabelsTest`
+  (phone module, where Robolectric sees the merged resources).
+- Not verified on a device or against a live 0.5.0 server.

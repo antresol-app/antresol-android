@@ -19,19 +19,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import app.antresol.core.model.EpisodeCard
-import app.antresol.core.model.SeasonInfo
+import app.antresol.core.library.EpisodeGuide
+import app.antresol.core.library.EpisodeState
+import app.antresol.core.library.GuideEpisode
+import app.antresol.core.library.GuideSeason
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.components.CardSizes
 import app.antresol.tv.ui.components.CardSurface
@@ -45,7 +52,11 @@ import app.antresol.tv.R as TvR
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
+import app.antresol.ui.components.Badge
 import app.antresol.ui.components.ProgressBar
+import app.antresol.ui.format.EpisodeLabels
+import app.antresol.ui.format.episodeStateLabel
+import app.antresol.ui.format.seasonLabel
 import app.antresol.ui.format.spokenDuration
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
@@ -53,27 +64,38 @@ import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 
 /** Focus key of an episode card on a series page. */
-fun episodeFocusKey(episode: EpisodeCard) = "episode/${episode.id}"
+fun episodeFocusKey(episode: GuideEpisode) = "episode/${episode.key}"
 
 /**
  * Season pills (or the season title when there is one) above a row of 16:9 episode cards with
  * progress and watched marks. Starts on the season of [initialEpisodeId], scrolled to it.
+ *
+ * With the server's episode guide every episode shows: library ones play (OK) and open (hold OK)
+ * as before; one that is not downloaded is dimmed and one not aired yet greyed, with their mark;
+ * they take focus (so the row scrolls to them) but do nothing, and the hint under the row says why.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun SeasonsSection(
-    seasons: List<SeasonInfo>,
+    guide: EpisodeGuide,
     initialEpisodeId: Long?,
     focus: FocusMemory,
     onPlayEpisode: (EpisodeCard) -> Unit,
     onOpenEpisode: (EpisodeCard) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val seasons = guide.seasons
     var selected by rememberSaveable {
-        mutableIntStateOf(seasons.indexOfFirst { season -> season.episodes.any { it.id == initialEpisodeId } }.coerceAtLeast(0))
+        mutableIntStateOf(
+            seasons.indexOfFirst { season -> season.libraryEpisodes.any { it.id == initialEpisodeId } }
+                .takeIf { it >= 0 }
+                ?: seasons.indexOfFirst { it.libraryEpisodes.isNotEmpty() }.coerceAtLeast(0),
+        )
     }
     val season = seasons[selected.coerceIn(seasons.indices)]
-    val titles = seasons.map { it.title.ifBlank { stringResource(R.string.detail_season_number, it.number) } }
+    val titles = seasons.map { seasonLabel(it) }
+    // The state of the focused card when it cannot play: the hint under the row explains it.
+    var focusedUnavailable by remember { mutableStateOf<EpisodeState?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = modifier.fillMaxWidth()) {
         Box(Modifier.padding(horizontal = ScreenPaddingH)) {
             if (seasons.size > 1) {
@@ -84,10 +106,16 @@ fun SeasonsSection(
         }
         // Each season gets its own scroll state and focus restorer, starting at the episode to watch.
         key(season.number) {
-            SeasonRow(season, initialEpisodeId, focus, onPlayEpisode, onOpenEpisode)
+            SeasonRow(season, guide.fromServer, initialEpisodeId, focus, onPlayEpisode, onOpenEpisode, onFocusUnavailable = { focusedUnavailable = it })
         }
         Text(
-            stringResource(TvR.string.detail_episode_hold_hint),
+            stringResource(
+                when (focusedUnavailable) {
+                    EpisodeState.NotDownloaded -> R.string.episode_not_in_library
+                    EpisodeState.Upcoming -> R.string.episode_not_aired
+                    else -> TvR.string.detail_episode_hold_hint
+                },
+            ),
             style = Antresol.typography.caption,
             modifier = Modifier.padding(horizontal = ScreenPaddingH),
         )
@@ -97,15 +125,18 @@ fun SeasonsSection(
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun SeasonRow(
-    season: SeasonInfo,
+    season: GuideSeason,
+    guided: Boolean,
     initialEpisodeId: Long?,
     focus: FocusMemory,
     onPlayEpisode: (EpisodeCard) -> Unit,
     onOpenEpisode: (EpisodeCard) -> Unit,
+    onFocusUnavailable: (EpisodeState?) -> Unit,
 ) {
-    val start = season.episodes.indexOfFirst { it.id == initialEpisodeId }
-        .takeIf { it >= 0 }
-        ?: season.episodes.indexOfFirst { it.progress > 0.0 && !it.watched }.coerceAtLeast(0)
+    val episodes = season.episodes
+    val start = episodes.indexOfFirst { it.card?.id == initialEpisodeId && initialEpisodeId != null }.takeIf { it >= 0 }
+        ?: episodes.indexOfFirst { it.isPlayable && it.progress > 0.0 && !it.watched }.takeIf { it >= 0 }
+        ?: episodes.indexOfFirst { it.isPlayable }.coerceAtLeast(0)
     HorizontalRowScrolling {
         LazyRow(
             state = rememberLazyListState(initialFirstVisibleItemIndex = start),
@@ -115,12 +146,16 @@ private fun SeasonRow(
                 .trapHorizontalFocus()
                 .focusRestorer(),
         ) {
-            items(season.episodes, key = { it.id }) { episode ->
+            items(episodes, key = { it.key }) { episode ->
+                val card = episode.card?.takeIf { episode.isPlayable }
                 EpisodeTile(
                     episode = episode,
-                    onClick = { onPlayEpisode(episode) },
-                    onLongClick = { onOpenEpisode(episode) },
-                    surfaceModifier = Modifier.remembersFocus(focus, episodeFocusKey(episode)),
+                    mark = episodeStateLabel(episode, guided),
+                    onClick = { card?.let(onPlayEpisode) },
+                    onLongClick = { card?.let(onOpenEpisode) },
+                    surfaceModifier = Modifier
+                        .remembersFocus(focus, episodeFocusKey(episode))
+                        .onFocusChanged { if (it.isFocused) onFocusUnavailable(if (card == null) episode.state else null) },
                 )
             }
         }
@@ -128,10 +163,17 @@ private fun SeasonRow(
 }
 
 @Composable
-private fun EpisodeTile(episode: EpisodeCard, onClick: () -> Unit, onLongClick: () -> Unit, surfaceModifier: Modifier) {
+private fun EpisodeTile(episode: GuideEpisode, mark: String?, onClick: () -> Unit, onLongClick: () -> Unit, surfaceModifier: Modifier) {
     val urls = LocalMediaUrls.current
     val outline = AntresolShapes.card
-    Column(Modifier.width(CardSizes.wideWidth), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val card = episode.card
+    val title = episode.title.ifBlank { stringResource(R.string.detail_episode_number, episode.number) }
+    Column(
+        Modifier
+            .width(CardSizes.wideWidth)
+            .alpha(EpisodeLabels.alpha(episode.state)),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         CardSurface(
             onClick = onClick,
             onLongClick = onLongClick,
@@ -141,8 +183,8 @@ private fun EpisodeTile(episode: EpisodeCard, onClick: () -> Unit, onLongClick: 
                 .aspectRatio(AntresolMotion.BACKDROP_ASPECT),
         ) {
             ArtworkImage(
-                url = urls?.image(episode.backdrop.ifEmpty { episode.poster }),
-                title = episode.title,
+                url = card?.let { urls?.image(it.backdrop.ifEmpty { it.poster }) },
+                title = title,
                 shape = outline,
                 modifier = Modifier.fillMaxSize(),
             ) {
@@ -168,15 +210,16 @@ private fun EpisodeTile(episode: EpisodeCard, onClick: () -> Unit, onLongClick: 
             }
         }
         Text(
-            text = stringResource(R.string.detail_episode_title, episode.episodeNo, episode.title),
+            text = stringResource(R.string.detail_episode_title, episode.number, title),
             style = Antresol.typography.title,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        episode.durationMs?.takeIf { it > 0 }?.let {
+        mark?.let { Badge(it) }
+        card?.durationMs?.takeIf { it > 0 }?.let {
             Text(spokenDuration(it), style = Antresol.typography.caption, maxLines = 1)
         }
-        episode.overview?.takeIf { it.isNotBlank() }?.let {
+        card?.overview?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = Antresol.typography.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }

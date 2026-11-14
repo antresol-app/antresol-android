@@ -1,0 +1,1 @@
+Set up a TV from your phone: scan the QR on the TV and the phone gives it the server and signs it in. Servers on your network are found automatically. TV: text fields stay above the keyboard, round icon buttons in the player, Back closes side menus.

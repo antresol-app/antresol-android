@@ -2,7 +2,6 @@ package app.antresol.tv.ui.onboarding
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,7 +34,10 @@ import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.core.session.SessionManager
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
+import app.antresol.tv.ui.components.KeyboardAwarePage
 import app.antresol.tv.ui.components.TvTextField
+import app.antresol.tv.ui.components.WhileNotTyping
+import app.antresol.tv.ui.components.rememberTvKeyboardOpen
 import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
@@ -89,7 +91,10 @@ fun ServerScreen(session: SessionManager) {
         }
     }
 
-    Box(
+    // While typing the field rides to the top: the TV keyboard covers the middle and bottom.
+    val keyboardOpen = rememberTvKeyboardOpen()
+    KeyboardAwarePage(
+        keyboardOpen = keyboardOpen,
         modifier = Modifier
             .fillMaxSize()
             .background(
@@ -99,21 +104,22 @@ fun ServerScreen(session: SessionManager) {
                     radius = 1400f,
                 ),
             ),
-        contentAlignment = Alignment.Center,
     ) {
         Column(
             modifier = Modifier.width(520.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            LogoTile(size = 72.dp)
+            WhileNotTyping(keyboardOpen) { LogoTile(size = 72.dp) }
             Text(stringResource(R.string.server_title), style = Antresol.typography.pageTitle, textAlign = TextAlign.Center)
-            Text(
-                stringResource(R.string.server_subtitle),
-                style = Antresol.typography.body,
-                color = AntresolColors.LabelSecondary,
-                textAlign = TextAlign.Center,
-            )
+            WhileNotTyping(keyboardOpen) {
+                Text(
+                    stringResource(R.string.server_subtitle),
+                    style = Antresol.typography.body,
+                    color = AntresolColors.LabelSecondary,
+                    textAlign = TextAlign.Center,
+                )
+            }
             Spacer(Modifier.height(8.dp))
             TvTextField(
                 value = address,

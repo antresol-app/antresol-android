@@ -244,7 +244,7 @@ class TvLiveUiTest {
         key(KeyEvent.KEYCODE_DPAD_LEFT, times = 2)
         waitFor(isFocused() and (hasAnyDescendant(hasText("Play") or hasText("Resume"))))
         key(KeyEvent.KEYCODE_DPAD_CENTER)
-        waitFor(hasText("Resume from", substring = true) or hasText("Quality") or hasText("This video can’t be played right now."), timeoutMs = 30_000)
+        waitFor(hasText("Resume from", substring = true) or hasContentDescription("Quality") or hasText("This video can’t be played right now."), timeoutMs = 30_000)
         Thread.sleep(1000)
         shot("12-player")
         // Back hides the controls, then leaves (under Robolectric the clip may already have ended).
@@ -254,7 +254,7 @@ class TvLiveUiTest {
             }
         }
         waitFor(hasText("Audio:", substring = true))
-        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Quality"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Quality"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
         shot("12b-movie-detail-after-player")
 
         // A series page: season title, episode cards and "Play S1 E…".
@@ -278,7 +278,7 @@ class TvLiveUiTest {
         shot("13-series-detail")
         // OK on an episode opens the player (resume prompt when it has progress).
         key(KeyEvent.KEYCODE_DPAD_CENTER)
-        waitFor(hasText("Resume from", substring = true) or hasText("Quality") or hasText("Play Now"), timeoutMs = 30_000)
+        waitFor(hasText("Resume from", substring = true) or hasContentDescription("Quality") or hasText("Play Now"), timeoutMs = 30_000)
         shot("14-episode-player")
         // Back hides the controls, then leaves the player.
         repeat(3) {

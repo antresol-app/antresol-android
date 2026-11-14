@@ -23,6 +23,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -30,7 +35,13 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Glow
+import androidx.tv.material3.Icon
+import androidx.tv.material3.LocalContentColor
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.core.model.PlayMode
 import app.antresol.core.model.Quality
@@ -42,6 +53,7 @@ import app.antresol.ui.format.TrackLabels
 import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
+import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 
 /** The side menus of the player. */
@@ -121,6 +133,63 @@ fun SeekBar(
         }
     }
 }
+
+/**
+ * A round glass icon button of the player's control row, like the Apple TV app's transport-bar
+ * buttons and the live player's banner: glass with a white glyph at rest, white with a black glyph,
+ * lifted and glowing when focused (the TV app's focus look). Its [label] is the accessibility name
+ * and shows as a caption under the button only while it is focused; the caption takes no width, so
+ * the row does not shift as focus moves.
+ */
+@Composable
+internal fun PlayerIconButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    var focused by remember { mutableStateOf(false) }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Surface(
+            onClick = onClick,
+            modifier = modifier
+                .size(PlayerButtonSize)
+                .onFocusChanged { focused = it.isFocused }
+                .semantics { contentDescription = label },
+            shape = ClickableSurfaceDefaults.shape(CircleShape),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = AntresolColors.Glass,
+                contentColor = AntresolColors.Label,
+                focusedContainerColor = AntresolColors.Label,
+                focusedContentColor = AntresolColors.LabelInverse,
+                pressedContainerColor = AntresolColors.LabelSecondary,
+                pressedContentColor = AntresolColors.LabelInverse,
+            ),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = AntresolMotion.FOCUS_SCALE),
+            glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.35f), 12.dp)),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = LocalContentColor.current,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(22.dp),
+            )
+        }
+        Box(Modifier.height(16.dp)) {
+            if (focused) {
+                Text(
+                    label,
+                    style = Antresol.typography.caption.copy(color = AntresolColors.Label),
+                    maxLines = 1,
+                    modifier = Modifier.layout { measurable, _ ->
+                        // As wide as it needs, centred under the button, without widening the row.
+                        val caption = measurable.measure(Constraints())
+                        layout(0, caption.height) { caption.place(-caption.width / 2, 0) }
+                    },
+                )
+            }
+        }
+    }
+}
+
+private val PlayerButtonSize = 48.dp
 
 /** The audio, subtitle or quality choices of the player in an [OptionsPanel]. */
 @Composable

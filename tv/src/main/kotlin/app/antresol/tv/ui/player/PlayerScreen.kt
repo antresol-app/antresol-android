@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -39,6 +40,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -203,12 +205,73 @@ private fun TitleBlock(item: ItemDetail?) {
 /** Video with the transport controls, the buffering spinner and the track menus. */
 @Composable
 private fun PlayingOverlay(viewModel: PlayerViewModel) {
+    PlayingOverlayContent(
+        transport = TransportState(
+            positionMs = viewModel.positionMs,
+            bufferedMs = viewModel.bufferedMs,
+            durationMs = viewModel.durationMs,
+            playing = viewModel.playWhenReady,
+            audioChoice = viewModel.audioTracks.size > 1,
+            subtitleChoice = viewModel.subtitleTracks.isNotEmpty(),
+            nextEpisode = viewModel.nextEpisode != null,
+        ),
+        isPlaying = viewModel.isPlaying,
+        busy = viewModel.isBuffering || viewModel.isSwitching,
+        title = { TitleBlock(viewModel.item) },
+        actions = TransportActions(
+            onSeek = viewModel::seekBy,
+            onToggle = viewModel::togglePlayPause,
+            onNext = viewModel::playNext,
+            onScrubKey = { handleScrubKey(it, viewModel) },
+            onMediaKey = { handleMediaKey(it, viewModel) },
+            onHiddenKey = { event, show -> handleHiddenKey(event, viewModel, show) },
+        ),
+        menuContent = { menu, onDismiss -> TrackMenu(menu = menu, viewModel = viewModel, onDismiss = onDismiss) },
+    )
+}
+
+/** What the control row shows: the position and which buttons there are. */
+internal data class TransportState(
+    val positionMs: Long,
+    val bufferedMs: Long,
+    val durationMs: Long,
+    val playing: Boolean,
+    val audioChoice: Boolean,
+    val subtitleChoice: Boolean,
+    val nextEpisode: Boolean,
+)
+
+/** What the controls do; the key handlers return true when they used the key. */
+internal class TransportActions(
+    val onSeek: (Long) -> Unit,
+    val onToggle: () -> Unit,
+    val onNext: () -> Unit,
+    val onScrubKey: (KeyEvent) -> Boolean,
+    val onMediaKey: (KeyEvent) -> Boolean,
+    val onHiddenKey: (KeyEvent, show: () -> Unit) -> Boolean,
+)
+
+/**
+ * The playing overlay without the view model (tests drive it): the controls fade after 5 s of
+ * playing, a menu opens over them and Back closes it first (the panel's own Back), then hides the
+ * controls, then leaves; a closed menu gives focus back to the button that opened it.
+ */
+@Composable
+internal fun PlayingOverlayContent(
+    transport: TransportState,
+    isPlaying: Boolean,
+    busy: Boolean,
+    title: @Composable () -> Unit,
+    actions: TransportActions,
+    menuContent: @Composable (PlayerMenu, onDismiss: () -> Unit) -> Unit,
+) {
     var controlsVisible by remember { mutableStateOf(true) }
     var menu by remember { mutableStateOf<PlayerMenu?>(null) }
     var interactions by remember { mutableIntStateOf(0) }
     val rootFocus = remember { FocusRequester() }
     val seekFocus = remember { FocusRequester() }
-    // A closed menu gives focus back to its pill, not to the seek bar (where OK would pause).
+    val playFocus = remember { FocusRequester() }
+    // A closed menu gives focus back to its button, not to the seek bar (where OK would pause).
     val menuFocus = remember { PlayerMenu.entries.associateWith { FocusRequester() } }
     var lastMenu by remember { mutableStateOf<PlayerMenu?>(null) }
 
@@ -227,8 +290,8 @@ private fun PlayingOverlay(viewModel: PlayerViewModel) {
             }
         }
     }
-    LaunchedEffect(controlsVisible, interactions, viewModel.isPlaying, menu) {
-        if (controlsVisible && viewModel.isPlaying && menu == null) {
+    LaunchedEffect(controlsVisible, interactions, isPlaying, menu) {
+        if (controlsVisible && isPlaying && menu == null) {
             delay(CONTROLS_HIDE_MS)
             controlsVisible = false
         }
@@ -241,31 +304,35 @@ private fun PlayingOverlay(viewModel: PlayerViewModel) {
             .fillMaxSize()
             .onPreviewKeyEvent { event ->
                 interactions++
-                handleMediaKey(event, viewModel)
+                // Back with the controls up hides them in one press. Taken here, before the focused
+                // button: as a key it would first become a focus "exit" to this box and be used up.
+                // With a menu open the menu takes Back itself (OptionsPanel).
+                if (event.key == Key.Back && menu == null && controlsVisible) {
+                    if (event.type == KeyEventType.KeyUp) controlsVisible = false
+                    return@onPreviewKeyEvent true
+                }
+                actions.onMediaKey(event)
             }
             .focusRequester(rootFocus)
             .onKeyEvent { event ->
                 if (controlsVisible) return@onKeyEvent false
-                handleHiddenKey(event, viewModel) { controlsVisible = true }
+                actions.onHiddenKey(event) { controlsVisible = true }
             }
             .focusable(),
     ) {
-        if (viewModel.isBuffering || viewModel.isSwitching) Spinner()
+        if (busy) Spinner()
         AnimatedVisibility(visible = controlsVisible, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
             TransportControls(
-                viewModel = viewModel,
+                transport = transport,
+                actions = actions,
+                title = title,
                 seekFocus = seekFocus,
+                playFocus = playFocus,
                 menuFocus = menuFocus,
                 onOpenMenu = { menu = it },
             )
         }
-        menu?.let { open ->
-            TrackMenu(
-                menu = open,
-                viewModel = viewModel,
-                onDismiss = { menu = null },
-            )
-        }
+        menu?.let { open -> menuContent(open) { menu = null } }
     }
 }
 
@@ -325,8 +392,11 @@ private fun handleHiddenKey(event: KeyEvent, viewModel: PlayerViewModel, show: (
 
 @Composable
 private fun TransportControls(
-    viewModel: PlayerViewModel,
+    transport: TransportState,
+    actions: TransportActions,
+    title: @Composable () -> Unit,
     seekFocus: FocusRequester,
+    playFocus: FocusRequester,
     menuFocus: Map<PlayerMenu, FocusRequester>,
     onOpenMenu: (PlayerMenu) -> Unit,
 ) {
@@ -338,49 +408,75 @@ private fun TransportControls(
                 .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent)))
                 .padding(start = ScreenPaddingH, end = ScreenPaddingH, top = 32.dp, bottom = 48.dp),
         ) {
-            TitleBlock(viewModel.item)
+            title()
         }
-        // Bottom: progress and buttons.
+        // Bottom: progress, then the round icon buttons (the Apple TV transport bar): only the
+        // focused control looks focused, and its name shows under it.
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
-                .padding(start = ScreenPaddingH, end = ScreenPaddingH, top = 64.dp, bottom = 32.dp),
+                .padding(start = ScreenPaddingH, end = ScreenPaddingH, top = 64.dp, bottom = 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             SeekBar(
-                positionMs = viewModel.positionMs,
-                bufferedMs = viewModel.bufferedMs,
-                durationMs = viewModel.durationMs,
-                onSeek = viewModel::seekBy,
-                onToggle = viewModel::togglePlayPause,
+                positionMs = transport.positionMs,
+                bufferedMs = transport.bufferedMs,
+                durationMs = transport.durationMs,
+                onSeek = actions.onSeek,
+                onToggle = actions.onToggle,
                 modifier = Modifier
                     .focusRequester(seekFocus)
-                    .onPreviewKeyEvent { handleScrubKey(it, viewModel) },
+                    // Down lands on the first button (Play), not on whichever is nearest the middle.
+                    .focusProperties { down = playFocus }
+                    .onPreviewKeyEvent { actions.onScrubKey(it) }
+                    .testTag(PlayerTags.SEEK_BAR),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                val playing = viewModel.playWhenReady
-                PillButton(
-                    text = stringResource(if (playing) R.string.player_pause else R.string.action_play),
-                    onClick = viewModel::togglePlayPause,
-                    icon = if (playing) AntresolIcons.Pause else AntresolIcons.Play,
-                    style = PillStyle.Primary,
+            Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.Top) {
+                PlayerIconButton(
+                    icon = if (transport.playing) AntresolIcons.Pause else AntresolIcons.Play,
+                    label = stringResource(if (transport.playing) R.string.player_pause else R.string.action_play),
+                    onClick = actions.onToggle,
+                    modifier = Modifier
+                        .focusRequester(playFocus)
+                        .testTag(PlayerTags.PLAY_PAUSE),
                 )
-                if (viewModel.audioTracks.size > 1) {
-                    PillButton(stringResource(R.string.detail_audio), onClick = { onOpenMenu(PlayerMenu.Audio) }, icon = AntresolIcons.Audio, modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Audio)))
+                if (transport.audioChoice) {
+                    PlayerIconButton(
+                        icon = AntresolIcons.Audio,
+                        label = stringResource(R.string.detail_audio),
+                        onClick = { onOpenMenu(PlayerMenu.Audio) },
+                        modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Audio)),
+                    )
                 }
-                if (viewModel.subtitleTracks.isNotEmpty()) {
-                    PillButton(stringResource(R.string.detail_subtitles), onClick = { onOpenMenu(PlayerMenu.Subtitles) }, icon = AntresolIcons.Subtitles, modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Subtitles)))
+                if (transport.subtitleChoice) {
+                    PlayerIconButton(
+                        icon = AntresolIcons.Subtitles,
+                        label = stringResource(R.string.detail_subtitles),
+                        onClick = { onOpenMenu(PlayerMenu.Subtitles) },
+                        modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Subtitles)),
+                    )
                 }
-                PillButton(stringResource(R.string.detail_quality), onClick = { onOpenMenu(PlayerMenu.Quality) }, icon = AntresolIcons.Sliders, modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Quality)))
+                PlayerIconButton(
+                    icon = AntresolIcons.Sliders,
+                    label = stringResource(R.string.detail_quality),
+                    onClick = { onOpenMenu(PlayerMenu.Quality) },
+                    modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Quality)),
+                )
                 Spacer(Modifier.weight(1f))
-                if (viewModel.nextEpisode != null) {
-                    PillButton(stringResource(R.string.player_next_episode), onClick = viewModel::playNext, icon = AntresolIcons.SkipNext)
+                if (transport.nextEpisode) {
+                    PlayerIconButton(icon = AntresolIcons.SkipNext, label = stringResource(R.string.player_next_episode), onClick = actions.onNext)
                 }
             }
         }
     }
+}
+
+/** Test tags of the player controls. */
+internal object PlayerTags {
+    const val SEEK_BAR = "player-seek"
+    const val PLAY_PAUSE = "player-play-pause"
 }
 
 @Composable

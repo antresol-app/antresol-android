@@ -1045,3 +1045,36 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
   `SampleDecodingTest.episodeGuide` (`tracking-episodes.json`), `VideoInfoTest` (TV), `EpisodeLabelsTest`
   (phone module, where Robolectric sees the merged resources).
 - Not verified on a device or against a live 0.5.0 server.
+
+## TV UI fixes from the owner's TV (keyboard, player focus, icon buttons, Back on panels)
+
+- Text fields over the keyboard: Gboard for TV floats over the middle and bottom of the screen and
+  covered the centred server address. `components/TvTextField.kt`: `rememberTvKeyboardOpen()` (the
+  root window insets' IME visibility, polled every 150 ms; Compose's `WindowInsets.isImeVisible` is
+  useless here, without an edge-to-edge window it says "visible" from the start), with a fallback for
+  keyboards that report no IME at all: the field's own OK → `keyboard.show()` counts as open until a
+  submit, focus loss or a D-pad key reaching the field. `KeyboardAwarePage` slides the page to the
+  top (animated, 40 dp gap) and `WhileNotTyping` folds the logo/avatar/subtitle. Used by the server
+  address and the profile password; search and the playlist-name panel already have the field in the
+  top third. Addresses and passwords ask for no suggestions: `TYPE_TEXT_FLAG_NO_SUGGESTIONS` is added
+  through `InterceptPlatformTextInput` (Compose never sets it; autocorrect off is not enough for Gboard).
+- Player controls (`ui/player`): Play/Pause, Audio, Subtitles, Quality (and Next Episode) are round
+  glass icon buttons (`PlayerIconButton`, 48 dp; focus = white fill, black glyph, 1.07 scale, glow, the
+  name as a caption under the focused one only), like the Apple TV transport bar and the live banner.
+  Play is no longer a white "primary" pill, so with focus on the seek bar nothing else looks focused.
+  Down from the seek bar goes to Play. `PlayingOverlayContent` is the overlay without the view model.
+- Back on side panels: Compose turns an unused Back key into a focus "exit" and counts a cancelled one
+  (OptionsPanel's `exit = Cancel`) or a move to a focusable parent (the player's root box) as used, so
+  the key never reached the activity's `BackHandler`s: player menus closed only by choosing. Now
+  `OptionsPanel` takes Back itself (preview key handler, closes on key-up without choosing, plus its
+  own `BackHandler`); every screen already puts focus back on the opener. The player's Back with the
+  controls up is taken at the overlay root and hides them in one press (as a key on a focused button it would otherwise go to that focus exit first).
+  KeyPanel-style panels (channels, guide, live player) keep focus outside and were not affected.
+- Tests: `OptionsPanelBackTest`, `PlayerControlsFocusTest` (fill colours of focused/unfocused buttons,
+  captions, D-pad order, Back on a track menu: closed, nothing chosen, focus on the opener, player not
+  left), `ServerScreenKeyboardTest` (field in the top third while typing and back, NO_SUGGESTIONS +
+  URI variation in the EditorInfo). All with real KEYCODE_BACK events through the window: the old
+  tests' `onBackPressed()` path never went through Compose's focus exit.
+- Not verified on a real TV: whether Gboard for TV reports IME insets (either way the fallback moves
+  the field), and the look of the floating keyboard over the moved page. The TV emulator did not run
+  (not enough disk space for its data partition); screenshots are Robolectric renders.

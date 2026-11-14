@@ -52,7 +52,10 @@ import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.LoadingView
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
+import app.antresol.tv.ui.components.KeyboardAwarePage
 import app.antresol.tv.ui.components.TvTextField
+import app.antresol.tv.ui.components.WhileNotTyping
+import app.antresol.tv.ui.components.rememberTvKeyboardOpen
 import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.tv.ui.load
 import app.antresol.tv.ui.userMessage
@@ -274,39 +277,41 @@ private fun PasswordStep(
     var password by remember(profile.id) { mutableStateOf("") }
     val fieldFocus = remember { FocusRequester() }
     LaunchedEffect(profile.id) { fieldFocus.tryRequestFocus() }
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-    ) {
-        ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 96.dp)
-        Text(stringResource(R.string.password_title, profile.name), style = Antresol.typography.sectionTitle)
-        TvTextField(
-            value = password,
-            onValueChange = { password = it },
-            placeholder = stringResource(R.string.profile_password),
-            onSubmit = { if (password.isNotEmpty()) onSubmit(password) },
-            password = true,
-            modifier = Modifier
-                .width(420.dp)
-                .focusRequester(fieldFocus),
-        )
-        Text(
-            text = error ?: stringResource(R.string.password_show_keyboard),
-            style = Antresol.typography.caption,
-            color = if (error != null) AntresolColors.Red else AntresolColors.LabelTertiary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.width(420.dp),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            PillButton(
-                text = stringResource(R.string.profile_sign_in),
-                onClick = { onSubmit(password) },
-                style = PillStyle.Primary,
-                enabled = !busy && password.isNotEmpty(),
+    // While typing the field rides to the top: the TV keyboard covers the middle and bottom.
+    val keyboardOpen = rememberTvKeyboardOpen()
+    KeyboardAwarePage(keyboardOpen = keyboardOpen, modifier = Modifier.fillMaxSize()) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            WhileNotTyping(keyboardOpen) { ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 96.dp) }
+            Text(stringResource(R.string.password_title, profile.name), style = Antresol.typography.sectionTitle)
+            TvTextField(
+                value = password,
+                onValueChange = { password = it },
+                placeholder = stringResource(R.string.profile_password),
+                onSubmit = { if (password.isNotEmpty()) onSubmit(password) },
+                password = true,
+                modifier = Modifier
+                    .width(420.dp)
+                    .focusRequester(fieldFocus),
             )
-            PillButton(text = stringResource(R.string.action_cancel), onClick = onCancel)
+            Text(
+                text = error ?: stringResource(R.string.password_show_keyboard),
+                style = Antresol.typography.caption,
+                color = if (error != null) AntresolColors.Red else AntresolColors.LabelTertiary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.width(420.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                PillButton(
+                    text = stringResource(R.string.profile_sign_in),
+                    onClick = { onSubmit(password) },
+                    style = PillStyle.Primary,
+                    enabled = !busy && password.isNotEmpty(),
+                )
+                PillButton(text = stringResource(R.string.action_cancel), onClick = onCancel)
+            }
         }
-        Spacer(Modifier.fillMaxWidth())
     }
 }

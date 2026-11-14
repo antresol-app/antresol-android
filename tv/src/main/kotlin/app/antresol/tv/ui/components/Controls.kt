@@ -1,5 +1,6 @@
 package app.antresol.tv.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
@@ -29,6 +30,11 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -50,7 +56,15 @@ data class MenuOption(val label: String, val selected: Boolean, val badge: Strin
 /**
  * An opaque panel on the right, over a dimmed page, with a list of choices; picking one applies it
  * and closes the panel. Focus starts on [focusIndex] (default: the selected choice) and stays in the
- * panel until Back ([onDismiss] by the caller).
+ * panel until Back, which closes it without choosing ([onDismiss]); the caller puts focus back on
+ * the control that opened it.
+ *
+ * The panel takes the remote's Back key itself, before anything else sees it. Compose turns an
+ * unused Back key into a focus "exit" and counts a cancelled one (this panel's `exit = Cancel`) or
+ * a move to a focusable parent (the player's root) as used, so the key never reached the
+ * activity and the screen's `BackHandler` never ran: in the player only a choice closed the menu.
+ * The [BackHandler] here covers a back that does not come as a key (composed after the screen's,
+ * it goes first).
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -70,9 +84,16 @@ fun OptionsPanel(
         // Never leave focus behind the scrim: fall back to the panel's first row.
         if (!focus.tryRequestFocus()) panelFocus.tryRequestFocus()
     }
+    BackHandler(onBack = onDismiss)
     Box(
         Modifier
             .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.key != Key.Back) return@onPreviewKeyEvent false
+                // On release, like the system Back; the press is swallowed so nothing else reacts.
+                if (event.type == KeyEventType.KeyUp) onDismiss()
+                true
+            }
             .background(Color.Black.copy(alpha = 0.5f)),
         contentAlignment = Alignment.CenterEnd,
     ) {

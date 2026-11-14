@@ -3,7 +3,9 @@ package app.antresol.tv
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.provider.Settings
 import app.antresol.core.api.ServerLanguage
+import app.antresol.core.discovery.ServerFinder
 import app.antresol.core.model.DeviceInfo
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.session.AuthState
@@ -11,6 +13,7 @@ import app.antresol.core.session.SessionManager
 import app.antresol.tv.playback.AudioEngine
 import app.antresol.tv.settings.TvSettings
 import app.antresol.ui.data.DataStoreSessionStore
+import app.antresol.ui.discovery.LanDiscovery
 import app.antresol.ui.image.AntresolImageLoader
 import coil.ImageLoader
 import coil.ImageLoaderFactory
@@ -22,6 +25,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.Locale
 
 /**
@@ -42,6 +47,12 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
     /** Music and audiobook playback, shared with [app.antresol.tv.playback.PlaybackService]. Created on first use. */
     val audio: AudioEngine by audioEngine
 
+    /**
+     * Antresol servers on the home network for the server screen (UDP probe + mDNS). Also probes
+     * the last server used directly when it is a private address. Tests replace it.
+     */
+    var serverFinder: ServerFinder = ServerFinder.None
+
     /** Final progress writes of closed players, awaited by screens that show progress. */
     val pendingWrites = PendingWrites()
 
@@ -57,12 +68,13 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         settings = TvSettings(this)
+        serverFinder = LanDiscovery(this, unicastHosts = ::lastServerHost)
         session = SessionManager(
             store = DataStoreSessionStore(this),
             deviceInfo = { id ->
                 DeviceInfo(
                     id = id,
-                    name = getString(R.string.device_name, Build.MODEL),
+                    name = tvName(),
                     model = Build.MODEL,
                     version = BuildConfig.VERSION_NAME,
                 )
@@ -88,6 +100,16 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
         token = { session.client?.token },
         language = ::serverLanguage,
     )
+
+    /** The TV's own name from its settings («Гостиная»), else "Android TV (model)": the phone approving a QR sign-in shows it. */
+    private fun tvName(): String =
+        runCatching { Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME) }.getOrNull()
+            ?.trim()?.takeIf { it.isNotEmpty() }
+            ?: getString(R.string.device_name, Build.MODEL)
+
+    /** Runs on the discovery thread. */
+    private fun lastServerHost(): List<String> =
+        listOfNotNull(runBlocking { session.lastServerUrl() }?.toHttpUrlOrNull()?.host)
 
     private fun serverLanguage(): String = ServerLanguage.from(Locale.getDefault().toLanguageTag())
 }

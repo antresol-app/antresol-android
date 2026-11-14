@@ -7,10 +7,12 @@ import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.antresol.core.discovery.ServerFinder
 import app.antresol.tv.AntresolTvApp
 import app.antresol.tv.AntresolTvTheme
 import app.antresol.tv.ui.components.TvKeyboard
@@ -56,20 +58,20 @@ class ServerScreenKeyboardTest {
      */
     @Test
     fun theFieldRidesAboveTheKeyboardAndComesBack() {
-        compose.setContent { AntresolTvTheme { ServerScreen(app.session) } }
+        compose.setContent { AntresolTvTheme { ServerScreen(app.session, ServerFinder.None) } }
         settle()
         val height = compose.activity.resources.displayMetrics.heightPixels.toFloat()
         val field = compose.onNode(hasSetTextAction())
         val rest = field.fetchSemanticsNode().boundsInRoot
         shot("server-rest")
         assertTrue("at rest the field is in the middle ($rest of $height)", rest.top > height * 0.4f)
-        compose.onNodeWithText("Enter the address", substring = true).assertExists()
+        compose.onNodeWithText("enter the address", substring = true).assertExists()
 
         key(KeyEvent.KEYCODE_DPAD_CENTER) // OK opens the keyboard
         settle()
         val typing = field.fetchSemanticsNode().boundsInRoot
         assertTrue("while typing the field is in the top third ($typing of $height)", typing.bottom < height / 3)
-        compose.onNodeWithText("Enter the address", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("enter the address", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Connect to your server").assertExists()
         shot("server-keyboard-open")
 
@@ -77,7 +79,7 @@ class ServerScreenKeyboardTest {
         settle()
         assertEquals(false, TvKeyboard.requested)
         assertEquals(rest.top, field.fetchSemanticsNode().boundsInRoot.top, 1f)
-        compose.onNodeWithText("Enter the address", substring = true).assertExists()
+        compose.onNodeWithText("enter the address", substring = true).assertExists()
 
         // Leaving the field with the keyboard up (Down to Connect) restores the page too.
         key(KeyEvent.KEYCODE_DPAD_CENTER)
@@ -96,8 +98,9 @@ class ServerScreenKeyboardTest {
     /** Gboard ignores autocorrect=false for suggestions: the address must ask for none, as a URI. */
     @Test
     fun theAddressAsksTheKeyboardForNoSuggestions() {
-        compose.setContent { AntresolTvTheme { ServerScreen(app.session) } }
-        compose.waitForIdle()
+        compose.setContent { AntresolTvTheme { ServerScreen(app.session, ServerFinder.None) } }
+        // The field takes focus after the last address is read from the DataStore (off the main thread).
+        compose.waitUntil(5_000) { compose.onAllNodes(isFocused()).fetchSemanticsNodes().isNotEmpty() }
         val info = EditorInfo()
         compose.runOnUiThread {
             val view = compose.activity.window.decorView.findFocus()

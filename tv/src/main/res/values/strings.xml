@@ -88,4 +88,16 @@
     <string name="search_browse">Browse</string>
     <string name="search_scope_all">All</string>
     <string name="shelf_see_all">See All</string>
+
+    <!-- Sign in with the phone (QR) -->
+    <string name="pair_sign_in_with_phone">Sign In with Your Phone</string>
+    <string name="pair_instructions">Scan the code with your phone’s camera or in the Antresol app (Settings → Sign In a TV). Or open %1$s on a signed-in phone or computer and type the code.</string>
+    <string name="pair_expires_in">The code expires in %1$s</string>
+    <string name="pair_getting_code">Getting a code…</string>
+    <string name="pair_retrying">%1$s Trying again…</string>
+    <string name="pair_denied">Sign-in was declined on the phone.</string>
+    <string name="pair_new_code">New Code</string>
+    <string name="pair_use_remote">Sign In with the Remote</string>
+    <string name="pair_qr_description">QR code to sign in on this TV</string>
+    <string name="pair_signing_in">Signing in…</string>
 </resources>

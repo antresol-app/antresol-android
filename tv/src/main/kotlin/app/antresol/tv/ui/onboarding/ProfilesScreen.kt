@@ -44,6 +44,8 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.core.model.Profile
+import app.antresol.core.pairing.PairingApi
+import app.antresol.core.pairing.pairingApi
 import app.antresol.core.session.AuthNotice
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
@@ -60,6 +62,7 @@ import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.tv.ui.load
 import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
+import app.antresol.tv.R as TvR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
@@ -69,9 +72,16 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
-/** "Who's watching?": the profiles of the server, then a password step for protected profiles. */
+/**
+ * "Who's watching?": the profiles of the server, then a password step for protected profiles.
+ * «Sign in with your phone» next to them opens the QR sign-in ([PhoneSignInScreen]).
+ */
 @Composable
-fun ProfilesScreen(session: SessionManager, state: AuthState.ChooseProfile) {
+fun ProfilesScreen(
+    session: SessionManager,
+    state: AuthState.ChooseProfile,
+    pairing: () -> PairingApi = { session.requireClient().pairingApi() },
+) {
     val resources = LocalContext.current.resources
     val scope = rememberCoroutineScope()
     var reload by remember { mutableIntStateOf(0) }
@@ -80,6 +90,13 @@ fun ProfilesScreen(session: SessionManager, state: AuthState.ChooseProfile) {
     var lastFocused by rememberSaveable { mutableStateOf<Long?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var phoneSignIn by rememberSaveable { mutableStateOf(false) }
+
+    if (phoneSignIn) {
+        val api = remember(state.serverUrl) { pairing() }
+        PhoneSignInScreen(session, state, api, onBack = { phoneSignIn = false })
+        return
+    }
 
     LaunchedEffect(state.serverUrl, reload) {
         profiles = LoadState.Loading
@@ -155,6 +172,7 @@ fun ProfilesScreen(session: SessionManager, state: AuthState.ChooseProfile) {
                         onFocused = { lastFocused = it },
                         onSelect = ::select,
                         onChangeServer = { scope.launch { session.changeServer() } },
+                        onPhoneSignIn = { phoneSignIn = true },
                     )
                 }
             }
@@ -172,6 +190,7 @@ private fun ProfilePicker(
     onFocused: (Long) -> Unit,
     onSelect: (Profile) -> Unit,
     onChangeServer: () -> Unit,
+    onPhoneSignIn: () -> Unit,
 ) {
     val requesters = remember(profiles) { profiles.associate { it.id to FocusRequester() } }
     LaunchedEffect(profiles) {
@@ -211,7 +230,14 @@ private fun ProfilePicker(
             color = AntresolColors.LabelTertiary,
         )
         Spacer(Modifier.height(12.dp))
-        PillButton(text = stringResource(R.string.server_change), onClick = onChangeServer, icon = AntresolIcons.Server)
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            PillButton(
+                text = stringResource(TvR.string.pair_sign_in_with_phone),
+                onClick = onPhoneSignIn,
+                icon = AntresolIcons.Phone,
+            )
+            PillButton(text = stringResource(R.string.server_change), onClick = onChangeServer, icon = AntresolIcons.Server)
+        }
     }
 }
 

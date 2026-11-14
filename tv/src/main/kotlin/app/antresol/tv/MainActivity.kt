@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handle(intent)
         setContent {
             AntresolTvTheme {
-                AntresolTvRoot(app.session)
+                AntresolTvRoot(app.session, app.serverFinder)
             }
         }
     }

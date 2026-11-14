@@ -82,4 +82,16 @@
     <string name="search_browse">Обзор</string>
     <string name="search_scope_all">Все</string>
     <string name="shelf_see_all">Показать все</string>
+
+    <!-- Вход с телефона (QR) -->
+    <string name="pair_sign_in_with_phone">Войти с телефона</string>
+    <string name="pair_instructions">Отсканируйте код камерой телефона или в приложении Antresol («Настройки» → «Войти на телевизоре»). Или откройте %1$s на телефоне или компьютере, где вы вошли, и введите код.</string>
+    <string name="pair_expires_in">Код действует ещё %1$s</string>
+    <string name="pair_getting_code">Получаем код…</string>
+    <string name="pair_retrying">%1$s Пробуем ещё раз…</string>
+    <string name="pair_denied">Вход отклонён на телефоне.</string>
+    <string name="pair_new_code">Новый код</string>
+    <string name="pair_use_remote">Войти пультом</string>
+    <string name="pair_qr_description">QR-код для входа на этом телевизоре</string>
+    <string name="pair_signing_in">Входим…</string>
 </resources>

@@ -45,6 +45,9 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.tv.material3.Text
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.core.model.Trailer
+import app.antresol.ui.trailers.Trailers
+import app.antresol.ui.trailers.trailerLabel
 import app.antresol.core.playback.Chapters
 import app.antresol.tv.R as TvR
 import app.antresol.tv.playback.AudioContent
@@ -96,6 +99,9 @@ private const val WATCHED_KEY = "action/watched"
 /** Focus key of Add to Playlist (albums) or Delete Playlist (playlists). */
 private const val PLAYLIST_KEY = "action/playlist"
 
+/** Focus key of the Trailer button of a movie or series page. */
+private const val TRAILER_KEY = "action/trailer"
+
 /**
  * The detail page of any card: tinted backdrop, artwork, title, meta and overview. Movies,
  * episodes and series add Play/Resume, watchlist and watched actions, track and cast lines, and
@@ -121,18 +127,20 @@ fun DetailScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         if (resumedOnce) viewModel.refresh() else resumedOnce = true
     }
-    when (val state = viewModel.state) {
-        LoadState.Loading -> LoadingView()
-        is LoadState.Failed -> ErrorView(state.error, onRetry = viewModel::reload, takeFocus = canTakeFocus())
-        is LoadState.Ready -> DetailContent(
-            model = state.value,
-            viewModel = viewModel,
-            audio = audio,
-            actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead, onClose),
-            onScrolledToTop = onScrolledToTop,
-            canTakeFocus = canTakeFocus,
-            onPanelOpenChanged = onPanelOpenChanged,
-        )
+    Box(Modifier.fillMaxSize().testTag("page/detail")) {
+        when (val state = viewModel.state) {
+            LoadState.Loading -> LoadingView()
+            is LoadState.Failed -> ErrorView(state.error, onRetry = viewModel::reload, takeFocus = canTakeFocus())
+            is LoadState.Ready -> DetailContent(
+                model = state.value,
+                viewModel = viewModel,
+                audio = audio,
+                actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead, onClose),
+                onScrolledToTop = onScrolledToTop,
+                canTakeFocus = canTakeFocus,
+                onPanelOpenChanged = onPanelOpenChanged,
+            )
+        }
     }
 }
 
@@ -145,8 +153,8 @@ private class DetailActions(
     val close: () -> Unit,
 )
 
-/** The playlist panels of a music page. */
-private enum class PlaylistPanel { AddTo, Name, ConfirmDelete }
+/** The side panels of a detail page: playlists (music) and the trailer chooser (video). */
+private enum class PlaylistPanel { AddTo, Name, ConfirmDelete, Trailers }
 
 @Composable
 private fun DetailContent(
@@ -161,11 +169,21 @@ private fun DetailContent(
     val focus = rememberFocusMemory()
     var panel by remember { mutableStateOf<PlaylistPanel?>(null) }
     var hadPanel by remember { mutableStateOf(false) }
+    var lastPanel by remember { mutableStateOf<PlaylistPanel?>(null) }
     LaunchedEffect(panel) {
         onPanelOpenChanged(panel != null)
         // The pill that opened the panel gets focus back.
-        if (panel != null) hadPanel = true else if (hadPanel) focus.restore(PLAYLIST_KEY)
+        if (panel != null) {
+            hadPanel = true
+            lastPanel = panel
+        } else if (hadPanel) {
+            focus.restore(if (lastPanel == PlaylistPanel.Trailers) TRAILER_KEY else PLAYLIST_KEY)
+        }
     }
+    val context = LocalContext.current
+    // Shown under the buttons when no app on the TV opens a trailer.
+    var trailerFailed by remember { mutableStateOf(false) }
+    val openTrailer: (Trailer) -> Unit = { trailer -> trailerFailed = !Trailers.open(context, trailer) }
     BackHandler(enabled = panel != null) { panel = null }
     val listState = rememberLazyListState()
     val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 80 } }
@@ -190,7 +208,7 @@ private fun DetailContent(
     val onOpen = actions.open
     val onPlay = actions.play
     LaunchedEffect(firstKey) {
-        if (firstKey != null && canTakeFocus()) focus.restore(firstKey)
+        if (firstKey != null) focus.restore(firstKey, canTakeFocus)
     }
     Box(Modifier.fillMaxSize()) {
         HeroBackground(model.card)
@@ -219,7 +237,16 @@ private fun DetailContent(
                                     onPlay = onPlay,
                                     onToggleWatchlist = viewModel::toggleWatchlist,
                                     onToggleWatched = viewModel::toggleWatched,
+                                    hasTrailer = viewModel.trailers.isNotEmpty(),
+                                    onTrailer = {
+                                        val trailers = viewModel.trailers
+                                        // One trailer plays at once; several open the chooser.
+                                        if (trailers.size == 1) openTrailer(trailers.single()) else panel = PlaylistPanel.Trailers
+                                    },
                                 )
+                                if (trailerFailed) {
+                                    Text(stringResource(R.string.trailer_no_app), style = Antresol.typography.caption, color = AntresolColors.LabelSecondary)
+                                }
                             }
                             if (music != null && (music.tracks.isNotEmpty() || model.card.kind == Kind.PLAYLIST)) {
                                 MusicActions(
@@ -296,6 +323,11 @@ private fun DetailContent(
                         )
                     }
                 }
+                if (video != null && video.cast.isNotEmpty()) {
+                    item(key = "cast") {
+                        CastRow(video.cast, focus, Modifier.padding(top = SectionGap))
+                    }
+                }
                 items(model.rows, key = { it.id }) { row ->
                     ShelfRow(
                         shelfId = row.id,
@@ -308,7 +340,7 @@ private fun DetailContent(
                 }
             }
         }
-        PlaylistPanels(panel, model, viewModel, onPanel = { panel = it }, onDeleted = actions.close)
+        PlaylistPanels(panel, model, viewModel, onPanel = { panel = it }, onDeleted = actions.close, onTrailer = openTrailer)
     }
 }
 
@@ -320,8 +352,20 @@ private fun PlaylistPanels(
     viewModel: DetailViewModel,
     onPanel: (PlaylistPanel?) -> Unit,
     onDeleted: () -> Unit,
+    onTrailer: (Trailer) -> Unit,
 ) {
     when (panel) {
+        PlaylistPanel.Trailers -> {
+            val resources = LocalContext.current.resources
+            OptionsPanel(
+                title = stringResource(R.string.trailer_choose),
+                options = viewModel.trailers.map { trailer ->
+                    MenuOption(trailerLabel(resources, trailer), selected = false, badge = trailer.lang.uppercase().ifBlank { null }) { onTrailer(trailer) }
+                },
+                onDismiss = { onPanel(null) },
+                focusIndex = 0,
+            )
+        }
         PlaylistPanel.AddTo -> {
             val playlists = viewModel.playlists
             val error = (playlists as? LoadState.Failed)?.error?.userMessage(LocalContext.current.resources)
@@ -456,7 +500,7 @@ private fun DetailText(model: DetailModel) {
     model.video?.let { VideoFacts(it) }
 }
 
-/** "Audio: English, Russian · Subtitles: English" and the first few cast members. */
+/** "Audio: English, Russian · Subtitles: English" (the cast has its own row below). */
 @Composable
 private fun VideoFacts(video: VideoInfo) {
     val resources = LocalContext.current.resources
@@ -471,14 +515,6 @@ private fun VideoFacts(video: VideoInfo) {
     if (tracks.isNotEmpty()) {
         Text(tracks, style = Antresol.typography.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
-    if (video.cast.isNotEmpty()) {
-        Text(
-            stringResource(R.string.detail_cast) + ": " + video.cast.take(5).joinToString(", ") { it.name },
-            style = Antresol.typography.caption,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
 }
 
 @Composable
@@ -490,6 +526,8 @@ private fun VideoActions(
     onPlay: (Long, ResumeMode) -> Unit,
     onToggleWatchlist: () -> Unit,
     onToggleWatched: () -> Unit,
+    hasTrailer: Boolean,
+    onTrailer: () -> Unit,
 ) {
     val target = video.playTarget
     Row(
@@ -539,6 +577,15 @@ private fun VideoActions(
             icon = AntresolIcons.CheckCircle,
             modifier = Modifier.remembersFocus(focus, WATCHED_KEY),
         )
+        // Last, so the buttons do not shift when the trailers arrive after the page.
+        if (hasTrailer) {
+            PillButton(
+                text = stringResource(R.string.action_trailer),
+                onClick = onTrailer,
+                icon = AntresolIcons.Trailer,
+                modifier = Modifier.remembersFocus(focus, TRAILER_KEY).testTag("action-trailer"),
+            )
+        }
     }
 }
 

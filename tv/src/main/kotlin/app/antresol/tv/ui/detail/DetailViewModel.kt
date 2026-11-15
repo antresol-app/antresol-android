@@ -25,6 +25,8 @@ import app.antresol.core.model.Progress
 import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.SubTrack
 import app.antresol.core.model.Track
+import app.antresol.core.model.Trailer
+import app.antresol.ui.trailers.Trailers
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.Resume
 import app.antresol.core.music.PlaylistEdits
@@ -131,6 +133,14 @@ class DetailViewModel(
     var actionError: Throwable? by mutableStateOf(null)
         private set
 
+    /**
+     * YouTube trailers of a movie or series page (a season or episode shows its series'), best
+     * first; empty until they arrive, and when there are none. Loaded beside the page, never
+     * holding it up.
+     */
+    var trailers: List<Trailer> by mutableStateOf(emptyList())
+        private set
+
     private var job: Job? = null
 
     /**
@@ -141,6 +151,7 @@ class DetailViewModel(
 
     init {
         reload()
+        if (kind in Trailers.KINDS) viewModelScope.launch { trailers = Trailers.fetch(client, id, kind) }
     }
 
     fun reload() {

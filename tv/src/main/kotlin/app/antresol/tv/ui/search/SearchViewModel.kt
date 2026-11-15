@@ -19,7 +19,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Search-as-you-type over `/api/search`, debounced. Songs play in place; the other results open their pages. */
+/**
+ * Search-as-you-type over `/api/search`, debounced. Songs play in place; the other results open
+ * their pages. The server's book results are not shown: the TV app has no books (as on Apple TV).
+ */
 class SearchViewModel(private val client: AntresolClient, private val audio: AudioEngine) : ViewModel() {
     var query: String by mutableStateOf("")
         private set
@@ -80,7 +83,7 @@ const val SONGS_ROW = "songs"
 
 /** The scope pills of the Search page. */
 enum class SearchScope {
-    All, Movies, Shows, Music, Books;
+    All, Movies, Shows, Music;
 
     /** The rows (and, for Movies / TV Shows, the cards of the library row) this scope shows. */
     fun filter(rows: List<DetailRow>): List<DetailRow> = when (this) {
@@ -88,13 +91,11 @@ enum class SearchScope {
         Movies -> rows.filter { it.id == LIBRARY_ROW }.map { row -> row.copy(cards = row.cards.filter { it.kind == Kind.MOVIE }) }
         Shows -> rows.filter { it.id == LIBRARY_ROW }.map { row -> row.copy(cards = row.cards.filter { it.kind in SHOW_KINDS }) }
         Music -> rows.filter { it.id in MUSIC_ROWS }
-        Books -> rows.filter { it.id in BOOK_ROWS }
     }.filter { it.cards.isNotEmpty() }
 
     private companion object {
         val SHOW_KINDS = setOf(Kind.SERIES, Kind.SEASON, Kind.EPISODE)
         val MUSIC_ROWS = setOf("artists", "albums", SONGS_ROW)
-        val BOOK_ROWS = setOf("audiobooks", "books", "comics")
     }
 }
 
@@ -106,9 +107,6 @@ private fun SearchResults.toRows(): List<DetailRow> = listOf(
     DetailRow("artists", titleRes = R.string.search_section_artists, cards = artists),
     DetailRow("albums", titleRes = R.string.search_section_albums, cards = albums),
     DetailRow(SONGS_ROW, titleRes = R.string.search_section_songs, cards = songs.map { it.asSongCard() }),
-    DetailRow("audiobooks", titleRes = R.string.search_section_audiobooks, cards = audiobooks),
-    DetailRow("books", titleRes = R.string.search_section_books, cards = books),
-    DetailRow("comics", titleRes = R.string.search_section_comics, cards = comics),
 ).filter { it.cards.isNotEmpty() }
 
 /** A square card for a song: its own id, album artwork. */

@@ -22,7 +22,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
+import kotlin.math.roundToInt
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,6 +43,7 @@ import app.antresol.tv.ui.components.MessageView
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.tv.ui.components.SegmentedPills
+import app.antresol.tv.ui.components.TopNavHeight
 import app.antresol.tv.ui.components.TvIcons
 import app.antresol.tv.ui.components.VerticalShelfScrolling
 import app.antresol.tv.ui.components.rememberFocusMemory
@@ -51,8 +57,12 @@ import app.antresol.ui.theme.Antresol
 private const val PREFETCH_DISTANCE = 18
 
 /**
- * A library grid (Movies, TV Shows, albums, artists, playlists, books…): page title, segmented
- * sort pills, an optional Shuffle pill (genre albums), and the cards in the source's shape.
+ * A library grid (Movies, TV Shows, albums, artists, playlists): page title, segmented sort pills,
+ * an optional Shuffle pill (genre albums), and the cards in the source's shape.
+ *
+ * The grid scrolls in the area below the top navigation and never under it, so the navigation
+ * stays up; the columns share the width the fixed card size leaves over, so the first and last
+ * column sit on the page gutters alike.
  */
 @Composable
 fun CardGridScreen(
@@ -65,8 +75,8 @@ fun CardGridScreen(
 ) {
     val focus = rememberFocusMemory()
     val gridState = rememberLazyGridState()
-    val atTop by remember { derivedStateOf { gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset < 40 } }
-    LaunchedEffect(atTop) { onScrolledToTop(atTop) }
+    // Nothing scrolls under the navigation, so it never needs to fade out.
+    LaunchedEffect(Unit) { onScrolledToTop(true) }
 
     val source = viewModel.source
     val sortLabels = source.sorts.map { stringResource(it.label) }
@@ -82,18 +92,23 @@ fun CardGridScreen(
     LaunchedEffect(firstKey) {
         if (firstKey == null || arrived) return@LaunchedEffect
         arrived = true
-        if (canTakeFocus()) focus.restore(firstKey)
+        // Entered later from the nav (it had focus on arrival), the grid starts on its first card.
+        focus.prefer(firstKey)
+        focus.restore(firstKey, canTakeFocus)
     }
 
-    VerticalShelfScrolling(leadingFraction = 0.2f, trailingFraction = 0.14f) {
+    VerticalShelfScrolling(leadingFraction = 0.12f, trailingFraction = 0.14f) {
         LazyVerticalGrid(
             columns = GridCells.FixedSize(cardWidth),
             state = gridState,
-            contentPadding = PaddingValues(start = ScreenPaddingH, end = ScreenPaddingH, top = 84.dp, bottom = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            // Room above the first row for its focus lift and glow inside the clipped area.
+            contentPadding = PaddingValues(start = ScreenPaddingH, end = ScreenPaddingH, top = 8.dp, bottom = 48.dp),
+            horizontalArrangement = EvenColumns(18.dp),
             verticalArrangement = Arrangement.spacedBy(26.dp),
             modifier = Modifier
                 .fillMaxSize()
+                .padding(top = TopNavHeight)
+                .clipToBounds()
                 .trapHorizontalFocus()
                 .focusGroup(),
         ) {
@@ -157,3 +172,23 @@ fun CardGridScreen(
 }
 
 private fun gridKey(card: Card) = "grid/${card.kind}/${card.id}"
+
+/**
+ * Columns at least [spacing] apart that share what a whole number of fixed-size columns leaves
+ * over, so the first column starts on the start gutter and the last one ends on the end gutter.
+ */
+private class EvenColumns(override val spacing: Dp) : Arrangement.Horizontal {
+    override fun Density.arrange(totalSize: Int, sizes: IntArray, layoutDirection: LayoutDirection, outPositions: IntArray) {
+        if (sizes.size < 2) {
+            with(Arrangement.Start) { arrange(totalSize, sizes, layoutDirection, outPositions) }
+            return
+        }
+        val gap = (totalSize - sizes.sum()).coerceAtLeast(0).toFloat() / (sizes.size - 1)
+        var x = 0f
+        for (i in sizes.indices) {
+            val start = x.roundToInt()
+            outPositions[i] = if (layoutDirection == LayoutDirection.Ltr) start else totalSize - start - sizes[i]
+            x += sizes[i] + gap
+        }
+    }
+}

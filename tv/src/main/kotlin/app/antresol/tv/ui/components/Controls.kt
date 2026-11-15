@@ -20,6 +20,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -51,6 +55,9 @@ import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 
 /** One choice of an [OptionsPanel]; [badge] is a small capsule after the label («Очищено»). */
+/** Frames an [OptionsPanel] keeps asking for focus until it has it. */
+private const val PANEL_FOCUS_FRAMES = 10
+
 data class MenuOption(val label: String, val selected: Boolean, val badge: String? = null, val onSelect: () -> Unit)
 
 /**
@@ -80,9 +87,15 @@ fun OptionsPanel(
     val panelFocus = remember(title) { FocusRequester() }
     // Scrolled so the row to focus is composed (a lazy row below the fold cannot take focus).
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (focusIndex - 2).coerceAtLeast(0))
+    // Whether focus is inside the panel: a request on a row that is not laid out yet is ignored
+    // without an error, so the request is repeated until focus has really arrived.
+    var inPanel by remember(title) { mutableStateOf(false) }
     LaunchedEffect(title) {
-        // Never leave focus behind the scrim: fall back to the panel's first row.
-        if (!focus.tryRequestFocus()) panelFocus.tryRequestFocus()
+        repeat(PANEL_FOCUS_FRAMES) {
+            if (inPanel) return@LaunchedEffect
+            // Never leave focus behind the scrim: fall back to the panel's first row.
+            if (!focus.tryRequestFocus(frames = 1)) panelFocus.tryRequestFocus(frames = 1)
+        }
     }
     BackHandler(onBack = onDismiss)
     Box(
@@ -104,6 +117,7 @@ fun OptionsPanel(
                 .background(AntresolColors.BackgroundElevated)
                 .padding(horizontal = 20.dp, vertical = 36.dp)
                 .focusRequester(panelFocus)
+                .onFocusChanged { inPanel = it.hasFocus }
                 .focusProperties { exit = { FocusRequester.Cancel } }
                 .focusGroup(),
             verticalArrangement = Arrangement.spacedBy(14.dp),

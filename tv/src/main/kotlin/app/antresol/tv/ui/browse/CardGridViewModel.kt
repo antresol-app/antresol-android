@@ -8,8 +8,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.AlbumSort
-import app.antresol.core.model.BookKind
-import app.antresol.core.model.BookSort
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
 import app.antresol.core.model.Page
@@ -25,7 +23,7 @@ import kotlinx.coroutines.launch
 data class GridSort(@StringRes val label: Int, val apiValue: String)
 
 /** The libraries a [CardGridScreen] can show. */
-enum class GridKind { Movies, Shows, Albums, Artists, Playlists, Books, Audiobooks, Comics }
+enum class GridKind { Movies, Shows, Albums, Artists, Playlists }
 
 /** What a grid lists: a library, optionally narrowed to a music [genre]. */
 data class GridSource(val kind: GridKind, val genre: String? = null) {
@@ -41,11 +39,6 @@ data class GridSource(val kind: GridKind, val genre: String? = null) {
                 GridSort(R.string.sort_title, AlbumSort.TITLE),
                 GridSort(R.string.sort_artist, AlbumSort.ARTIST),
                 GridSort(R.string.sort_year, AlbumSort.YEAR),
-            )
-            GridKind.Books, GridKind.Audiobooks, GridKind.Comics -> listOf(
-                GridSort(R.string.sort_recent, BookSort.ADDED),
-                GridSort(R.string.sort_title, BookSort.TITLE),
-                GridSort(R.string.sort_author, BookSort.AUTHOR),
             )
             GridKind.Artists, GridKind.Playlists -> emptyList()
         }
@@ -65,9 +58,6 @@ data class GridSource(val kind: GridKind, val genre: String? = null) {
         GridKind.Shows -> client.items(kind = Kind.SERIES, sort = sort, offset = offset)
         GridKind.Albums -> client.albums(sort = sort, genre = genre, offset = offset)
         GridKind.Artists -> client.artists(offset = offset)
-        GridKind.Books -> client.books(BookKind.BOOK, sort = sort, offset = offset)
-        GridKind.Audiobooks -> client.books(BookKind.AUDIOBOOK, sort = sort, offset = offset)
-        GridKind.Comics -> client.books(BookKind.COMIC, sort = sort, offset = offset)
         GridKind.Playlists -> client.playlists().items.map { playlist ->
             Card(id = playlist.id, kind = Kind.PLAYLIST, title = playlist.name, subtitle = songCount(playlist.trackCount), poster = playlist.cover)
         }.let { Page(it, it.size) }

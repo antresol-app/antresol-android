@@ -8,12 +8,15 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 
 /**
- * Requests focus once the target is attached. Lazy rows attach their items during layout, which can
+ * Requests focus once the target is attached, while [allowed] holds. Lazy rows attach their items during layout, which can
  * run a frame after the effect that asks for focus, so retry for a few frames. Returns success.
  */
-suspend fun FocusRequester.tryRequestFocus(frames: Int = 4): Boolean {
+suspend fun FocusRequester.tryRequestFocus(frames: Int = 4, allowed: () -> Boolean = { true }): Boolean {
     repeat(frames) {
         withFrameNanos { }
+        // Asked on every frame: the page may have started leaving meanwhile (or, just arrived, may
+        // not be the current one yet for a frame).
+        if (!allowed()) return@repeat
         try {
             requestFocus()
             return true

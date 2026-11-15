@@ -162,6 +162,38 @@ object AntresolIcons {
         lineTo(16f, 9.3f)
     }
 
+    /** An open eye: "watched" on cards. */
+    val Eye: ImageVector = lineIcon("Eye") {
+        moveTo(2.5f, 12f)
+        quadTo(7f, 5f, 12f, 5f)
+        quadTo(17f, 5f, 21.5f, 12f)
+        quadTo(17f, 19f, 12f, 19f)
+        quadTo(7f, 19f, 2.5f, 12f)
+        close()
+        moveTo(12f, 9f)
+        arcToRelative(3f, 3f, 0f, true, true, 0f, 6f)
+        arcToRelative(3f, 3f, 0f, true, true, 0f, -6f)
+        close()
+    }
+
+    /** A YouTube-style play badge for trailers: a rounded rectangle with a play triangle. */
+    val Trailer: ImageVector = lineIcon("Trailer") {
+        moveTo(6f, 5.5f)
+        lineTo(18f, 5.5f)
+        quadTo(21.5f, 5.5f, 21.5f, 9f)
+        lineTo(21.5f, 15f)
+        quadTo(21.5f, 18.5f, 18f, 18.5f)
+        lineTo(6f, 18.5f)
+        quadTo(2.5f, 18.5f, 2.5f, 15f)
+        lineTo(2.5f, 9f)
+        quadTo(2.5f, 5.5f, 6f, 5.5f)
+        close()
+        moveTo(10f, 9.2f)
+        lineTo(15f, 12f)
+        lineTo(10f, 14.8f)
+        close()
+    }
+
     /** Speech bubble: audio track. */
     val Audio: ImageVector = lineIcon("Audio") {
         moveTo(5.5f, 5f)

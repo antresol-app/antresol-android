@@ -17,7 +17,10 @@ import app.antresol.tv.ui.load
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/** What the home screen shows: the hero rotation and the non-empty `/api/home` shelves in server order. */
+/**
+ * What the home screen shows: the hero rotation and the non-empty `/api/home` shelves in server
+ * order, without books (the TV app has none, as on Apple TV).
+ */
 data class HomeContent(
     val hero: List<Card>,
     /** Title of the shelf the hero was borrowed from when the server sent no hero; null = "New in Library". */
@@ -31,7 +34,8 @@ data class HomeContent(
         private val VIDEO_KINDS = setOf(Kind.MOVIE, Kind.SERIES, Kind.EPISODE)
         private val HERO_FALLBACK_SHELVES = listOf(ShelfId.CONTINUE, ShelfId.RECENT_MOVIES, ShelfId.RECENT_SERIES, ShelfId.WATCHLIST)
 
-        fun from(response: HomeResponse): HomeContent {
+        fun from(home: HomeResponse): HomeContent {
+            val response = home.withoutBooks()
             val shelves = response.shelves.filter { it.cards.isNotEmpty() }
             if (response.hero.isNotEmpty()) return HomeContent(response.hero.take(MAX_HERO), null, shelves)
             val fallback = HERO_FALLBACK_SHELVES.firstNotNullOfOrNull { id ->

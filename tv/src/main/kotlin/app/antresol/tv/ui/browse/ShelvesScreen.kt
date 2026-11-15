@@ -115,7 +115,7 @@ fun ShelvesScreen(
             ?: page.genres.firstOrNull()?.let { "genre/${it.name}" }
             ?: linkKeys.firstOrNull()?.let { "link/$it" }
             ?: return@LaunchedEffect
-        if (canTakeFocus()) focus.restore(first)
+        focus.restore(first, canTakeFocus)
     }
     VerticalShelfScrolling {
         LazyColumn(

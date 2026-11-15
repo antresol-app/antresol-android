@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,18 +31,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import app.antresol.core.api.AntresolClient
-import app.antresol.core.model.DeviceSession
-import app.antresol.core.model.Health
-import app.antresol.core.model.LibraryStatus
 import app.antresol.core.model.Quality
 import app.antresol.core.session.AuthState
 import app.antresol.tv.BuildConfig
@@ -52,16 +44,13 @@ import app.antresol.tv.R as TvR
 import app.antresol.ui.language.UiLanguageModel
 import app.antresol.ui.language.UiLanguages
 import app.antresol.tv.settings.TvSettings
-import app.antresol.tv.ui.LoadState
 import app.antresol.tv.ui.components.MenuOption
 import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.listRowColors
 import app.antresol.tv.ui.components.tryRequestFocus
-import app.antresol.tv.ui.load
 import app.antresol.tv.ui.player.qualityLabel
-import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ProfileAvatar
@@ -69,74 +58,23 @@ import app.antresol.ui.format.TrackLabels
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
 
-/**
- * Server facts for the Settings page (each null when the server did not answer) and the devices
- * signed in to this profile (`/api/me/devices`), which can be signed out one by one.
- */
-class SettingsViewModel(private val client: AntresolClient) : ViewModel() {
-    var health: Health? by mutableStateOf(null)
-        private set
-    var library: LibraryStatus? by mutableStateOf(null)
-        private set
-
-    /** This device first. */
-    var devices: LoadState<List<DeviceSession>> by mutableStateOf(LoadState.Loading)
-        private set
-
-    /** The last sign-out of another device failed. */
-    var revokeFailed: Boolean by mutableStateOf(false)
-        private set
-
-    val serverUrl: String get() = client.baseUrl
-
-    init {
-        viewModelScope.launch { health = runCatching { client.health() }.getOrNull() }
-        viewModelScope.launch { library = runCatching { client.libraryStatus() }.getOrNull() }
-        loadDevices()
-    }
-
-    fun loadDevices() {
-        viewModelScope.launch { devices = load { client.devices().items.sortedByDescending { it.current } } }
-    }
-
-    /** Signs [device] out of this profile, then reloads the list. */
-    fun revoke(device: DeviceSession) {
-        if (device.current) return
-        viewModelScope.launch {
-            revokeFailed = try {
-                client.revokeDevice(device.id)
-                false
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                true
-            }
-            loadDevices()
-        }
-    }
-}
-
-private enum class SettingsMenu { Quality, Subtitles, Language, ConfirmSignOut, ConfirmChangeServer, ConfirmRevoke }
+private enum class SettingsMenu { Quality, Subtitles, Language, ConfirmSignOut }
 
 /**
  * Settings, opened from the avatar: the profile (switch, sign out), playback defaults (video
- * quality, subtitle language), the app language, the server (address, version, library, change),
- * the profile's signed-in devices and about the app. Choices open a side panel (the shell hides its
- * nav meanwhile, see [onMenuOpenChanged]); a new language restarts the app's screens from Home, so
- * text from the server reloads in that language too. Sign Out, Change Server and signing out
- * another device ask first, with Cancel focused.
+ * quality, subtitle language), the app language and about the app. Server facts and signed-in
+ * devices are managed on the web, not on a TV (as on Apple TV). Choices open a side panel (the
+ * shell hides its nav meanwhile, see [onMenuOpenChanged]); a new language restarts the app's
+ * screens from Home, so text from the server reloads in that language too. Sign Out asks first,
+ * with Cancel focused.
  */
 @Composable
 fun SettingsScreen(
     state: AuthState.SignedIn,
-    viewModel: SettingsViewModel,
     settings: TvSettings,
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
-    onChangeServer: () -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
     onMenuOpenChanged: (Boolean) -> Unit,
     language: UiLanguageModel,
@@ -144,7 +82,6 @@ fun SettingsScreen(
     val preferences by settings.preferences.collectAsStateWithLifecycle()
     LaunchedEffect(language) { language.refresh() }
     var menu by remember { mutableStateOf<SettingsMenu?>(null) }
-    var revoking by remember { mutableStateOf<DeviceSession?>(null) }
     LaunchedEffect(menu != null) { onMenuOpenChanged(menu != null) }
     // The control that opened each panel gets focus back when the panel closes.
     val openers = remember { SettingsMenu.entries.associateWith { FocusRequester() } }
@@ -155,11 +92,9 @@ fun SettingsScreen(
         if (current != null) {
             lastMenu = current
         } else {
-            // A signed-out device's row is gone: fall back to the first setting.
             lastMenu?.let { if (!openers.getValue(it).tryRequestFocus()) first.tryRequestFocus() }
         }
     }
-    val activity = LocalContext.current as? Activity
     BackHandler(enabled = menu != null) { menu = null }
     LaunchedEffect(Unit) {
         onScrolledToTop(true)
@@ -213,43 +148,6 @@ fun SettingsScreen(
                         modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Language)),
                     )
                 }
-                item { Section(stringResource(TvR.string.settings_server)) }
-                item { InfoRow(stringResource(TvR.string.settings_server_address), viewModel.serverUrl) }
-                item {
-                    InfoRow(
-                        stringResource(TvR.string.settings_server_version),
-                        viewModel.health?.version?.ifBlank { null } ?: stringResource(TvR.string.settings_unknown),
-                    )
-                }
-                viewModel.library?.let { library ->
-                    item {
-                        InfoRow(
-                            stringResource(TvR.string.settings_library),
-                            stringResource(TvR.string.settings_library_counts, library.movies, library.episodes, library.albums, library.books + library.audiobooks + library.comics),
-                        )
-                    }
-                }
-                item {
-                    Box(Modifier.padding(top = 10.dp)) {
-                        PillButton(
-                            stringResource(R.string.server_change),
-                            onClick = { menu = SettingsMenu.ConfirmChangeServer },
-                            icon = AntresolIcons.Server,
-                            modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.ConfirmChangeServer)),
-                        )
-                    }
-                }
-                devicesSection(
-                    devices = viewModel.devices,
-                    revokeFailed = viewModel.revokeFailed,
-                    revoking = revoking,
-                    revokeOpener = openers.getValue(SettingsMenu.ConfirmRevoke),
-                    onRevoke = { device ->
-                        revoking = device
-                        menu = SettingsMenu.ConfirmRevoke
-                    },
-                    onRetry = viewModel::loadDevices,
-                )
             }
         }
         when (menu) {
@@ -283,21 +181,6 @@ fun SettingsScreen(
                 onConfirm = onSignOut,
                 onDismiss = { menu = null },
             )
-            SettingsMenu.ConfirmChangeServer -> ConfirmPanel(
-                title = stringResource(TvR.string.settings_change_server_confirm, viewModel.serverUrl),
-                confirmLabel = stringResource(R.string.server_change),
-                onConfirm = onChangeServer,
-                onDismiss = { menu = null },
-            )
-            SettingsMenu.ConfirmRevoke -> revoking?.let { device ->
-                ConfirmPanel(
-                    title = stringResource(R.string.settings_revoke_title, device.label()),
-                    note = stringResource(R.string.settings_revoke_body),
-                    confirmLabel = stringResource(R.string.settings_revoke),
-                    onConfirm = { viewModel.revoke(device) },
-                    onDismiss = { menu = null },
-                )
-            }
             null -> Unit
         }
     }
@@ -351,10 +234,9 @@ private fun ProfileColumn(
 
 /** Cancel (focused) or the destructive action. */
 @Composable
-private fun ConfirmPanel(title: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit, note: String? = null) {
+private fun ConfirmPanel(title: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     OptionsPanel(
         title = title,
-        note = note,
         options = listOf(
             MenuOption(stringResource(R.string.action_cancel), selected = false) {},
             MenuOption(confirmLabel, selected = false, onSelect = onConfirm),
@@ -397,88 +279,6 @@ private fun SettingRow(label: String, value: String, onClick: () -> Unit, modifi
             Text(value, style = Antresol.typography.body, color = LocalContentColor.current.copy(alpha = 0.7f), maxLines = 1)
             Icon(AntresolIcons.ChevronRight, contentDescription = null, tint = LocalContentColor.current.copy(alpha = 0.7f), modifier = Modifier.width(16.dp))
         }
-    }
-}
-
-/**
- * "Signed-in Devices": this device (not focusable), then every other device of this profile; OK on
- * one asks to sign it out. Failures show a line with Try Again.
- */
-private fun LazyListScope.devicesSection(
-    devices: LoadState<List<DeviceSession>>,
-    revokeFailed: Boolean,
-    revoking: DeviceSession?,
-    revokeOpener: FocusRequester,
-    onRevoke: (DeviceSession) -> Unit,
-    onRetry: () -> Unit,
-) {
-    item { Section(stringResource(R.string.settings_devices)) }
-    when (devices) {
-        LoadState.Loading -> item { InfoRow(stringResource(R.string.state_loading), "") }
-        is LoadState.Failed -> item {
-            val message = devices.error.userMessage(LocalContext.current.resources)
-            Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(message, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, modifier = Modifier.weight(1f))
-                PillButton(stringResource(R.string.action_retry), onClick = onRetry)
-            }
-        }
-        is LoadState.Ready -> {
-            if (revokeFailed) {
-                item {
-                    Text(
-                        stringResource(R.string.settings_revoke_failed),
-                        style = Antresol.typography.caption,
-                        color = AntresolColors.Red,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
-                    )
-                }
-            }
-            items(devices.value, key = { "device-${it.id}" }) { device ->
-                if (device.current) {
-                    InfoRow(device.label(), stringResource(R.string.settings_this_device), detail = device.details())
-                } else {
-                    SettingRow(
-                        label = device.label(),
-                        value = stringResource(R.string.settings_revoke),
-                        detail = device.details(),
-                        onClick = { onRevoke(device) },
-                        modifier = if (device.id == revoking?.id) Modifier.focusRequester(revokeOpener) else Modifier,
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun DeviceSession.label(): String = name.ifBlank { model }
-
-/** Model (when it differs from the name), app version and the day it was last seen. */
-private fun DeviceSession.details(): String = listOfNotNull(
-    model.takeIf { it.isNotBlank() && it != name },
-    version.takeIf { it.isNotBlank() }?.let { "v$it" },
-    lastSeen.takeIf { it.length >= 10 }?.take(10),
-).joinToString(" · ")
-
-/** A read-only fact (server address, version, this device). */
-@Composable
-private fun InfoRow(label: String, value: String, detail: String = "") {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = Antresol.typography.bodyEmphasis, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (detail.isNotBlank()) Text(detail, style = Antresol.typography.caption, maxLines = 1)
-        }
-        Text(
-            value,
-            style = Antresol.typography.body,
-            color = AntresolColors.LabelSecondary,
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1.4f),
-        )
     }
 }
 

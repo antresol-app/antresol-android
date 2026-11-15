@@ -122,7 +122,7 @@ private fun HomeContentView(
 
     // Arrival (first launch or back from a detail page): focus Play or the remembered card.
     LaunchedEffect(Unit) {
-        if (canTakeFocus()) focus.restore(homeKey)
+        focus.restore(homeKey, canTakeFocus)
     }
 
     // A refresh can remove the focused card (a finished Continue Watching item): move focus to its
@@ -134,7 +134,7 @@ private fun HomeContentView(
         val key = focus.focusedKey ?: return@LaunchedEffect
         if (before === content || key == PLAY_KEY || key == DETAILS_KEY || content.hasCardKey(key)) return@LaunchedEffect
         if (!canTakeFocus()) return@LaunchedEffect
-        focus.restore(content.neighbourKey(before, key) ?: homeKey)
+        focus.restore(content.neighbourKey(before, key) ?: homeKey, canTakeFocus)
     }
 
     // Rotate through the hero cards while the user rests on the hero buttons.

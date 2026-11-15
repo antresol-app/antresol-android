@@ -10,6 +10,8 @@ import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
+import app.antresol.core.model.Trailer
+import app.antresol.ui.trailers.Trailers
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.PendingWrites
 import app.antresol.mobile.R
@@ -59,6 +61,14 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
 
     fun consumeNotice() {
         notice = null
+    }
+
+    /** YouTube trailers (a season or episode gets its series'), best first; empty until loaded and when none. */
+    var trailers: List<Trailer> by mutableStateOf(emptyList())
+        private set
+
+    init {
+        viewModelScope.launch { trailers = Trailers.fetch(client, id) }
     }
 
     /** Shows string resource [res] once (an episode that is not in the library was tapped). */

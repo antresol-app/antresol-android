@@ -124,14 +124,6 @@ object TvIcons {
         moveTo(8f, 20.5f); lineTo(16f, 20.5f)
     }
 
-    val Headphones: ImageVector = lineIcon("Headphones") {
-        moveTo(4f, 17f); lineTo(4f, 12f)
-        arcTo(8f, 8f, 0f, false, true, 20f, 12f)
-        lineTo(20f, 17f)
-        moveTo(4f, 14f); lineTo(7f, 14f); lineTo(7f, 20f); lineTo(5f, 20f); quadTo(4f, 20f, 4f, 19f); close()
-        moveTo(20f, 14f); lineTo(17f, 14f); lineTo(17f, 20f); lineTo(19f, 20f); quadTo(20f, 20f, 20f, 19f); close()
-    }
-
     private fun PathBuilder.heart() {
         moveTo(12f, 20f)
         curveTo(5f, 15.5f, 3f, 12f, 3f, 8.8f)

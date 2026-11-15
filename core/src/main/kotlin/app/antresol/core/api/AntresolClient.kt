@@ -17,6 +17,7 @@ import app.antresol.core.model.Health
 import app.antresol.core.model.HlsStatus
 import app.antresol.core.model.HomeResponse
 import app.antresol.core.model.ItemDetail
+import app.antresol.core.model.TrailerList
 import app.antresol.core.model.LastChannelRequest
 import app.antresol.core.model.LibraryStatus
 import app.antresol.core.model.Lyrics
@@ -196,6 +197,12 @@ class AntresolClient(
         }
 
     suspend fun item(id: Long): ItemDetail = get("api/items/$id")
+
+    /**
+     * YouTube trailers and teasers of a movie or series (a season or episode answers with its
+     * series'), best first. The server answers an empty list when it has none.
+     */
+    suspend fun trailers(id: Long): TrailerList = get("api/items/$id/trailers")
 
     suspend fun search(query: String): SearchResults = get("api/search") { addQueryParameter("q", query) }
 

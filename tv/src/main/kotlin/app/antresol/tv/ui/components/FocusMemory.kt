@@ -1,6 +1,8 @@
 package app.antresol.tv.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,11 +31,30 @@ class FocusMemory(initialKey: String?) {
         focusedKey = key
     }
 
-    /** Focuses the remembered element, or [fallbackKey] when there is none or it is gone. */
-    suspend fun restore(fallbackKey: String): Boolean {
+    /** Makes [key] the element to come back to when nothing was focused on this screen yet. */
+    fun prefer(key: String) {
+        if (focusedKey == null) focusedKey = key
+    }
+
+    /**
+     * Focuses the remembered element, or [fallbackKey] when there is none or it is gone. [allowed]
+     * is asked before every attempt (a page that started leaving must not take focus).
+     */
+    suspend fun restore(fallbackKey: String, allowed: () -> Boolean = { true }): Boolean {
         val key = focusedKey
-        if (key != null && key != fallbackKey && requester(key).tryRequestFocus()) return true
-        return requester(fallbackKey).tryRequestFocus()
+        if (key != null && key != fallbackKey && requester(key).tryRequestFocus(allowed = allowed)) return true
+        return requester(fallbackKey).tryRequestFocus(allowed = allowed)
+    }
+
+    /** Focuses the remembered element right now, if there is one and it is composed. */
+    fun focusRemembered(): Boolean {
+        val key = focusedKey ?: return false
+        return try {
+            requester(key).requestFocus()
+            true
+        } catch (_: IllegalStateException) {
+            false
+        }
     }
 
     companion object {
@@ -44,8 +65,22 @@ class FocusMemory(initialKey: String?) {
     }
 }
 
+/**
+ * The focus memories of the page being composed. The shell provides one set per page and, when
+ * the user enters the page from the navigation, focuses the element the page remembers.
+ */
+val LocalFocusMemories = staticCompositionLocalOf<MutableSet<FocusMemory>?> { null }
+
 @Composable
-fun rememberFocusMemory(): FocusMemory = rememberSaveable(saver = FocusMemory.Saver) { FocusMemory(null) }
+fun rememberFocusMemory(): FocusMemory {
+    val memory = rememberSaveable(saver = FocusMemory.Saver) { FocusMemory(null) }
+    val pageMemories = LocalFocusMemories.current
+    DisposableEffect(memory, pageMemories) {
+        pageMemories?.add(memory)
+        onDispose { pageMemories?.remove(memory) }
+    }
+    return memory
+}
 
 /** Registers this focusable under [key] in [memory]. Put it before the focusable modifier. */
 fun Modifier.remembersFocus(memory: FocusMemory, key: String): Modifier =

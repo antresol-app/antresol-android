@@ -62,6 +62,10 @@
     <string name="detail_seasons">Seasons</string>
     <string name="detail_season_number">Season %1$d</string>
     <string name="detail_episode_number">Episode %1$d</string>
+    <string name="action_trailer">Trailer</string>
+    <string name="trailer_choose">Trailers</string>
+    <string name="trailer_teaser">Teaser</string>
+    <string name="trailer_no_app">Install the YouTube app to watch trailers.</string>
     <string name="detail_cast">Cast</string>
     <string name="detail_audio">Audio</string>
     <string name="detail_subtitles">Subtitles</string>

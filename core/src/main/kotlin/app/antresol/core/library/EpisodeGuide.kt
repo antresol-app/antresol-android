@@ -182,6 +182,7 @@ data class EpisodeGuide(val seasons: List<GuideSeason>, val fromServer: Boolean)
             seasonNo = entry.season,
             episodeNo = entry.number,
             watched = entry.watched,
+            thumb = "/api/images/frame/$itemId",
         )
 
         internal fun parseDate(text: String): LocalDate? = try {

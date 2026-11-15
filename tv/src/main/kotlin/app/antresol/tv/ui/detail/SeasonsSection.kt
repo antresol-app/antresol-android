@@ -1,6 +1,5 @@
 package app.antresol.tv.ui.detail
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,12 +8,10 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -32,7 +29,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import app.antresol.core.model.EpisodeCard
 import app.antresol.core.library.EpisodeGuide
@@ -50,16 +46,16 @@ import app.antresol.tv.ui.components.remembersFocus
 import app.antresol.tv.ui.components.trapHorizontalFocus
 import app.antresol.tv.R as TvR
 import app.antresol.ui.R
-import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.components.Badge
 import app.antresol.ui.components.ProgressBar
+import app.antresol.ui.components.WatchedMark
+import app.antresol.ui.components.WatchedStyle
 import app.antresol.ui.format.EpisodeLabels
 import app.antresol.ui.format.episodeStateLabel
 import app.antresol.ui.format.seasonLabel
 import app.antresol.ui.format.spokenDuration
 import app.antresol.ui.theme.Antresol
-import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 
@@ -168,6 +164,7 @@ private fun EpisodeTile(episode: GuideEpisode, mark: String?, onClick: () -> Uni
     val outline = AntresolShapes.card
     val card = episode.card
     val title = episode.title.ifBlank { stringResource(R.string.detail_episode_number, episode.number) }
+    var focused by remember { mutableStateOf(false) }
     Column(
         Modifier
             .width(CardSizes.wideWidth)
@@ -180,33 +177,32 @@ private fun EpisodeTile(episode: GuideEpisode, mark: String?, onClick: () -> Uni
             outline = outline,
             modifier = surfaceModifier
                 .fillMaxWidth()
-                .aspectRatio(AntresolMotion.BACKDROP_ASPECT),
+                .aspectRatio(AntresolMotion.BACKDROP_ASPECT)
+                .onFocusChanged { focused = it.hasFocus },
         ) {
             ArtworkImage(
-                url = card?.let { urls?.image(it.backdrop.ifEmpty { it.poster }) },
+                // The episode's own still or a frame of it; the series backdrop only when the server has neither.
+                url = card?.let { urls?.image(it.wideImage) },
+                fallbackUrl = card?.let { urls?.image(it.wideFallback) },
                 title = title,
                 shape = outline,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                if (episode.watched) {
-                    Box(
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(26.dp)
-                            .background(AntresolColors.Glass, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(AntresolIcons.Check, contentDescription = stringResource(R.string.detail_watched), tint = AntresolColors.Label, modifier = Modifier.size(16.dp))
-                    }
-                } else if (episode.progress > 0.0) {
-                    ProgressBar(
-                        fraction = episode.progress.toFloat(),
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 10.dp, vertical = 9.dp),
-                    )
-                }
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(WatchedStyle.artworkAlpha(episode.watched, focused)),
+            )
+            if (episode.watched) {
+                WatchedMark(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                )
+            } else if (episode.progress > 0.0) {
+                ProgressBar(
+                    fraction = episode.progress.toFloat(),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 10.dp, vertical = 9.dp),
+                )
             }
         }
         Text(

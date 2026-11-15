@@ -64,7 +64,7 @@ import app.antresol.ui.theme.AntresolShapes
 private const val FIELD_KEY = "search/field"
 
 /** The Browse tiles under an empty search: where each one leads. */
-enum class BrowseTarget { Movies, Shows, Music, Books, Audiobooks, Comics }
+enum class BrowseTarget { Movies, Shows, Music }
 
 /**
  * Search: the page title, a text field (OK opens the keyboard), scope pills and, while the query is
@@ -84,13 +84,12 @@ fun SearchScreen(
     val listState = rememberLazyListState()
     val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 40 } }
     LaunchedEffect(atTop) { onScrolledToTop(atTop) }
-    LaunchedEffect(Unit) { if (canTakeFocus()) focus.restore(FIELD_KEY) }
+    LaunchedEffect(Unit) { focus.restore(FIELD_KEY, canTakeFocus) }
     val scopeLabels = listOf(
         stringResource(TvR.string.search_scope_all),
         stringResource(R.string.nav_movies),
         stringResource(R.string.nav_tv_shows),
         stringResource(R.string.nav_music),
-        stringResource(R.string.nav_books),
     )
 
     VerticalShelfScrolling {
@@ -108,7 +107,7 @@ fun SearchScreen(
                         TvTextField(
                             value = viewModel.query,
                             onValueChange = viewModel::onQueryChange,
-                            placeholder = stringResource(R.string.search_hint),
+                            placeholder = stringResource(TvR.string.search_tv_hint),
                             onSubmit = {},
                             imeAction = ImeAction.Search,
                             leadingIcon = AntresolIcons.Search,
@@ -130,7 +129,7 @@ fun SearchScreen(
                     item(key = "browse") { BrowseRow(focus, onBrowse) }
                     item(key = "prompt") {
                         Text(
-                            stringResource(R.string.search_prompt),
+                            stringResource(TvR.string.search_tv_prompt),
                             style = Antresol.typography.body,
                             color = AntresolColors.LabelSecondary,
                             modifier = Modifier.padding(horizontal = ScreenPaddingH),
@@ -217,9 +216,6 @@ private val BrowseTarget.label: Int
         BrowseTarget.Movies -> R.string.nav_movies
         BrowseTarget.Shows -> R.string.nav_tv_shows
         BrowseTarget.Music -> R.string.nav_music
-        BrowseTarget.Books -> R.string.nav_books
-        BrowseTarget.Audiobooks -> TvR.string.books_audiobooks
-        BrowseTarget.Comics -> TvR.string.books_comics
     }
 
 private val BrowseTarget.icon: ImageVector
@@ -227,19 +223,14 @@ private val BrowseTarget.icon: ImageVector
         BrowseTarget.Movies -> TvIcons.Film
         BrowseTarget.Shows -> TvIcons.Tv
         BrowseTarget.Music -> TvIcons.MusicNote
-        BrowseTarget.Books, BrowseTarget.Comics -> TvIcons.Book
-        BrowseTarget.Audiobooks -> TvIcons.Headphones
     }
 
-/** Gradient presets in the design's order: red, violet, pink, amber, green, cyan. */
+/** Gradient presets in the design's order: red, violet, pink. */
 private val BrowseTarget.gradient: String
     get() = when (this) {
         BrowseTarget.Movies -> "grad-3"
         BrowseTarget.Shows -> "grad-1"
         BrowseTarget.Music -> "grad-6"
-        BrowseTarget.Books -> "grad-5"
-        BrowseTarget.Audiobooks -> "grad-4"
-        BrowseTarget.Comics -> "grad-7"
     }
 
 private val FIELD_WIDTH = 720.dp

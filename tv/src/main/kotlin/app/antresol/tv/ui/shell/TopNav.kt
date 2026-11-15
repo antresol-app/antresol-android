@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -86,8 +87,8 @@ fun TopNav(
     onNowPlaying: () -> Unit,
     onSettings: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
-    /** The current page's focus requester, if a page is attached. */
-    contentFocus: () -> FocusRequester?,
+    /** Down from the nav: focuses the current page (its remembered element); false when there is none. */
+    onEnterContent: (FocusManager) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
@@ -102,17 +103,7 @@ fun TopNav(
             // below: Down enters the page's focus group, which restores its last focused element.
             .onPreviewKeyEvent { event ->
                 if (event.key != Key.DirectionDown) return@onPreviewKeyEvent false
-                if (event.type == KeyEventType.KeyDown) {
-                    try {
-                        val page = contentFocus()
-                        if (page != null) {
-                            page.requestFocus()
-                            focusManager.moveFocus(FocusDirection.Enter)
-                        }
-                    } catch (_: IllegalStateException) {
-                        // No page attached yet.
-                    }
-                }
+                if (event.type == KeyEventType.KeyDown) onEnterContent(focusManager)
                 true
             },
     ) {

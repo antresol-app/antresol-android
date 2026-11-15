@@ -12,12 +12,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -35,6 +37,8 @@ import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.components.BadgeRow
 import app.antresol.ui.components.ProgressBar
+import app.antresol.ui.components.WatchedMark
+import app.antresol.ui.components.WatchedStyle
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
@@ -58,8 +62,9 @@ fun Card.defaultShape(): CardShape = when (kind) {
 
 /**
  * A focusable artwork card with the caption below it (title, subtitle or year, badges), like the
- * web shelves. Focus lifts it by 1.04 with a white edge and a soft glow. [surfaceModifier] goes on
- * the focusable artwork (use it for focus requesters).
+ * web shelves. Focus lifts it by 1.04 with a white edge and a soft glow. A watched card has its
+ * artwork dimmed and the eye in the corner. [surfaceModifier] goes on the focusable artwork (use it
+ * for focus requesters).
  */
 @Composable
 fun MediaCard(
@@ -84,7 +89,8 @@ fun MediaCard(
         CardShape.Wide -> AntresolMotion.BACKDROP_ASPECT to AntresolShapes.card
     }
     val image = when (shape) {
-        CardShape.Wide -> urls?.image(card.backdrop.ifEmpty { card.poster })
+        // An episode shows its own picture, not the series backdrop every episode shares.
+        CardShape.Wide -> urls?.image(card.wideImage)
         else -> urls?.image(card.poster)
     }
     var focused by remember { mutableStateOf(false) }
@@ -101,15 +107,25 @@ fun MediaCard(
                 .aspectRatio(aspect)
                 .onFocusChanged { focused = it.hasFocus },
         ) {
-            ArtworkImage(url = image, title = card.title, shape = outline, modifier = Modifier.fillMaxSize()) {
-                if (card.progress > 0.0) {
-                    ProgressBar(
-                        fraction = card.progress.toFloat(),
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 10.dp, vertical = 9.dp),
-                    )
-                }
+            ArtworkImage(
+                url = image,
+                title = card.title,
+                shape = outline,
+                fallbackUrl = if (shape == CardShape.Wide) urls?.image(card.wideFallback) else null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(WatchedStyle.artworkAlpha(card.watched, focused)),
+            )
+            // Over the dimmed artwork, at full strength.
+            if (card.watched) {
+                WatchedMark(Modifier.align(if (shape == CardShape.Round) Alignment.TopCenter else Alignment.TopEnd).padding(8.dp))
+            } else if (card.progress > 0.0) {
+                ProgressBar(
+                    fraction = card.progress.toFloat(),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 10.dp, vertical = 9.dp),
+                )
             }
         }
         CardCaption(card, focused, showBadges, centered = shape == CardShape.Round)
@@ -125,10 +141,18 @@ fun CardSurface(
     onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    // Whether this card still has focus, for the held-OK guard of its long press.
+    val focusFlag = remember { booleanArrayOf(false) }
+    DisposableEffect(Unit) { onDispose { focusFlag[0] = false } }
     Surface(
         onClick = onClick,
-        onLongClick = onLongClick,
-        modifier = modifier,
+        onLongClick = onLongClick?.let { longClick ->
+            {
+                HeldKeyGuard.arm { focusFlag[0] }
+                longClick()
+            }
+        },
+        modifier = modifier.onFocusChanged { focusFlag[0] = it.hasFocus },
         shape = ClickableSurfaceDefaults.shape(outline),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = AntresolColors.BackgroundElevated,

@@ -1,6 +1,7 @@
 package app.antresol.mobile.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
@@ -23,6 +25,8 @@ import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.components.BadgeRow
 import app.antresol.ui.components.ProgressBar
+import app.antresol.ui.components.WatchedMark
+import app.antresol.ui.components.WatchedStyle
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
@@ -62,8 +66,9 @@ object CardSizes {
 }
 
 /**
- * A library card: artwork (with the title fallback and a progress bar), then title, a caption
- * (subtitle or year) and the server's badges. Pass [width] in rows; grids fill their cell.
+ * A library card: artwork (with the title fallback and a progress bar; dimmed with the eye when
+ * watched), then title, a caption (subtitle or year) and the server's badges. Pass [width] in
+ * rows; grids fill their cell.
  */
 @Composable
 fun MediaCard(
@@ -89,17 +94,31 @@ fun MediaCard(
         val (image, aspect) = when (style) {
             CardStyle.Poster -> card.poster to AntresolMotion.POSTER_ASPECT
             CardStyle.Square, CardStyle.Circle -> card.poster to 1f
-            CardStyle.Wide -> card.backdrop.ifBlank { card.poster } to AntresolMotion.BACKDROP_ASPECT
+            // An episode shows its own picture, not the series backdrop every episode shares.
+            CardStyle.Wide -> card.wideImage to AntresolMotion.BACKDROP_ASPECT
         }
-        ArtworkImage(
-            url = urls?.image(image),
-            title = card.title,
-            shape = if (circle) CircleShape else AntresolShapes.card,
-            modifier = Modifier
+        Box(
+            Modifier
                 .fillMaxWidth()
                 .aspectRatio(aspect),
         ) {
-            if (card.progress > 0.0) {
+            // A watched card: dimmed artwork, the eye at full strength on top.
+            ArtworkImage(
+                url = urls?.image(image),
+                fallbackUrl = if (style == CardStyle.Wide) urls?.image(card.wideFallback) else null,
+                title = card.title,
+                shape = if (circle) CircleShape else AntresolShapes.card,
+                modifier = Modifier
+                    .matchParentSize()
+                    .alpha(WatchedStyle.artworkAlpha(card.watched)),
+            )
+            if (card.watched) {
+                WatchedMark(
+                    Modifier
+                        .align(if (circle) Alignment.TopCenter else Alignment.TopEnd)
+                        .padding(8.dp),
+                )
+            } else if (card.progress > 0.0) {
                 ProgressBar(
                     fraction = card.progress.toFloat(),
                     modifier = Modifier

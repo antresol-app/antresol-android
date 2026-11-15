@@ -37,6 +37,12 @@ import app.antresol.ui.theme.AntresolShapes
 /** Horizontal TV safe area: content starts 48 dp from the screen edge. */
 val ScreenPaddingH = 48.dp
 
+/**
+ * Height of the top navigation (18 dp above and below the 40 dp glass pill). Pages that must never
+ * scroll under the navigation (the library grids) start their scrolling area here.
+ */
+val TopNavHeight = 76.dp
+
 /** Stable focus key of a card inside a shelf. */
 fun cardFocusKey(shelfId: String, card: Card): String = "$shelfId/${card.kind}/${card.id}"
 

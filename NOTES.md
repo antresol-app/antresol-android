@@ -1214,3 +1214,656 @@ implement the same wire format.
   firewalls/ROMs block inbound connections to an app port, phone camera scanning of the setup QR, the
   phone browser path (form → 303 → server `/pair` page with its sign-in gate), and the phone on a public
   https address (the TV then uses that address too).
+
+## Owner list 2026-11-15 (TV + phone)
+
+Codes against the server contract of the same date (A `Card.watched`, B `Card.thumb` +
+`/api/images/frame/{id}`, C `GET /api/items/{id}/trailers`), built in parallel; verified with
+fixtures (`TvShellUiTest` + `tv/src/test/.../fixtures/FakeServer.kt`), not against a live server.
+
+### `:core` / `:ui-common`
+- `CardFields.thumb` / `watched` (interface defaults; `Card`, `EpisodeCard` carry both, `ItemDetail`
+  `watched`), `CardFields.wideImage` = thumb → backdrop → poster for every 16:9 tile.
+  `CastMember.photo`. `TrailerList` / `Trailer` (`appUrl` = `vnd.youtube:<key>`, `webUrl`),
+  `AntresolClient.trailers(id)`. Episodes the guide synthesizes get `thumb = /api/images/frame/<id>`.
+- `Kind.isBook`, `HomeResponse.withoutBooks()` (the TV apps have no books, as on Apple TV).
+- `components/Watched.kt` (`WatchedStyle` alphas, `WatchedMark` eye in a glass circle),
+  `components/CastPhoto.kt` (photo over the initials avatar), `AntresolIcons.Eye` / `Trailer`,
+  `trailers/Trailers.kt` (fetch, empty on any failure; open the YouTube app, else the https page).
+  Strings `action_trailer`, `trailer_choose`, `trailer_teaser`, `trailer_no_app` (en + ru).
+
+### TV
+- Trailer pill last in the detail actions (no shift when trailers arrive after the page); one
+  trailer opens directly, several open an `OptionsPanel` chooser; no app → a caption.
+- Cast row (`detail/CastRow.kt`): focusable round photos with name and character; the cast text
+  line in the header is gone.
+- Episode tiles and Wide cards use `wideImage`; watched cards and episodes: dimmed artwork
+  (`WatchedStyle`, less while focused) and the eye; progress only when not watched.
+- Grids (`CardGridScreen`): the scrolling area starts under the nav (`TopNavHeight`, clipped), the
+  nav stays up; `EvenColumns` shares the space a fixed column count leaves over between the gaps,
+  so both gutters are 48 dp.
+- No Books: tab, page, book grids, search scope/tiles/rows and book cards on Home are gone. The
+  book detail, comic reader and audiobook player code stays (unreachable from the TV UI now).
+- Settings: the server section (address, version, library, change server), devices and
+  `SettingsViewModel` are gone; profile, playback, language and app version remain.
+- Tabs (`MainShell`): every tab sits on an empty `ShellRootRoute`, so each tab (Home too) is saved
+  and restored the same way. Leaving a tab starts a 5 s timer (`TAB_RESET_MS`); coming back first
+  cancels it (state kept), else `clearBackStack(tab)` drops its saved stack and it opens fresh.
+  Selecting the current tab pops to its root. Back on a tab root: Home → `moveTaskToBack`, other
+  tabs → Home.
+- Long press (`HeldKeyGuard`): after a long press opened a page, the rest of the held OK (repeats
+  and the release) is swallowed at the shell root once focus has left the long-pressed card, so
+  the new page's Play is not clicked by the release.
+- Hang (item 6), root cause: two focus faults that together leave the TV with nothing focused and
+  the D-pad unable to bring focus back (it looks frozen).
+  1. Pages took focus from `LaunchedEffect`s gated only by "the nav has no focus". During Back the
+     leaving page stays composed for its fade-out; a detail page whose load finished then (or whose
+     focus request was still retrying) pulled focus onto itself and dropped it when it was disposed.
+  2. Each page was a `focusRestorer()` group. The restorer keeps the page's last focused child and
+     redirects later focus requests inside the page to it, also when that child is gone, so Home
+     coming back from a detail page (or a page opening a side panel, e.g. the trailer chooser)
+     ended up with no element focused.
+  `TvShellUiTest.enteringAndLeavingTheSameSeriesNeverLosesFocus` (OK, then Back at 16…700 ms, item
+  answers after 0/120/400 ms; 21 rounds) froze in 5 rounds and showed no focused element in 6 more
+  on e9a3d7a; now every round returns to Details.
+  Fix: each page gets a gate (`LocalPageCanTakeFocus`) that is true only for the current back stack
+  entry, asked on every frame of a focus attempt (`tryRequestFocus(allowed)`,
+  `FocusMemory.restore(key, allowed)`); the page is a plain focus group and the nav enters it
+  through the page's `FocusMemory` (`LocalFocusMemories`, `PageFocus.enter`); the shell re-enters
+  the current page if it has no focus after a transition or loses it later (`ensureFocus`),
+  registering each page composition separately (an entry can be composed anew while its old
+  composition is disposed). `OptionsPanel` repeats its focus request until focus has arrived.
+
+### Phone
+- Songs: Play/Shuffle queue the whole list through `PagedViewModel.followToEnd`: failed pages are retried
+  (2 s, 5 s, 15 s), then wait for Try Again; pages loaded later (retry or scrolling) still join the queue. The
+  queue follows while the Songs page is open (leaving the page stops appending). `PagedViewModelTest`.
+- Focus rings: every remaining plain `clickable` (settings, chapter, track, episode, account and sheet rows,
+  genre chips, sort pills, section titles, Now Playing toggles, mini-player) uses `focusClickable`.
+  **Note:** the task listed this for the TV, but the TV rows were already tv-material `Surface`s with the
+  shared focus treatment (white fill); the plain-`clickable` gap was the phone's.
+- Playlists: Playlists page "New Playlist"; "Add to Playlist" sheet (album button, or long press on a song in
+  album/artist/playlist pages and Songs) with a new-playlist option; playlist page Edit (move up/down, remove),
+  Rename, Delete (confirmation sheet). Edits are optimistic, one at a time, rolled back on failure.
+  Decision: name entry and the delete confirmation are bottom sheets, not `AlertDialog`s — opening an
+  `AlertDialog` from a click inside the signed-in shell never got idle under Robolectric (a standalone dialog
+  did), so it could not be tested; sheets match the app's other sheets anyway.
+- Live test `MobileLiveUiTest.phonePlaylists` (create, add album, move, remove, rename, delete; cleans up).
+
+### TV
+- Settings: Signed-in Devices section (last): this device, then others; OK asks to sign one out.
+- Playlists: album pages "Add to Playlist" (panel with New Playlist → name panel with `TvTextField`), playlist
+  pages "Delete Playlist" with confirmation (also for empty playlists). The nav hides while a panel is open
+  (`MainShell.panelOpen`, shared with Settings). Live test `TvLiveUiTest.playlistsCreateAddDelete`.
+- **Observed, not fixed:** under Robolectric, focus does not move into an `OptionsPanel` (the existing Settings
+  panels behave the same: focus stays on the opener behind the scrim), and tv `Surface`s take no touch input,
+  so the live tests press panel rows through their semantics click action. Verify panel focus on a device.
+
+### Verified
+`ANTRESOL_TEST_SERVER=1 ./gradlew --no-daemon :core:test :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug`
+green, plus `:ui-common:testDebugUnitTest`.
+
+### Known gaps
+- Never run on a device: Keystore sealing, panel focus on TV, PiP, audio output remain unverified on hardware.
+- Phone has no subtitle-language setting (the shared player supports it; only the TV sets it).
+- TV playlists: no rename, remove or reorder (phone only).
+- Test runs leave many "robolectric" device sessions on the test server (pre-existing; seen in the new
+  devices list).
+
+## Release engineering + screenshots
+
+### Release builds
+- Root `build.gradle.kts` configures both apps (`plugins.withId("com.android.application")`): `versionName` from
+  `antresolVersionName` in `gradle.properties` (1.0.0), `versionCode` = `GITHUB_RUN_NUMBER` or 1, release = R8 +
+  resource shrinking + `proguard-android-optimize.txt`, signing from `ANTRESOL_KEYSTORE_FILE` / `_PASSWORD` /
+  `ANTRESOL_KEY_ALIAS` / `ANTRESOL_KEY_PASSWORD` (env or Gradle property), unsigned when absent. The modules no
+  longer set versions or release build types themselves. Details and secret names: `docs/RELEASE.md`.
+- Keep rules: nothing new was needed. `ui-common/consumer-rules.pro` keeps `$$serializer`/`serializer()` for
+  `app.antresol.**`; kotlinx.serialization, Media3, OkHttp, Coil ship their own rules. No reflection or
+  `getIdentifier` in the code base (checked), so resource shrinking is safe.
+- **R8 proof**: `verifyReleaseSerialization` (in the root script) runs before every `assembleRelease`/`bundleRelease`.
+  It reads `mapping.txt` + `usage.txt` (which together list every class R8 saw) and fails unless each serializable
+  app class kept its `$$serializer` unrenamed with all members and a surviving class kept `serializer()` unrenamed.
+  Current result: phone 71/71, TV 72/72 serializable classes, all kept. A doctored mapping (renamed serializer)
+  makes it fail, so the check is live.
+- Decision: no Robolectric run of the release variant. Unit tests (also `testReleaseUnitTest`) run the unminified
+  classes, so they cannot show R8 damage; the mapping check is the honest proof available without a device.
+  A real-device smoke test of the release APK remains to be done.
+- Verified: `:tv:assembleRelease :mobile:assembleRelease :tv:bundleRelease :mobile:bundleRelease` (APKs ≈ 3.4–3.7 MB,
+  AABs ≈ 7 MB), and signing with a throwaway keystore (`apksigner verify` OK, versionCode 42 from
+  `GITHUB_RUN_NUMBER=42`).
+
+### CI
+- Push/PR: unit tests + debug builds (unchanged). Push to main and tags: release APKs + AABs, uploaded with the
+  debug APKs and R8 mappings as workflow artifacts `debug-apks` and `release`. Tags `v*`: job `github-release`
+  (`contents: write`) runs `gh release create` with `GITHUB_TOKEN`; notes = both apps' en-US changelog.
+  Signing secrets: `ANTRESOL_KEYSTORE_BASE64`, `ANTRESOL_KEYSTORE_PASSWORD`, `ANTRESOL_KEY_ALIAS`,
+  `ANTRESOL_KEY_PASSWORD`; without them files are named `*-unsigned.*`. Not run on GitHub from here (no way to
+  trigger it); YAML parsed locally.
+
+### Store metadata
+- 2026-11-14, supersedes the next item: the owner wanted one Play app, as on iOS/tvOS. The TV build now has
+  `applicationId = app.antresol.mobile`, version code + 1 000 000, `leanback` required (so Play never offers the
+  TV bundle to phones) and goes to the Android TV form-factor track of the phone app. One listing:
+  `mobile/fastlane` holds the TV banner and TV screenshots too; `tv/fastlane` is gone. The old Play app
+  `app.antresol.tv` (closed test since 2026-11-10) is no longer fed.
+- Decision (superseded): two apps need two listings, so the fastlane folders live per module:
+  `{mobile,tv}/fastlane/metadata/android/{en-US,ru-RU}/` (title, short/full description, `changelogs/1.txt`), within
+  Play's length limits. Copy follows the server README (own server required, no content, no data collected) and only
+  claims what the Android apps do (no offline downloads, no EPUB reader on Android).
+- `docs/PLAY_STORE.md`: data safety answers (no data collected or shared, traffic only to the user's server),
+  permissions, TV review notes (leanback banner present, 1280×720 banner and TV screenshots still needed, reviewers
+  need a demo server), graphics to make.
+
+### Screenshot gallery
+- `docs/screenshots/{tv,mobile/phone,mobile/tablet}` (59 PNGs) + `docs/screenshots/README.md`, produced by
+  `scripts/update-screenshots.sh` (runs the live UI tests, then copies a fixed selection under stable names;
+  `--copy-only` reuses the last run).
+- Tests changed: phone qualifiers are now `w360dp-h800dp-xxhdpi` (1080×2400; the player `w800dp-h360dp`). New shots:
+  clean server screens (TV + phone). The tablet test became `tabletOnboardingBrowseAndSearch` (profiles, home,
+  movies, movie and series detail, music, albums, books, search) and `MobilePlaybackLiveUiTest` gained
+  `tabletVideoPlayer` and `tabletNowPlayingAudiobookAndSettings` (album, two-column Now Playing, audiobook,
+  settings); shared steps are helpers (`videoPlayer`, `playFirstTrackOfTestAlbum`, `openAudiobook`, `openSettings`).
+- Fix: Media3 keeps session ids in a static map, so a second test creating `PlaybackService` failed with "Session ID
+  must be unique"; the outer rule now destroys the service after each test.
+- Fix (test isolation): with `org.gradle.parallel` the TV and phone live tests ran at the same time as the same
+  profile on the same items, so the phone's progress snapshot captured the TV player's position and "restored" it
+  (Big Buck Demo kept 881 ms of progress; the TV test then saw Resume instead of Play). `:mobile` test tasks now
+  `mustRunAfter(":tv:testDebugUnitTest")`; the phone playback test re-restores until a late final write no longer
+  changes the progress; the TV music test accepts the hero's Play or Resume. The stray progress on the server was
+  reset (movie 19 unwatched, as the tests expect).
+- Observed, not fixed: comic pages never decode under Robolectric (TV shows "This page couldn't be loaded", the
+  phone a black page), so readers are left out of the gallery; verify on a device. The test library has almost no
+  posters, so most cards show the gradient placeholder. On a landscape tablet the Settings column is capped at
+  720 dp and left-aligned (by design of the existing screen, looks sparse).
+
+### Verified
+`ANTRESOL_TEST_SERVER=1 ./gradlew --no-daemon :core:test :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug`
+green (11 live UI tests), `scripts/update-screenshots.sh` green, plus the release/bundle builds above.
+
+### Known gaps
+- The release APKs were never installed on a device or emulator; GitHub Actions release/tag jobs never ran.
+- Play listing graphics (icon 512, feature graphic, TV banner 1280×720, real-device screenshots) are not made.
+
+## Design fidelity pass (screenshots vs docs/design-ref)
+
+Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; fixes below, gallery re-rendered.
+
+### Shared (`:ui-common`)
+- `ArtworkImage`: the title-on-gradient placeholder now sits *under* the image and stays until it loads. Before,
+  it was removed on success and Coil's crossfade faded in from the empty dark box, so posters flashed (and many
+  gallery shots showed) plain dark tiles. Boxes narrower than 96 dp (queue/track thumbnails, mini player) show
+  the title's initial instead of an ellipsised title ("S…", "…").
+- `BadgeRow` wraps (FlowRow) instead of cutting badges in narrow cards ("Audio EN RU" became "Audio").
+
+### Phone
+- Grids: minimum column 100 dp, so posters are three across on a 360 dp phone as in the reference (104 dp gave
+  two huge columns). Shelf cards 140 dp (poster/square) and 124 dp (circle), matching the reference proportion.
+- Album page: Add to Playlist and the star moved to the top bar opposite Back (`BackBar`/`DetailHeader`
+  `actions`), so Play and Shuffle keep full labels ("Pl…", "Sh…" before). `PlayShuffleRow` lost its now unused
+  `trailing` slot.
+- Book actions and playlist edit actions use FlowRow: they wrap rather than truncate ("Want t…", "Delete P…"),
+  which also covers the longer Russian labels.
+- `SegmentedPills` scrolls as a whole from the page gutter to the screen edge (new `gutter` parameter) instead
+  of clipping inside its own capsule (Search's "Books" was cut). Pill padding 14 dp.
+- Artwork placeholders of Now Playing, the mini player and the queue are seeded by the album title, so they match
+  the album's card instead of each song getting another colour.
+- Now Playing: Speed and Sleep toggles are plain like the panel toggles until active (they had a stray dark disc).
+- A bottom fade behind the mini player and tab bar, so content no longer shows through the bar edges.
+- Pill buttons use 14 dp side padding (was 18), so "Перемешать" fits a half-width pill on a 360 dp phone.
+
+### TV
+- Search: title, field and scope pills start on the page gutter, aligned with the result rows (the centred
+  column did not line up with anything).
+- Detail pages: no uniform 30 dp LazyColumn spacing; sections keep 30 dp above them and song/chapter rows sit
+  close (tracks were ~65 dp apart).
+- Settings no longer dims the tab it was opened from in the top bar (it belongs to the avatar).
+- Now-playing chip: the equalizer bars rest at uneven heights and start desynchronised; flat bars read as "…".
+
+### Tests
+- `MobilePlaybackLiveUiTest` waits for the Music page's shelves before its shot (it captured the spinner).
+
+### Known gaps (observed, not fixed)
+- Robolectric does not move focus into the TV side panels (see the TV live test comment), so the Settings
+  quality and Add to Playlist shots show no focused row; on a device the first/selected row takes focus.
+- The faint rectangle behind the focused profile circle on TV is how Robolectric draws the tv-material glow; not
+  checked on a device.
+- Hero/now-playing artwork in some shots is still mid-crossfade (Robolectric clock), showing the placeholder.
+
+## Play listing graphics
+
+- `scripts/render-store-graphics.js` (Playwright/Chromium, Inter font) renders into
+  `{mobile,tv}/fastlane/metadata/android/{en-US,ru-RU}/images/`: `icon.png` 512×512 (full-bleed `app-icon.svg`,
+  re-encoded as RGBA because Chromium writes opaque PNGs as 24-bit and Play wants 32-bit), `featureGraphic.png`
+  1024×500 and, for TV, `tvBanner.png` 1280×720 (gradient + mark + wordmark + localized tagline).
+- Screenshots: phone shots are framed 1080×1920 with localized captions (raw 1080×2400 exceeds Play's 2:1 aspect
+  limit); tablet (`tenInchScreenshots/`) and TV (`tvScreenshots/`) gallery shots are copied unchanged. Selections
+  and captions are lists at the top of the script. Details and caveats in `docs/PLAY_STORE.md` → Graphics.
+
+## Google Play preparation (API 36, real screenshots, version 2)
+
+- **API 36**: `compileSdk`/`targetSdk` 36 in `:tv`, `:mobile` (`:ui-common` compiles against 36). AGP stays 8.7.3:
+  it links, dexes and runs R8 against android-36 without problems, so `android.suppressUnsupportedCompileSdk=36`
+  silences its "untested API level" warning instead of an AGP/Kotlin bump. Robolectric tests keep their pinned
+  `@Config(sdk = 34/35)`.
+- API 36 behaviour checked on emulators (phone, tablet, TV): edge to edge was already on (`enableEdgeToEdge`,
+  insets per screen) and is correct; the one visible problem was scrolled titles colliding with the transparent
+  status bar, fixed with a short status-bar gradient in `MainShell` (not on readers/player). Back handling is all
+  `BackHandler` (predictive back works); the player's `sensorLandscape` is ignored on large screens from API 36,
+  which is fine (the tablet is landscape anyway, and the player handles any orientation).
+- **Version**: local builds take `versionCode` from `antresolVersionCode` (2) in `gradle.properties`; CI still uses
+  the run number. `changelogs/2.txt` (copy of 1.txt) in all four locale folders.
+- **Store screenshots**: emulator captures (API 36 Google APIs / Android TV images, Pixel 8, Pixel Tablet, TV 1080p)
+  of the debug builds signed in to a demo server with open-licensed content, demo-mode status bar; 8 per form factor
+  in `docs/store-screenshots/`. `scripts/render-store-graphics.js` turns them into posters with CSS device frames
+  (`--screenshots` for posters only). Details in `docs/PLAY_STORE.md` → Graphics. The Robolectric gallery in
+  `docs/screenshots` is unchanged and no longer feeds the store.
+- Observed, not fixed: the profile picker shows the server as `host:443` for an https address (explicit default port).
+- Release AABs for both apps signed with the upload key and verified (`jarsigner -verify`, bundletool: versionCode 2,
+  targetSdk 36). The release builds were still not installed on a device.
+
+## Live TV channels («ТВ»)
+
+### `:core`
+- `model/Channels.kt`: `Channel`, `ChannelProgram`, `ChannelList`, `ChannelGuide` (editor fields such as
+  `rules` are ignored). `AntresolClient.channels()`, `channelGuide(id, hours)`, `openLiveChannel(id)` (fetches a
+  media key with ≥ 6 h left, GETs the live playlist so the server starts the encoder and reports 503/403/404 as
+  `ApiException`, returns the signed URL). `MediaUrls.liveChannel(id, mk)`.
+- `channels/ChannelLogic.kt`: `Channels.sections` (web's `byCategory`), `neighbour` (zap by number, wrapping),
+  `progress`, `onAir` (guide → now/next), `showing` (a card moves on to `next` when `now` ended between
+  refreshes), `programLine`; `LiveStartPolicy` (503 with `Retry-After` ≤ 5 s = "starting", retried up to 15
+  times; everything else shows the server's message).
+- `channels/LiveTvSession.kt`: the player's logic without ExoPlayer (`LiveApi`, state flow of channels, current
+  channel, guide and `LiveStream` Starting/Ready/Failed; zap, retry, refresh every 30 s, reopen after a player
+  error with the same retry budget). Tests: `ChannelLogicTest`, `LiveTvSessionTest`, sample decoding
+  (`channels.json`, `channel-guide.json`), client request shapes.
+
+### `:ui-common`
+- `playback/LivePlayerViewModel`: ExoPlayer (OkHttp data source, HLS by MIME type) driven by `LiveTvSession`;
+  behind-live-window → back to the live edge; a 401 drops the media key; background stops the stream and
+  reopens it at the live edge on return. No progress, no HLS keepalive (the live stream has no session).
+- `channels/ChannelsViewModel` (shared by both apps; sections, picked section, `onAir`, 30 s refresh while a page
+  is started, pull to refresh, keeps data on a failed refresh), `ChannelLogo`/`ChannelLogoBadge` (gradient tile),
+  `rememberNowMs`, `programClock`. EN/RU strings `nav_tv`, `tv_*`. `AntresolIcons.ChevronUp/Down` (moved from
+  `MobileIcons`). Test `ChannelsViewModelTest`.
+
+### Apps
+- TV: `NavTab.Tv` («ТВ») between TV Shows and Music; `ChannelsRoute` → `ui/channels/ChannelsScreen` (title +
+  section pills, rows or a 3-column section grid of `ChannelCard`s built on `CardSurface`), `LiveRoute` →
+  `ui/player/LivePlayerScreen` (full screen, nav hidden). Up/Down/Channel±/Page± zap; other keys show the
+  overlay; the error panel's Try Again takes focus. Audio pauses before live TV.
+- Phone: decision as on the web — no sixth tab; `OnAirShelf` on Home after the first shelf, its title opens
+  `ChannelsRoute` (pushed page). `player/LivePlayerActivity` (landscape, closes an open video player, pauses
+  music, closes on profile switch) + `LivePlayerScreen` (tap = overlay, buttons and vertical swipe zap).
+
+### Verified
+- `./gradlew :core:test :ui-common:testDebugUnitTest :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug`.
+- On emulators (API 36 Google APIs image; the TV app on a 1920×1080 / 320 dpi D-pad AVD, as no Android TV
+  image was installed) against a test server: tab, sections, live playback (frames advance), zapping with
+  D-pad and Channel+, wrap from 1 to the last channel, the server's "too many channels" refusal with Try
+  Again, Back restoring focus; phone Home shelf, TV page, section, live playback, button and swipe zapping.
+
+### Known gaps
+- Not run on a real Android TV image/device (leanback launcher, real remote CH± keys); no Robolectric live UI
+  test for the channels screens yet.
+- A server keeps a channel's encoder running for a while after the viewer leaves, and allows 3 at once, so
+  quick zapping through many channels shows "too many channels" (server behaviour, same on the web).
+- The live player has no MediaSession (headset buttons / system now-playing) and no picture-in-picture
+  (done in the next round, below).
+
+## Live TV, second round (continue, zap without black, mini-guide, PiP)
+
+### `:core`
+- `channels/LastChannel.kt`: `LastChannels` (per server + profile, a `StateFlow` per key) over a
+  `LastChannelStorage`; `InMemoryLastChannelStorage` for tests. `Channels.continueWith` (the last
+  channel while it is still listed), `Channels.miniGuide` (the current channel's section by number,
+  `startIndex` = the channel on; unknown channel → every channel from 0). `LiveTvSession.tune(id)` (the
+  guide), `LiveTvState.onAir(nowMs)` (guide first, else the list's now/next), `liveMiniGuide` (the
+  channel on screen shows its guide's now/next, the list is up to 30 s older). Tests in
+  `LastChannelsTest`, `ChannelLogicTest`, `LiveTvSessionTest`.
+
+### `:ui-common`
+- `PrefsLastChannelStorage` (SharedPreferences `last_channels`), `lastChannels(context)`; both apps keep
+  one `LastChannels` in their Application. `ChannelsViewModel(lastChannel = …)` exposes `continueChannel`.
+- `LivePlayerViewModel(…, lastChannel)`: remembers the channel on its first rendered frame; `tune`,
+  `miniGuide`, `awaitingPicture` / `hasPicture`. A switch or reopen now only `stop()`s the player (no
+  `clearMediaItems`), and both apps' `VideoSurface(keepLastFrame = true)` set
+  `keepContentOnPlayerReset`, so the old frame stays (dimmed 45 % with a spinner) until the new
+  channel's first frame. The media item carries metadata (title = programme, artist = channel,
+  `MEDIA_TYPE_TV_CHANNEL`), updated in place with `replaceMediaItem` as programmes change.
+- `LiveMediaSession.build`: a Media3 session over a `ForwardingPlayer` without seek/skip/speed commands
+  and without a duration, so the platform session has no scrubber (verified: actions 17031, no
+  ACTION_SEEK_TO). `LiveBadge` («● LIVE»). Strings `tv_continue`, `tv_continue_watching`,
+  `tv_next_at_long` («Далее в HH:MM — …»), `tv_guide_hint`, `tv_watching`.
+
+### TV
+- `ContinueChannel` (392 dp card + eyebrow, programme title, «● N · name», time, next) first on the page
+  and the initial focus. Cards gained the «Next at» line, `width`, `watching` (red dot), `showNext`.
+- `LivePlayerScreen`: one bottom banner (logo, «N · name ● LIVE», programme, start–progress–end,
+  next, an «OK Channels» hint) sliding in on every switch and on OK, hiding after 5 s; OK with the
+  banner up — or Down after OK — opens the mini-guide (section title + 172 dp cards, focus on the
+  channel on, OK tunes, Up/Back closes, auto-hides after 15 s idle); Back: guide → banner → leave.
+  Channel±/Page±/Media Next/Previous zap everywhere; Up/Down zap when the guide is closed.
+  The media session lives while the screen is composed.
+
+### Phone
+- `ContinueChannel` on top of the TV page (stacked; side by side from 600 dp). Player: banner at the
+  top (back, logo, channel + live, programme, progress, next, up/down buttons), a tap opens it with
+  the bottom strip of the section (164 dp cards, a tap tunes), another tap hides; swipes zap as
+  before. Picture-in-picture (auto-enter on Android 12+, `onUserLeaveHint` before), overlays hidden in
+  PiP, closing the PiP window ends the channel; one live activity at a time, and a video closes it
+  (and vice versa). `LocalMediaUrls` is provided in the activity so the strip shows programme art.
+
+### Verified
+- `./gradlew :core:test :ui-common:testDebugUnitTest :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug`.
+- Emulators (API 36 Google APIs; TV app on a 1920×1080/320 dpi D-pad AVD, phone on a Pixel 8 AVD)
+  against a test server: Continue after watching, focus, banner on open and on zap, the held frame
+  right after a zap (dimmed, never black), mini-guide open/move/tune, Back order, phone strip, swipe
+  zap, picture-in-picture, media session state and metadata (`dumpsys media_session`).
+
+### Known gaps
+- Not run on a real Android TV image or device; the emulator image is a phone image (status bar and
+  gesture handle visible in captures).
+- Other channels' cards in the strip use the 30 s channel list, so with very short programmes a card
+  can show a programme that just ended for up to 30 s (the channel on screen uses its guide).
+- No PiP actions (channel up/down buttons in the PiP window); headset next/previous don't zap.
+- No Robolectric UI test for the new player overlays.
+
+## Live TV: external IPTV channels
+
+- The server merges channels of external IPTV sources into `GET /api/channels` and the guide by
+  number (from 100): `external: true`, `stream {url, userAgent, referrer, fallbacks, unsupported}`;
+  their programmes have `kind: "external"`, `itemId: 0` (no item page).
+- `LiveTvSession` plays them straight from the provider (never the own live route): the stream,
+  then the fallbacks in order, skipping ones marked unsupported on `android`/`androidtv`. A source
+  that fails before playing hands over at once; one that broke while playing is reopened up to twice.
+  When none plays: `LiveStream.Failed(external = true)` («Канал сейчас не открывается»), no automatic
+  retry; Try Again starts over, zapping works.
+- The server's hidden-address form `/api/channels/live/ext/{id}/{n}` (a 302) gets `?mk=`; provider
+  URLs never do. The player loads external streams through a plain `DefaultHttpDataSource`
+  (`setUserAgent`, `setDefaultRequestProperties(Referer)`, cross-protocol redirects), never the
+  authorised OkHttp client. A URL without an extension is tried as HLS, then as a plain stream.
+- Audio/subtitles of an external channel: the stream's own track groups with their labels
+  (`ExternalTracks`, duplicates get «(CC)»/«5.1»/a number); the choice is kept per channel in the
+  device's preferences (`live_external_tracks`, language + label); default = the profile's language.
+- «ТВ» calls `POST /api/channels/opened` when it opens (at most every 10 minutes) and reloads the list.
+- Verified on emulators (phone 360 dp and Pixel 9 Pro XL on API 36, Android TV API 34 image): the three
+  demo HLS streams, alternate audio and subtitles, the per-channel memory, a failing channel and
+  zapping out of it, the hidden-address form. Fallback order and TV-is-TV are unit-tested
+  (`ExternalChannelSessionTest`, `LiveTvNoHistoryTest`).
+- Not verified: real providers (User-Agent/Referer requirements, MPEG-TS without extension),
+  fallbacks with real duplicate channels; on the TV emulator the Apple «advanced» stream rendered
+  zoomed (goldfish decoder), the other two were fine.
+
+## Episode guide on series pages
+
+- `:core`: `AntresolClient.episodeGuide(kind, tmdbId)` (`GET /api/tracking/{kind}/{tmdbId}/episodes`,
+  server 0.5.0+, docs/API.md §4.6), models in `model/EpisodeGuide.kt`, and `library/EpisodeGuide`:
+  `fetch` (null for anything but a series with a `tmdbId`, for every failure — 404 from the age
+  filter, 404/405 from older servers, network, decoding — and after 6 s) and `build`, which merges the
+  series detail with the guide into `GuideSeason`s of `GuideEpisode`s (`Downloaded` / `NotDownloaded`
+  / `Upcoming`). A library source's `meta.itemId` picks the library card (so title, still, progress,
+  watched and the watched toggles stay the library's); a library episode at the same season and number
+  also counts as downloaded; library episodes the guide misses are kept; a library source the detail
+  does not list becomes a minimal card that still plays. Upcoming = air date after today or none.
+  No guide = the library's seasons, unchanged, and no «Скачана» marks.
+- `:ui-common`: `EpisodeLabels` (marks, localized air date «21 ноября» / "November 21", the year only
+  when it is another year's, «Спецвыпуски» for season 0, the dim levels) and the strings.
+- Phone: not-downloaded rows are dimmed without still/Play/watched toggle and tapping one shows «Серии
+  нет в медиатеке»; upcoming rows are greyed and not clickable. The season watched toggle shows only
+  for seasons the library has, and marks the library season item as before.
+- TV: every guide episode is a card in the season row; library ones play on OK and open on hold as
+  before. The others stay focusable so the row scrolls to them, but OK does nothing; the hint under
+  the row says «Серии нет в медиатеке» / «Ещё не вышла» while one is focused.
+- Tests: `EpisodeGuideTest` (states, numbering mismatches, fallback, fetch failures and timeout),
+  `SampleDecodingTest.episodeGuide` (`tracking-episodes.json`), `VideoInfoTest` (TV), `EpisodeLabelsTest`
+  (phone module, where Robolectric sees the merged resources).
+- Not verified on a device or against a live 0.5.0 server.
+
+## TV UI fixes from the owner's TV (keyboard, player focus, icon buttons, Back on panels)
+
+- Text fields over the keyboard: Gboard for TV floats over the middle and bottom of the screen and
+  covered the centred server address. `components/TvTextField.kt`: `rememberTvKeyboardOpen()` (the
+  root window insets' IME visibility, polled every 150 ms; Compose's `WindowInsets.isImeVisible` is
+  useless here, without an edge-to-edge window it says "visible" from the start), with a fallback for
+  keyboards that report no IME at all: the field's own OK → `keyboard.show()` counts as open until a
+  submit, focus loss or a D-pad key reaching the field. `KeyboardAwarePage` slides the page to the
+  top (animated, 40 dp gap) and `WhileNotTyping` folds the logo/avatar/subtitle. Used by the server
+  address and the profile password; search and the playlist-name panel already have the field in the
+  top third. Addresses and passwords ask for no suggestions: `TYPE_TEXT_FLAG_NO_SUGGESTIONS` is added
+  through `InterceptPlatformTextInput` (Compose never sets it; autocorrect off is not enough for Gboard).
+- Player controls (`ui/player`): Play/Pause, Audio, Subtitles, Quality (and Next Episode) are round
+  glass icon buttons (`PlayerIconButton`, 48 dp; focus = white fill, black glyph, 1.07 scale, glow, the
+  name as a caption under the focused one only), like the Apple TV transport bar and the live banner.
+  Play is no longer a white "primary" pill, so with focus on the seek bar nothing else looks focused.
+  Down from the seek bar goes to Play. `PlayingOverlayContent` is the overlay without the view model.
+- Back on side panels: Compose turns an unused Back key into a focus "exit" and counts a cancelled one
+  (OptionsPanel's `exit = Cancel`) or a move to a focusable parent (the player's root box) as used, so
+  the key never reached the activity's `BackHandler`s: player menus closed only by choosing. Now
+  `OptionsPanel` takes Back itself (preview key handler, closes on key-up without choosing, plus its
+  own `BackHandler`); every screen already puts focus back on the opener. The player's Back with the
+  controls up is taken at the overlay root and hides them in one press (as a key on a focused button it would otherwise go to that focus exit first).
+  KeyPanel-style panels (channels, guide, live player) keep focus outside and were not affected.
+- Tests: `OptionsPanelBackTest`, `PlayerControlsFocusTest` (fill colours of focused/unfocused buttons,
+  captions, D-pad order, Back on a track menu: closed, nothing chosen, focus on the opener, player not
+  left), `ServerScreenKeyboardTest` (field in the top third while typing and back, NO_SUGGESTIONS +
+  URI variation in the EditorInfo). All with real KEYCODE_BACK events through the window: the old
+  tests' `onBackPressed()` path never went through Compose's focus exit.
+- Not verified on a real TV: whether Gboard for TV reports IME insets (either way the fallback moves
+  the field), and the look of the floating keyboard over the moved page. The TV emulator did not run
+  (not enough disk space for its data partition); screenshots are Robolectric renders.
+
+## LAN server discovery and TV sign-in by QR (phone and TV)
+
+Implements the server's client contract for LAN discovery and QR sign-in (server 1.4.0+, the server
+side of the same feature: UDP probe on port 8420, mDNS `_antresol._tcp`, `POST /api/auth/pair/*`).
+
+### `:core`
+- `discovery/`: `DiscoveryProtocol` (probe bytes, UDP answer parsing with the answer's **source address
+  first**, since inside Docker the listed `urls` are container addresses; mDNS TXT parsing, IPv4 only),
+  `Sightings.merge` (by server id; a UDP source address stays first), `UdpProbeSource` (3 probes 300 ms
+  apart to 255.255.255.255, every interface's subnet broadcast and the last server's address when it is
+  a private IPv4 literal, 2 s of answers, repeated every 10 s while collected), `ServerDiscovery` /
+  `ServerFinder` (merges sources, confirms each server with `/api/health` on its candidates in order and
+  lists only confirmed ones; `searching` for the first 4 s).
+- `pairing/`: `PairingFlow` (TV state machine: Starting → Pending(code, url, deadline) → Approved /
+  Denied; expired codes and the end of the countdown start a new code by themselves, one last poll
+  runs at the deadline so a late approval is not lost; network errors keep polling; 429 waits
+  `Retry-After`; a failing `start` is retried every 5 s). The countdown is on the device clock: the
+  server's `expiresAt` is trusted only within 6 min of now (TV clocks are often wrong), else 5 min.
+  `PairCode` / `PairLink` (QR URL `…/pair?code=&sid=`, or a bare typed code; the host is ignored),
+  `QrCodes` (ZXing core encode/decode). `AntresolClient.pairStart/pairPoll/pairLookup/pairApprove/
+  pairDeny` (`pairPoll` maps 410 to denied/expired), `SessionManager.deviceInfo()` and
+  `signInWithPairing(token, user, serverId)` (stores the token as a normal sign-in).
+- Tests: `DiscoveryTest` (parsing, merge, broadcast math, a real UDP round trip on loopback, health
+  confirmation and impostors), `PairingTest` (flow with virtual time, request shapes via MockWebServer,
+  codes/links, QR round trip, sign-in storage). `PairingIntegrationTest` runs against a real server
+  with `ANTRESOL_PAIRING_E2E=<base URL>` (+ `ANTRESOL_PAIRING_E2E_UDP`, `ANTRESOL_PAIRING_E2E_PASSWORD`):
+  unicast UDP probe → health → TV pairing flow → phone lookup/approve → TV token works for `/api/me`
+  and shows in the devices list. Passed 2026-11-14 against the server branch built locally.
+
+### `:ui-common`
+- `discovery/LanDiscovery`: the Android `ServerFinder`: UDP probe + `NsdManager` (resolves one service
+  at a time; any NSD failure only ends that source) and a Wi-Fi `MulticastLock` while collected
+  (`CHANGE_WIFI_MULTICAST_STATE`, declared here). No location permission.
+- `components/QrCodeImage` (black modules on a white rounded tile with a quiet zone, pixel-snapped),
+  icons `Phone` and `QrCode`, shared strings for the server list.
+
+### TV
+- `ServerScreen(session, finder)`: found servers above the field (glass rows, white when focused; at
+  most two rows and a peek, the rest scroll), "Looking…" then a Docker hint when none. The logo folds
+  away while servers are listed. Focus moves to the first server found **only if no key was pressed
+  yet**. Choosing one fills the field and runs the same `connect()`.
+- Profiles: «Sign In with Your Phone» next to «Change Server» opens `PhoneSignInScreen`: a 300 dp QR of
+  the contract's `url` verbatim, the code as `ABC 234`, "open host:port/pair and type the code", a
+  countdown, New Code after a decline, «Sign In with the Remote» / Back return to the picker. The flow
+  is collected with the lifecycle (it stops in the background; on return a new code replaces it).
+- The TV's device name is now the system device name (`Settings.Global.DEVICE_NAME`, e.g. «Гостиная»)
+  when set, else "Android TV (model)" as before; the approving phone shows it.
+- Tests: `LanPairingUiTest` (list states, focus on the first server, D-pad to the field, connect through
+  MockWebServer, focus not stolen after a key; QR screen countdown, **the rendered QR decodes back to
+  the URL**, renewal after 5 min, approval → signed in; decline → New Code focused → new code; Back).
+  `ServerScreenKeyboardTest` waits for the field's focus (it was racing the DataStore read).
+
+### Phone
+- `ServerScreen(session, finder)`: a grouped block of found servers above the field.
+- Settings → «Sign In a TV» (`PairTvRoute`): CameraX preview + ZXing decoding of the Y plane
+  (`QrScanner`), CAMERA asked with a rationale on the screen (Open Settings when permanently denied;
+  `camera.any` not required), a "type the code" field, then the device card (name, model, version,
+  orange warning when `remote`), the profile (admins: every profile from `/api/profiles`, others: their
+  own), Approve / Decline, Done. A QR of another server (`sid` ≠ own) is refused with a message; the
+  phone always calls its own server. The approve call sends `userId: 0` for the own profile.
+- No app link for `/pair`: the contract defines no scheme and https links per user server cannot be
+  verified; the phone camera opens the server's web page instead, which does the same.
+- Tests: `LanPairingPhoneUiTest` (server list → connect; admin approves another profile; other-server
+  QR refused; typed code; non-admin sends 0; permission rationale; invalid code; decline).
+
+### Libraries
+- `com.google.zxing:core` 3.5.3 (Apache-2.0; pure Java, no network) in `:core`.
+- `androidx.camera:camera-camera2/-lifecycle/-view` 1.4.1 (Apache-2.0) in `:mobile` only.
+
+### Not verified (needs a real TV/phone)
+- Broadcast/multicast reception on real Wi-Fi (some routers and TV boxes drop them), NsdManager on TV
+  boxes, the multicast lock's effect, real camera scanning distance/angle of the TV QR, Android 16+
+  local-network permission behaviour (not enforced for target SDK 36 yet).
+
+## TV setup by phone (one QR for the server and the sign-in)
+
+2026-11-14: the TV is set up from the phone: one QR carries the server address and the sign-in, the
+remote is the fallback. Builds on the server's pairing contract; no server change. The Apple apps
+implement the same wire format.
+
+### `:core` (`tvsetup/`)
+- `TvSetupLink` (`http://<private IPv4>:<port>/setup?n=<nonce>&v=1`; plain http, private/link-local IPv4
+  literal only; `v` absent or `1`), `ScannedTvCode` (setup link or the server's `/pair` link / bare code).
+- `SetupNonces`: 128-bit base64url (22 chars), 10 min, one at a time; a POST claims it, a failed POST
+  gives it back (the person can fix the address on the same page), a successful one consumes it.
+- `TvSetupListener`: hand-written HTTP/1.1 on a `ServerSocket` (one request per connection, Connection:
+  close, 10 s socket timeout, ≤ 4 concurrent). Clients not on private/link-local/loopback get the socket
+  closed without an answer. ≤ 10 requests to `/setup` per minute in total (429 `rate_limited`), body
+  ≤ 4 KB, no chunked bodies. `GET /setup?n=` → HTML form (ru/en by `Accept-Language`, inline CSS, no
+  scripts, CSP, `Referrer-Policy: no-referrer`), wrong nonce → 404 «Код устарел…». `POST /setup`: JSON
+  (`n, server, serverId?`) → `200 {code, sid, server, device}` or `{"error": "<code>"}` with the spec's
+  statuses; form → `303` to `<server>/pair?code=&sid=` or the form again with the message. After a
+  successful answer it runs the handler's commit and closes itself.
+- `TvSetupCoordinator` (the TV's handler): `SessionManager.check` (health + setup, same as a typed
+  address), `serverId` comparison (409), `pairStart`, answer; commit = `PairingTicket.offer` then
+  `SessionManager.use` (state → ChooseProfile). A server that still needs setup answers `422
+  not_antresol` (not in the spec's list); the TV's HTML page says "not set up yet".
+- `PairingFlow(initial = StartedPairing)`: shows and polls the handed-over code first, no second `start`
+  (that would cancel the code the phone is approving). Used once per flow instance.
+- `TvSetupSender` (phone POST, 40 s read timeout since the TV checks the server first), `setUpTv` /
+  `approveTvCode` (sid check, lookup, approve).
+- Tests: `TvSetupTest` (links, nonces, validation, JSON contract, listener on loopback incl. rate limit,
+  form redirect, error pages; coordinator vs MockWebServer; sender; flow with a handed-over code).
+  `TvSetupIntegrationTest` with `ANTRESOL_TVSETUP_E2E=<base URL>` (+ `ANTRESOL_PAIRING_E2E_PASSWORD`):
+  TV listener on loopback ← phone POST → real server pair start → phone lookup/approve → TV flow gets the
+  token → `/api/me`, devices list, nonce single use. Passed 2026-11-14 against `feat/lan-pairing` built
+  locally (fresh data dir, admin created with `POST /api/setup`).
+
+### TV
+- `AuthState.NoServer` → `TvSetupScreen` (QR right; title, hint, «Серверы в этой сети», «Ввести адрес
+  пультом» left; focus on the button, or on the first server found before any key). «Ввести адрес
+  пультом» → the old `ServerScreen`, Back returns. No LAN IPv4 → orange note, no QR.
+- Listener lifecycle: `repeatOnLifecycle(STARTED)`; `LocalAddresses.lanIpv4()` (private before
+  link-local, eth/wlan first); renewed at nonce expiry; stopped in `finally`.
+- `ChooseProfile` → `PhoneSignInScreen` by default (Apple TV layout via `QrScreenLayout`), «Sign In with
+  the Remote» → profile picker (Back → QR), «Change Server» on the QR screen. A declined code shows New
+  Code under the status on the right. Session-expired notice shows on the QR screen.
+- `AntresolTvApp.pairingTicket` carries the started code from the listener to the QR screen.
+- Tests: `TvSetupUiTest` (screenshots to `$ANTRESOL_SHOTS_DIR`, default `tv/build/tv-setup-shots`),
+  `LanPairingUiTest` / `TvLiveUiTest` adjusted to the new defaults.
+
+### Phone
+- The scanner recognises the setup QR → `PairStep.SetupConfirm` («Настроить телевизор»: server =
+  the address the phone uses now, profile; admins pick) → POST → sid check → lookup + approve →
+  «Готово». If the TV took the server but approve failed, «Повторить» only approves.
+- Cleartext to a LAN IP: `android:usesCleartextTraffic="true"` and no network security config in
+  `:mobile` (and `:tv`), so plain http to the TV's listener is allowed. Android 16+ local-network
+  permission is not enforced for target SDK 36 yet (same open item as discovery).
+- Tests: `TvSetupPhoneUiTest`.
+
+### Not verified (needs a real TV/phone)
+- The TV's LAN address choice on real boxes (Ethernet + Wi-Fi, VPN interfaces), whether some TV
+  firewalls/ROMs block inbound connections to an app port, phone camera scanning of the setup QR, the
+  phone browser path (form → 303 → server `/pair` page with its sign-in gate), and the phone on a public
+  https address (the TV then uses that address too).
+
+## Owner list 2026-11-15 (TV + phone)
+
+Codes against the server contract of the same date (A `Card.watched`, B `Card.thumb` +
+`/api/images/frame/{id}`, C `GET /api/items/{id}/trailers`), built in parallel; verified with
+fixtures (`TvShellUiTest` + `tv/src/test/.../fixtures/FakeServer.kt`), not against a live server.
+
+### `:core` / `:ui-common`
+- `CardFields.thumb` / `watched` (interface defaults; `Card`, `EpisodeCard` carry both, `ItemDetail`
+  `watched`), `CardFields.wideImage` = thumb → backdrop → poster for every 16:9 tile.
+  `CastMember.photo`. `TrailerList` / `Trailer` (`appUrl` = `vnd.youtube:<key>`, `webUrl`),
+  `AntresolClient.trailers(id)`. Episodes the guide synthesizes get `thumb = /api/images/frame/<id>`.
+- `Kind.isBook`, `HomeResponse.withoutBooks()` (the TV apps have no books, as on Apple TV).
+- `components/Watched.kt` (`WatchedStyle` alphas, `WatchedMark` eye in a glass circle),
+  `components/CastPhoto.kt` (photo over the initials avatar), `AntresolIcons.Eye` / `Trailer`,
+  `trailers/Trailers.kt` (fetch, empty on any failure; open the YouTube app, else the https page).
+  Strings `action_trailer`, `trailer_choose`, `trailer_teaser`, `trailer_no_app` (en + ru).
+
+### TV
+- Trailer pill last in the detail actions (no shift when trailers arrive after the page); one
+  trailer opens directly, several open an `OptionsPanel` chooser; no app → a caption.
+- Cast row (`detail/CastRow.kt`): focusable round photos with name and character; the cast text
+  line in the header is gone.
+- Episode tiles and Wide cards use `wideImage`; watched cards and episodes: dimmed artwork
+  (`WatchedStyle`, less while focused) and the eye; progress only when not watched.
+- Grids (`CardGridScreen`): the scrolling area starts under the nav (`TopNavHeight`, clipped), the
+  nav stays up; `EvenColumns` shares the space a fixed column count leaves over between the gaps,
+  so both gutters are 48 dp.
+- No Books: tab, page, book grids, search scope/tiles/rows and book cards on Home are gone. The
+  book detail, comic reader and audiobook player code stays (unreachable from the TV UI now).
+- Settings: the server section (address, version, library, change server), devices and
+  `SettingsViewModel` are gone; profile, playback, language and app version remain.
+- Tabs (`MainShell`): every tab sits on an empty `ShellRootRoute`, so each tab (Home too) is saved
+  and restored the same way. Leaving a tab starts a 5 s timer (`TAB_RESET_MS`); coming back first
+  cancels it (state kept), else `clearBackStack(tab)` drops its saved stack and it opens fresh.
+  Selecting the current tab pops to its root. Back on a tab root: Home → `moveTaskToBack`, other
+  tabs → Home.
+- Long press (`HeldKeyGuard`): after a long press opened a page, the rest of the held OK (repeats
+  and the release) is swallowed at the shell root once focus has left the long-pressed card, so
+  the new page's Play is not clicked by the release.
+- Hang (item 6), root cause: pages took focus from `LaunchedEffect`s gated only by "the nav has no
+  focus". During Back the leaving page stays composed for its fade-out; a detail page whose load
+  finished then (or whose focus request was still retrying over its 4 frames) pulled focus onto
+  itself, and its disposal a moment later left nothing focused, and the D-pad could not bring focus
+  back: the TV looks frozen. `TvShellUiTest.enteringAndLeavingTheSameSeriesNeverLosesFocus` (OK, then
+  Back at 16…700 ms, item answers after 0/120/400 ms) froze in 5 of 21 rounds on e9a3d7a, 0 now.
+  Fix: each page gets a gate (`LocalPageCanTakeFocus`) that is true only for the current back stack
+  entry, asked on every frame of a focus attempt (`tryRequestFocus(allowed)`,
+  `FocusMemory.restore(key, allowed)`); the shell re-enters the current page when it has no focus
+  after a transition or loses it later (`PageFocus.ensureFocus`), registering each page composition
+  separately (the same entry can be composed anew while the old composition is disposed).
+  Down from the nav now focuses the element the page remembers (`LocalFocusMemories`), so a tab
+  kept within 5 s comes back exactly where it was.
+- Not fixed (seen in Robolectric before and after): after Back, Home sometimes shows no highlighted
+  element until the first D-pad key, which then focuses one. Not verified on a real TV.
+
+### Phone
+- Same data: `MediaCard` Wide tiles (Continue Watching) use `wideImage`; watched cards dimmed with
+  the eye; episode rows show the episode's own still, dimmed when watched; cast photos
+  (`CastPhoto`) with initials as the fallback; a trailer icon button beside Play (a pill in the
+  actions row when there is nothing to play): one trailer opens YouTube, several open
+  `TrailerSheet`; no app → snackbar.
+- Already there, unchanged: long press on a Continue Watching card opens its page. Phone Settings
+  keep the server and devices sections (the owner's item 8 is about the TVs; the phone is where a TV
+  is signed in) and Books stay on the phone.
+- Tests: `PhoneOwnerListUiTest` (fixture copy in `mobile/src/test/.../fixtures/FakeServer.kt`),
+  screenshots `mobile/build/screenshots/owner-phone-*.png`. The trailer sheet is a separate window
+  that the decor-view screenshot does not capture; the test selects its row and checks the intent.
+
+### Follow-up: cast photos on TV, busy frames
+- Cast photos on TV: the TV image loader sends the photo's absolute URL with the Bearer header
+  (`TvShellUiTest` asserts the header on `/api/images/cast/…`) and the photo replaces the initials
+  (`CastPhoto` now hides the initials once loaded). Earlier TV screenshots showed initials for two
+  test-only reasons: Coil's process-wide loader came from an earlier test's application (no token),
+  and Robolectric draws no animation frames, so a first load stayed at the crossfade's empty start.
+  Both UI tests now install the app's own loader without crossfade.
+- `/api/images/frame/{id}` may answer 503 + Retry-After while busy: `ArtworkImage(fallbackUrl)`
+  shows the backdrop (else poster, `CardFields.wideFallback`) on any error, and a later visit asks
+  for the frame again (Coil does not cache failures). `TvShellUiTest.busyFramesFallBackToTheBackdropAndAreRetried`.

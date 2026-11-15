@@ -4,6 +4,9 @@ import app.antresol.core.model.AlbumDetail
 import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
+import app.antresol.core.model.Kind
+import app.antresol.core.model.TrailerList
+import app.antresol.core.model.Trailer
 import app.antresol.core.model.ChannelEpg
 import app.antresol.core.model.ChannelGuide
 import app.antresol.core.model.ChannelList
@@ -73,6 +76,7 @@ class SampleDecodingTest {
         "item-movie" to serializer<ItemDetail>(),
         "item-season" to serializer<ItemDetail>(),
         "item-series" to serializer<ItemDetail>(),
+        "item-trailers" to serializer<TrailerList>(),
         "items-movies" to serializer<Page<Card>>(),
         "items-series" to serializer<Page<Card>>(),
         "library-status" to serializer<LibraryStatus>(),
@@ -312,5 +316,55 @@ class SampleDecodingTest {
         )
         assertEquals("", card.title)
         assertTrue(card.badges.isEmpty())
+    }
+
+    @Test
+    fun trailers() {
+        val list = sample<TrailerList>("item-trailers")
+        assertEquals(2, list.trailers.size)
+        val first = list.trailers[0]
+        assertEquals("abc123XYZ_0", first.key)
+        assertEquals("vnd.youtube:abc123XYZ_0", first.appUrl)
+        assertEquals("https://www.youtube.com/watch?v=abc123XYZ_0", first.webUrl)
+        assertEquals("https://www.youtube.com/watch?v=k", Trailer(key = "k").webUrl)
+        assertTrue(json.decodeFromString(serializer<TrailerList>(), "{}").trailers.isEmpty())
+    }
+
+    @Test
+    fun watchedThumbAndCastPhoto() {
+        val card = json.decodeFromString(
+            serializer<Card>(),
+            """{"id":7,"kind":"episode","backdrop":"/b","thumb":"/api/images/frame/7","watched":true}""",
+        )
+        assertTrue(card.watched)
+        assertEquals("/api/images/frame/7", card.wideImage)
+        assertEquals("/b", card.copy(thumb = "").wideImage)
+        assertEquals("/p", Card(id = 1, poster = "/p").wideImage)
+        // Omitted when false / empty.
+        val plain = json.decodeFromString(serializer<Card>(), """{"id":8,"kind":"movie"}""")
+        assertFalse(plain.watched)
+        assertEquals("", plain.thumb)
+
+        val detail = json.decodeFromString(
+            serializer<ItemDetail>(),
+            """{"id":2,"kind":"series","cast":[{"name":"A B","character":"C","photo":"/api/images/cast/A%20B"},{"name":"D"}],
+               "seasons":[{"id":3,"number":1,"episodes":[{"id":4,"thumb":"/api/images/frame/4","watched":true}]}]}""",
+        )
+        assertEquals("/api/images/cast/A%20B", detail.cast[0].photo)
+        assertEquals("", detail.cast[1].photo)
+        val episode = detail.seasons[0].episodes[0]
+        assertEquals("/api/images/frame/4", episode.thumb)
+        assertTrue(episode.toCard().watched)
+        assertEquals("/api/images/frame/4", episode.toCard().thumb)
+    }
+
+    @Test
+    fun homeWithoutBooks() {
+        val home = sample<HomeResponse>("home")
+        assertTrue(home.shelves.any { shelf -> shelf.cards.any { Kind.isBook(it.kind) } })
+        val tv = home.withoutBooks()
+        assertTrue(tv.shelves.none { shelf -> shelf.cards.any { Kind.isBook(it.kind) } })
+        assertTrue(tv.shelves.none { it.cards.isEmpty() })
+        assertTrue(tv.shelves.any { it.id == "recent-movies" })
     }
 }

@@ -1,6 +1,18 @@
 package app.antresol.tv.ui.shell
 
 import android.app.Activity
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.mutableIntStateOf
+import app.antresol.tv.ui.components.LocalFocusMemories
+import app.antresol.tv.ui.components.FocusMemory
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.runtime.State
+import kotlinx.coroutines.Job
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.activity.compose.BackHandler
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.animation.core.animateFloatAsState
@@ -8,6 +20,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -25,10 +38,10 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -69,6 +82,7 @@ import app.antresol.tv.ui.channels.ChannelsScreen
 import app.antresol.tv.ui.comics.ComicReaderScreen
 import app.antresol.tv.ui.comics.ComicReaderViewModel
 import app.antresol.tv.ui.components.GlassNotice
+import app.antresol.tv.ui.components.HeldKeyGuard
 import app.antresol.tv.ui.components.LinkButton
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.TvIcons
@@ -88,7 +102,6 @@ import app.antresol.tv.ui.search.BrowseTarget
 import app.antresol.tv.ui.search.SearchScreen
 import app.antresol.tv.ui.search.SearchViewModel
 import app.antresol.tv.ui.settings.SettingsScreen
-import app.antresol.tv.ui.settings.SettingsViewModel
 import app.antresol.tv.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.core.channels.ChannelFilter
@@ -184,7 +197,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     // Full-screen experiences hide the nav; detail, grid and settings pages keep it (no tab selected).
     val fullScreen = backStack?.destination?.let { destination ->
         destination.hasRoute(PlayerRoute::class) || destination.hasRoute(ComicReaderRoute::class) ||
-            destination.hasRoute(NowPlayingRoute::class) || destination.hasRoute(LiveRoute::class)
+            destination.hasRoute(NowPlayingRoute::class) || destination.hasRoute(LiveRoute::class) ||
+            destination.hasRoute(ShellRootRoute::class)
     } ?: true
     var panelOpen by remember { mutableStateOf(false) }
     val navVisible = !fullScreen && !panelOpen
@@ -229,8 +243,62 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     }
     // Down from the nav enters the current page (see [page]).
     val contentFocus = remember { PageFocus() }
-    contentFocus.currentEntryId = backStack?.id
-    val canTakeFocus = { !navFocused }
+    contentFocus.currentEntry = navController.currentBackStackEntryAsState()
+    // Pages take focus only while the nav does not have it, and only the current page: a page
+    // that is leaving (its fade-out still composed) must never pull focus to itself.
+    contentFocus.navFocused = { navFocused }
+
+    // Tabs: a tab left for another one resets to its root after TAB_RESET_MS, unless the user
+    // comes back first (an accidental switch keeps everything).
+    val resets = remember { HashMap<NavTab, Job>() }
+    val selectTab: (NavTab) -> Unit = { tab ->
+        val leaving = navController.currentTab()
+        resets.remove(tab)?.cancel()
+        if (tab == leaving) {
+            // The current tab again: back to its root.
+            navController.popBackStack(tab.route, inclusive = false)
+        } else {
+            navController.navigateToTab(tab)
+            if (leaving != null) {
+                resets.remove(leaving)?.cancel()
+                resets[leaving] = scope.launch {
+                    delay(TAB_RESET_MS)
+                    resets.remove(leaving)
+                    navController.clearBackStack(leaving.route)
+                }
+            }
+        }
+    }
+    // The shell opens on Home, above the root (a restored back stack is left as it was).
+    LaunchedEffect(navController) {
+        if (navController.currentBackStackEntry?.destination?.hasRoute(ShellRootRoute::class) == true) {
+            navController.navigate(HomeRoute)
+        }
+    }
+    // Back on a tab's root: another tab goes to Home, Home leaves the app (the root stays hidden).
+    val activity = LocalContext.current.findActivity()
+    contentFocus.onTabRootBack = { tab -> if (tab == NavTab.Home) activity?.moveTaskToBack(true) else selectTab(NavTab.Home) }
+    // Safety net: once a page has settled, focus is on it or on the nav, never nowhere (a TV
+    // without focus ignores every key and looks frozen). Back pressed during the forward
+    // transition returns to a page that never left composition, so its own arrival effects do not
+    // run again, while the focused element of the page that was opening goes away with it. Checked
+    // a few times: that element can take focus with it as it is detached after the transition.
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(backStack?.id) {
+        delay(AntresolMotion.FAST_MS.toLong())
+        repeat(SETTLE_CHECKS) {
+            delay(SETTLE_STEP_MS)
+            if (!navFocused && !panelOpen) contentFocus.ensureFocus(focusManager)
+        }
+    }
+    // And whenever the current page loses focus later on without the nav or a panel taking it
+    // (the leftovers of the page that was opening are detached when its exit settles).
+    LaunchedEffect(contentFocus) {
+        snapshotFlow { contentFocus.focusLost }.collect {
+            delay(SETTLE_STEP_MS)
+            if (!navFocused && !panelOpen) contentFocus.ensureFocus(focusManager)
+        }
+    }
     val onScrolledToTop: (Boolean) -> Unit = { contentAtTop = it }
 
     // The system's now-playing card was opened.
@@ -246,11 +314,13 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(AntresolColors.Background),
+                .background(AntresolColors.Background)
+                // The rest of a held OK after a long press opened a page never presses its buttons.
+                .onPreviewKeyEvent(HeldKeyGuard::consume),
         ) {
             NavHost(
                 navController = navController,
-                startDestination = HomeRoute,
+                startDestination = ShellRootRoute,
                 modifier = Modifier.fillMaxSize(),
                 // Short fades: the default 700 ms feels slow on a TV and keeps both pages composed.
                 enterTransition = { fadeIn(tween(AntresolMotion.FAST_MS)) },
@@ -258,21 +328,22 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 popEnterTransition = { fadeIn(tween(AntresolMotion.FAST_MS)) },
                 popExitTransition = { fadeOut(tween(AntresolMotion.FAST_MS)) },
             ) {
+                composable<ShellRootRoute> { Box(Modifier.fillMaxSize()) }
                 page<HomeRoute>(contentFocus) {
                     HomeScreen(
                         viewModel = viewModel { HomeViewModel(client, app.pendingWrites) },
                         onOpen = open,
                         onPlay = playCard,
                         onScrolledToTop = onScrolledToTop,
-                        canTakeFocus = canTakeFocus,
+                        canTakeFocus = LocalPageCanTakeFocus.current,
                         seeAll = seeAll,
                     )
                 }
                 page<MoviesRoute>(contentFocus) {
-                    LibraryGrid(GridSource(GridKind.Movies), stringResource(R.string.nav_movies), open, onScrolledToTop, canTakeFocus)
+                    LibraryGrid(GridSource(GridKind.Movies), stringResource(R.string.nav_movies), open, onScrolledToTop, LocalPageCanTakeFocus.current)
                 }
                 page<ShowsRoute>(contentFocus) {
-                    LibraryGrid(GridSource(GridKind.Shows), stringResource(R.string.nav_tv_shows), open, onScrolledToTop, canTakeFocus)
+                    LibraryGrid(GridSource(GridKind.Shows), stringResource(R.string.nav_tv_shows), open, onScrolledToTop, LocalPageCanTakeFocus.current)
                 }
                 page<ChannelsRoute>(contentFocus) {
                     ChannelsScreen(
@@ -283,7 +354,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                             navController.navigate(LiveRoute(channel.id, filter.key))
                         },
                         onScrolledToTop = onScrolledToTop,
-                        canTakeFocus = canTakeFocus,
+                        canTakeFocus = LocalPageCanTakeFocus.current,
                         onPanelOpenChanged = { panelOpen = it },
                     )
                 }
@@ -293,7 +364,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         viewModel = viewModel { ShelvesViewModel({ client.musicHome().shelves }, { client.genres().genres }) },
                         onOpen = open,
                         onScrolledToTop = onScrolledToTop,
-                        canTakeFocus = canTakeFocus,
+                        canTakeFocus = LocalPageCanTakeFocus.current,
                         onGenre = { genre -> openGrid(GridKind.Albums, genre.name) },
                         seeAll = seeAll,
                         actions = { link ->
@@ -310,21 +381,6 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         },
                     )
                 }
-                page<BooksRoute>(contentFocus) {
-                    ShelvesScreen(
-                        title = stringResource(R.string.nav_books),
-                        viewModel = viewModel { ShelvesViewModel({ client.booksHome().shelves }) },
-                        onOpen = open,
-                        seeAll = seeAll,
-                        onScrolledToTop = onScrolledToTop,
-                        canTakeFocus = canTakeFocus,
-                        actions = { link ->
-                            LinkButton(stringResource(TvR.string.books_all), { openGrid(GridKind.Books, null) }, Modifier.link("books"))
-                            LinkButton(stringResource(TvR.string.books_audiobooks), { openGrid(GridKind.Audiobooks, null) }, Modifier.link("audiobooks"))
-                            LinkButton(stringResource(TvR.string.books_comics), { openGrid(GridKind.Comics, null) }, Modifier.link("comics"))
-                        },
-                    )
-                }
                 page<SearchRoute>(contentFocus) {
                     SearchScreen(
                         viewModel = viewModel { SearchViewModel(client, audio) },
@@ -332,26 +388,21 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onNowPlaying = nowPlaying,
                         onBrowse = { target ->
                             when (target) {
-                                BrowseTarget.Movies -> navController.navigateToTab(NavTab.Movies)
-                                BrowseTarget.Shows -> navController.navigateToTab(NavTab.Shows)
-                                BrowseTarget.Music -> navController.navigateToTab(NavTab.Music)
-                                BrowseTarget.Books -> openGrid(GridKind.Books, null)
-                                BrowseTarget.Audiobooks -> openGrid(GridKind.Audiobooks, null)
-                                BrowseTarget.Comics -> openGrid(GridKind.Comics, null)
+                                BrowseTarget.Movies -> selectTab(NavTab.Movies)
+                                BrowseTarget.Shows -> selectTab(NavTab.Shows)
+                                BrowseTarget.Music -> selectTab(NavTab.Music)
                             }
                         },
                         onScrolledToTop = onScrolledToTop,
-                        canTakeFocus = canTakeFocus,
+                        canTakeFocus = LocalPageCanTakeFocus.current,
                     )
                 }
                 page<SettingsRoute>(contentFocus) {
                     SettingsScreen(
                         state = state,
-                        viewModel = viewModel { SettingsViewModel(client) },
                         settings = app.settings,
                         onSwitchProfile = { scope.launch { session.switchProfile() } },
                         onSignOut = { scope.launch { session.signOut() } },
-                        onChangeServer = { scope.launch { session.changeServer() } },
                         onScrolledToTop = onScrolledToTop,
                         onMenuOpenChanged = { panelOpen = it },
                         language = uiLanguage,
@@ -365,7 +416,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         title = source.genre ?: stringResource(gridTitle(source.kind)),
                         open = open,
                         onScrolledToTop = onScrolledToTop,
-                        canTakeFocus = canTakeFocus,
+                        canTakeFocus = LocalPageCanTakeFocus.current,
                         onShuffle = source.shuffle?.let { shuffleSource -> { shuffle(shuffleSource) } },
                     )
                 }
@@ -390,7 +441,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onNowPlaying = nowPlaying,
                         onRead = { volumeId, fromStart -> navController.navigate(ComicReaderRoute(volumeId, fromStart)) },
                         onScrolledToTop = onScrolledToTop,
-                        canTakeFocus = canTakeFocus,
+                        canTakeFocus = LocalPageCanTakeFocus.current,
                         onPanelOpenChanged = { panelOpen = it },
                         onClose = { navController.popBackStack() },
                     )
@@ -436,11 +487,11 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                     avatar = state.session.avatar,
                     nowPlaying = audio.currentTrack?.title ?: (audio.content as? AudioContent.Audiobook)?.book?.card?.title,
                     nowPlayingActive = audio.isPlaying,
-                    onSelect = { tab -> navController.navigateToTab(tab) },
+                    onSelect = selectTab,
                     onNowPlaying = nowPlaying,
                     onSettings = { navController.navigate(SettingsRoute) { launchSingleTop = true } },
                     onFocusChanged = { navFocused = it },
-                    contentFocus = contentFocus::current,
+                    onEnterContent = contentFocus::enter,
                     modifier = Modifier.graphicsLayer { alpha = navAlpha },
                 )
             }
@@ -457,28 +508,107 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
 
 private const val NOTICE_MS = 3_500L
 
+/** A tab left for this long is back at its root when the user returns. */
+internal const val TAB_RESET_MS = 5_000L
+
+/** After a page's transition, how often and how many times the shell checks that something has focus. */
+private const val SETTLE_STEP_MS = 120L
+private const val SETTLE_CHECKS = 8
+
+/** Whether the current page may take focus now: it is the current entry and the nav does not have focus. */
+private val LocalPageCanTakeFocus = staticCompositionLocalOf<() -> Boolean> { { false } }
+
 /**
  * One focus requester per back stack entry. During a page transition both pages are composed; the
  * nav must enter only the current one, never the page that is leaving.
  */
 private class PageFocus {
     private val requesters = HashMap<String, FocusRequester>()
+    private val memories = HashMap<String, MutableSet<FocusMemory>>()
 
-    var currentEntryId: String? = null
+    /** Entries whose page holds focus now. */
+    private val focused = HashSet<String>()
 
-    fun requesterFor(entryId: String): FocusRequester = requesters.getOrPut(entryId) { FocusRequester() }
+    /** The shell's current back stack entry; read as state, so pages see a change at once. */
+    var currentEntry: State<NavBackStackEntry?> = mutableStateOf(null)
 
-    fun release(entryId: String) {
-        requesters.remove(entryId)
+    val currentEntryId: String? get() = currentEntry.value?.id
+
+    var navFocused: () -> Boolean = { false }
+
+    var onTabRootBack: (NavTab) -> Unit = {}
+
+    /**
+     * Registers the page composed for [entryId]. The same entry can be composed anew while its old
+     * composition is still being disposed (a transition reversed by Back), so each composition
+     * registers its own objects and [release] only removes them if they are still the current ones.
+     */
+    fun attach(entryId: String, requester: FocusRequester, pageMemories: MutableSet<FocusMemory>) {
+        requesters[entryId] = requester
+        memories[entryId] = pageMemories
     }
 
-    fun current(): FocusRequester? = currentEntryId?.let(requesters::get)
+    fun release(entryId: String, requester: FocusRequester) {
+        if (requesters[entryId] !== requester) return
+        requesters.remove(entryId)
+        memories.remove(entryId)
+        focused.remove(entryId)
+    }
+
+    /**
+     * Down from the nav: focuses the element the current page remembers, else enters the page's
+     * focus group (its first element). False when no page can take focus.
+     */
+    @OptIn(ExperimentalComposeUiApi::class)
+    fun enter(focusManager: FocusManager): Boolean {
+        val id = currentEntryId ?: return false
+        if (memories[id].orEmpty().any { it.focusRemembered() }) {
+            // A remembered group (sort pills) enters its own element.
+            focusManager.moveFocus(FocusDirection.Enter)
+            return true
+        }
+        val requester = requesters[id] ?: return false
+        return try {
+            requester.requestFocus()
+            focusManager.moveFocus(FocusDirection.Enter)
+            true
+        } catch (_: IllegalStateException) {
+            // Not attached yet.
+            false
+        }
+    }
+
+    fun canTakeFocus(entryId: String): Boolean = entryId == currentEntryId && !navFocused()
+
+    fun onFocusChanged(entryId: String, hasFocus: Boolean) {
+        if (hasFocus) focused += entryId else focused -= entryId
+        if (!hasFocus && entryId == currentEntryId) focusLost++
+    }
+
+    /** Counts the times the current page lost focus (to anything: the nav, a player, or nothing). */
+    var focusLost by mutableIntStateOf(0)
+        private set
+
+    /**
+     * Puts focus on the current page (its remembered element) when nothing on it has focus. A page
+     * with nothing focusable yet takes focus itself when it loads.
+     */
+    fun ensureFocus(focusManager: FocusManager) {
+        val id = currentEntryId ?: return
+        if (id in focused) return
+        enter(focusManager)
+    }
 }
 
 /**
  * A destination whose page can be entered from the nav with Down. The page spans the whole screen
- * behind the nav, so geometric focus search never finds it below the pills; the nav instead
- * focuses this group, which restores the element focused last on this page.
+ * behind the nav, so geometric focus search never finds it below the pills; the nav instead asks
+ * [PageFocus.enter], which focuses the element the page's [FocusMemory] remembers.
+ *
+ * The page is a plain focus group, not a `focusRestorer()`: the restorer kept the last focused
+ * child of the page and redirected later focus requests inside the page to it, even when that
+ * child was gone, so a page coming back (Back from a detail) or opening a side panel ended up with
+ * no element focused.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 private inline fun <reified T : Any> NavGraphBuilder.page(
@@ -486,15 +616,32 @@ private inline fun <reified T : Any> NavGraphBuilder.page(
     noinline content: @Composable (NavBackStackEntry) -> Unit,
 ) {
     composable<T> { entry ->
-        val requester = remember(entry.id) { contentFocus.requesterFor(entry.id) }
-        DisposableEffect(entry.id) { onDispose { contentFocus.release(entry.id) } }
+        val requester = remember { FocusRequester() }
+        val pageMemories = remember { LinkedHashSet<FocusMemory>() }
+        // Registered during composition, so the nav can enter the page from its first frame.
+        contentFocus.attach(entry.id, requester, pageMemories)
+        DisposableEffect(entry.id) { onDispose { contentFocus.release(entry.id, requester) } }
+        val gate = remember(entry.id) { { contentFocus.canTakeFocus(entry.id) } }
+        // A tab's own page directly on the root: Back there is the shell's (see [PageFocus.onTabRootBack]).
+        val tab = NavTab.entries.firstOrNull { entry.destination.hasRoute(it.route::class) }
+        BackHandler(enabled = tab != null && contentFocus.currentEntryId == entry.id) { tab?.let(contentFocus.onTabRootBack) }
         Box(
             Modifier
                 .fillMaxSize()
                 .focusRequester(requester)
-                .focusRestorer(),
+                .focusGroup()
+                .onFocusChanged {
+                    // The page's group itself can end up focused with no element in it focused,
+                    // which looks the same as no focus at all to the user.
+                    contentFocus.onFocusChanged(entry.id, it.hasFocus && !it.isFocused)
+                },
         ) {
-            content(entry)
+            CompositionLocalProvider(
+                LocalPageCanTakeFocus provides gate,
+                LocalFocusMemories provides pageMemories,
+            ) {
+                content(entry)
+            }
         }
     }
 }
@@ -528,25 +675,20 @@ private fun gridTitle(kind: GridKind): Int = when (kind) {
     GridKind.Albums -> TvR.string.music_all_albums
     GridKind.Artists -> TvR.string.music_artists
     GridKind.Playlists -> TvR.string.music_playlists
-    GridKind.Books -> TvR.string.books_all
-    GridKind.Audiobooks -> TvR.string.books_audiobooks
-    GridKind.Comics -> TvR.string.books_comics
 }
 
 private val PLAYABLE_KINDS = setOf(Kind.MOVIE, Kind.EPISODE, Kind.SERIES, Kind.SEASON)
 
-/** Server shelf ids (Home, Music, Books) and the grid that lists all of it. */
+/** Server shelf ids (Home, Music) and the grid that lists all of it. */
 private val SHELF_GRIDS = mapOf(
     "recent-movies" to GridKind.Movies,
     "recent-series" to GridKind.Shows,
     "recent-albums" to GridKind.Albums,
     "artists" to GridKind.Artists,
     "playlists" to GridKind.Playlists,
-    "audiobooks" to GridKind.Audiobooks,
-    "comics" to GridKind.Comics,
 )
 
-/** Switches tabs the TV way: one entry per tab, each keeping its own scroll and focus state. */
+/** Switches tabs the TV way: one entry per tab on the root, each keeping its own scroll and focus state. */
 private fun NavHostController.navigateToTab(tab: NavTab) {
     navigate(tab.route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
@@ -554,3 +696,9 @@ private fun NavHostController.navigateToTab(tab: NavTab) {
         restoreState = true
     }
 }
+
+/** The tab whose stack is showing: the nearest tab page below the top of the back stack. */
+private fun NavHostController.currentTab(): NavTab? =
+    currentBackStack.value.asReversed().firstNotNullOfOrNull { entry ->
+        NavTab.entries.firstOrNull { tab -> entry.destination.hasRoute(tab.route::class) }
+    }

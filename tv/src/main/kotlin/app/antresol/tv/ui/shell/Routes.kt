@@ -6,6 +6,13 @@ import app.antresol.ui.R
 import app.antresol.ui.playback.ResumeMode
 import kotlinx.serialization.Serializable
 
+/**
+ * The empty start destination under every tab. Each tab (Home too) sits on it, so switching tabs
+ * saves and restores every tab the same way and a tab's saved state can be cleared on its own.
+ */
+@Serializable
+data object ShellRootRoute
+
 @Serializable
 data object HomeRoute
 
@@ -21,9 +28,6 @@ data object ChannelsRoute
 
 @Serializable
 data object MusicRoute
-
-@Serializable
-data object BooksRoute
 
 @Serializable
 data object SearchRoute
@@ -70,5 +74,4 @@ enum class NavTab(val route: Any, @StringRes val label: Int, val iconOnly: Boole
     Shows(ShowsRoute, R.string.nav_tv_shows),
     Tv(ChannelsRoute, R.string.nav_tv),
     Music(MusicRoute, R.string.nav_music),
-    Books(BooksRoute, R.string.nav_books),
 }

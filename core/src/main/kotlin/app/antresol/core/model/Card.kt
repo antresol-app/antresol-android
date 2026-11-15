@@ -15,6 +15,9 @@ object Kind {
     const val BOOK = "book"
     const val COMIC = "comic"
     const val COMIC_VOLUME = "comic_volume"
+
+    /** Books, audiobooks, comics and comic volumes (the TV apps have no books). */
+    fun isBook(kind: String): Boolean = kind == BOOK || kind == AUDIOBOOK || kind == COMIC || kind == COMIC_VOLUME
 }
 
 /**
@@ -34,10 +37,22 @@ interface CardFields {
     val badges: List<String>
     val seriesId: Long?
 
+    /**
+     * Episodes only: a 16:9 picture of this episode (its own still, else a frame of its video).
+     * `""` when the server sends none; [wideImage] falls back to the backdrop.
+     */
+    val thumb: String get() = ""
+
+    /** The profile finished it (a series or season: every episode of it in the library). */
+    val watched: Boolean get() = false
+
+    /** The picture of a 16:9 tile: the episode's own [thumb], else the backdrop, else the poster. */
+    val wideImage: String get() = thumb.ifEmpty { backdrop.ifEmpty { poster } }
+
     fun toCard(): Card = Card(
         id = id, kind = kind, title = title, subtitle = subtitle, year = year,
         poster = poster, backdrop = backdrop, logo = logo, progress = progress,
-        badges = badges, seriesId = seriesId,
+        badges = badges, seriesId = seriesId, thumb = thumb, watched = watched,
     )
 }
 
@@ -59,6 +74,8 @@ data class Card(
     val season: Int? = null,
     val episode: Int? = null,
     val resumeSec: Double? = null,
+    override val thumb: String = "",
+    override val watched: Boolean = false,
 ) : CardFields {
     override fun toCard(): Card = this
 }
@@ -92,7 +109,15 @@ object ShelfId {
 data class HomeResponse(
     val hero: List<Card> = emptyList(),
     val shelves: List<Shelf> = emptyList(),
-)
+) {
+    /** Home without book cards, and without shelves that held only books (the TV apps have no books). */
+    fun withoutBooks(): HomeResponse = HomeResponse(
+        hero = hero.filterNot { Kind.isBook(it.kind) },
+        shelves = shelves.mapNotNull { shelf ->
+            shelf.copy(cards = shelf.cards.filterNot { Kind.isBook(it.kind) }).takeIf { it.cards.isNotEmpty() }
+        },
+    )
+}
 
 /** Response of shelf-only home screens (`/api/music/home`, `/api/books/home`). */
 @Serializable

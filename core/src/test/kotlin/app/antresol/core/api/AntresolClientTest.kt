@@ -210,6 +210,15 @@ class AntresolClientTest {
     }
 
     @Test
+    fun trailers() = runTest {
+        client.token = "t"
+        enqueue("""{"trailers":[{"name":"T","site":"YouTube","key":"k1","type":"Trailer"}]}""")
+        val list = client.trailers(42)
+        assertEquals("/api/items/42/trailers", server.takeRequest().path)
+        assertEquals("k1", list.trailers.single().key)
+    }
+
+    @Test
     fun channelCalls() = runTest {
         client.token = "t"
         enqueue("""{"channels":[{"id":2,"number":10,"name":"Comedy","category":"Movies","logo":1,"rules":{"order":"shuffle"}}],"canManage":true}""")

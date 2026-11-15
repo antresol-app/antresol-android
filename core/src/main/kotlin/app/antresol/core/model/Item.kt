@@ -30,12 +30,15 @@ data class ItemDetail(
     val inWatchlist: Boolean = false,
     val actions: ItemActions = ItemActions(),
     val tmdbId: Long? = null,
+    override val watched: Boolean = false,
 ) : CardFields
 
 @Serializable
 data class CastMember(
     val name: String,
     val character: String? = null,
+    /** Server-relative photo path (`/api/images/cast/<name>`), `""` when none. Needs the Bearer header. */
+    val photo: String = "",
 )
 
 @Serializable
@@ -72,7 +75,8 @@ data class EpisodeCard(
     val episodeNo: Int = 0,
     val overview: String? = null,
     val durationMs: Long? = null,
-    val watched: Boolean = false,
+    override val watched: Boolean = false,
+    override val thumb: String = "",
 ) : CardFields
 
 /** A physical file of a movie or episode. [id] is a file id for `/api/play/{fileId}`. */
@@ -132,3 +136,27 @@ data class SubTrack(
     /** Server-relative WebVTT URL; absent for image subtitles. Needs the Bearer header. */
     val url: String? = null,
 )
+
+/** `GET /api/items/{id}/trailers`: TMDB YouTube trailers and teasers, best first. Empty when there are none. */
+@Serializable
+data class TrailerList(val trailers: List<Trailer> = emptyList())
+
+@Serializable
+data class Trailer(
+    val name: String = "",
+    val site: String = "",
+    /** The YouTube video id. */
+    val key: String = "",
+    /** `Trailer` or `Teaser`. */
+    val type: String = "",
+    val lang: String = "",
+    val official: Boolean = false,
+    /** `https://www.youtube.com/watch?v=<key>`. */
+    val url: String = "",
+) {
+    /** The page to open when the YouTube app is missing. */
+    val webUrl: String get() = url.ifEmpty { "https://www.youtube.com/watch?v=$key" }
+
+    /** The YouTube app's own link. */
+    val appUrl: String get() = "vnd.youtube:$key"
+}

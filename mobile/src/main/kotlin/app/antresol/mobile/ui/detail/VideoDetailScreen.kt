@@ -78,6 +78,8 @@ import app.antresol.ui.components.BadgeRow
 import app.antresol.ui.components.CastPhoto
 import app.antresol.ui.components.WatchedStyle
 import app.antresol.ui.trailers.Trailers
+import app.antresol.ui.trailers.trailerLabel
+import app.antresol.mobile.player.TrailerPlayerActivity
 import app.antresol.ui.components.ProgressBar
 import app.antresol.ui.format.Durations
 import app.antresol.ui.format.EpisodeLabels
@@ -155,7 +157,11 @@ private fun VideoDetailContent(
     val trailers = viewModel.trailers
     val openTrailer: (Trailer) -> Unit = { trailer ->
         trailerSheet = false
-        if (!Trailers.open(context, trailer)) viewModel.showNotice(UiR.string.trailer_no_app)
+        when (Trailers.howToPlay(trailer)) {
+            Trailers.Mode.Player, Trailers.Mode.Embed ->
+                TrailerPlayerActivity.start(context, trailer.play, trailer.key, trailerLabel(context.resources, trailer))
+            Trailers.Mode.External -> if (!Trailers.open(context, trailer)) viewModel.showNotice(UiR.string.trailer_no_app)
+        }
     }
     val onTrailer: () -> Unit = { if (trailers.size == 1) openTrailer(trailers.single()) else trailerSheet = true }
     if (trailerSheet) TrailerSheet(trailers, onDismiss = { trailerSheet = false }, onOpen = openTrailer)

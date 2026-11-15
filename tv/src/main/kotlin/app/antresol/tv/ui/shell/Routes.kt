@@ -62,6 +62,13 @@ data class DetailRoute(val kind: String, val id: Long) {
 @Serializable
 data class PlayerRoute(val itemId: Long, val resume: String)
 
+/**
+ * A trailer, full screen: with [play] (the server fetches it) in the app's own player, else the
+ * embedded player for [key]. [name] shows while it loads.
+ */
+@Serializable
+data class TrailerRoute(val play: String, val key: String, val name: String)
+
 /** A live channel, full screen; Up/Down switch channels inside the list of [filter] (a [ChannelFilter] key). */
 @Serializable
 data class LiveRoute(val channelId: Long, val filter: String = "all")

@@ -3,6 +3,8 @@ package app.antresol.tv.ui
 import android.content.res.Resources
 import app.antresol.core.api.ApiException
 import app.antresol.core.api.InvalidServerAddressException
+import app.antresol.core.playback.TrailerBusyException
+import app.antresol.core.playback.TrailerUnavailableException
 import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.ui.R
 import app.antresol.ui.playback.PlaybackUnavailableException
@@ -31,6 +33,8 @@ fun Throwable.userMessage(resources: Resources): String = when (this) {
     is ServerNeedsSetupException -> resources.getString(R.string.server_needs_setup)
     is PlaybackUnavailableException -> resources.getString(R.string.error_playback)
     is StreamLimitException -> resources.getString(R.string.error_too_many_streams)
+    is TrailerBusyException -> resources.getString(R.string.trailer_busy)
+    is TrailerUnavailableException -> resources.getString(R.string.trailer_unavailable)
     is ApiException -> when {
         status == 200 -> resources.getString(R.string.error_generic)
         // Throttled (e.g. too many sign-in attempts): the server's sentence plus how long to wait.

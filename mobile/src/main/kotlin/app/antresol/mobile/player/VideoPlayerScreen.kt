@@ -385,7 +385,7 @@ private fun ResumePrompt(positionMs: Long, onChoose: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun FailedPanel(error: Throwable, onRetry: () -> Unit, onBack: () -> Unit) {
+internal fun FailedPanel(error: Throwable, onRetry: () -> Unit, onBack: () -> Unit) {
     val message = if (error is PlaybackUnavailableException) {
         stringResource(UiR.string.error_playback)
     } else {

@@ -17,7 +17,8 @@ import java.util.concurrent.TimeUnit
 /**
  * A MockWebServer that plays a small Antresol library for the shell UI tests: one passwordless
  * profile, home shelves (Continue Watching with an episode), movie and series grids, a movie and a
- * series detail with cast photos, episode thumbs, watched marks and trailers. Every image path
+ * series detail with cast photos, episode thumbs, watched marks and trailers (played by the server:
+ * `POST /api/trailers/{key}/play` and a small MP4 from the test resources). Every image path
  * answers a generated PNG in its own colour with a short label, so distinct pictures are visible
  * in the screenshots.
  */
@@ -30,6 +31,16 @@ class FakeServer {
 
     /** Answers `/api/images/frame/...` with 503 + Retry-After while true (the server busy making frames). */
     @Volatile var framesBusy: Boolean = false
+
+    /** How `POST /api/trailers/{key}/play` answers. */
+    enum class TrailerPlay { Ready, BusyOnce, Failed }
+
+    @Volatile var trailerPlay: TrailerPlay = TrailerPlay.Ready
+
+    /** Delay of the trailer play answer, to catch the loading state. */
+    @Volatile var trailerPlayDelayMs: Long = 0
+
+    private val busyAnswered = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /** Delay of `GET /api/items/{id}` answers, to land them mid-transition. */
     @Volatile var itemDelayMs: Long = 0
@@ -59,6 +70,7 @@ class FakeServer {
             return MockResponse().setResponseCode(503).setHeader("Retry-After", "5").setBody("""{"error":"busy"}""")
         }
         if (path.startsWith("/api/images/")) return image(path)
+        if (path.startsWith("/api/trailers/")) return trailer(method, path, query)
         return when {
             path == "/api/health" -> json("""{"ok":true,"serverId":"$SERVER_ID","version":"1.5.0"}""")
             path == "/api/setup" -> json("""{"needsSetup":false}""")
@@ -78,6 +90,29 @@ class FakeServer {
             path == "/api/channels" -> json("""{"channels":[]}""")
             else -> MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
         }
+    }
+
+    /** `POST /api/trailers/{key}/play` and the MP4 it points at (a 30 s 160x90 clip, `mk` required). */
+    private fun trailer(method: String, path: String, query: String): MockResponse {
+        val play = Regex("/api/trailers/([A-Za-z0-9_-]+)/play").matchEntire(path)
+        if (play != null && method == "POST") {
+            val key = play.groupValues[1]
+            if (key !in PLAYABLE_TRAILERS) return MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
+            return when (trailerPlay) {
+                TrailerPlay.Failed -> MockResponse().setResponseCode(502).setBody("""{"error":"Could not fetch the trailer."}""")
+                TrailerPlay.BusyOnce -> if (busyAnswered.compareAndSet(false, true)) {
+                    MockResponse().setResponseCode(503).setHeader("Retry-After", "1").setBody("""{"error":"busy"}""")
+                } else {
+                    json("""{"url":"/api/trailers/$key.mp4?mk=test-mk","durationMs":30000}""")
+                }
+                TrailerPlay.Ready -> json("""{"url":"/api/trailers/$key.mp4?mk=test-mk","durationMs":30000}""")
+            }.setBodyDelay(trailerPlayDelayMs, TimeUnit.MILLISECONDS)
+        }
+        if (path.endsWith(".mp4") && "mk=test-mk" in query) {
+            val bytes = requireNotNull(FakeServer::class.java.getResourceAsStream("/trailer-sample.mp4")).use { it.readBytes() }
+            return MockResponse().setHeader("Content-Type", "video/mp4").setBody(Buffer().write(bytes))
+        }
+        return MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
     }
 
     private fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
@@ -170,9 +205,9 @@ class FakeServer {
 
     private fun trailers(id: Long): String = when (id) {
         MOVIE_ID -> """{"trailers":[
-            {"name":"Official Trailer","site":"YouTube","key":"movieTrailer1","type":"Trailer","lang":"en","official":true,"url":"https://www.youtube.com/watch?v=movieTrailer1"},
+            {"name":"Official Trailer","site":"YouTube","key":"movieTrailer1","type":"Trailer","lang":"en","official":true,"url":"https://www.youtube.com/watch?v=movieTrailer1","play":"/api/trailers/movieTrailer1/play"},
             {"name":"Teaser","site":"YouTube","key":"movieTeaser2","type":"Teaser","lang":"en","official":true,"url":"https://www.youtube.com/watch?v=movieTeaser2"}]}"""
-        SERIES_ID -> """{"trailers":[{"name":"Season 1 Trailer","site":"YouTube","key":"seriesTrailer","type":"Trailer","lang":"en","official":true,"url":"https://www.youtube.com/watch?v=seriesTrailer"}]}"""
+        SERIES_ID -> """{"trailers":[{"name":"Season 1 Trailer","site":"YouTube","key":"seriesTrailer","type":"Trailer","lang":"en","official":true,"url":"https://www.youtube.com/watch?v=seriesTrailer","play":"/api/trailers/seriesTrailer/play"}]}"""
         else -> """{"trailers":[]}"""
     }
 
@@ -183,6 +218,9 @@ class FakeServer {
         const val MOVIE_COUNT = 23
         const val SHOW_COUNT = 30
         val EPISODE_IDS = (601L..606L).toList()
+
+        /** Trailers listed with `play`; the movie's teaser has none (an older server: embedded player). */
+        val PLAYABLE_TRAILERS = setOf("movieTrailer1", "seriesTrailer")
         private const val ME = """{"id":1,"name":"Alex","avatar":"grad-3","hasPassword":false,"isAdmin":true,"isKid":false}"""
         private val CAST = """[
             {"name":"Ada Lovelace","character":"The Countess","photo":"/api/images/cast/Ada%20Lovelace"},

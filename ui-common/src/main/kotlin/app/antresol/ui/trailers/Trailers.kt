@@ -10,7 +10,11 @@ import app.antresol.core.model.Kind
 import app.antresol.core.model.Trailer
 import kotlinx.coroutines.CancellationException
 
-/** Trailers of a detail page (`GET /api/items/{id}/trailers`) and opening them in the YouTube app. */
+/**
+ * Trailers of a detail page (`GET /api/items/{id}/trailers`) and how each one plays (see [howToPlay]):
+ * in the app's own player when the server fetches it, else in the embedded YouTube player, and in
+ * the YouTube app only on a device without a WebView.
+ */
 object Trailers {
     /** Kinds whose detail page offers trailers (a season or episode gets its series'). */
     val KINDS = setOf(Kind.MOVIE, Kind.SERIES, Kind.SEASON, Kind.EPISODE)
@@ -28,6 +32,24 @@ object Trailers {
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    /** Where a trailer plays. */
+    enum class Mode {
+        /** The server fetches it (`play`): the app's own video player. */
+        Player,
+
+        /** No `play` (public servers, trailers off): the official embedded player in a WebView. */
+        Embed,
+
+        /** No WebView on the device: the YouTube app or the browser ([open]). */
+        External,
+    }
+
+    fun howToPlay(trailer: Trailer): Mode = when {
+        trailer.playsInApp -> Mode.Player
+        TrailerEmbed.isValidKey(trailer.key) && TrailerEmbed.isAvailable() -> Mode.Embed
+        else -> Mode.External
     }
 
     /**

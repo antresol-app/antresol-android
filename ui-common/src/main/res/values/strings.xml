@@ -66,6 +66,8 @@
     <string name="trailer_choose">Trailers</string>
     <string name="trailer_teaser">Teaser</string>
     <string name="trailer_no_app">Install the YouTube app to watch trailers.</string>
+    <string name="trailer_busy">The trailer is still being prepared. Try again in a minute.</string>
+    <string name="trailer_unavailable">This trailer is not available.</string>
     <string name="detail_cast">Cast</string>
     <string name="detail_audio">Audio</string>
     <string name="detail_subtitles">Subtitles</string>

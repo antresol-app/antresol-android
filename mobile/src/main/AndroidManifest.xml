@@ -47,6 +47,14 @@
             android:supportsPictureInPicture="true"
             android:theme="@style/Theme.Antresol" />
 
+        <!-- A trailer, landscape: the app's own player or the embedded one; no picture-in-picture. -->
+        <activity
+            android:name=".player.TrailerPlayerActivity"
+            android:configChanges="density|fontScale|keyboard|keyboardHidden|layoutDirection|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.Antresol" />
+
         <!-- A live channel, landscape; Up/Down buttons and vertical swipes switch channels; picture-in-picture on leaving. -->
         <activity
             android:name=".player.LivePlayerActivity"

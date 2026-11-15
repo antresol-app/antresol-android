@@ -40,8 +40,9 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
 - **Browse**: Movies and TV Shows grids with sort pills (they scroll below the nav, never under it);
   Music (All Albums, Artists, Songs, Playlists, Shuffle All, genre chips, shelves); album and artist
   grids; debounced Search. Watched movies, episodes and series are dimmed with an eye.
-- **Video**: detail pages with Play/Resume, watchlist and watched toggles, «Trailer» (YouTube, a
-  chooser when there are several), the cast with photos, seasons and episodes, each
+- **Video**: detail pages with Play/Resume, watchlist and watched toggles, «Trailer» (played inside the app: in its own
+  player when the server fetches it, else in the embedded YouTube player; a chooser when there
+  are several), the cast with photos, seasons and episodes, each
   with its own still (with the server's episode guide every episode shows: ones not in the library dimmed, ones not
   aired yet greyed with their air date; only library episodes play). The
   ExoPlayer player sends the device's codec caps (direct play, or HLS remux/transcode), has audio,

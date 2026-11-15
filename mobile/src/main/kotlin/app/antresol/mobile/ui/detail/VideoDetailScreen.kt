@@ -391,6 +391,7 @@ private fun EpisodeRow(
         ArtworkImage(
             // The episode's own still or a frame of it; the series backdrop only when the server has neither.
             url = urls?.image(episode.wideImage),
+            fallbackUrl = urls?.image(episode.wideFallback),
             title = episode.title,
             shape = AntresolShapes.smallCard,
             modifier = Modifier

@@ -1856,3 +1856,14 @@ fixtures (`TvShellUiTest` + `tv/src/test/.../fixtures/FakeServer.kt`), not again
 - Tests: `PhoneOwnerListUiTest` (fixture copy in `mobile/src/test/.../fixtures/FakeServer.kt`),
   screenshots `mobile/build/screenshots/owner-phone-*.png`. The trailer sheet is a separate window
   that the decor-view screenshot does not capture; the test selects its row and checks the intent.
+
+### Follow-up: cast photos on TV, busy frames
+- Cast photos on TV: the TV image loader sends the photo's absolute URL with the Bearer header
+  (`TvShellUiTest` asserts the header on `/api/images/cast/…`) and the photo replaces the initials
+  (`CastPhoto` now hides the initials once loaded). Earlier TV screenshots showed initials for two
+  test-only reasons: Coil's process-wide loader came from an earlier test's application (no token),
+  and Robolectric draws no animation frames, so a first load stayed at the crossfade's empty start.
+  Both UI tests now install the app's own loader without crossfade.
+- `/api/images/frame/{id}` may answer 503 + Retry-After while busy: `ArtworkImage(fallbackUrl)`
+  shows the backdrop (else poster, `CardFields.wideFallback`) on any error, and a later visit asks
+  for the frame again (Coil does not cache failures). `TvShellUiTest.busyFramesFallBackToTheBackdropAndAreRetried`.

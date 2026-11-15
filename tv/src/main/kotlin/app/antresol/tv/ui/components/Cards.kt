@@ -111,6 +111,7 @@ fun MediaCard(
                 url = image,
                 title = card.title,
                 shape = outline,
+                fallbackUrl = if (shape == CardShape.Wide) urls?.image(card.wideFallback) else null,
                 modifier = Modifier
                     .fillMaxSize()
                     .alpha(WatchedStyle.artworkAlpha(card.watched, focused)),

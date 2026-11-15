@@ -62,6 +62,11 @@ class TvShellUiTest {
             session.signIn(Profile(1, "Alex", "grad-3"), null)
         }
         val state = session.state.value as AuthState.SignedIn
+        // Coil's loader is a process-wide singleton: one built for an earlier test's application
+        // would send that application's (absent) token. Use this application's loader, without
+        // the crossfade: Robolectric draws no animation frames, so a first (not memory-cached) load
+        // would stay at the crossfade's start, an empty frame, in the screenshots.
+        coil.Coil.setImageLoader(app.newImageLoader().newBuilder().crossfade(false).build())
         compose.setContent { AntresolTvTheme { MainShell(session, state) } }
         waitFor(hasText("The Test Show") and SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Text))
         waitFor(isFocused())
@@ -235,8 +240,41 @@ class TvShellUiTest {
         key(KeyEvent.KEYCODE_DPAD_DOWN) // cast
         repeat(3) { settleImages() }
         shot("shell-series-cast")
-        assertTrue(fake.requests.any { it.contains("/api/images/cast/Ada%20Lovelace") })
+        // The TV loader asks for the absolute cast photo URL with the profile's Bearer token.
+        assertEquals("Bearer test-device-token", fake.imageAuth["/api/images/cast/Ada%20Lovelace"])
         compose.onAllNodes(hasText("Grace Hopper"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty().let(::assertTrue)
+    }
+
+    /**
+     * The frame endpoint can answer 503 (Retry-After) while the server is busy: episode tiles then
+     * show the backdrop instead of staying blank, and the next visit asks for the frame again.
+     */
+    @Test
+    fun busyFramesFallBackToTheBackdropAndAreRetried() {
+        fake.framesBusy = true
+        key(KeyEvent.KEYCODE_DPAD_RIGHT)
+        key(KeyEvent.KEYCODE_DPAD_CENTER) // Details
+        waitFor(hasTestTag("action-trailer"))
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        repeat(2) { settleImages() }
+        shot("shell-series-frames-busy")
+        val frame = "/api/images/frame/${FakeServer.EPISODE_IDS[2]}"
+        val busyAsks = fake.requests.count { it.endsWith(frame) }
+        assertTrue("frame asked while busy", busyAsks >= 1)
+        // The fallback was drawn: the series backdrop, not the empty placeholder.
+        assertTrue(fake.requests.any { it.endsWith("/api/images/local/${FakeServer.SERIES_ID}/backdrop") })
+
+        fake.framesBusy = false
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(isFocused() and (hasText("Details") or hasAnyDescendant(hasText("Details"))))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasTestTag("action-trailer"))
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        repeat(2) { settleImages() }
+        shot("shell-series-frames-retried")
+        assertTrue("the failed frame is asked for again", fake.requests.count { it.endsWith(frame) } > busyAsks)
     }
 
     /** Item 1: a movie with two trailers opens the chooser; choosing one starts the YouTube intent. */
@@ -339,6 +377,8 @@ class TvShellUiTest {
         repeat(20) {
             Thread.sleep(50)
             ShadowLooper.idleMainLooper(50, TimeUnit.MILLISECONDS)
+            // Frames, so Coil's crossfade runs to its end before a screenshot.
+            compose.mainClock.advanceTimeBy(50)
         }
         compose.waitForIdle()
     }

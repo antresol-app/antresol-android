@@ -4,6 +4,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -19,13 +23,18 @@ import coil.compose.AsyncImage
  */
 @Composable
 fun CastPhoto(member: CastMember, photoUrl: String?, size: Dp, modifier: Modifier = Modifier) {
+    // Like ArtworkImage: the initials stay until the photo has loaded (and come back if it fails),
+    // so a photo with transparent edges never shows letters through it.
+    var loaded by remember(photoUrl) { mutableStateOf(false) }
     Box(modifier.size(size).clip(CircleShape)) {
-        ProfileAvatar(name = member.name, avatar = castGradient(member.name), size = size)
+        if (!loaded) ProfileAvatar(name = member.name, avatar = castGradient(member.name), size = size)
         if (photoUrl != null) {
             AsyncImage(
                 model = photoUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                onSuccess = { loaded = true },
+                onError = { loaded = false },
                 modifier = Modifier.matchParentSize(),
             )
         }

@@ -105,6 +105,7 @@ fun MediaCard(
             // A watched card: dimmed artwork, the eye at full strength on top.
             ArtworkImage(
                 url = urls?.image(image),
+                fallbackUrl = if (style == CardStyle.Wide) urls?.image(card.wideFallback) else null,
                 title = card.title,
                 shape = if (circle) CircleShape else AntresolShapes.card,
                 modifier = Modifier

@@ -49,6 +49,9 @@ interface CardFields {
     /** The picture of a 16:9 tile: the episode's own [thumb], else the backdrop, else the poster. */
     val wideImage: String get() = thumb.ifEmpty { backdrop.ifEmpty { poster } }
 
+    /** What a 16:9 tile shows when its [thumb] fails to load: the backdrop, else the poster ("" when there is no thumb). */
+    val wideFallback: String get() = if (thumb.isEmpty()) "" else backdrop.ifEmpty { poster }
+
     fun toCard(): Card = Card(
         id = id, kind = kind, title = title, subtitle = subtitle, year = year,
         poster = poster, backdrop = backdrop, logo = logo, progress = progress,

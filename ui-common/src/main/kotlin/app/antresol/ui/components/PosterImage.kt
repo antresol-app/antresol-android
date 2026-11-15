@@ -45,9 +45,16 @@ fun ArtworkImage(
     modifier: Modifier = Modifier,
     shape: Shape = AntresolShapes.card,
     contentScale: ContentScale = ContentScale.Crop,
+    /**
+     * Shown when [url] fails (an episode's frame the server is busy making answers 503). The next
+     * composition of this artwork (a later visit) asks for [url] again; failures are not cached.
+     */
+    fallbackUrl: String? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
-    var loaded by remember(url) { mutableStateOf(false) }
+    var failed by remember(url) { mutableStateOf(false) }
+    val model = if (failed && fallbackUrl != null) fallbackUrl else url
+    var loaded by remember(model) { mutableStateOf(false) }
     BoxWithConstraints(
         modifier = modifier
             .clip(shape)
@@ -72,13 +79,16 @@ fun ArtworkImage(
                 )
             }
         }
-        if (url != null) {
+        if (model != null) {
             AsyncImage(
-                model = url,
+                model = model,
                 contentDescription = title,
                 contentScale = contentScale,
                 onSuccess = { loaded = true },
-                onError = { loaded = false },
+                onError = {
+                    loaded = false
+                    if (model == url) failed = true
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }

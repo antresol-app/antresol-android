@@ -183,6 +183,7 @@ private fun EpisodeTile(episode: GuideEpisode, mark: String?, onClick: () -> Uni
             ArtworkImage(
                 // The episode's own still or a frame of it; the series backdrop only when the server has neither.
                 url = card?.let { urls?.image(it.wideImage) },
+                fallbackUrl = card?.let { urls?.image(it.wideFallback) },
                 title = title,
                 shape = outline,
                 modifier = Modifier

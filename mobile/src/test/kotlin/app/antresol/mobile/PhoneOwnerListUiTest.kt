@@ -61,6 +61,11 @@ class PhoneOwnerListUiTest {
             session.signIn(Profile(1, "Alex", "grad-3"), null)
         }
         val state = session.state.value as AuthState.SignedIn
+        // Coil's loader is a process-wide singleton: one built for an earlier test's application
+        // would send that application's (absent) token. Use this application's loader, without
+        // the crossfade: Robolectric draws no animation frames, so a first (not memory-cached) load
+        // would stay at the crossfade's start, an empty frame, in the screenshots.
+        coil.Coil.setImageLoader(app.newImageLoader().newBuilder().crossfade(false).build())
         compose.setContent { AntresolTheme { MainShell(session, state) } }
         waitFor(hasText("Continue Watching"))
     }
@@ -91,7 +96,7 @@ class PhoneOwnerListUiTest {
         list().performScrollToNode(hasText("Cast"))
         settle()
         shot("owner-phone-series-cast")
-        assertTrue(fake.requests.any { it.contains("/api/images/cast/Ada%20Lovelace") })
+        assertEquals("Bearer test-device-token", fake.imageAuth["/api/images/cast/Ada%20Lovelace"])
 
         // One trailer: straight to the YouTube app.
         list().performScrollToNode(hasTestTag("detail-trailer"))

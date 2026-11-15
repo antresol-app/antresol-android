@@ -25,6 +25,12 @@ class FakeServer {
     val server = MockWebServer()
     val requests = CopyOnWriteArrayList<String>()
 
+    /** The Authorization header each image path was requested with. */
+    val imageAuth = ConcurrentHashMap<String, String>()
+
+    /** Answers `/api/images/frame/...` with 503 + Retry-After while true (the server busy making frames). */
+    @Volatile var framesBusy: Boolean = false
+
     /** Delay of `GET /api/items/{id}` answers, to land them mid-transition. */
     @Volatile var itemDelayMs: Long = 0
 
@@ -37,6 +43,7 @@ class FakeServer {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val path = request.path.orEmpty()
                 requests += "${request.method} $path"
+                if (path.startsWith("/api/images/")) imageAuth[path] = request.getHeader("Authorization").orEmpty()
                 return answer(request.method.orEmpty(), path)
             }
         }
@@ -48,6 +55,9 @@ class FakeServer {
     private fun answer(method: String, fullPath: String): MockResponse {
         val path = fullPath.substringBefore('?')
         val query = fullPath.substringAfter('?', "")
+        if (path.startsWith("/api/images/frame/") && framesBusy) {
+            return MockResponse().setResponseCode(503).setHeader("Retry-After", "5").setBody("""{"error":"busy"}""")
+        }
         if (path.startsWith("/api/images/")) return image(path)
         return when {
             path == "/api/health" -> json("""{"ok":true,"serverId":"$SERVER_ID","version":"1.5.0"}""")

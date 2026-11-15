@@ -29,16 +29,20 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   «Sign In with Your Phone» (a QR and a 6-character code a signed-in phone approves; the TV gets a
   normal device token; the code renews itself every 5 minutes), with «Sign In with the Remote» (profile
   picker, password step) as the fallback. The session is restored on launch.
-- **Shell**: a centred glass pill (Search, Home, Movies, TV Shows, TV, Music, Books), the now-playing chip
+- **Shell**: a centred glass pill (Search, Home, Movies, TV Shows, TV, Music), the now-playing chip
   while music or an audiobook is loaded, and the avatar, which opens Settings. Down from the pills
-  enters the page and returns to the element that was focused there.
+  enters the page and returns to the element that was focused there. A tab left for another one is
+  back at its root (top, first element) when the user returns after more than 5 s; within 5 s it is
+  as it was. There are no books on the TV (as on Apple TV): no Books tab, and Home and Search leave
+  book results out.
 - **Home**: an artwork-tinted hero (eyebrow line, huge title, white Play and glass Details pills),
   Continue Watching and every server shelf.
-- **Browse**: Movies and TV Shows grids with sort pills; Music (All Albums, Artists, Songs,
-  Playlists, Shuffle All, genre chips, shelves); Books (All Books, Audiobooks, Manga & Comics,
-  shelves); album, artist and book grids; debounced Search.
-- **Video**: detail pages with Play/Resume, watchlist and watched toggles, seasons and episodes
-  (with the server's episode guide every episode shows: ones not in the library dimmed, ones not
+- **Browse**: Movies and TV Shows grids with sort pills (they scroll below the nav, never under it);
+  Music (All Albums, Artists, Songs, Playlists, Shuffle All, genre chips, shelves); album and artist
+  grids; debounced Search. Watched movies, episodes and series are dimmed with an eye.
+- **Video**: detail pages with Play/Resume, watchlist and watched toggles, «Trailer» (YouTube, a
+  chooser when there are several), the cast with photos, seasons and episodes, each
+  with its own still (with the server's episode guide every episode shows: ones not in the library dimmed, ones not
   aired yet greyed with their air date; only library episodes play). The
   ExoPlayer player sends the device's codec caps (direct play, or HLS remux/transcode), has audio,
   subtitle and quality menus, keeps the HLS session alive, saves progress every 10 s and counts
@@ -64,8 +68,8 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   manga), loads the next pages in advance with the Bearer header, saves the page and offers the
   next volume at the end. E-books show that they can be read in the web app or on a phone.
 - **Settings**: switch profile, sign out, default video quality, subtitle language turned on
-  automatically, app language (System / English / Русский), server address, version and library
-  counts, change server, app version.
+  automatically, app language (System / English / Русский), app version. Server facts and devices
+  are not shown on the TV.
 
 Live UI tests (`TvLiveUiTest`, Robolectric with D-pad key events) write screenshots to
 `tv/build/screenshots/`.

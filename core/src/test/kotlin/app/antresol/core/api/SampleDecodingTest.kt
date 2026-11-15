@@ -326,6 +326,11 @@ class SampleDecodingTest {
         assertEquals("abc123XYZ_0", first.key)
         assertEquals("vnd.youtube:abc123XYZ_0", first.appUrl)
         assertEquals("https://www.youtube.com/watch?v=abc123XYZ_0", first.webUrl)
+        assertEquals("/api/trailers/abc123XYZ_0/play", first.play)
+        assertTrue(first.playsInApp)
+        // Older servers and trailers off: no `play`, the apps open the link outside.
+        assertEquals("", list.trailers[1].play)
+        assertTrue(!list.trailers[1].playsInApp)
         assertEquals("https://www.youtube.com/watch?v=k", Trailer(key = "k").webUrl)
         assertTrue(json.decodeFromString(serializer<TrailerList>(), "{}").trailers.isEmpty())
     }

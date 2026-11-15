@@ -153,10 +153,26 @@ data class Trailer(
     val official: Boolean = false,
     /** `https://www.youtube.com/watch?v=<key>`. */
     val url: String = "",
+    /**
+     * `/api/trailers/<key>/play` when the server can fetch trailers and play them in the app's own
+     * player; empty on older servers or with trailers off (then the app opens [url] outside).
+     */
+    val play: String = "",
 ) {
+    /** The server plays this trailer itself ([play] is set). */
+    val playsInApp: Boolean get() = play.isNotBlank()
+
     /** The page to open when the YouTube app is missing. */
     val webUrl: String get() = url.ifEmpty { "https://www.youtube.com/watch?v=$key" }
 
     /** The YouTube app's own link. */
     val appUrl: String get() = "vnd.youtube:$key"
 }
+
+/** `POST /api/trailers/{key}/play`: the server's cached MP4 of a trailer, ready to play. */
+@Serializable
+data class TrailerPlay(
+    /** Server path (or absolute URL) of the MP4, signed with `mk`: plays without extra headers. */
+    val url: String,
+    val durationMs: Long = 0,
+)

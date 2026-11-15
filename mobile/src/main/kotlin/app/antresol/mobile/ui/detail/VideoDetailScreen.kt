@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -51,6 +52,7 @@ import app.antresol.core.model.CastMember
 import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.FileInfo
 import app.antresol.core.model.Kind
+import app.antresol.core.model.Trailer
 import app.antresol.core.library.EpisodeState
 import app.antresol.core.library.GuideEpisode
 import app.antresol.mobile.R
@@ -73,7 +75,9 @@ import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.components.Badge
 import app.antresol.ui.components.BadgeRow
-import app.antresol.ui.components.ProfileAvatar
+import app.antresol.ui.components.CastPhoto
+import app.antresol.ui.components.WatchedStyle
+import app.antresol.ui.trailers.Trailers
 import app.antresol.ui.components.ProgressBar
 import app.antresol.ui.format.Durations
 import app.antresol.ui.format.EpisodeLabels
@@ -145,6 +149,16 @@ private fun VideoDetailContent(
         ?: seasons.firstOrNull()
     var selectedSeason by rememberSaveable(item.id) { mutableIntStateOf(initialSeason?.number ?: 0) }
     val season = seasons.firstOrNull { it.number == selectedSeason } ?: seasons.firstOrNull()
+    // One trailer plays at once; several open the chooser.
+    var trailerSheet by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val trailers = viewModel.trailers
+    val openTrailer: (Trailer) -> Unit = { trailer ->
+        trailerSheet = false
+        if (!Trailers.open(context, trailer)) viewModel.showNotice(UiR.string.trailer_no_app)
+    }
+    val onTrailer: () -> Unit = { if (trailers.size == 1) openTrailer(trailers.single()) else trailerSheet = true }
+    if (trailerSheet) TrailerSheet(trailers, onDismiss = { trailerSheet = false }, onOpen = openTrailer)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -202,7 +216,7 @@ private fun VideoDetailContent(
             }
         }
         detail.playTarget?.let { target ->
-            item("play") { PlayRow(target, onPlay) }
+            item("play") { PlayRow(target, onPlay, onTrailer = onTrailer.takeIf { trailers.isNotEmpty() }) }
         }
         item("actions") {
             Row(
@@ -224,6 +238,15 @@ private fun VideoDetailContent(
                         icon = if (detail.watched) MobileIcons.CheckCircle else MobileIcons.Circle,
                         onClick = viewModel::toggleWatched,
                         modifier = buttonModifier.testTag("toggle-watched"),
+                    )
+                }
+                // Nothing to play: the trailer takes a pill here instead of the icon beside Play.
+                if (detail.playTarget == null && trailers.isNotEmpty()) {
+                    GlassPillButton(
+                        text = stringResource(UiR.string.action_trailer),
+                        icon = AntresolIcons.Trailer,
+                        onClick = onTrailer,
+                        modifier = buttonModifier.testTag("detail-trailer"),
                     )
                 }
             }
@@ -301,7 +324,7 @@ private fun SeasonWatchedToggle(episodes: List<EpisodeCard>, onToggle: () -> Uni
 
 /** The white Play/Resume pill ("Resume S1 E3" for a series) and, when resuming, Play from Beginning. */
 @Composable
-private fun PlayRow(target: PlayTarget, onPlay: (itemId: Long, mode: ResumeMode) -> Unit) {
+private fun PlayRow(target: PlayTarget, onPlay: (itemId: Long, mode: ResumeMode) -> Unit, onTrailer: (() -> Unit)? = null) {
     val episode = target.episode
     val label = when {
         episode != null && target.resume -> stringResource(UiR.string.detail_resume_episode, episode.seasonNo, episode.episodeNo)
@@ -327,6 +350,14 @@ private fun PlayRow(target: PlayTarget, onPlay: (itemId: Long, mode: ResumeMode)
                 contentDescription = stringResource(UiR.string.action_play_from_start),
                 onClick = { onPlay(target.itemId, ResumeMode.FromStart) },
                 modifier = Modifier.size(50.dp).testTag("detail-play-from-start"),
+            )
+        }
+        if (onTrailer != null) {
+            GlassIconButton(
+                icon = AntresolIcons.Trailer,
+                contentDescription = stringResource(UiR.string.action_trailer),
+                onClick = onTrailer,
+                modifier = Modifier.size(50.dp).testTag("detail-trailer"),
             )
         }
     }
@@ -358,7 +389,8 @@ private fun EpisodeRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ArtworkImage(
-            url = urls?.image(episode.backdrop.ifBlank { episode.poster }),
+            // The episode's own still or a frame of it; the series backdrop only when the server has neither.
+            url = urls?.image(episode.wideImage),
             title = episode.title,
             shape = AntresolShapes.smallCard,
             modifier = Modifier
@@ -366,6 +398,7 @@ private fun EpisodeRow(
                 .aspectRatio(AntresolMotion.BACKDROP_ASPECT)
                 .clip(AntresolShapes.smallCard)
                 .focusClickable(AntresolShapes.smallCard, onClick = onPlay)
+                .alpha(WatchedStyle.artworkAlpha(episode.watched))
                 .testTag("episode-play-${episode.id}"),
         ) {
             Box(
@@ -481,6 +514,7 @@ private fun FileDetails(file: FileInfo) {
 
 @Composable
 private fun CastRow(cast: List<CastMember>) {
+    val urls = LocalMediaUrls.current
     Column(Modifier.padding(top = 20.dp)) {
         SectionTitle(stringResource(UiR.string.detail_cast))
         LazyRow(
@@ -490,7 +524,7 @@ private fun CastRow(cast: List<CastMember>) {
             // The same person can be listed twice: the position keeps keys unique.
             itemsIndexed(cast, key = { index, member -> "$index-${member.name}" }) { _, member ->
                 Column(Modifier.width(84.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    ProfileAvatar(name = member.name, avatar = AntresolGradients.avatarIds[Math.floorMod(member.name.hashCode(), AntresolGradients.avatarIds.size)], size = 64.dp)
+                    CastPhoto(member, urls?.image(member.photo), size = 64.dp)
                     Text(member.name, style = Antresol.typography.caption.copy(color = AntresolColors.Label), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
                     member.character?.takeIf { it.isNotBlank() }?.let {
                         Text(it, style = Antresol.typography.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)

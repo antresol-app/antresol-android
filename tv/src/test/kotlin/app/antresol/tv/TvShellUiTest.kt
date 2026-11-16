@@ -21,6 +21,7 @@ import app.antresol.tv.fixtures.FakeServer
 import app.antresol.tv.ui.components.TopNavHeight
 import app.antresol.tv.ui.shell.TAB_RESET_MS
 import app.antresol.tv.ui.shell.MainShell
+import app.antresol.ui.trailers.TrailerEmbed
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -277,9 +278,94 @@ class TvShellUiTest {
         assertTrue("the failed frame is asked for again", fake.requests.count { it.endsWith(frame) } > busyAsks)
     }
 
-    /** Item 1: a movie with two trailers opens the chooser; choosing one starts the YouTube intent. */
+    /**
+     * A movie with two trailers opens the chooser. The first has `play`: it plays in the app's own
+     * player, full screen without the nav, after the server was busy once (503 + Retry-After): the
+     * name and a spinner first, then the player's controls. Back returns to the page. No progress
+     * is written and no other app is started.
+     */
     @Test
-    fun movieTrailerChooserOpensYouTube() {
+    fun movieTrailerPlaysInTheAppsOwnPlayer() {
+        fake.trailerPlay = FakeServer.TrailerPlay.BusyOnce
+        openMovieTrailerChooser()
+        shot("shell-trailer-chooser")
+        key(KeyEvent.KEYCODE_DPAD_CENTER) // the first: Official Trailer
+        waitFor(hasTestTag("trailer-loading"))
+        compose.onAllNodes(hasText("Official Trailer"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty().let(::assertTrue)
+        shot("shell-trailer-loading")
+        assertTrue("the nav is hidden", compose.onAllNodes(hasText("Movies") and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        waitFor(hasTestTag("trailer-playing"), timeoutMs = 20_000)
+        settleImages()
+        shot("shell-trailer-playing")
+        assertEquals(2, fake.requests.count { it == "POST /api/trailers/movieTrailer1/play" })
+        assertTrue("the MP4 was fetched", fake.requests.any { it.startsWith("GET /api/trailers/movieTrailer1.mp4?mk=test-mk") })
+        assertNoOtherAppStarted()
+        // A trailer has no quality menu and never writes progress.
+        assertTrue(compose.onAllNodes(hasContentDescription("Quality"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(hasTestTag("action-trailer"))
+        assertTrue(fake.requests.none { it.startsWith("PUT /api/progress") || it.startsWith("POST /api/play") })
+    }
+
+    /** The server could not fetch the trailer (502): its message and «Повторить», which plays it once the server can. */
+    @Test
+    fun failedTrailerShowsTheErrorWithRetry() {
+        fake.trailerPlay = FakeServer.TrailerPlay.Failed
+        key(KeyEvent.KEYCODE_DPAD_RIGHT)
+        key(KeyEvent.KEYCODE_DPAD_CENTER) // the series' Details
+        waitFor(hasTestTag("action-trailer"))
+        val onTrailer = isFocused() and (hasText("Trailer") or hasAnyDescendant(hasText("Trailer")))
+        repeat(6) { if (compose.onAllNodes(onTrailer).fetchSemanticsNodes().isEmpty()) key(KeyEvent.KEYCODE_DPAD_RIGHT) }
+        waitFor(onTrailer)
+        key(KeyEvent.KEYCODE_DPAD_CENTER) // one trailer: plays at once
+        waitFor(hasTestTag("trailer-failed"))
+        waitFor(isFocused() and (hasText("Try Again") or hasAnyDescendant(hasText("Try Again"))))
+        shot("shell-trailer-error")
+        compose.onAllNodes(hasText("Could not fetch the trailer."), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty().let(::assertTrue)
+        fake.trailerPlay = FakeServer.TrailerPlay.Ready
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasTestTag("trailer-playing"), timeoutMs = 20_000)
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(hasTestTag("action-trailer"))
+    }
+
+    /**
+     * The teaser has no `play` (a public or older server): the official embedded player in a
+     * WebView, loaded under an https base URL so the embed gets a referrer, with autoplay and the
+     * IFrame API; OK pauses through it; Back destroys the WebView. No other app is started.
+     */
+    @Test
+    fun trailerWithoutPlayUsesTheEmbeddedPlayer() {
+        openMovieTrailerChooser()
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        waitFor(isFocused() and (hasText("Teaser") or hasAnyDescendant(hasText("Teaser"))))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasTestTag("trailer-loading"))
+        shot("shell-trailer-embed-loading")
+        assertNoOtherAppStarted()
+        val web = findWebView(compose.activity.window.decorView) ?: error("no WebView")
+        val shadow = org.robolectric.Shadows.shadowOf(web)
+        val page = shadow.lastLoadDataWithBaseURL ?: error("nothing loaded")
+        assertEquals("https://www.youtube.com/", page.baseUrl)
+        assertEquals("text/html", page.mimeType)
+        for (part in listOf("videoId: 'movieTeaser2'", "host: 'https://www.youtube-nocookie.com'", "autoplay: 1", "playsinline: 1", "rel: 0", "origin: 'https://www.youtube.com'", "https://www.youtube.com/iframe_api")) {
+            assertTrue("page has $part", page.data.contains(part))
+        }
+        assertTrue(web.settings.javaScriptEnabled)
+        assertEquals(false, web.settings.mediaPlaybackRequiresUserGesture)
+        // The player reports «playing» through the bridge; OK then pauses it through the IFrame API.
+        val bridge = shadow.getJavascriptInterface(TrailerEmbed.BRIDGE) ?: error("no bridge")
+        bridge.javaClass.getMethod("onState", Int::class.javaPrimitiveType).apply { isAccessible = true }.invoke(bridge, 1)
+        waitFor(hasTestTag("trailer-playing"))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        assertEquals("antresolToggle()", shadow.lastEvaluatedJavascript)
+        key(KeyEvent.KEYCODE_BACK)
+        waitFor(hasTestTag("action-trailer"))
+        assertTrue("the WebView is destroyed", shadow.wasDestroyCalled())
+    }
+
+    /** Continue Watching → the movie (long press) → its Trailer button → the chooser, first row focused. */
+    private fun openMovieTrailerChooser() {
         key(KeyEvent.KEYCODE_DPAD_DOWN) // Continue Watching
         key(KeyEvent.KEYCODE_DPAD_RIGHT) // the movie
         hold(KeyEvent.KEYCODE_DPAD_CENTER, repeats = 3) // long press → its page
@@ -291,10 +377,21 @@ class TvShellUiTest {
         waitFor(onTrailer)
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         waitFor(isFocused() and (hasText("Official Trailer") or hasAnyDescendant(hasText("Official Trailer"))))
-        shot("shell-trailer-chooser")
-        key(KeyEvent.KEYCODE_DPAD_CENTER) // the first: Official Trailer
-        val started = org.robolectric.Shadows.shadowOf(compose.activity).nextStartedActivity
-        assertEquals("vnd.youtube:movieTrailer1", started?.data?.toString())
+    }
+
+    /** No ACTION_VIEW intent (a trailer app or the browser); the rule's own activity launch does not count. */
+    private fun assertNoOtherAppStarted() {
+        val shadow = org.robolectric.Shadows.shadowOf(compose.activity)
+        while (true) {
+            val intent = shadow.nextStartedActivity ?: return
+            assertTrue("started $intent", intent.action != android.content.Intent.ACTION_VIEW)
+        }
+    }
+
+    private fun findWebView(view: android.view.View): android.webkit.WebView? = when (view) {
+        is android.webkit.WebView -> view
+        is android.view.ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { findWebView(view.getChildAt(it)) }
+        else -> null
     }
 
     /** Item 8: Settings keep the profile, playback and language; no server or devices sections. */

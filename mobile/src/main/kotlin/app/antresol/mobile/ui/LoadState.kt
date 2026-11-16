@@ -3,6 +3,8 @@ package app.antresol.mobile.ui
 import android.content.res.Resources
 import app.antresol.core.api.ApiException
 import app.antresol.core.api.InvalidServerAddressException
+import app.antresol.core.playback.TrailerBusyException
+import app.antresol.core.playback.TrailerUnavailableException
 import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.mobile.R as MobileR
 import app.antresol.ui.R
@@ -33,6 +35,8 @@ suspend fun <T> load(block: suspend () -> T): LoadState<T> = try {
 fun Throwable.userMessage(resources: Resources): String = when (this) {
     is ServerNeedsSetupException -> resources.getString(R.string.server_needs_setup)
     is StreamLimitException -> resources.getString(R.string.error_too_many_streams)
+    is TrailerBusyException -> resources.getString(R.string.trailer_busy)
+    is TrailerUnavailableException -> resources.getString(R.string.trailer_unavailable)
     is ApiException -> when {
         status == 200 -> resources.getString(R.string.error_generic)
         // No localized `error` from the server (the client falls back to "HTTP 429").

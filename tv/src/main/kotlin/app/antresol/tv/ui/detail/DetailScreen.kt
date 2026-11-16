@@ -115,6 +115,8 @@ fun DetailScreen(
     onPlay: (itemId: Long, mode: ResumeMode) -> Unit,
     onNowPlaying: () -> Unit,
     onRead: (volumeId: Long, fromStart: Boolean) -> Unit,
+    /** A trailer that plays inside the app (own player or embedded), with its display name. */
+    onTrailer: (Trailer, name: String) -> Unit,
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
     /** A side panel (add to playlist, delete) opened or closed: the shell hides its nav meanwhile. */
@@ -135,7 +137,7 @@ fun DetailScreen(
                 model = state.value,
                 viewModel = viewModel,
                 audio = audio,
-                actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead, onClose),
+                actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead, onClose, onTrailer),
                 onScrolledToTop = onScrolledToTop,
                 canTakeFocus = canTakeFocus,
                 onPanelOpenChanged = onPanelOpenChanged,
@@ -151,6 +153,7 @@ private class DetailActions(
     val nowPlaying: () -> Unit,
     val read: (Long, Boolean) -> Unit,
     val close: () -> Unit,
+    val trailer: (Trailer, String) -> Unit,
 )
 
 /** The side panels of a detail page: playlists (music) and the trailer chooser (video). */
@@ -181,9 +184,18 @@ private fun DetailContent(
         }
     }
     val context = LocalContext.current
-    // Shown under the buttons when no app on the TV opens a trailer.
+    // Shown under the buttons when nothing on the TV plays a trailer (no WebView and no app for it).
     var trailerFailed by remember { mutableStateOf(false) }
-    val openTrailer: (Trailer) -> Unit = { trailer -> trailerFailed = !Trailers.open(context, trailer) }
+    val resources = context.resources
+    val openTrailer: (Trailer) -> Unit = { trailer ->
+        trailerFailed = when (Trailers.howToPlay(trailer)) {
+            Trailers.Mode.Player, Trailers.Mode.Embed -> {
+                actions.trailer(trailer, trailerLabel(resources, trailer))
+                false
+            }
+            Trailers.Mode.External -> !Trailers.open(context, trailer)
+        }
+    }
     BackHandler(enabled = panel != null) { panel = null }
     val listState = rememberLazyListState()
     val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 80 } }

@@ -937,20 +937,7 @@ open class VideoPlayerViewModel(
         bufferedMs = source?.timeline?.fileMs(player.bufferedPosition) ?: 0L
     }
 
-    private fun buildPlayer(): ExoPlayer {
-        // Stream and segment URLs carry ?mk=; the shared client adds Bearer only where there is none.
-        val http = OkHttpDataSource.Factory(client.httpClient)
-        val dataSources = DefaultDataSource.Factory(context, http)
-        return ExoPlayer.Builder(context)
-            .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(true))
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
-            .setAudioAttributes(
-                AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
-                true,
-            )
-            .setHandleAudioBecomingNoisy(true)
-            .build()
-    }
+    private fun buildPlayer(): ExoPlayer = buildVideoPlayer(context, client)
 
     // endregion
 
@@ -966,4 +953,24 @@ open class VideoPlayerViewModel(
         private const val SUBTITLE_ATTEMPTS = 6
         private const val SUBTITLE_ID = "antresol-subtitle"
     }
+}
+
+/**
+ * The ExoPlayer of the app's video players (films, episodes, trailers): media through [client]'s
+ * HTTP client, decoder fallback, movie audio focus, paused when headphones are unplugged.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
+    // Stream and segment URLs carry ?mk=; the shared client adds Bearer only where there is none.
+    val http = OkHttpDataSource.Factory(client.httpClient)
+    val dataSources = DefaultDataSource.Factory(context, http)
+    return ExoPlayer.Builder(context)
+        .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(true))
+        .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
+        .setAudioAttributes(
+            AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
+            true,
+        )
+        .setHandleAudioBecomingNoisy(true)
+        .build()
 }

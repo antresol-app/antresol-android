@@ -1867,3 +1867,34 @@ fixtures (`TvShellUiTest` + `tv/src/test/.../fixtures/FakeServer.kt`), not again
 - `/api/images/frame/{id}` may answer 503 + Retry-After while busy: `ArtworkImage(fallbackUrl)`
   shows the backdrop (else poster, `CardFields.wideFallback`) on any error, and a later visit asks
   for the frame again (Coil does not cache failures). `TvShellUiTest.busyFramesFallBackToTheBackdropAndAreRetried`.
+
+## Trailers inside the app (owner, 2026-11-15)
+
+Owner: a trailer plays inside Antresol, not in another app. Server contract (vault
+`fix/trailers-inapp`): each trailer may carry `play` (`/api/trailers/<key>/play`); `POST` it and
+the server answers `{"url","durationMs"}` (a cached MP4 signed with `mk`), `503` + Retry-After
+while busy, `502` with a translated message when the fetch failed, `404` for an unknown key.
+
+- core: `Trailer.play` / `playsInApp`, `TrailerPlay`, `AntresolClient.trailerPlay(play)` (90 s read
+  timeout: the first fetch can take a minute), `playback/TrailerPlayback.open`: 503 asked again
+  after Retry-After (default 2 s, 0.5–10 s) up to 30 s of waiting, then `TrailerBusyException`;
+  404 → `TrailerUnavailableException`; 502 thrown as is (the server's message is shown).
+- ui-common `trailers/`: `Trailers.howToPlay` → `Player` (has `play`), `Embed` (no `play`: public
+  servers, trailers off), `External` (no WebView on the device: the old YouTube app / browser
+  intent, last resort). `TrailerPlayerViewModel` (the films' ExoPlayer via `buildVideoPlayer`, no
+  progress, no Continue Watching, no next episode). `TrailerEmbed` + `TrailerEmbedView`: the
+  official IFrame player in a WebView, page loaded with `loadDataWithBaseURL("https://www.youtube.com/")`
+  so the embed gets a referrer (error 153 otherwise), player host `youtube-nocookie.com`,
+  `origin` set, autoplay without a gesture, a JS bridge for playing/ended/errors, `antresolToggle()`
+  for play/pause; the WebView is destroyed with the screen.
+- TV: `TrailerRoute(play, key, name)` full screen (nav hidden) → `TrailerPlayerScreen` (the name
+  and a spinner, then the film player's transport without menus; Back leaves at once) or
+  `TrailerEmbedScreen` (OK toggles through the IFrame API). Errors: `ErrorView` with «Повторить».
+- Phone: `TrailerPlayerActivity` (landscape, bars hidden, no picture-in-picture) with the same two
+  screens in `player/TrailerPlayerScreen.kt`.
+- Tests: both FakeServers answer `POST /api/trailers/{key}/play` (ready, busy once, 502) and serve
+  `src/test/resources/trailer-sample.mp4` (30 s, 160x90, 9 KB); `TvShellUiTest` and
+  `PhoneOwnerListUiTest` cover own player (loading after a 503, playing), error + retry, and the
+  embedded page (HTML, base URL, settings, bridge, toggle, destroy). Not verified: the embedded
+  player on a real device (Robolectric draws no WebView content), and real video frames.
+

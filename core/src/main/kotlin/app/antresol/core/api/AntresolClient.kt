@@ -18,6 +18,7 @@ import app.antresol.core.model.HlsStatus
 import app.antresol.core.model.HomeResponse
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.TrailerList
+import app.antresol.core.model.TrailerPlay
 import app.antresol.core.model.LastChannelRequest
 import app.antresol.core.model.LibraryStatus
 import app.antresol.core.model.Lyrics
@@ -100,6 +101,11 @@ class AntresolClient(
     val httpClient: OkHttpClient = httpClient.newBuilder()
         .addInterceptor(AntresolHeadersInterceptor({ urls.baseUrl }, { token }, language))
         .build()
+
+    /** For calls the server may take long to answer (a trailer's first fetch). */
+    private val slowHttpClient: OkHttpClient by lazy {
+        httpClient.newBuilder().readTimeout(SLOW_READ_TIMEOUT_SEC, TimeUnit.SECONDS).build()
+    }
 
     /** Media key for `?mk=` URLs, refreshed automatically and bound to the current [token]. */
     val mediaKeys = MediaKeyCache(fetch = ::mediaKey, token = { token })
@@ -203,6 +209,17 @@ class AntresolClient(
      * series'), best first. The server answers an empty list when it has none.
      */
     suspend fun trailers(id: Long): TrailerList = get("api/items/$id/trailers")
+
+    /**
+     * `POST` a trailer's [app.antresol.core.model.Trailer.play] path: the server fetches the trailer
+     * into its cache (up to about a minute the first time) and answers where to play it. 503 with
+     * `Retry-After` while it is busy, 502 when the fetch failed, 404 for a key it never listed.
+     * [app.antresol.core.playback.TrailerPlayback.open] adds the retries.
+     */
+    suspend fun trailerPlay(play: String): TrailerPlay {
+        val url = requireNotNull(urls.resolve(play)) { "Empty trailer play path" }.toHttpUrl()
+        return decode(execute(buildRequest("POST", url, null), http = slowHttpClient).body, serializer())
+    }
 
     suspend fun search(query: String): SearchResults = get("api/search") { addQueryParameter("q", query) }
 
@@ -457,12 +474,16 @@ class AntresolClient(
         return Request.Builder().url(url).method(method, effectiveBody).build()
     }
 
-    private suspend fun execute(request: Request, reportUnauthorized: Boolean = true): RawResponse {
+    private suspend fun execute(
+        request: Request,
+        reportUnauthorized: Boolean = true,
+        http: OkHttpClient = httpClient,
+    ): RawResponse {
         // Send the token read now, so a 401 is reported for the token that actually failed.
         // Never hand the token to another host (a server-supplied absolute URL, e.g. a subtitle).
         val sentToken = token?.takeIf { request.url.isSameOrigin(urls.baseUrl.toHttpUrl()) }
         val authorized = if (sentToken == null) request else request.newBuilder().header("Authorization", "Bearer $sentToken").build()
-        val response = httpClient.newCall(authorized).awaitRaw()
+        val response = http.newCall(authorized).awaitRaw()
         if (response.status in 200..299) return response
         val error = errorFrom(response)
         if (error.isUnauthorized && reportUnauthorized && sentToken != null) onUnauthorized(sentToken)
@@ -506,6 +527,9 @@ class AntresolClient(
 
         /** A live channel can be watched for hours: its key is refreshed with less than this left. */
         private val LIVE_KEY_LIFETIME: java.time.Duration = java.time.Duration.ofHours(6)
+
+        /** The server waits up to about 60 s for a trailer's first fetch. */
+        private const val SLOW_READ_TIMEOUT_SEC = 90L
 
         private val JSON = "application/json; charset=utf-8".toMediaType()
         private val EMPTY_BODY = ByteArray(0).toRequestBody(null)

@@ -18,6 +18,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.antresol.core.model.Profile
 import app.antresol.core.session.AuthState
 import app.antresol.mobile.fixtures.FakeServer
+import app.antresol.mobile.player.TrailerPlayerActivity
+import app.antresol.ui.trailers.TrailerPhase
+import org.robolectric.Robolectric
 import app.antresol.mobile.ui.shell.MainShell
 import app.antresol.ui.theme.AntresolTheme
 import kotlinx.coroutines.runBlocking
@@ -37,7 +40,7 @@ import java.time.Duration
 /**
  * The phone side of the 2026-11-15 owner list against [FakeServer]: Continue Watching episode
  * stills, watched cards (eye + dim), episode stills on the series page, cast photos, the trailer
- * button and chooser. Screenshots go to `mobile/build/screenshots/owner-*.png`.
+ * button and chooser, and the trailer player (own and embedded). Screenshots go to `mobile/build/screenshots/owner-*.png`.
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], qualifiers = "en-w360dp-h800dp-port-xxhdpi")
@@ -98,10 +101,13 @@ class PhoneOwnerListUiTest {
         shot("owner-phone-series-cast")
         assertEquals("Bearer test-device-token", fake.imageAuth["/api/images/cast/Ada%20Lovelace"])
 
-        // One trailer: straight to the YouTube app.
+        // One trailer, which the server plays: straight to the trailer player.
         list().performScrollToNode(hasTestTag("detail-trailer"))
         compose.onNode(hasTestTag("detail-trailer")).performClick()
-        assertEquals("vnd.youtube:seriesTrailer", shadowOf(compose.activity).nextStartedActivity?.data?.toString())
+        val started = shadowOf(compose.activity).nextStartedActivity
+        assertEquals(TrailerPlayerActivity::class.java.name, started?.component?.className)
+        assertEquals("/api/trailers/seriesTrailer/play", started?.getStringExtra("play"))
+        assertEquals("Season 1 Trailer", started?.getStringExtra("name"))
     }
 
     @Test
@@ -117,7 +123,104 @@ class PhoneOwnerListUiTest {
         settle()
         shot("owner-phone-trailer-sheet")
         compose.onNode(hasTestTag("trailer-0")).performClick()
-        assertEquals("vnd.youtube:movieTrailer1", shadowOf(compose.activity).nextStartedActivity?.data?.toString())
+        val first = shadowOf(compose.activity).nextStartedActivity
+        assertEquals(TrailerPlayerActivity::class.java.name, first?.component?.className)
+        assertEquals("/api/trailers/movieTrailer1/play", first?.getStringExtra("play"))
+        // The teaser has no `play`: the same activity, with the embedded player for its key.
+        compose.onNode(hasTestTag("detail-trailer")).performClick()
+        waitFor(hasTestTag("trailer-1"))
+        compose.onNode(hasTestTag("trailer-1")).performClick()
+        val teaser = shadowOf(compose.activity).nextStartedActivity
+        assertEquals(TrailerPlayerActivity::class.java.name, teaser?.component?.className)
+        assertEquals("", teaser?.getStringExtra("play"))
+        assertEquals("movieTeaser2", teaser?.getStringExtra("key"))
+    }
+
+    /**
+     * The trailer player, landscape: the name and a spinner while the server is busy (503 +
+     * Retry-After, asked again), then the controls over the picture. Back closes it; no progress.
+     */
+    @Test
+    @Config(qualifiers = "en-w800dp-h360dp-land-xxhdpi")
+    fun trailerPlaysInTheAppsOwnPlayer() {
+        fake.trailerPlay = FakeServer.TrailerPlay.BusyOnce
+        val activity = trailerActivity("/api/trailers/movieTrailer1/play", "movieTrailer1", "Official Trailer")
+        val model = requireNotNull(activity.viewModel)
+        assertEquals(TrailerPhase.Loading, model.phase)
+        waitUntil { fake.requests.contains("POST /api/trailers/movieTrailer1/play") }
+        shot(activity, "owner-phone-trailer-loading")
+        waitUntil(20_000) { model.phase == TrailerPhase.Playing }
+        settle()
+        shot(activity, "owner-phone-trailer-playing")
+        assertEquals(2, fake.requests.count { it == "POST /api/trailers/movieTrailer1/play" })
+        assertTrue(fake.requests.any { it.startsWith("GET /api/trailers/movieTrailer1.mp4?mk=test-mk") })
+        activity.onBackPressedDispatcher.onBackPressed()
+        assertTrue(activity.isFinishing)
+        assertTrue(fake.requests.none { it.startsWith("PUT /api/progress") || it.startsWith("POST /api/play") })
+    }
+
+    /** The server could not fetch the trailer (502): its message with «Повторить»; retrying plays it. */
+    @Test
+    @Config(qualifiers = "en-w800dp-h360dp-land-xxhdpi")
+    fun failedTrailerShowsTheErrorWithRetry() {
+        fake.trailerPlay = FakeServer.TrailerPlay.Failed
+        val activity = trailerActivity("/api/trailers/seriesTrailer/play", "seriesTrailer", "Season 1 Trailer")
+        val model = requireNotNull(activity.viewModel)
+        waitUntil { model.phase is TrailerPhase.Failed }
+        settle()
+        shot(activity, "owner-phone-trailer-error")
+        assertEquals("Could not fetch the trailer.", (model.phase as TrailerPhase.Failed).error.message)
+        fake.trailerPlay = FakeServer.TrailerPlay.Ready
+        model.retry()
+        waitUntil(20_000) { model.phase == TrailerPhase.Playing }
+    }
+
+    /** No `play`: the embedded official player, loaded under an https base URL (a referrer) with autoplay. */
+    @Test
+    @Config(qualifiers = "en-w800dp-h360dp-land-xxhdpi")
+    fun trailerWithoutPlayUsesTheEmbeddedPlayer() {
+        val activity = trailerActivity("", "movieTeaser2", "Teaser")
+        assertEquals(null, activity.viewModel)
+        settle()
+        shot(activity, "owner-phone-trailer-embed-loading")
+        val web = findWebView(activity.window.decorView) ?: error("no WebView")
+        val page = shadowOf(web).lastLoadDataWithBaseURL ?: error("nothing loaded")
+        assertEquals("https://www.youtube.com/", page.baseUrl)
+        assertTrue(page.data.contains("videoId: 'movieTeaser2'"))
+        assertTrue(page.data.contains("host: 'https://www.youtube-nocookie.com'"))
+        assertTrue(page.data.contains("origin: 'https://www.youtube.com'"))
+        assertTrue(web.settings.javaScriptEnabled)
+        assertEquals(false, web.settings.mediaPlaybackRequiresUserGesture)
+        activity.onBackPressedDispatcher.onBackPressed()
+        assertTrue(activity.isFinishing)
+    }
+
+    private fun trailerActivity(play: String, key: String, name: String): TrailerPlayerActivity {
+        val intent = TrailerPlayerActivity.intent(app, play, key, name)
+        return Robolectric.buildActivity(TrailerPlayerActivity::class.java, intent).setup().visible().get()
+    }
+
+    private fun waitUntil(timeoutMs: Long = 15_000, condition: () -> Boolean) {
+        val end = System.currentTimeMillis() + timeoutMs
+        while (!condition()) {
+            check(System.currentTimeMillis() < end) { "timed out" }
+            Thread.sleep(20)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(50))
+        }
+    }
+
+    private fun findWebView(view: android.view.View): android.webkit.WebView? = when (view) {
+        is android.webkit.WebView -> view
+        is android.view.ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { findWebView(view.getChildAt(it)) }
+        else -> null
+    }
+
+    private fun shot(activity: android.app.Activity, name: String) {
+        shadowOf(Looper.getMainLooper()).idle()
+        val view = activity.window.decorView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
+        File(shots, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     private fun list() = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)).onFirst()

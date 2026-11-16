@@ -219,6 +219,67 @@ class AntresolClientTest {
     }
 
     @Test
+    fun trailerPlayPostsThePlayPath() = runTest {
+        client.token = "t"
+        enqueue("""{"url":"/api/trailers/k1.mp4?mk=m","durationMs":120000}""")
+        val answer = client.trailerPlay("/api/trailers/k1/play")
+        val request = server.takeRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/api/trailers/k1/play", request.path)
+        assertEquals("Bearer t", request.getHeader("Authorization"))
+        assertEquals("/api/trailers/k1.mp4?mk=m", answer.url)
+        assertEquals(120000L, answer.durationMs)
+    }
+
+    @Test
+    fun trailerPlaybackWaitsOutABusyServer() = runTest {
+        client.token = "t"
+        enqueue("""{"error":"busy"}""", code = 503, headers = mapOf("Retry-After" to "3"))
+        enqueue("""{"error":"busy"}""", code = 503)
+        enqueue("""{"url":"/api/trailers/k1.mp4?mk=m","durationMs":1}""")
+        val waits = ArrayList<Long>()
+        val answer = app.antresol.core.playback.TrailerPlayback.open(client, "/api/trailers/k1/play") { waits += it }
+        assertEquals("/api/trailers/k1.mp4?mk=m", answer.url)
+        // Retry-After first, then the default step.
+        assertEquals(listOf(3_000L, 2_000L), waits)
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test
+    fun trailerPlaybackGivesUpAfterTheBudget() = runTest {
+        client.token = "t"
+        repeat(5) { enqueue("""{"error":"busy"}""", code = 503, headers = mapOf("Retry-After" to "10")) }
+        val waits = ArrayList<Long>()
+        try {
+            app.antresol.core.playback.TrailerPlayback.open(client, "/api/trailers/k1/play") { waits += it }
+            fail("expected TrailerBusyException")
+        } catch (e: app.antresol.core.playback.TrailerBusyException) {
+            assertEquals(listOf(10_000L, 10_000L, 10_000L), waits)
+            assertEquals(4, server.requestCount)
+        }
+    }
+
+    @Test
+    fun trailerPlaybackFailures() = runTest {
+        client.token = "t"
+        enqueue("""{"error":"Не удалось загрузить трейлер"}""", code = 502)
+        try {
+            app.antresol.core.playback.TrailerPlayback.open(client, "/api/trailers/k1/play") { fail("no retry on 502") }
+            fail("expected ApiException")
+        } catch (e: ApiException) {
+            assertEquals(502, e.status)
+            assertEquals("Не удалось загрузить трейлер", e.message)
+        }
+        enqueue("""{"error":"not found"}""", code = 404)
+        try {
+            app.antresol.core.playback.TrailerPlayback.open(client, "/api/trailers/zz/play") { fail("no retry on 404") }
+            fail("expected TrailerUnavailableException")
+        } catch (e: app.antresol.core.playback.TrailerUnavailableException) {
+            assertEquals(404, (e.cause as ApiException).status)
+        }
+    }
+
+    @Test
     fun channelCalls() = runTest {
         client.token = "t"
         enqueue("""{"channels":[{"id":2,"number":10,"name":"Comedy","category":"Movies","logo":1,"rules":{"order":"shuffle"}}],"canManage":true}""")

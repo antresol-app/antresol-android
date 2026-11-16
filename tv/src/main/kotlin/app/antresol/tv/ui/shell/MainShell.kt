@@ -97,6 +97,9 @@ import app.antresol.tv.ui.nowplaying.NowPlayingScreen
 import app.antresol.tv.ui.nowplaying.NowPlayingViewModel
 import app.antresol.tv.ui.player.LivePlayerScreen
 import app.antresol.tv.ui.player.PlayerScreen
+import app.antresol.tv.ui.player.TrailerEmbedScreen
+import app.antresol.tv.ui.player.TrailerPlayerScreen
+import app.antresol.ui.trailers.TrailerPlayerViewModel
 import app.antresol.tv.ui.player.PlayerViewModel
 import app.antresol.tv.ui.search.BrowseTarget
 import app.antresol.tv.ui.search.SearchScreen
@@ -198,6 +201,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val fullScreen = backStack?.destination?.let { destination ->
         destination.hasRoute(PlayerRoute::class) || destination.hasRoute(ComicReaderRoute::class) ||
             destination.hasRoute(NowPlayingRoute::class) || destination.hasRoute(LiveRoute::class) ||
+            destination.hasRoute(TrailerRoute::class) ||
             destination.hasRoute(ShellRootRoute::class)
     } ?: true
     var panelOpen by remember { mutableStateOf(false) }
@@ -440,6 +444,11 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onPlay = play,
                         onNowPlaying = nowPlaying,
                         onRead = { volumeId, fromStart -> navController.navigate(ComicReaderRoute(volumeId, fromStart)) },
+                        onTrailer = { trailer, name ->
+                            // A trailer takes over the screen and the speakers, like a video.
+                            audio.pause()
+                            navController.navigate(TrailerRoute(trailer.play, trailer.key, name))
+                        },
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = LocalPageCanTakeFocus.current,
                         onPanelOpenChanged = { panelOpen = it },
@@ -461,6 +470,17 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 composable<LiveRoute> { entry ->
                     val route = entry.toRoute<LiveRoute>()
                     LivePlayerScreen(viewModel = viewModel { LivePlayerViewModel(app, client, route.channelId, ChannelFilter.fromKey(route.filter), platform = LiveTvSession.PLATFORM_ANDROID_TV) })
+                }
+                composable<TrailerRoute> { entry ->
+                    val route = entry.toRoute<TrailerRoute>()
+                    if (route.play.isNotBlank()) {
+                        TrailerPlayerScreen(
+                            viewModel = viewModel { TrailerPlayerViewModel(app, client, route.play, route.name) },
+                            onExit = { navController.popBackStack() },
+                        )
+                    } else {
+                        TrailerEmbedScreen(trailerKey = route.key, name = route.name, onExit = { navController.popBackStack() })
+                    }
                 }
                 composable<PlayerRoute> { entry ->
                     val route = entry.toRoute<PlayerRoute>()

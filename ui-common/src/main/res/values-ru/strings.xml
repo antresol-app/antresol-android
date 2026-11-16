@@ -64,6 +64,8 @@
     <string name="trailer_choose">Трейлеры</string>
     <string name="trailer_teaser">Тизер</string>
     <string name="trailer_no_app">Чтобы смотреть трейлеры, установите приложение YouTube.</string>
+    <string name="trailer_busy">Трейлер ещё готовится. Попробуйте через минуту.</string>
+    <string name="trailer_unavailable">Этот трейлер недоступен.</string>
     <string name="detail_cast">В ролях</string>
     <string name="detail_audio">Звук</string>
     <string name="detail_subtitles">Субтитры</string>

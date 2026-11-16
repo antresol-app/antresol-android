@@ -239,6 +239,8 @@ internal data class TransportState(
     val audioChoice: Boolean,
     val subtitleChoice: Boolean,
     val nextEpisode: Boolean,
+    /** The quality menu (not for trailers, which come in one quality). */
+    val qualityChoice: Boolean = true,
 )
 
 /** What the controls do; the key handlers return true when they used the key. */
@@ -264,6 +266,8 @@ internal fun PlayingOverlayContent(
     title: @Composable () -> Unit,
     actions: TransportActions,
     menuContent: @Composable (PlayerMenu, onDismiss: () -> Unit) -> Unit,
+    /** Back leaves at once, controls up or not (the trailer player); null: Back first hides the controls. */
+    onBack: (() -> Unit)? = null,
 ) {
     var controlsVisible by remember { mutableStateOf(true) }
     var menu by remember { mutableStateOf<PlayerMenu?>(null) }
@@ -297,7 +301,7 @@ internal fun PlayingOverlayContent(
         }
     }
     BackHandler(enabled = menu != null) { menu = null }
-    BackHandler(enabled = menu == null && controlsVisible) { controlsVisible = false }
+    BackHandler(enabled = menu == null && controlsVisible) { if (onBack != null) onBack() else controlsVisible = false }
 
     Box(
         Modifier
@@ -307,8 +311,10 @@ internal fun PlayingOverlayContent(
                 // Back with the controls up hides them in one press. Taken here, before the focused
                 // button: as a key it would first become a focus "exit" to this box and be used up.
                 // With a menu open the menu takes Back itself (OptionsPanel).
-                if (event.key == Key.Back && menu == null && controlsVisible) {
-                    if (event.type == KeyEventType.KeyUp) controlsVisible = false
+                if (event.key == Key.Back && menu == null && (controlsVisible || onBack != null)) {
+                    if (event.type == KeyEventType.KeyUp) {
+                        if (onBack != null) onBack() else controlsVisible = false
+                    }
                     return@onPreviewKeyEvent true
                 }
                 actions.onMediaKey(event)
@@ -458,12 +464,14 @@ private fun TransportControls(
                         modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Subtitles)),
                     )
                 }
-                PlayerIconButton(
-                    icon = AntresolIcons.Sliders,
-                    label = stringResource(R.string.detail_quality),
-                    onClick = { onOpenMenu(PlayerMenu.Quality) },
-                    modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Quality)),
-                )
+                if (transport.qualityChoice) {
+                    PlayerIconButton(
+                        icon = AntresolIcons.Sliders,
+                        label = stringResource(R.string.detail_quality),
+                        onClick = { onOpenMenu(PlayerMenu.Quality) },
+                        modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Quality)),
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 if (transport.nextEpisode) {
                     PlayerIconButton(icon = AntresolIcons.SkipNext, label = stringResource(R.string.player_next_episode), onClick = actions.onNext)

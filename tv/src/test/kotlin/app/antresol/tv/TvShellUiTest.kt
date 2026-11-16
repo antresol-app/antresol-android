@@ -366,6 +366,22 @@ class TvShellUiTest {
         assertTrue("the WebView is destroyed", shadow.wasDestroyCalled())
     }
 
+    /** With the app in the background the embedded player is paused and its WebView told to stop working. */
+    @Test
+    fun embeddedTrailerIsPausedInTheBackground() {
+        openMovieTrailerChooser()
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        waitFor(isFocused() and (hasText("Teaser") or hasAnyDescendant(hasText("Teaser"))))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasTestTag("trailer-loading"))
+        val web = findWebView(compose.activity.window.decorView) ?: error("no WebView")
+        val shadow = org.robolectric.Shadows.shadowOf(web)
+        assertEquals(false, shadow.wasOnPauseCalled())
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        assertEquals(TrailerEmbed.PAUSE_JS, shadow.lastEvaluatedJavascript)
+        assertTrue("the WebView is paused", shadow.wasOnPauseCalled())
+    }
+
     /** Continue Watching → the movie (long press) → its Trailer button → the chooser, first row focused. */
     private fun openMovieTrailerChooser() {
         key(KeyEvent.KEYCODE_DPAD_DOWN) // Continue Watching

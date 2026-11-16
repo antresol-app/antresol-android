@@ -10,17 +10,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.attempt
 import app.antresol.core.model.BookDetail
@@ -33,6 +29,7 @@ import app.antresol.core.playback.PlaybackTiming
 import app.antresol.core.playback.ScrobbleTracker
 import app.antresol.core.playback.playbackApi
 import app.antresol.ui.playback.TranscodeSeekingPlayer
+import app.antresol.ui.playback.buildAudioPlayer
 import app.antresol.ui.playback.isUnauthorized
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -40,8 +37,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.Call
-import okhttp3.OkHttpClient
 
 /** What the audio player holds: a music queue or one audiobook. */
 sealed interface AudioContent {
@@ -73,20 +68,7 @@ class AudioEngine(
     private val clientProvider: () -> AntresolClient?,
     private val scope: CoroutineScope,
 ) {
-    private val fallbackHttp by lazy { OkHttpClient() }
-    private val callFactory = Call.Factory { request -> (clientProvider()?.httpClient ?: fallbackHttp).newCall(request) }
-
-    private val exo: ExoPlayer = ExoPlayer.Builder(context)
-        .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(context, OkHttpDataSource.Factory(callFactory))))
-        .setAudioAttributes(
-            AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
-            true,
-        )
-        .setHandleAudioBecomingNoisy(true)
-        .setWakeMode(C.WAKE_MODE_NETWORK)
-        .setSeekBackIncrementMs(BACK_STEP_MS)
-        .setSeekForwardIncrementMs(FORWARD_STEP_MS)
-        .build()
+    private val exo: ExoPlayer = buildAudioPlayer(context, BACK_STEP_MS, FORWARD_STEP_MS) { clientProvider()?.httpClient }
 
     private val knownDurations = HashMap<String, Long>()
 

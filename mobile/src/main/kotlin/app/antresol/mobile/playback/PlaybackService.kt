@@ -4,17 +4,11 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
-import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DataSource
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
@@ -28,6 +22,7 @@ import app.antresol.mobile.AntresolMobileApp
 import app.antresol.mobile.MainActivity
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.playback.TranscodeSeekingPlayer
+import app.antresol.ui.playback.buildAudioPlayer
 import app.antresol.ui.playback.isUnauthorized
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -39,7 +34,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 
 /**
  * Background playback of music and audiobooks: one ExoPlayer behind a Media3 [MediaSession]
@@ -104,22 +98,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        val fallbackHttp by lazy { OkHttpClient() }
-        // Resolved per stream so a profile switch (new token) applies to the next item.
-        val http = DataSource.Factory {
-            OkHttpDataSource.Factory(app.session.client?.httpClient ?: fallbackHttp).createDataSource()
-        }
-        exo = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
-            .setAudioAttributes(
-                AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
-                true,
-            )
-            .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_NETWORK)
-            .setSeekBackIncrementMs(SEEK_BACK_MS)
-            .setSeekForwardIncrementMs(SEEK_FORWARD_MS)
-            .build()
+        exo = buildAudioPlayer(this, SEEK_BACK_MS, SEEK_FORWARD_MS) { app.session.client?.httpClient }
         player = TranscodeSeekingPlayer(exo, ::knownDurationMs, ::startingAt)
         player.addListener(listener)
         val openApp = PendingIntent.getActivity(

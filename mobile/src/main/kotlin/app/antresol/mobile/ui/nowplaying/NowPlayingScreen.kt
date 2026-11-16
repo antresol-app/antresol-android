@@ -262,12 +262,12 @@ private fun Transport(playback: PlaybackConnection, playing: NowPlaying) {
                 iconSize = 22.dp,
                 modifier = Modifier.testTag("now-playing-shuffle"),
             )
-            RoundIconButton(MobileIcons.SkipPrevious, stringResource(R.string.now_playing_previous), onClick = playback::previous, size = 56.dp, iconSize = 30.dp)
+            RoundIconButton(MobileIcons.SkipPrevious, stringResource(UiR.string.now_playing_previous), onClick = playback::previous, size = 56.dp, iconSize = 30.dp)
             PlayPause(paused, playback)
-            RoundIconButton(MobileIcons.SkipNext, stringResource(R.string.now_playing_next), onClick = playback::next, size = 56.dp, iconSize = 30.dp)
+            RoundIconButton(MobileIcons.SkipNext, stringResource(UiR.string.now_playing_next), onClick = playback::next, size = 56.dp, iconSize = 30.dp)
             RoundIconButton(
                 if (playback.repeatMode == Player.REPEAT_MODE_ONE) MobileIcons.RepeatOne else MobileIcons.Repeat,
-                stringResource(R.string.now_playing_repeat),
+                stringResource(UiR.string.now_playing_repeat),
                 onClick = playback::cycleRepeat,
                 tint = if (playback.repeatMode != Player.REPEAT_MODE_OFF) AntresolColors.Accent else AntresolColors.LabelSecondary,
                 iconSize = 22.dp,
@@ -518,7 +518,7 @@ private fun OptionsSheet(sheet: NowPlayingSheet, playback: PlaybackConnection, o
                 }
                 NowPlayingSheet.Sleep -> {
                     SheetTitle(stringResource(R.string.sleep_timer))
-                    SheetOption(stringResource(R.string.sleep_off), selected = playback.sleepTimer == null) {
+                    SheetOption(stringResource(UiR.string.sleep_off), selected = playback.sleepTimer == null) {
                         playback.cancelSleepTimer()
                         onDismiss()
                     }

@@ -28,7 +28,6 @@ import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.Page
 import app.antresol.core.model.Track
-import app.antresol.mobile.R
 import app.antresol.mobile.playback.PlaybackConnection
 import app.antresol.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
@@ -183,7 +182,7 @@ fun PlayShuffleRow(
 @Composable
 fun ShuffleAllButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     GlassPillButton(
-        text = stringResource(R.string.music_shuffle_all),
+        text = stringResource(UiR.string.music_shuffle_all),
         icon = MobileIcons.Shuffle,
         onClick = onClick,
         enabled = enabled,

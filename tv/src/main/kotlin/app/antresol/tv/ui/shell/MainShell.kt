@@ -372,12 +372,12 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onGenre = { genre -> openGrid(GridKind.Albums, genre.name) },
                         seeAll = seeAll,
                         actions = { link ->
-                            LinkButton(stringResource(TvR.string.music_all_albums), { openGrid(GridKind.Albums, null) }, Modifier.link("albums"))
-                            LinkButton(stringResource(TvR.string.music_artists), { openGrid(GridKind.Artists, null) }, Modifier.link("artists"))
-                            LinkButton(stringResource(TvR.string.music_songs), { navController.navigate(SongsRoute) }, Modifier.link("songs"))
-                            LinkButton(stringResource(TvR.string.music_playlists), { openGrid(GridKind.Playlists, null) }, Modifier.link("playlists"))
+                            LinkButton(stringResource(R.string.music_all_albums), { openGrid(GridKind.Albums, null) }, Modifier.link("albums"))
+                            LinkButton(stringResource(R.string.music_artists), { openGrid(GridKind.Artists, null) }, Modifier.link("artists"))
+                            LinkButton(stringResource(R.string.music_songs), { navController.navigate(SongsRoute) }, Modifier.link("songs"))
+                            LinkButton(stringResource(R.string.music_playlists), { openGrid(GridKind.Playlists, null) }, Modifier.link("playlists"))
                             PillButton(
-                                stringResource(TvR.string.music_shuffle_all),
+                                stringResource(R.string.music_shuffle_all),
                                 onClick = { shuffle(ShuffleSource.All) },
                                 icon = TvIcons.Shuffle,
                                 modifier = Modifier.link("shuffle"),
@@ -692,9 +692,9 @@ private fun LibraryGrid(
 private fun gridTitle(kind: GridKind): Int = when (kind) {
     GridKind.Movies -> R.string.nav_movies
     GridKind.Shows -> R.string.nav_tv_shows
-    GridKind.Albums -> TvR.string.music_all_albums
-    GridKind.Artists -> TvR.string.music_artists
-    GridKind.Playlists -> TvR.string.music_playlists
+    GridKind.Albums -> R.string.music_all_albums
+    GridKind.Artists -> R.string.music_artists
+    GridKind.Playlists -> R.string.music_playlists
 }
 
 /** Server shelf ids (Home, Music) and the grid that lists all of it. */

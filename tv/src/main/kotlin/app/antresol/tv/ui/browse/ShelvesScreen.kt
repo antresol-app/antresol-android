@@ -29,7 +29,6 @@ import app.antresol.core.api.attempt
 import app.antresol.core.model.Card
 import app.antresol.core.model.Genre
 import app.antresol.core.model.Shelf
-import app.antresol.tv.R as TvR
 import app.antresol.ui.LoadState
 import app.antresol.ui.LoadViewModel
 import app.antresol.tv.ui.components.ErrorView
@@ -136,7 +135,7 @@ fun ShelvesScreen(
                         item(key = "genres") {
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text(
-                                    stringResource(TvR.string.music_genres),
+                                    stringResource(R.string.music_genres),
                                     style = Antresol.typography.sectionTitle,
                                     modifier = Modifier.padding(horizontal = ScreenPaddingH),
                                 )

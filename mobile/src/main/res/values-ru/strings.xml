@@ -14,10 +14,6 @@
     <string name="sort_by_author">По автору</string>
 
     <!-- Music and books pages -->
-    <string name="music_all_albums">Все альбомы</string>
-    <string name="music_artists">Исполнители</string>
-    <string name="music_playlists">Плейлисты</string>
-    <string name="music_genres">Жанры</string>
     <string name="books_all">Все книги</string>
     <string name="books_audiobooks">Аудиокниги</string>
     <string name="books_comics">Манга и комиксы</string>
@@ -26,7 +22,6 @@
     <string name="search_field_hint">Фильмы, музыка и книги</string>
     <string name="search_clear">Очистить</string>
     <string name="search_filter_all">Все</string>
-    <string name="search_browse">Обзор</string>
 
     <!-- Sign-in -->
     <string name="password_show">Показать пароль</string>
@@ -52,11 +47,8 @@
     <string name="now_playing_title">Сейчас играет</string>
     <string name="now_playing_listening">Слушаете</string>
     <string name="now_playing_close">Закрыть</string>
-    <string name="now_playing_next">Следующий</string>
-    <string name="now_playing_previous">Предыдущий</string>
     <string name="now_playing_next_chapter">Следующая глава</string>
     <string name="now_playing_previous_chapter">Предыдущая глава</string>
-    <string name="now_playing_repeat">Повтор</string>
     <string name="now_playing_star">В избранное</string>
     <string name="now_playing_unstar">Убрать из избранного</string>
     <string name="now_playing_lyrics">Текст песни</string>
@@ -65,7 +57,6 @@
     <string name="now_playing_no_lyrics">Для этой песни нет текста.</string>
     <string name="now_playing_error">Не удаётся воспроизвести. Проверьте связь с сервером.</string>
     <string name="sleep_timer">Таймер сна</string>
-    <string name="sleep_off">Выкл.</string>
     <string name="sleep_minutes">%1$d мин</string>
     <string name="sleep_end_of_chapter">В конце главы</string>
     <string name="sleep_end_of_track">В конце трека</string>
@@ -73,19 +64,15 @@
     <string name="reader_unavailable">Эту книгу не удаётся открыть.</string>
     <string name="reader_page_of">Страница %1$d из %2$d</string>
     <string name="reader_next_volume">Следующий том</string>
-    <string name="music_songs">Песни</string>
-    <string name="music_shuffle_all">Перемешать все</string>
     <string name="detail_continue_reading">Продолжить чтение</string>
     <string name="detail_format_coming_soon">Чтение книг в формате %1$s в приложении появится позже.</string>
     <string name="settings_server">Сервер</string>
     <string name="settings_server_address">Адрес</string>
     <string name="settings_server_version">Версия сервера</string>
-    <string name="settings_playback">Воспроизведение</string>
     <string name="settings_video_quality">Качество видео</string>
     <string name="settings_video_quality_detail">Применяется при запуске видео. В плеере его можно сменить.</string>
     <string name="settings_autoplay">Автозапуск следующей серии</string>
     <string name="settings_autoplay_detail">Через 10 секунд после конца серии</string>
-    <string name="settings_language">Язык</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_app_version">Версия приложения</string>
     <string name="account_open">Аккаунт: %1$s</string>

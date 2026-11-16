@@ -83,10 +83,10 @@ private fun MusicShelves(
     onShuffleAll: () -> Unit,
     shuffling: Boolean,
 ) {
-    val allAlbums = stringResource(R.string.music_all_albums)
-    val songs = stringResource(R.string.music_songs)
-    val artists = stringResource(R.string.music_artists)
-    val playlists = stringResource(R.string.music_playlists)
+    val allAlbums = stringResource(UiR.string.music_all_albums)
+    val songs = stringResource(UiR.string.music_songs)
+    val artists = stringResource(UiR.string.music_artists)
+    val playlists = stringResource(UiR.string.music_playlists)
     ShelvesPage(
         title = stringResource(UiR.string.nav_music),
         viewModel = viewModel,
@@ -101,7 +101,7 @@ private fun MusicShelves(
         extra = { music ->
             if (music.genres.isNotEmpty()) {
                 item("genres") {
-                    SectionTitle(stringResource(R.string.music_genres), Modifier.padding(top = 12.dp))
+                    SectionTitle(stringResource(UiR.string.music_genres), Modifier.padding(top = 12.dp))
                     GenreChips(music.genres) { genre -> onGrid(GridSource.Albums(genre.name), genre.name) }
                 }
             }

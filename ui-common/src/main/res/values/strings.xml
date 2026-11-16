@@ -221,4 +221,19 @@
     <string name="server_none_found">No servers found on this network. If Antresol runs in Docker without host networking, enter its address below.</string>
     <string name="server_manual_title">Or enter the address</string>
     <string name="server_found_detail">%1$s · version %2$s</string>
+
+    <!-- Music, Now Playing and settings words both apps use -->
+    <string name="music_all_albums">All Albums</string>
+    <string name="music_artists">Artists</string>
+    <string name="music_songs">Songs</string>
+    <string name="music_playlists">Playlists</string>
+    <string name="music_genres">Genres</string>
+    <string name="music_shuffle_all">Shuffle All</string>
+    <string name="now_playing_repeat">Repeat</string>
+    <string name="now_playing_previous">Previous</string>
+    <string name="now_playing_next">Next</string>
+    <string name="sleep_off">Off</string>
+    <string name="settings_playback">Playback</string>
+    <string name="settings_language">Language</string>
+    <string name="search_browse">Browse</string>
 </resources>

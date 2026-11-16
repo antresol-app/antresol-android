@@ -167,7 +167,7 @@ fun SearchScreen(
 private fun BrowseRow(focus: FocusMemory, onBrowse: (BrowseTarget) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            stringResource(TvR.string.search_browse),
+            stringResource(R.string.search_browse),
             style = Antresol.typography.sectionTitle,
             modifier = Modifier.padding(horizontal = ScreenPaddingH),
         )

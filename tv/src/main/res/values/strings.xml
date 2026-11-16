@@ -5,12 +5,6 @@
     <string name="device_name" translatable="false">Android TV (%1$s)</string>
 
     <!-- Music -->
-    <string name="music_all_albums">All Albums</string>
-    <string name="music_artists">Artists</string>
-    <string name="music_songs">Songs</string>
-    <string name="music_playlists">Playlists</string>
-    <string name="music_genres">Genres</string>
-    <string name="music_shuffle_all">Shuffle All</string>
     <string name="music_top_songs">Top Songs</string>
     <string name="music_favorite">Favorite</string>
     <string name="music_in_favorites">In Favorites</string>
@@ -25,10 +19,7 @@
     <string name="now_playing_nothing">Nothing is playing. Pick an album, a playlist or an audiobook.</string>
     <string name="now_playing_error">This can’t be played right now.</string>
     <string name="now_playing_shuffle">Shuffle</string>
-    <string name="now_playing_repeat">Repeat</string>
     <string name="now_playing_repeat_one">Repeat One</string>
-    <string name="now_playing_previous">Previous</string>
-    <string name="now_playing_next">Next</string>
     <string name="now_playing_back_15">Back 15 seconds</string>
     <string name="now_playing_forward_30">Forward 30 seconds</string>
     <string name="now_playing_speed">Speed</string>
@@ -36,7 +27,6 @@
     <string name="now_playing_chapter_of">Chapter %1$d of %2$d</string>
 
     <!-- Sleep timer -->
-    <string name="sleep_off">Off</string>
     <string name="sleep_minutes">%1$d min</string>
     <string name="sleep_end_of_chapter">End of Chapter</string>
     <string name="sleep_end_of_song">End of Song</string>
@@ -55,13 +45,11 @@
     <string name="ebook_unavailable">E-books can’t be read on TV. Open this book in the Antresol web app or on your phone.</string>
 
     <!-- Settings -->
-    <string name="settings_playback">Playback</string>
     <string name="settings_default_quality">Video Quality</string>
     <string name="settings_default_quality_hint">Used when a video starts. You can still change it in the player.</string>
     <string name="settings_subtitles">Subtitles</string>
     <string name="settings_subtitles_hint">Turned on automatically when a video has them in this language.</string>
     <string name="settings_off">Off</string>
-    <string name="settings_language">Language</string>
     <string name="language_english" translatable="false">English</string>
     <string name="language_russian" translatable="false">Русский</string>
     <string name="settings_app_version">Antresol for Android TV %1$s</string>
@@ -73,7 +61,6 @@
     <string name="comic_retry_hint">Press OK to try again.</string>
     <string name="lyrics_loading">Loading lyrics…</string>
     <string name="detail_episode_hold_hint">Hold OK on an episode for its details.</string>
-    <string name="search_browse">Browse</string>
     <string name="search_scope_all">All</string>
     <string name="shelf_see_all">See All</string>
 

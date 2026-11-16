@@ -203,7 +203,7 @@ fun SettingsScreen(
                 ActionRow(AntresolIcons.Server, stringResource(UiR.string.server_change), onChangeServer, "settings-change-server")
             }
 
-            header(R.string.settings_playback)
+            header(UiR.string.settings_playback)
             group {
                 ValueRow(stringResource(R.string.settings_video_quality), qualityLabel(settings.videoQuality), onClick = { qualitySheet = true }, tag = "settings-quality")
                 Divider()

@@ -163,7 +163,7 @@ fun SongsScreen(viewModel: SongsViewModel, audio: AudioEngine, onNowPlaying: () 
                             .padding(bottom = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(stringResource(TvR.string.music_songs), style = Antresol.typography.pageTitle)
+                        Text(stringResource(R.string.music_songs), style = Antresol.typography.pageTitle)
                         Spacer(Modifier.weight(1f))
                         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.trapHorizontalFocus()) {
                             PillButton(

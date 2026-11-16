@@ -122,7 +122,7 @@ fun SettingsScreen(
                     .weight(1f)
                     .fillMaxHeight(),
             ) {
-                item { Section(stringResource(TvR.string.settings_playback)) }
+                item { Section(stringResource(R.string.settings_playback)) }
                 item {
                     SettingRow(
                         label = stringResource(TvR.string.settings_default_quality),
@@ -139,7 +139,7 @@ fun SettingsScreen(
                         modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Subtitles)),
                     )
                 }
-                item { Section(stringResource(TvR.string.settings_language)) }
+                item { Section(stringResource(R.string.settings_language)) }
                 item {
                     SettingRow(
                         label = stringResource(R.string.ui_language),

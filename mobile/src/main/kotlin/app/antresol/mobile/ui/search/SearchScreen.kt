@@ -240,7 +240,7 @@ private fun BrowseTiles(onTab: (NavTab) -> Unit, onGrid: OpenGrid) {
     )
     val columns = if (LocalConfiguration.current.screenWidthDp >= 600) 3 else 2
     Column(Modifier.padding(top = 12.dp)) {
-        SectionTitle(stringResource(R.string.search_browse))
+        SectionTitle(stringResource(UiR.string.search_browse))
         Column(
             modifier = Modifier.padding(horizontal = PageGutter, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

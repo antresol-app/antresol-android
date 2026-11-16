@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Music -->
-    <string name="music_all_albums">Все альбомы</string>
-    <string name="music_artists">Исполнители</string>
-    <string name="music_songs">Песни</string>
-    <string name="music_playlists">Плейлисты</string>
-    <string name="music_genres">Жанры</string>
-    <string name="music_shuffle_all">Перемешать все</string>
     <string name="music_top_songs">Популярные песни</string>
     <string name="music_favorite">В избранное</string>
     <string name="music_in_favorites">В избранном</string>
@@ -21,10 +15,7 @@
     <string name="now_playing_nothing">Сейчас ничего не играет. Выберите альбом, плейлист или аудиокнигу.</string>
     <string name="now_playing_error">Сейчас это не удаётся воспроизвести.</string>
     <string name="now_playing_shuffle">Перемешать</string>
-    <string name="now_playing_repeat">Повтор</string>
     <string name="now_playing_repeat_one">Повтор песни</string>
-    <string name="now_playing_previous">Предыдущий</string>
-    <string name="now_playing_next">Следующий</string>
     <string name="now_playing_back_15">Назад на 15 секунд</string>
     <string name="now_playing_forward_30">Вперёд на 30 секунд</string>
     <string name="now_playing_speed">Скорость</string>
@@ -32,7 +23,6 @@
     <string name="now_playing_chapter_of">Глава %1$d из %2$d</string>
 
     <!-- Sleep timer -->
-    <string name="sleep_off">Выкл.</string>
     <string name="sleep_minutes">%1$d мин</string>
     <string name="sleep_end_of_chapter">До конца главы</string>
     <string name="sleep_end_of_song">До конца песни</string>
@@ -51,13 +41,11 @@
     <string name="ebook_unavailable">Электронные книги нельзя читать на телевизоре. Откройте книгу в веб-версии Antresol или на телефоне.</string>
 
     <!-- Settings -->
-    <string name="settings_playback">Воспроизведение</string>
     <string name="settings_default_quality">Качество видео</string>
     <string name="settings_default_quality_hint">Применяется при запуске видео. В плеере его по-прежнему можно изменить.</string>
     <string name="settings_subtitles">Субтитры</string>
     <string name="settings_subtitles_hint">Включаются автоматически, если у видео есть субтитры на этом языке.</string>
     <string name="settings_off">Выкл.</string>
-    <string name="settings_language">Язык</string>
     <string name="settings_app_version">Antresol для Android TV %1$s</string>
     <string name="settings_about_text">Клиент для вашего медиасервера Antresol.</string>
 
@@ -67,7 +55,6 @@
     <string name="comic_retry_hint">Нажмите OK, чтобы повторить.</string>
     <string name="lyrics_loading">Загрузка текста…</string>
     <string name="detail_episode_hold_hint">Удерживайте OK на серии, чтобы открыть её описание.</string>
-    <string name="search_browse">Обзор</string>
     <string name="search_scope_all">Все</string>
     <string name="shelf_see_all">Показать все</string>
 

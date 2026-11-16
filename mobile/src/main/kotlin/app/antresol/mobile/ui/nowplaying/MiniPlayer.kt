@@ -104,7 +104,7 @@ fun MiniPlayer(playback: PlaybackConnection, onOpen: () -> Unit, modifier: Modif
             } else {
                 RoundIconButton(
                     icon = MobileIcons.SkipNext,
-                    contentDescription = stringResource(R.string.now_playing_next),
+                    contentDescription = stringResource(UiR.string.now_playing_next),
                     onClick = playback::next,
                     size = 44.dp,
                     iconSize = 22.dp,

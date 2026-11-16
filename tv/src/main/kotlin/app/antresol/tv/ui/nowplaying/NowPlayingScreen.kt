@@ -218,12 +218,12 @@ private fun MusicControls(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RoundIconButton(TvIcons.Shuffle, stringResource(TvR.string.now_playing_shuffle), audio::toggleShuffle, active = audio.shuffle)
-        RoundIconButton(TvIcons.Previous, stringResource(TvR.string.now_playing_previous), audio::previous)
+        RoundIconButton(TvIcons.Previous, stringResource(R.string.now_playing_previous), audio::previous)
         PlayPauseButton(audio, Modifier.focusRequester(play))
-        RoundIconButton(TvIcons.Next, stringResource(TvR.string.now_playing_next), audio::next)
+        RoundIconButton(TvIcons.Next, stringResource(R.string.now_playing_next), audio::next)
         RoundIconButton(
             icon = if (audio.repeatMode == Player.REPEAT_MODE_ONE) TvIcons.RepeatOne else TvIcons.Repeat,
-            contentDescription = stringResource(if (audio.repeatMode == Player.REPEAT_MODE_ONE) TvR.string.now_playing_repeat_one else TvR.string.now_playing_repeat),
+            contentDescription = stringResource(if (audio.repeatMode == Player.REPEAT_MODE_ONE) TvR.string.now_playing_repeat_one else R.string.now_playing_repeat),
             onClick = audio::cycleRepeat,
             active = audio.repeatMode != Player.REPEAT_MODE_OFF,
         )
@@ -254,11 +254,11 @@ private fun AudiobookControls(audio: AudioEngine, openers: Map<NowPlayingMenu, F
         horizontalArrangement = Arrangement.spacedBy(18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RoundIconButton(TvIcons.Previous, stringResource(TvR.string.now_playing_previous), audio::previous)
+        RoundIconButton(TvIcons.Previous, stringResource(R.string.now_playing_previous), audio::previous)
         RoundIconButton(TvIcons.SkipBack, stringResource(TvR.string.now_playing_back_15), { audio.skipBy(-AudioEngine.BACK_STEP_MS) })
         PlayPauseButton(audio, Modifier.focusRequester(play))
         RoundIconButton(TvIcons.SkipForward, stringResource(TvR.string.now_playing_forward_30), { audio.skipBy(AudioEngine.FORWARD_STEP_MS) })
-        RoundIconButton(TvIcons.Next, stringResource(TvR.string.now_playing_next), audio::next)
+        RoundIconButton(TvIcons.Next, stringResource(R.string.now_playing_next), audio::next)
     }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         PillButton(
@@ -425,7 +425,7 @@ private fun speedLabel(speed: Float): String =
 
 @Composable
 private fun sleepLabel(option: SleepTimer, isBook: Boolean): String = when (option) {
-    SleepTimer.Off -> stringResource(TvR.string.sleep_off)
+    SleepTimer.Off -> stringResource(R.string.sleep_off)
     SleepTimer.EndOfItem -> stringResource(if (isBook) TvR.string.sleep_end_of_chapter else TvR.string.sleep_end_of_song)
     else -> stringResource(TvR.string.sleep_minutes, option.minutes)
 }

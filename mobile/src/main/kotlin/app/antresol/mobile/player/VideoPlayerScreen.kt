@@ -118,7 +118,7 @@ fun VideoPlayerScreen(
                 ResumePrompt(phase.positionMs, onChoose = viewModel::chooseResume)
             }
             PlayerPhase.Playing -> PlayingLayer(viewModel, canPictureInPicture, onPictureInPicture, onExit)
-            is PlayerPhase.UpNext -> UpNextPanel(phase, onPlayNow = viewModel::playNext, onClose = onExit)
+            is PlayerPhase.UpNext -> UpNextPanel(phase, onPlayNow = viewModel::playNext, onCancel = viewModel::cancelUpNext)
             is PlayerPhase.Failed -> Overlay(viewModel.item, onExit) {
                 FailedPanel(phase.error, onRetry = viewModel::retry, onBack = onExit)
             }
@@ -406,7 +406,7 @@ internal fun FailedPanel(error: Throwable, onRetry: () -> Unit, onBack: () -> Un
 }
 
 @Composable
-private fun UpNextPanel(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit, onClose: () -> Unit) {
+private fun UpNextPanel(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit, onCancel: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
@@ -427,7 +427,8 @@ private fun UpNextPanel(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit, onClos
             }
             phase.secondsLeft?.let { Text(stringResource(UiR.string.player_next_in, it), style = Antresol.typography.caption) }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
-                GlassPillButton(stringResource(UiR.string.player_back), onClick = onClose)
+                // As on the TV: Cancel stays on the last frame with the controls (their Back leaves the player, as the system Back does here).
+                GlassPillButton(stringResource(UiR.string.action_cancel), onClick = onCancel, modifier = Modifier.testTag("player-up-next-cancel"))
                 PrimaryPillButton(stringResource(UiR.string.player_play_now), onClick = onPlayNow, icon = AntresolIcons.Play, modifier = Modifier.testTag("player-play-now"))
             }
         }

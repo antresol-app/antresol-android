@@ -159,6 +159,13 @@ class AudioEngine(
                 playWhenReady = ready
                 if (!ready) scope.launch { reporter?.reporter?.flush() }
                 if (!ready && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) clearSleepTimer()
+                updatePosition()
+                updateTicker()
+            }
+
+            // The ticker is off while paused: a seek then shows its position from here.
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                updatePosition()
             }
 
             override fun onPlaybackStateChanged(state: Int) {
@@ -166,6 +173,7 @@ class AudioEngine(
                 if (state == Player.STATE_READY) error = null
                 if (state == Player.STATE_ENDED) scope.launch { reporter?.reporter?.flush() }
                 updatePosition()
+                updateTicker()
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -406,6 +414,7 @@ class AudioEngine(
                 sleepRemainingMs = option.minutes * 60_000L
             }
         }
+        updateTicker()
     }
 
     private fun armEndOfItem() {
@@ -422,6 +431,7 @@ class AudioEngine(
         sleepUntilBookMs = null
         sleepRemainingMs = null
         exo.pauseAtEndOfMediaItems = false
+        updateTicker()
     }
 
     /** Replaces a track of the queue, e.g. after starring it. */
@@ -531,6 +541,21 @@ class AudioEngine(
                 tick()
                 delay(TICK_MS)
             }
+        }
+    }
+
+    /**
+     * The ticker runs while the queue is meant to play (also through buffering) or a timed sleep timer
+     * counts down; a paused or finished queue does not wake the main thread twice a second.
+     */
+    private fun updateTicker() {
+        val state = exo.playbackState
+        val playing = exo.playWhenReady && state != Player.STATE_IDLE && state != Player.STATE_ENDED
+        if (content != null && (playing || sleepEndsAt != null)) {
+            startTicker()
+        } else {
+            ticker?.cancel()
+            ticker = null
         }
     }
 

@@ -5,12 +5,9 @@ import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.ComicPages
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.reading.ComicProgress
+import app.antresol.core.reading.PageProgressSaver
 import app.antresol.ui.LoadViewModel
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /** One comic volume ready to read. */
 data class ComicVolume(
@@ -33,46 +30,18 @@ class NothingToReadException : Exception()
  * pinned to the profile that opened the volume; the final save is tracked in [pendingWrites].
  */
 class ComicReaderViewModel(
-    private val client: AntresolClient,
-    private val appScope: CoroutineScope,
-    private val pendingWrites: PendingWrites,
-    private val volumeId: Long,
+    client: AntresolClient,
+    appScope: CoroutineScope,
+    pendingWrites: PendingWrites,
+    volumeId: Long,
     fromStart: Boolean,
 ) : LoadViewModel<ComicVolume>(fetch = { load(client, volumeId, fromStart) }) {
-    private var page = -1
-    private var count = 0
-    private var savedPage = -1
-    private var saveJob: Job? = null
+    private val saver = PageProgressSaver(viewModelScope, appScope, pendingWrites, SAVE_DELAY_MS) { client.saveProgress(volumeId, it) }
 
     /** The reader shows page [index] (0-based) of [total]. */
-    fun onPage(index: Int, total: Int) {
-        if (index == page) return
-        page = index
-        count = total
-        saveJob?.cancel()
-        saveJob = viewModelScope.launch {
-            delay(SAVE_DELAY_MS)
-            save()
-        }
-    }
+    fun onPage(index: Int, total: Int) = saver.onPage(index, total)
 
-    override fun onCleared() {
-        if (page < 0 || page == savedPage) return
-        pendingWrites.track(appScope.launch { save() })
-    }
-
-    private suspend fun save() {
-        val current = page
-        if (current < 0 || current == savedPage) return
-        try {
-            client.saveProgress(volumeId, ComicProgress.update(current, count))
-            savedPage = current
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // Retried with the next page turn or on close.
-        }
-    }
+    override fun onCleared() = saver.close()
 
     private companion object {
         const val SAVE_DELAY_MS = 1_500L

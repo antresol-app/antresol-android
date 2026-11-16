@@ -7,16 +7,14 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
-import app.antresol.core.api.attempt
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.ComicPages
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.reading.ComicProgress
+import app.antresol.core.reading.PageProgressSaver
 import app.antresol.ui.LoadState
 import app.antresol.ui.load
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** A comic volume ready to read: its detail, reader file and page sizes. */
@@ -48,11 +46,10 @@ class ComicReaderViewModel(
     var atEnd: Boolean by mutableStateOf(false)
         private set
 
-    private var savedPage: Int? = null
-    private var saveJob: Job? = null
-
     /** Writes as the profile that opened the reader, even when the last one runs after a profile switch. */
     private val writer: AntresolClient = client.pinned()
+
+    private val saver = PageProgressSaver(viewModelScope, appScope, pendingWrites, SAVE_DELAY_MS) { writer.saveProgress(volumeId, it) }
 
     init {
         reload()
@@ -68,7 +65,7 @@ class ComicReaderViewModel(
                 ComicVolume(detail, fileId, pages).also { volume ->
                     val progress = detail.progress
                     page = if (fromStart) 0 else ComicProgress.startPage(progress?.locator, progress?.finished == true, volume.count)
-                    savedPage = page.takeIf { progress != null && progress.fraction > 0 }
+                    saver.opened(page, volume.count, onServer = progress != null && progress.fraction > 0)
                 }
             }
         }
@@ -92,24 +89,12 @@ class ComicReaderViewModel(
     }
 
     private fun show(index: Int) {
-        page = index
-        saveJob?.cancel()
-        saveJob = viewModelScope.launch {
-            delay(SAVE_DELAY_MS)
-            save()
-        }
-    }
-
-    private suspend fun save() {
         val volume = (state as? LoadState.Ready)?.value ?: return
-        val current = page
-        if (current == savedPage || volume.count == 0) return
-        if (attempt { writer.saveProgress(volumeId, ComicProgress.update(current, volume.count)) } != null) savedPage = current
+        page = index
+        saver.onPage(index, volume.count)
     }
 
-    override fun onCleared() {
-        pendingWrites.track(appScope.launch { save() })
-    }
+    override fun onCleared() = saver.close()
 
     private companion object {
         const val SAVE_DELAY_MS = 1_200L

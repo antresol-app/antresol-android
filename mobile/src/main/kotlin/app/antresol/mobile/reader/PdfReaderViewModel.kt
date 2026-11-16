@@ -8,15 +8,12 @@ import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.reading.ComicProgress
+import app.antresol.core.reading.PageProgressSaver
 import app.antresol.ui.LoadState
 import app.antresol.ui.LoadViewModel
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -97,41 +94,13 @@ class PdfReaderViewModel(
     private val bookId: Long,
     fromStart: Boolean,
 ) : LoadViewModel<PdfBook>(fetch = { open(client, File(cacheDir, "books"), bookId, fromStart) }) {
-    private var page = -1
-    private var savedPage = -1
-    private var saveJob: Job? = null
+    private val saver = PageProgressSaver(viewModelScope, appScope, pendingWrites, SAVE_DELAY_MS) { client.saveProgress(bookId, it) }
 
-    fun onPage(index: Int, total: Int) {
-        if (index == page) return
-        page = index
-        saveJob?.cancel()
-        saveJob = viewModelScope.launch {
-            delay(SAVE_DELAY_MS)
-            save(total)
-        }
-    }
+    fun onPage(index: Int, total: Int) = saver.onPage(index, total)
 
     override fun onCleared() {
         val book = (state as? LoadState.Ready)?.value ?: return
-        pendingWrites.track(
-            appScope.launch {
-                save(book.document.pageCount)
-                book.document.closeSafely()
-            },
-        )
-    }
-
-    private suspend fun save(total: Int) {
-        val current = page
-        if (current < 0 || current == savedPage) return
-        try {
-            client.saveProgress(bookId, ComicProgress.update(current, total))
-            savedPage = current
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // Retried with the next page or on close.
-        }
+        saver.close { book.document.closeSafely() }
     }
 
     companion object {

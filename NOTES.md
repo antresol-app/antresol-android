@@ -1355,6 +1355,14 @@ From the duplication review (`AS-n`). Nothing here was run on a device.
 - Tests: one `FakeServer` and `trailer-sample.mp4` in `test-fixtures/`, added to both apps' unit
   tests by the root `build.gradle.kts` as a **java** source dir (the Kotlin plugin overwrites an
   Android source set's `kotlin` dirs with its own, so `kotlin.srcDir` is silently dropped).
-- Left alone on purpose: the TV focus timers (AS-26), paged sources and grid sources (the two
+- `HeldKeyGuard`: a first key-down (repeat 0) is a new press: it ends the guard and is never
+  swallowed. The release of the held OK is lost when it arrives while the opened page has nothing
+  focused (no key handler sees it); the guard then stayed armed and ate the next OK. That is also
+  why `TvShellUiTest`'s trailer-chooser tests failed on a busy machine (also on 7484bda, before
+  this pass). `HeldKeyGuardTest`.
+- Verified: `./gradlew :core:test :ui-common:testDebugUnitTest :tv:testDebugUnitTest
+  :mobile:testDebugUnitTest assembleDebug` green: core 224 (9 skipped), ui-common 28, tv 41,
+  mobile 45.
+- Left alone on purpose: the other TV focus timers (AS-26), paged sources and grid sources (the two
   apps' sort labels, playlist cards and paging differ), the detail models, profile sign-in,
   rulers/timelines/blocks of the guide (each app's own `Text`, sizes and focus or touch).

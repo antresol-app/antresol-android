@@ -15,7 +15,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,9 +34,6 @@ import androidx.tv.material3.Text
 import app.antresol.core.discovery.DiscoveredServer
 import app.antresol.core.discovery.DiscoveryState
 import app.antresol.core.discovery.ServerFinder
-import app.antresol.core.api.InvalidServerAddressException
-import app.antresol.core.session.NotAntresolServerException
-import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.core.session.SessionManager
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
@@ -46,14 +42,11 @@ import app.antresol.tv.ui.components.TvTextField
 import app.antresol.tv.ui.components.WhileNotTyping
 import app.antresol.tv.ui.components.rememberTvKeyboardOpen
 import app.antresol.tv.ui.components.tryRequestFocus
-import app.antresol.ui.userMessage
+import app.antresol.ui.onboarding.rememberServerConnectState
 import app.antresol.ui.R
 import app.antresol.ui.components.LogoTile
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
-import java.io.IOException
 
 /**
  * First-run screen: the servers found on the network ([finder]: UDP probe + mDNS, each confirmed
@@ -66,10 +59,10 @@ import java.io.IOException
 @Composable
 fun ServerScreen(session: SessionManager, finder: ServerFinder, onBack: (() -> Unit)? = null) {
     val resources = LocalContext.current.resources
-    val scope = rememberCoroutineScope()
     var address by rememberSaveable { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    var connecting by remember { mutableStateOf(false) }
+    val connection = rememberServerConnectState(session)
+    val error = connection.error
+    val connecting = connection.busy
     val fieldFocus = remember { FocusRequester() }
     val firstServerFocus = remember { FocusRequester() }
     val discovery by remember(finder) { finder.states() }.collectAsStateWithLifecycle(DiscoveryState())
@@ -86,31 +79,15 @@ fun ServerScreen(session: SessionManager, finder: ServerFinder, onBack: (() -> U
     fun connect() {
         if (connecting) return
         if (address.isBlank()) {
-            error = resources.getString(R.string.server_invalid_address)
+            connection.error = resources.getString(R.string.server_invalid_address)
             return
         }
-        connecting = true
-        error = null
-        scope.launch {
-            try {
-                session.connect(address)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                error = when (e) {
-                    is NotAntresolServerException -> resources.getString(R.string.server_not_antresol)
-                    is ServerNeedsSetupException, is InvalidServerAddressException -> e.userMessage(resources)
-                    is IOException -> resources.getString(R.string.server_unreachable)
-                    else -> e.userMessage(resources)
-                }
-                connecting = false
-            }
-        }
+        connection.connect(address)
     }
 
     fun choose(server: DiscoveredServer) {
         address = server.baseUrl
-        error = null
+        connection.error = null
         connect()
     }
 
@@ -175,7 +152,7 @@ fun ServerScreen(session: SessionManager, finder: ServerFinder, onBack: (() -> U
                 value = address,
                 onValueChange = {
                     address = it
-                    error = null
+                    connection.error = null
                 },
                 placeholder = stringResource(R.string.server_address_hint),
                 onSubmit = ::connect,

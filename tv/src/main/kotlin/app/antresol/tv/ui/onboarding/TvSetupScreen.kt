@@ -11,14 +11,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -27,12 +25,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.tv.material3.Text
-import app.antresol.core.api.InvalidServerAddressException
-import app.antresol.core.discovery.DiscoveredServer
 import app.antresol.core.discovery.DiscoveryState
 import app.antresol.core.discovery.ServerFinder
-import app.antresol.core.session.NotAntresolServerException
-import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.core.session.SessionManager
 import app.antresol.core.tvsetup.LocalAddresses
 import app.antresol.core.tvsetup.TvSetupHandler
@@ -41,18 +35,16 @@ import app.antresol.core.tvsetup.TvSetupListener
 import app.antresol.tv.R
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.tryRequestFocus
-import app.antresol.ui.userMessage
+import app.antresol.ui.onboarding.rememberServerConnectState
 import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.QrCodeImage
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.InetAddress
@@ -86,12 +78,11 @@ fun TvSetupScreen(
     onEnterAddress: () -> Unit,
     lanAddress: () -> InetAddress? = LocalAddresses::lanIpv4,
 ) {
-    val resources = LocalContext.current.resources
-    val scope = rememberCoroutineScope()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var qr by remember { mutableStateOf<SetupQr>(SetupQr.Opening) }
-    var connecting by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val connection = rememberServerConnectState(session)
+    val connecting = connection.busy
+    val error = connection.error
     val discovery by remember(finder) { finder.states() }.collectAsStateWithLifecycle(DiscoveryState())
     val manualFocus = remember { FocusRequester() }
     val firstServerFocus = remember { FocusRequester() }
@@ -131,27 +122,6 @@ fun TvSetupScreen(
         if (found && untouched) firstServerFocus.tryRequestFocus()
     }
 
-    fun choose(server: DiscoveredServer) {
-        if (connecting) return
-        connecting = true
-        error = null
-        scope.launch {
-            try {
-                session.connect(server.baseUrl)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                error = when (e) {
-                    is NotAntresolServerException -> resources.getString(UiR.string.server_not_antresol)
-                    is ServerNeedsSetupException, is InvalidServerAddressException -> e.userMessage(resources)
-                    is IOException -> resources.getString(UiR.string.server_unreachable)
-                    else -> e.userMessage(resources)
-                }
-                connecting = false
-            }
-        }
-    }
-
     val ready = qr as? SetupQr.Ready
     QrScreenLayout(
         modifier = Modifier
@@ -186,7 +156,7 @@ fun TvSetupScreen(
         DiscoveredServerList(
             state = discovery,
             enabled = !connecting,
-            onChoose = ::choose,
+            onChoose = { connection.connect(it.baseUrl) },
             firstFocus = firstServerFocus,
             title = stringResource(R.string.setup_servers_title),
             centered = false,

@@ -12,11 +12,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -25,24 +23,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.antresol.core.api.ApiException
 import app.antresol.core.discovery.DiscoveredServer
 import app.antresol.core.discovery.DiscoveryState
 import app.antresol.core.discovery.ServerFinder
-import app.antresol.core.session.NotAntresolServerException
-import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.core.session.SessionManager
 import app.antresol.mobile.ui.components.GlassTextField
 import app.antresol.mobile.ui.components.PrimaryPillButton
-import app.antresol.ui.userMessage
+import app.antresol.ui.onboarding.rememberServerConnectState
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.LogoTile
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import java.io.IOException
 
 /**
  * First launch (or "Change Server"): the servers found on the network ([finder]) above the address
@@ -51,12 +44,11 @@ import java.io.IOException
  */
 @Composable
 fun ServerScreen(session: SessionManager, finder: ServerFinder) {
-    val resources = LocalContext.current.resources
     val focus = LocalFocusManager.current
-    val scope = rememberCoroutineScope()
     var address by rememberSaveable { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val connection = rememberServerConnectState(session)
+    val busy = connection.busy
+    val error = connection.error
     val discovery by remember(finder) { finder.states() }.collectAsStateWithLifecycle(DiscoveryState())
 
     LaunchedEffect(Unit) {
@@ -66,32 +58,12 @@ fun ServerScreen(session: SessionManager, finder: ServerFinder) {
     fun connect() {
         if (busy || address.isBlank()) return
         focus.clearFocus()
-        busy = true
-        error = null
-        scope.launch {
-            try {
-                session.connect(address.trim())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: NotAntresolServerException) {
-                error = resources.getString(R.string.server_not_antresol)
-            } catch (e: ServerNeedsSetupException) {
-                error = resources.getString(R.string.server_needs_setup)
-            } catch (e: ApiException) {
-                error = e.userMessage(resources)
-            } catch (e: IOException) {
-                error = resources.getString(R.string.server_unreachable)
-            } catch (e: Exception) {
-                error = e.userMessage(resources)
-            } finally {
-                busy = false
-            }
-        }
+        connection.connect(address)
     }
 
     fun choose(server: DiscoveredServer) {
         address = server.baseUrl
-        error = null
+        connection.error = null
         connect()
     }
 
@@ -117,7 +89,7 @@ fun ServerScreen(session: SessionManager, finder: ServerFinder) {
             value = address,
             onValueChange = {
                 address = it
-                error = null
+                connection.error = null
             },
             placeholder = stringResource(R.string.server_address_hint),
             leadingIcon = AntresolIcons.Server,

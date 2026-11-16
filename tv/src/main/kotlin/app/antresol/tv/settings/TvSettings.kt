@@ -37,11 +37,13 @@ class TvSettings(context: Context) : ProfileLanguageCache {
 
     fun update(transform: (TvPreferences) -> TvPreferences) {
         val next = transform(current)
-        prefs.edit()
+        val edit = prefs.edit()
             .putString(KEY_PROFILE_LANGUAGE, next.profileLanguage)
             .putString(KEY_QUALITY, next.defaultQuality)
             .putString(KEY_SUBTITLES, next.subtitleLanguage)
-            .commit()
+        // Only the language is written at once (the activity restarts and reads it right after);
+        // the rest must not hold the main thread for a disk write.
+        if (next.profileLanguage != current.profileLanguage) edit.commit() else edit.apply()
         _preferences.value = next
     }
 

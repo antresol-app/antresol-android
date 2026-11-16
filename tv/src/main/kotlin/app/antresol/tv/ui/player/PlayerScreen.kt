@@ -205,35 +205,47 @@ private fun TitleBlock(item: ItemDetail?) {
 /** Video with the transport controls, the buffering spinner and the track menus. */
 @Composable
 private fun PlayingOverlay(viewModel: PlayerViewModel) {
-    PlayingOverlayContent(
-        transport = TransportState(
-            positionMs = viewModel.positionMs,
-            bufferedMs = viewModel.bufferedMs,
-            durationMs = viewModel.durationMs,
-            playing = viewModel.playWhenReady,
-            audioChoice = viewModel.audioTracks.size > 1,
-            subtitleChoice = viewModel.subtitleTracks.isNotEmpty(),
-            nextEpisode = viewModel.nextEpisode != null,
-        ),
-        isPlaying = viewModel.isPlaying,
-        busy = viewModel.isBuffering || viewModel.isSwitching,
-        title = { TitleBlock(viewModel.item) },
-        actions = TransportActions(
+    // The position ticks twice a second for the whole film: it is read by the seek bar only (the
+    // lambdas below), and the rest is the same between passes, so nothing is recomposed while the
+    // controls are hidden.
+    val source = viewModel.source
+    val audioChoice = remember(source) { viewModel.audioTracks.size > 1 }
+    val subtitleChoice = remember(source) { viewModel.subtitleTracks.isNotEmpty() }
+    val actions = remember(viewModel) {
+        TransportActions(
             onSeek = viewModel::seekBy,
             onToggle = viewModel::togglePlayPause,
             onNext = viewModel::playNext,
             onScrubKey = { handleScrubKey(it, viewModel) },
             onMediaKey = { handleMediaKey(it, viewModel) },
             onHiddenKey = { event, show -> handleHiddenKey(event, viewModel, show) },
+        )
+    }
+    PlayingOverlayContent(
+        transport = TransportState(
+            positionMs = { viewModel.positionMs },
+            bufferedMs = { viewModel.bufferedMs },
+            durationMs = viewModel.durationMs,
+            playing = viewModel.playWhenReady,
+            audioChoice = audioChoice,
+            subtitleChoice = subtitleChoice,
+            nextEpisode = viewModel.nextEpisode != null,
         ),
+        isPlaying = viewModel.isPlaying,
+        busy = viewModel.isBuffering || viewModel.isSwitching,
+        title = { TitleBlock(viewModel.item) },
+        actions = actions,
         menuContent = { menu, onDismiss -> TrackMenu(menu = menu, viewModel = viewModel, onDismiss = onDismiss) },
     )
 }
 
-/** What the control row shows: the position and which buttons there are. */
+/**
+ * What the control row shows: the position and which buttons there are. The position is read
+ * through the lambdas where it is drawn, so its ticks recompose the seek bar's row only.
+ */
 internal data class TransportState(
-    val positionMs: Long,
-    val bufferedMs: Long,
+    val positionMs: () -> Long,
+    val bufferedMs: () -> Long,
     val durationMs: Long,
     val playing: Boolean,
     val audioChoice: Boolean,
@@ -427,8 +439,8 @@ private fun TransportControls(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             SeekBar(
-                positionMs = transport.positionMs,
-                bufferedMs = transport.bufferedMs,
+                positionMs = transport.positionMs(),
+                bufferedMs = transport.bufferedMs(),
                 durationMs = transport.durationMs,
                 onSeek = actions.onSeek,
                 onToggle = actions.onToggle,

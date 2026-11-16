@@ -70,8 +70,8 @@ fun TrailerPlayerScreen(viewModel: TrailerPlayerViewModel, onExit: () -> Unit) {
             TrailerPhase.Playing -> Box(Modifier.fillMaxSize().testTag(TrailerTags.PLAYING)) {
                 PlayingOverlayContent(
                     transport = TransportState(
-                        positionMs = viewModel.positionMs,
-                        bufferedMs = viewModel.bufferedMs,
+                        positionMs = { viewModel.positionMs },
+                        bufferedMs = { viewModel.bufferedMs },
                         durationMs = viewModel.durationMs,
                         playing = viewModel.playWhenReady,
                         audioChoice = false,

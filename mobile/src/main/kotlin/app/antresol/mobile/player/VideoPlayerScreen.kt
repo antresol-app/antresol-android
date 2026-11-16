@@ -271,7 +271,8 @@ private fun Controls(
         ) {
             GlassIconButton(MobileIcons.ChevronLeft, stringResource(UiR.string.player_back), onExit)
             TitleBlock(viewModel.item, Modifier.weight(1f))
-            if (viewModel.audioMenu.rows.size > 1 || viewModel.audioMenu.toggle != null) {
+            val audioMenu = remember(viewModel.source) { viewModel.audioMenu }
+            if (audioMenu.rows.size > 1 || audioMenu.toggle != null) {
                 RoundIconButton(AntresolIcons.Audio, stringResource(UiR.string.detail_audio), { onTouch(); onMenu(PlayerMenu.Audio) }, glass = true, size = 44.dp, iconSize = 22.dp)
             }
             if (viewModel.subtitleTracks.isNotEmpty()) {

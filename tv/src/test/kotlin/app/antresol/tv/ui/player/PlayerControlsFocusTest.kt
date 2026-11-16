@@ -54,7 +54,7 @@ class PlayerControlsFocusTest {
                 BackHandler { exits++ }
                 PlayingOverlayContent(
                     transport = TransportState(
-                        positionMs = 754_000, bufferedMs = 900_000, durationMs = 5_400_000, playing = playing,
+                        positionMs = { 754_000 }, bufferedMs = { 900_000 }, durationMs = 5_400_000, playing = playing,
                         audioChoice = true, subtitleChoice = true, nextEpisode = false,
                     ),
                     // Paused-looking for the clock: the controls must not fade during the test.

@@ -1,5 +1,6 @@
 package app.antresol.core.discovery
 
+import app.antresol.core.api.attempt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -40,7 +41,7 @@ fun interface ServerFinder {
  */
 class UdpProbeSource(
     private val port: Int = DiscoveryProtocol.PORT,
-    private val unicastHosts: () -> List<String> = { emptyList() },
+    private val unicastHosts: suspend () -> List<String> = { emptyList() },
     private val broadcastTargets: () -> List<InetAddress> = ::defaultBroadcastTargets,
     private val sends: Int = 3,
     private val gapMs: Long = 300,
@@ -78,9 +79,9 @@ class UdpProbeSource(
         }
     }.flowOn(Dispatchers.IO)
 
-    private fun targets(): List<InetSocketAddress> {
+    private suspend fun targets(): List<InetSocketAddress> {
         // Only private IPv4 literals: no DNS lookup, and no probe ever leaves the local network.
-        val unicast = runCatching { unicastHosts() }.getOrDefault(emptyList())
+        val unicast = attempt { unicastHosts() }.orEmpty()
             .filter { IPV4_LITERAL.matches(it) }
             .mapNotNull { host -> runCatching { InetAddress.getByName(host) }.getOrNull() }
             .filter { it.isSiteLocalAddress || it.isLinkLocalAddress || it.isLoopbackAddress }

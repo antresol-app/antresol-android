@@ -36,7 +36,7 @@ import kotlin.coroutines.resume
  */
 class LanDiscovery(
     context: Context,
-    private val unicastHosts: () -> List<String> = { emptyList() },
+    private val unicastHosts: suspend () -> List<String> = { emptyList() },
 ) : ServerFinder {
     private val app = context.applicationContext
 

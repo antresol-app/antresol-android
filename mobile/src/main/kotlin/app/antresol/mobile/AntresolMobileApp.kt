@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.Locale
 
@@ -39,9 +38,7 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
     /** Final progress writes of closed players and readers, awaited by screens that show progress. */
     val pendingWrites = PendingWrites()
 
-    /** The channel each profile watched last on this device («Continue» on the TV page). */
-
-    /** Antresol servers on the home network for the server screen (UDP probe + mDNS). Tests replace it. */
+    /** Antresol servers on the home network for the server screen (UDP probe + mDNS). */
     var serverFinder: ServerFinder = ServerFinder.None
 
     /** Music and audiobook playback (the Media3 service behind a controller). */
@@ -85,9 +82,8 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
         language = ::serverLanguage,
     )
 
-    /** Runs on the discovery thread: the last server is also probed directly (when it is a private address). */
-    private fun lastServerHost(): List<String> =
-        listOfNotNull(runBlocking { session.lastServerUrl() }?.toHttpUrlOrNull()?.host)
+    /** The last server is also probed directly (when it is a private address). */
+    private suspend fun lastServerHost(): List<String> = listOfNotNull(session.lastServerUrl()?.toHttpUrlOrNull()?.host)
 
     private fun serverLanguage(): String = ServerLanguage.from(settings.effectiveLocale().toLanguageTag())
 

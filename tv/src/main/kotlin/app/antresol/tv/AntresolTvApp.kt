@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.Locale
 
@@ -50,7 +49,7 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
 
     /**
      * Antresol servers on the home network for the server screen (UDP probe + mDNS). Also probes
-     * the last server used directly when it is a private address. Tests replace it.
+     * the last server used directly when it is a private address.
      */
     var serverFinder: ServerFinder = ServerFinder.None
 
@@ -59,8 +58,6 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
 
     /** Final progress writes of closed players, awaited by screens that show progress. */
     val pendingWrites = PendingWrites()
-
-    /** The channel each profile watched last on this device («Continue» on the TV page). */
 
     /** Set when the system asks to show the now-playing screen (tap on the media session). */
     val nowPlayingRequested = MutableStateFlow(false)
@@ -111,9 +108,8 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
             ?.trim()?.takeIf { it.isNotEmpty() }
             ?: getString(R.string.device_name, Build.MODEL)
 
-    /** Runs on the discovery thread. */
-    private fun lastServerHost(): List<String> =
-        listOfNotNull(runBlocking { session.lastServerUrl() }?.toHttpUrlOrNull()?.host)
+    /** The last server is also probed directly (when it is a private address). */
+    private suspend fun lastServerHost(): List<String> = listOfNotNull(session.lastServerUrl()?.toHttpUrlOrNull()?.host)
 
     private fun serverLanguage(): String = ServerLanguage.from(Locale.getDefault().toLanguageTag())
 }

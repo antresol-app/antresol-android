@@ -16,31 +16,22 @@ internal class RawResponse(val status: Int, val headers: Headers, val body: Stri
  * Runs the call on OkHttp's dispatcher. A 2xx body is handed to [onSuccess] there (streamed, e.g.
  * into a file) and null is returned; any other answer is read fully and returned for error handling.
  */
-internal suspend fun Call.awaitStreamed(onSuccess: (Response) -> Unit): RawResponse? = suspendCancellableCoroutine { cont ->
-    cont.invokeOnCancellation { runCatching { cancel() } }
-    enqueue(object : Callback {
-        override fun onFailure(call: Call, e: IOException) {
-            if (!cont.isCancelled) cont.resumeWithException(e)
-        }
-
-        override fun onResponse(call: Call, response: Response) {
-            val result = runCatching {
-                response.use {
-                    if (it.code in 200..299) {
-                        onSuccess(it)
-                        null
-                    } else {
-                        RawResponse(it.code, it.headers, it.body?.string().orEmpty())
-                    }
-                }
-            }
-            result.fold(cont::resume) { if (!cont.isCancelled) cont.resumeWithException(it) }
-        }
-    })
+internal suspend fun Call.awaitStreamed(onSuccess: (Response) -> Unit): RawResponse? = await {
+    if (it.code in 200..299) {
+        onSuccess(it)
+        null
+    } else {
+        it.raw()
+    }
 }
 
 /** Runs the call on OkHttp's dispatcher, reads the body there, and cancels the call with the coroutine. */
-internal suspend fun Call.awaitRaw(): RawResponse = suspendCancellableCoroutine { cont ->
+internal suspend fun Call.awaitRaw(): RawResponse = await { it.raw() }
+
+private fun Response.raw() = RawResponse(code, headers, body?.string().orEmpty())
+
+/** Runs the call on OkHttp's dispatcher; [read] gets the response there, which is closed after it. */
+private suspend fun <T> Call.await(read: (Response) -> T): T = suspendCancellableCoroutine { cont ->
     cont.invokeOnCancellation { runCatching { cancel() } }
     enqueue(object : Callback {
         override fun onFailure(call: Call, e: IOException) {
@@ -48,9 +39,7 @@ internal suspend fun Call.awaitRaw(): RawResponse = suspendCancellableCoroutine 
         }
 
         override fun onResponse(call: Call, response: Response) {
-            val result = runCatching {
-                response.use { RawResponse(it.code, it.headers, it.body?.string().orEmpty()) }
-            }
+            val result = runCatching { response.use(read) }
             result.fold(cont::resume) { if (!cont.isCancelled) cont.resumeWithException(it) }
         }
     })

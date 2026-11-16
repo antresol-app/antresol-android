@@ -102,7 +102,7 @@ class MediaDetailViewModel(private val client: AntresolClient, kind: String, pri
     fun toggleWant() {
         val before = (state as? LoadState.Ready)?.value ?: return
         val want = before.want ?: return
-        mutate(before, { it.copy(want = !want) }) {
+        optimistic({ it.copy(want = !want) }, onFailure = { notice = R.string.detail_action_failed }) {
             if (want) client.removeFromWatchlist(id) else client.addToWatchlist(id)
         }
     }
@@ -111,7 +111,7 @@ class MediaDetailViewModel(private val client: AntresolClient, kind: String, pri
     fun toggleStar() {
         val before = (state as? LoadState.Ready)?.value ?: return
         val starred = before.starred ?: return
-        mutate(before, { it.copy(starred = !starred) }) {
+        optimistic({ it.copy(starred = !starred) }, onFailure = { notice = R.string.detail_action_failed }) {
             if (starred) client.unstar(id) else client.star(id)
         }
     }
@@ -183,20 +183,6 @@ class MediaDetailViewModel(private val client: AntresolClient, kind: String, pri
                 notice = R.string.detail_action_failed
             } finally {
                 savingPlaylist = false
-            }
-        }
-    }
-
-    private fun mutate(before: MediaDetail, change: (MediaDetail) -> MediaDetail, write: suspend () -> Unit) {
-        update(change)
-        viewModelScope.launch {
-            try {
-                write()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                update { before }
-                notice = R.string.detail_action_failed
             }
         }
     }

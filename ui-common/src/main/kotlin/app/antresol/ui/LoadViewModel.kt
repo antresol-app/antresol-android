@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.playback.PendingWrites
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -32,6 +33,12 @@ open class LoadViewModel<T>(
 
     private var loadedAt = 0L
     private var job: Job? = null
+
+    /** [optimistic] writes in flight, how many overlapped, the value before the first, and whether one failed. */
+    private var writes = 0
+    private var overlapping = 0
+    private var beforeWrites: T? = null
+    private var writeFailed = false
 
     init {
         reload()
@@ -81,6 +88,38 @@ open class LoadViewModel<T>(
     protected fun update(transform: (T) -> T) {
         val ready = state as? LoadState.Ready ?: return
         state = LoadState.Ready(transform(ready.value))
+    }
+
+    /**
+     * Shows [change] at once and sends [write]; a failed write undoes the change and calls
+     * [onFailure]. When several overlap and one fails, the page goes back to the value before the
+     * first of them and is then re-read: a snapshot taken per write would also wipe a later change
+     * that the server accepted.
+     */
+    protected fun optimistic(change: (T) -> T, onFailure: () -> Unit, write: suspend () -> Unit) {
+        val ready = state as? LoadState.Ready ?: return
+        if (writes++ == 0) {
+            beforeWrites = ready.value
+            overlapping = 0
+            writeFailed = false
+        }
+        overlapping++
+        update(change)
+        viewModelScope.launch {
+            try {
+                write()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                writeFailed = true
+                onFailure()
+            } finally {
+                if (--writes == 0 && writeFailed) {
+                    beforeWrites?.let { before -> update { before } }
+                    if (overlapping > 1) refresh(force = true)
+                }
+            }
+        }
     }
 
     private fun apply(result: LoadState<T>) {

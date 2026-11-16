@@ -11,14 +11,13 @@ import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
 import app.antresol.core.model.Trailer
+import app.antresol.ui.LoadState
 import app.antresol.ui.trailers.Trailers
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.PendingWrites
 import app.antresol.mobile.R
 import app.antresol.core.playback.Resume
-import app.antresol.ui.LoadState
 import app.antresol.ui.LoadViewModel
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -113,17 +112,7 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
 
     private fun mutate(change: (VideoDetail) -> VideoDetail, write: suspend (before: VideoDetail) -> Unit) {
         val before = (state as? LoadState.Ready)?.value ?: return
-        update(change)
-        viewModelScope.launch {
-            try {
-                write(before)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                update { before }
-                notice = R.string.detail_action_failed
-            }
-        }
+        optimistic(change, onFailure = { notice = R.string.detail_action_failed }) { write(before) }
     }
 
     private companion object {

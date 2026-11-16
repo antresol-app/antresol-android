@@ -92,7 +92,7 @@ The server accepts three ways to authenticate:
 |---|---|---|
 | **Device token** (native apps) | Header `Authorization: Bearer <token>` | Every `/api/*` endpoint, including images, HLS, streams, subtitles and SSE. |
 | Web session cookie | `Cookie: vault_session=<token>` | Every endpoint (used by the web app). A device token also works as the cookie value. |
-| **Media key** (short-lived, signed) | Query parameter `?mk=<key>` | **Only** these path prefixes: `/api/stream/`, `/api/hls/`, `/api/audio/`, `/api/tracks/`, plus `/api/torrent-stream/` and `/api/online/s/`, which are unused in library-only builds. **Not** accepted on images, subtitles (`/api/subs/...`), comics, `/api/download/` or JSON endpoints. |
+| **Media key** (short-lived, signed) | Query parameter `?mk=<key>` | **Only** these path prefixes: `/api/stream/`, `/api/hls/`, `/api/audio/`, `/api/tracks/`, plus the stream paths of other source kinds, which are unused in library-only builds. **Not** accepted on images, subtitles (`/api/subs/...`), comics, `/api/download/` or JSON endpoints. |
 
 Token details:
 
@@ -263,7 +263,7 @@ Returns the Me object for the authenticated user:
 | isKid | bool | Kid profiles see only items rated ≤ `maxRating`. **Unrated items are hidden from kids.** |
 | maxRating | string \| null | For example `"6+"` or `"12+"`. Values used by the web UI: `0+`, `6+`, `12+`, `16+`, `18+`. |
 | remote | bool | The request comes from outside the home network, so remote quality caps apply. |
-| libraryOnly | bool | `true` in this build: there is no torrent or online discovery. |
+| libraryOnly | bool | `true` in this build: there is no discovery of other sources. |
 
 Use this call to validate a stored token at app start: `401` means sign in again.
 
@@ -512,7 +512,7 @@ have an empty `airDate`), in season then episode order:
   ] }
 ```
 
-- `sources[].kind` is `library`, `pinned`, `torrent` or `online`; the apps use only `library`, whose
+- `sources[].kind` is an opaque kind (`library` is the core's); the apps use only `library`, whose
   `meta.itemId` is the episode item to play (as from SeasonInfo). Kids get library sources only.
 - `airDate` is `YYYY-MM-DD` or `""` (unknown). `watched`/`positionSec` merge the profile's watch
   states; `positionSec` is omitted when 0. `new`: unwatched news with a non-library source.

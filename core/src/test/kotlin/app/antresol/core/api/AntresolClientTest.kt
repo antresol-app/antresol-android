@@ -10,7 +10,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
@@ -145,7 +145,7 @@ class AntresolClientTest {
         assertEquals("/api/play/12", request.path)
         val body = takeJson(request)
         assertEquals(setOf("caps", "startSec", "audioIndex"), body.keys)
-        assertEquals(listOf("mp4", "mov", "mkv", "webm"), body["caps"]!!.jsonObject["containers"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("mp4", "mov", "mkv", "webm"), (body["caps"]!!.jsonObject["containers"] as List<*>).map { (it as JsonElement).jsonPrimitive.content })
         assertFalse(body["caps"]!!.jsonObject.containsKey("maxHeight"))
     }
 
@@ -341,7 +341,7 @@ class AntresolClientTest {
         client.recordPlay(15)
         val create = server.takeRequest()
         assertEquals("POST /api/music/playlists", "${create.method} ${create.path}")
-        assertEquals(listOf(15, 16), takeJson(create)["trackIds"]!!.jsonArray.map { it.jsonPrimitive.int })
+        assertEquals(listOf(15, 16), (takeJson(create)["trackIds"] as List<*>).map { (it as JsonElement).jsonPrimitive.int })
         val patch = server.takeRequest()
         assertEquals("PATCH", patch.method)
         assertEquals(setOf("order"), takeJson(patch).keys)

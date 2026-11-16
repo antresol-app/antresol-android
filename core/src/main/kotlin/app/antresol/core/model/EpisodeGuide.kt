@@ -43,7 +43,7 @@ data class GuideEntry(
 
 @Serializable
 data class GuideSource(
-    /** `library`, `pinned`, `torrent` or `online`; the apps play only `library`. */
+    /** An opaque source kind; `library` is the core's and the only one the apps play. */
     val kind: String = "",
     val ref: String = "",
     val provider: String? = null,

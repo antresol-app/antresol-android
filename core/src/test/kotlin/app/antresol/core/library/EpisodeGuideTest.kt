@@ -62,7 +62,7 @@ class EpisodeGuideTest {
             episodes = listOf(
                 entry(1, 1, "2026-01-05", library(11)),
                 entry(1, 2, "2026-01-12", library(12)),
-                entry(1, 3, "2026-01-19", GuideSource(kind = "torrent", ref = "btih:1"), watched = true),
+                entry(1, 3, "2026-01-19", GuideSource(kind = "x-source", ref = "x:1"), watched = true),
                 entry(1, 4, "2026-11-14"), // airs today: aired
                 entry(1, 5, "2026-11-15"),
                 entry(1, 6, ""),

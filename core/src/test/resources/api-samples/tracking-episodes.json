@@ -6,7 +6,7 @@
     {"season": 1, "number": 2, "name": "Episode 2", "airDate": "2026-01-12", "watched": false, "positionSec": 300, "new": false,
      "sources": [{"kind": "library", "ref": "item:5", "quality": "720p", "labels": [], "firstSeen": "2026-01-13T10:00:00Z", "meta": {"itemId": 5, "fileId": 8}}]},
     {"season": 1, "number": 3, "name": "Episode 3", "airDate": "2026-01-19", "watched": false, "new": true,
-     "sources": [{"kind": "torrent", "ref": "btih:0000", "provider": "example", "quality": "1080p", "labels": ["LostFilm"], "firstSeen": "2026-01-20T10:00:00.123456789Z", "meta": {"sourceId": "abc", "voice": "LostFilm", "lang": "ru", "studios": ["LostFilm"]}}]},
+     "sources": [{"kind": "x-source", "ref": "x:0000", "provider": "example", "quality": "1080p", "labels": ["LostFilm"], "firstSeen": "2026-01-20T10:00:00.123456789Z", "meta": {"sourceId": "abc", "voice": "LostFilm", "lang": "ru", "studios": ["LostFilm"]}}]},
     {"season": 1, "number": 4, "name": "Episode 4", "airDate": "2099-01-26", "watched": false, "new": false, "sources": []},
     {"season": 2, "number": 1, "name": "Episode 1", "airDate": "", "watched": false, "new": false,
      "sources": [{"kind": "library", "ref": "item:12", "labels": [], "firstSeen": "2026-02-01T10:00:00Z", "meta": {"itemId": 12, "fileId": 13}}]}

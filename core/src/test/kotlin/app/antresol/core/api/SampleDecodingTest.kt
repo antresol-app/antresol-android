@@ -144,10 +144,10 @@ class SampleDecodingTest {
         assertEquals(4L, first.librarySource?.meta?.itemId)
         assertEquals(7L, first.librarySource?.meta?.fileId)
         assertEquals(300, guide.episodes[1].positionSec)
-        val torrent = guide.episodes[2]
-        assertNull(torrent.librarySource)
-        assertTrue(torrent.new)
-        assertEquals(listOf("LostFilm"), torrent.sources.single().labels)
+        val xSource = guide.episodes[2]
+        assertNull(xSource.librarySource)
+        assertTrue(xSource.new)
+        assertEquals(listOf("LostFilm"), xSource.sources.single().labels)
         assertTrue(guide.episodes[3].sources.isEmpty())
         assertEquals("", guide.episodes[4].airDate)
     }

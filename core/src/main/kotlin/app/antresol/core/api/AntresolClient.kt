@@ -57,6 +57,8 @@ import app.antresol.core.model.TrackList
 import app.antresol.core.model.UiLanguage
 import app.antresol.core.model.UiLanguageRequest
 import app.antresol.core.model.WatchedRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
@@ -218,7 +220,7 @@ class AntresolClient(
      */
     suspend fun trailerPlay(play: String): TrailerPlay {
         val url = requireNotNull(urls.resolve(play)) { "Empty trailer play path" }.toHttpUrl()
-        return decode(execute(buildRequest("POST", url, null), http = slowHttpClient).body, serializer())
+        return decodeOffMain(execute(buildRequest("POST", url, null), http = slowHttpClient).body, serializer())
     }
 
     suspend fun search(query: String): SearchResults = get("api/search") { addQueryParameter("q", query) }
@@ -455,10 +457,10 @@ class AntresolClient(
         send("GET", url(path, query), null)
 
     private suspend inline fun <reified T> post(path: String, body: RequestBody?, reportUnauthorized: Boolean = true): T =
-        decode(execute(buildRequest("POST", url(path), body), reportUnauthorized).body, serializer())
+        decodeOffMain(execute(buildRequest("POST", url(path), body), reportUnauthorized).body, serializer())
 
     private suspend inline fun <reified T> send(method: String, url: HttpUrl, body: RequestBody?): T =
-        decode(execute(buildRequest(method, url, body)).body, serializer())
+        decodeOffMain(execute(buildRequest(method, url, body)).body, serializer())
 
     private suspend fun delete(path: String) = sendNoContent("DELETE", url(path), null)
 
@@ -500,6 +502,10 @@ class AntresolClient(
             retryAfterSec = response.headers["Retry-After"]?.trim()?.toLongOrNull(),
         )
     }
+
+    /** Callers are on the main thread (view models); a page of cards or a channel list is parsed off it. */
+    private suspend fun <T> decodeOffMain(body: String, serializer: KSerializer<T>): T =
+        withContext(Dispatchers.Default) { decode(body, serializer) }
 
     private fun <T> decode(body: String, serializer: KSerializer<T>): T = try {
         json.decodeFromString(serializer, body)

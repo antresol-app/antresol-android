@@ -37,7 +37,7 @@ import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
 
 /** One action of a [KeyPanel]. */
-data class PanelAction(val label: String, val icon: ImageVector? = null, val onClick: () -> Unit)
+data class PanelAction(val label: String, val icon: ImageVector? = null)
 
 /**
  * A panel over the page whose choices are driven by the remote directly (the page's root passes its

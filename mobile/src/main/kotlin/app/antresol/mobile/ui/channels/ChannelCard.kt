@@ -55,7 +55,6 @@ fun ChannelCard(
     width: Dp? = null,
     watching: Boolean = false,
     showNext: Boolean = true,
-    onLongClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val urls = LocalMediaUrls.current
@@ -69,7 +68,7 @@ fun ChannelCard(
     Column(
         modifier = sized
             .clip(AntresolShapes.smallCard)
-            .focusClickable(AntresolShapes.smallCard, role = null, onLongClick = onLongClick, onClick = onClick)
+            .focusClickable(AntresolShapes.smallCard, role = null, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = description },
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {

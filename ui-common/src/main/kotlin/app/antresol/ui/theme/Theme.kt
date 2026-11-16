@@ -14,7 +14,6 @@ val LocalAntresolTypography = staticCompositionLocalOf { AntresolTypography.phon
 object Antresol {
     val colors: AntresolColors get() = AntresolColors
     val shapes: AntresolShapes get() = AntresolShapes
-    val gradients: AntresolGradients get() = AntresolGradients
 
     val typography: AntresolTypography
         @Composable get() = LocalAntresolTypography.current

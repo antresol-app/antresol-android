@@ -134,9 +134,7 @@ data class ShelvesResponse(val shelves: List<Shelf> = emptyList())
 data class Page<T>(
     val items: List<T> = emptyList(),
     val total: Int = 0,
-) {
-    fun hasMore(offset: Int): Boolean = offset + items.size < total
-}
+)
 
 /** `GET /api/search`. */
 @Serializable

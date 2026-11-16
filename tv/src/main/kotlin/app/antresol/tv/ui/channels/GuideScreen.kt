@@ -573,11 +573,11 @@ private fun GuideBlock(
 private fun ProgramPanel(row: ChannelEpgRow, program: ChannelProgram, nowMs: Long, onAir: Boolean, selected: Int) {
     val urls = LocalMediaUrls.current
     val actions = listOfNotNull(
-        PanelAction(stringResource(R.string.tv_watch_now), AntresolIcons.Play) {}.takeIf { onAir },
+        PanelAction(stringResource(R.string.tv_watch_now), AntresolIcons.Play).takeIf { onAir },
         PanelAction(
             stringResource(if (row.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),
             if (row.favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
-        ) {},
+        ),
     )
     KeyPanel(title = stringResource(R.string.tv_channel_number, row.number, row.name), actions = actions, selected = selected, width = 420.dp) {
         ProgrammeStill(

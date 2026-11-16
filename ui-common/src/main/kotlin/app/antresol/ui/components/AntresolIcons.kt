@@ -336,24 +336,6 @@ object AntresolIcons {
         moveTo(17f, 20f); lineTo(20f, 20f)
     }
 
-    /** The programme guide: a time grid. */
-    val Guide: ImageVector = lineIcon("Guide") {
-        moveTo(4f, 5f)
-        lineTo(20f, 5f)
-        moveTo(4f, 10f)
-        lineTo(11f, 10f)
-        moveTo(14f, 10f)
-        lineTo(20f, 10f)
-        moveTo(4f, 15f)
-        lineTo(8f, 15f)
-        moveTo(11f, 15f)
-        lineTo(20f, 15f)
-        moveTo(4f, 20f)
-        lineTo(14f, 20f)
-        moveTo(17f, 20f)
-        lineTo(20f, 20f)
-    }
-
     /** A list of rows: the channel list. */
     val List: ImageVector = lineIcon("List") {
         moveTo(8f, 6f)

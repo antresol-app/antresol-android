@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,9 +35,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -177,11 +174,11 @@ fun ChannelsScreen(
             KeyPanel(
                 title = stringResource(R.string.tv_channel_number, channel.number, channel.name),
                 actions = listOf(
-                    PanelAction(stringResource(R.string.tv_watch_now), AntresolIcons.Play) {},
+                    PanelAction(stringResource(R.string.tv_watch_now), AntresolIcons.Play),
                     PanelAction(
                         stringResource(if (favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),
                         if (favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
-                    ) {},
+                    ),
                 ),
                 selected = menuSelected,
             )
@@ -366,7 +363,6 @@ private val PreviewWidth = 960.dp - ScreenPaddingH * 2 - ListWidth - 28.dp
 @Composable
 private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, nowMs: Long, last: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
     val urls = LocalMediaUrls.current
-    val context = LocalContext.current
     val program = Channels.showing(channel, nowMs)
     val description = listOfNotNull(
         stringResource(R.string.tv_channel_number, channel.number, channel.name),
@@ -496,15 +492,6 @@ private fun ChannelPreview(channel: Channel, nowMs: Long, modifier: Modifier = M
             KeyHint("OK", stringResource(R.string.tv_watch_now))
             KeyHint("OK ⋯", stringResource(if (channel.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add))
         }
-    }
-}
-
-/** [FocusRequester.requestFocus], ignoring a requester that is not attached (yet). */
-fun FocusRequester.requestFocusSafely() {
-    try {
-        requestFocus()
-    } catch (_: IllegalStateException) {
-        // Not attached (yet).
     }
 }
 

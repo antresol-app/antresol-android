@@ -298,10 +298,10 @@ class LivePlayerViewModel(
     /** Channel up (+1, the next number) or down (−1), wrapping. False when there is no other channel. */
     fun zap(step: Int): Boolean = session.zap(step)
 
-    /** Favourite on/off for [channelId] (the player's star). */
-    fun toggleFavorite(channelId: Long = state.channelId) {
-        val channel = state.channels.firstOrNull { it.id == channelId } ?: return
-        session.setFavorite(channelId, !channel.favorite)
+    /** Favourite on/off for the channel on (the player's star). */
+    fun toggleFavorite() {
+        val channel = state.channels.firstOrNull { it.id == state.channelId } ?: return
+        session.setFavorite(channel.id, !channel.favorite)
     }
 
     /**

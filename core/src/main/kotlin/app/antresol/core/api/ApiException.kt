@@ -13,15 +13,8 @@ class ApiException(
     val retryAfterSec: Long? = null,
 ) : IOException(message) {
     val isUnauthorized: Boolean get() = status == 401
-    val isForbidden: Boolean get() = status == 403
     val isNotFound: Boolean get() = status == 404
 
     /** The profile already holds the maximum number of HLS sessions. */
     val isTooManySessions: Boolean get() = status == 429
-
-    val isRemotePasswordless: Boolean get() = code == CODE_REMOTE_PASSWORDLESS
-
-    companion object {
-        const val CODE_REMOTE_PASSWORDLESS = "remote-passwordless"
-    }
 }

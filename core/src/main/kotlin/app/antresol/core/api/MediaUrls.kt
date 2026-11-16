@@ -59,18 +59,12 @@ class MediaUrls(baseUrl: String) {
     fun comicPage(fileId: Long, index: Int): String =
         build("api", "comics", fileId.toString(), "page", index.toString())
 
-    /** All pages of a comic volume as a ZIP. Bearer only. */
-    fun comicZip(fileId: Long): String = build("api", "comics", fileId.toString(), "pages.zip")
-
     /**
      * A channel's live HLS playlist (`/api/channels/live/{id}/index.m3u8`). With [mediaKey] the server
      * signs every segment line with the same key, so the player needs no headers.
      */
     fun liveChannel(channelId: Long, mediaKey: String? = null): String =
         build("api", "channels", "live", channelId.toString(), "index.m3u8") { mk(mediaKey) }
-
-    /** Album ZIP download. Bearer only. */
-    fun albumZip(albumId: Long): String = build("api", "music", "albums", albumId.toString(), "zip")
 
     fun withMediaKey(url: String, mediaKey: String?): String {
         if (mediaKey == null) return url

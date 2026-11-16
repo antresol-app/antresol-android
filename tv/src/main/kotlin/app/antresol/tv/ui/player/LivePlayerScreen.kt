@@ -404,11 +404,11 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             val options = if (panel == Panel.Audio) {
                 audioEntries.map { e ->
                     val label = if (e.isToggle) stringResource(R.string.track_cleaned_toggle) else e.track.label.ifBlank { e.track.name }
-                    PanelAction(label, AntresolIcons.Check.takeIf { e.checked }) {}
+                    PanelAction(label, AntresolIcons.Check.takeIf { e.checked })
                 }
             } else {
-                listOf(PanelAction(stringResource(R.string.detail_subtitles_off), AntresolIcons.Check.takeIf { selection.subtitles == null }) {}) +
-                    subtitles.map { track -> PanelAction(track.label.ifBlank { track.name }, AntresolIcons.Check.takeIf { track.name == selection.subtitles?.name }) {} }
+                listOf(PanelAction(stringResource(R.string.detail_subtitles_off), AntresolIcons.Check.takeIf { selection.subtitles == null })) +
+                    subtitles.map { track -> PanelAction(track.label.ifBlank { track.name }, AntresolIcons.Check.takeIf { track.name == selection.subtitles?.name }) }
             }
             KeyPanel(
                 title = stringResource(if (panel == Panel.Audio) R.string.detail_audio else R.string.detail_subtitles),

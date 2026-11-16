@@ -52,9 +52,6 @@ object TrailerEmbed {
         false
     }
 
-    /** The embed URL the player iframe loads (also what [html] asks the IFrame API for). */
-    fun embedUrl(key: String): String = "$EMBED_HOST/embed/$key?autoplay=1&playsinline=1&rel=0"
-
     /**
      * The player page for [key] (a valid key, see [isValidKey]): the IFrame API fills the page,
      * starts playing at once and reports playing, ended and errors to [BRIDGE]; [TOGGLE_JS]

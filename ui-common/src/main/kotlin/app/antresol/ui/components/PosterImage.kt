@@ -3,7 +3,6 @@ package app.antresol.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,7 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
@@ -28,7 +26,6 @@ import app.antresol.ui.image.AntresolImageLoader
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolGradients
-import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -122,30 +119,6 @@ private fun PlaceholderTitle(title: String, modifier: Modifier) {
 
 /** Artwork narrower than this shows the title's initial rather than the title. */
 private val COMPACT_ARTWORK = 96.dp
-
-/** A 2:3 poster with rounded corners (radius 12) and an optional progress bar along the bottom. */
-@Composable
-fun PosterImage(
-    url: String?,
-    title: String,
-    modifier: Modifier = Modifier,
-    progress: Double = 0.0,
-) {
-    ArtworkImage(
-        url = url,
-        title = title,
-        modifier = modifier.aspectRatio(AntresolMotion.POSTER_ASPECT),
-    ) {
-        if (progress > 0.0) {
-            ProgressBar(
-                fraction = progress.toFloat(),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 10.dp, vertical = 10.dp),
-            )
-        }
-    }
-}
 
 /** A thin white progress capsule on a translucent track. */
 @Composable

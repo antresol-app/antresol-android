@@ -33,7 +33,7 @@ class KeyPanelTest {
     fun theSelectedChoiceIsAlwaysOnScreen() {
         var selected by mutableIntStateOf(0)
         compose.setContent {
-            AntresolTheme { KeyPanel(title = "Audio", actions = voices.map { PanelAction(it) {} }, selected = selected) }
+            AntresolTheme { KeyPanel(title = "Audio", actions = voices.map { PanelAction(it) }, selected = selected) }
         }
         val metrics = compose.activity.resources.displayMetrics
         val order = voices.indices.toList() + voices.indices.reversed()

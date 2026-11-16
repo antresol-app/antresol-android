@@ -100,8 +100,6 @@ object LiveTracks {
         return LiveTrackSelection(audio, subtitles)
     }
 
-    const val RU = "ru"
-
     private val ORIGINAL = Regex("оригинал|original", RegexOption.IGNORE_CASE)
 
     private val THREE_LETTER = mapOf(

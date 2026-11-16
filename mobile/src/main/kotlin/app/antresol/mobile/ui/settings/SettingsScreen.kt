@@ -1,5 +1,7 @@
 package app.antresol.mobile.ui.settings
 
+import android.content.Context
+import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -353,7 +356,7 @@ private fun DeviceRow(device: DeviceSession, onRevoke: () -> Unit) {
             val detail = listOfNotNull(
                 device.model.takeIf { it.isNotBlank() && it != device.name },
                 device.version.takeIf { it.isNotBlank() }?.let { "v$it" },
-                device.lastSeen.takeIf { it.length >= 10 }?.take(10),
+                lastSeenDate(LocalContext.current, device.lastSeen),
             ).joinToString(" · ")
             if (detail.isNotBlank()) Text(detail, style = Antresol.typography.caption, maxLines = 1)
         }
@@ -371,6 +374,13 @@ private fun DeviceRow(device: DeviceSession, onRevoke: () -> Unit) {
             }
         }
     }
+}
+
+/** The day of an ISO [lastSeen] in the device's date format; the bare day as sent when it cannot be read. */
+private fun lastSeenDate(context: Context, lastSeen: String): String? {
+    if (lastSeen.length < 10) return null
+    val at = runCatching { Instant.parse(lastSeen) }.getOrNull() ?: return lastSeen.take(10)
+    return DateFormat.getMediumDateFormat(context).format(Date(at.toEpochMilli()))
 }
 
 @Composable

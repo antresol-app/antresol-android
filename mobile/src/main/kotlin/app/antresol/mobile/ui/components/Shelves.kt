@@ -13,6 +13,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.antresol.core.model.Card
 import app.antresol.ui.components.AntresolIcons
@@ -33,7 +35,7 @@ fun SectionTitle(title: String, modifier: Modifier = Modifier, onSeeAll: (() -> 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text(title, style = Antresol.typography.sectionTitle)
+        Text(title, style = Antresol.typography.sectionTitle, modifier = Modifier.semantics { heading() })
         if (onSeeAll != null) {
             Icon(
                 imageVector = AntresolIcons.ChevronRight,

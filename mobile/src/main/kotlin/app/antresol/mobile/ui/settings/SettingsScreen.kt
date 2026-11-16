@@ -26,6 +26,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +41,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
@@ -267,7 +273,7 @@ private fun LazyListScope.header(title: Int) {
         Text(
             stringResource(title).uppercase(),
             style = Antresol.typography.eyebrow,
-            modifier = Modifier.padding(start = PageGutter, end = PageGutter, top = 24.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = PageGutter, end = PageGutter, top = 24.dp, bottom = 8.dp).semantics { heading() },
         )
     }
 }
@@ -327,6 +333,8 @@ private fun SwitchRow(label: String, detail: String, checked: Boolean, onChange:
         modifier = Modifier
             .fillMaxWidth()
             .focusClickable(AntresolShapes.control, role = Role.Switch) { onChange(!checked) }
+            // The row is the switch for TalkBack: it says on or off, and the drawn switch is not a second stop.
+            .semantics { toggleableState = ToggleableState(checked) }
             .testTag(tag)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -338,7 +346,8 @@ private fun SwitchRow(label: String, detail: String, checked: Boolean, onChange:
         }
         Switch(
             checked = checked,
-            onCheckedChange = onChange,
+            onCheckedChange = null,
+            modifier = Modifier.minimumInteractiveComponentSize(),
             colors = SwitchDefaults.colors(checkedTrackColor = AntresolColors.Green, checkedThumbColor = Color.White),
         )
     }
@@ -396,6 +405,7 @@ private fun QualityDialog(selected: String, onSelect: (String) -> Unit, onDismis
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusClickable(AntresolShapes.control, role = Role.RadioButton) { onSelect(value) }
+                            .semantics { this.selected = value == selected }
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),

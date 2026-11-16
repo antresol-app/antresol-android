@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.antresol.ui.theme.AntresolColors
@@ -26,8 +28,10 @@ fun Modifier.focusClickable(
     role: Role? = Role.Button,
     onClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
     onClick: () -> Unit,
 ): Modifier = composed {
+    val haptics = LocalHapticFeedback.current
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     this
@@ -38,7 +42,9 @@ fun Modifier.focusClickable(
             enabled = enabled,
             role = role,
             onClickLabel = onClickLabel,
-            onLongClick = onLongClick,
+            onLongClickLabel = onLongClickLabel,
+            // A long press answers with the system's long-press tick.
+            onLongClick = onLongClick?.let { action -> { haptics.performHapticFeedback(HapticFeedbackType.LongPress); action() } },
             onClick = onClick,
         )
 }

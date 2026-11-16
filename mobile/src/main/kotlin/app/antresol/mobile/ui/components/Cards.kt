@@ -15,12 +15,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.mobile.R
 import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.components.BadgeRow
@@ -87,7 +89,13 @@ fun MediaCard(
     Column(
         modifier = sized
             .clip(AntresolShapes.smallCard)
-            .focusClickable(AntresolShapes.smallCard, role = null, onLongClick = onLongClick, onClick = onClick),
+            .focusClickable(
+                AntresolShapes.smallCard,
+                role = null,
+                onLongClick = onLongClick,
+                onLongClickLabel = if (onLongClick != null) stringResource(R.string.card_open_page) else null,
+                onClick = onClick,
+            ),
         horizontalAlignment = if (circle) Alignment.CenterHorizontally else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {

@@ -3,6 +3,7 @@
     <string name="app_name" translatable="false">Antresol</string>
 
     <!-- Shell -->
+    <string name="card_open_page">Open page</string>
     <string name="back">Back</string>
     <string name="account">Account</string>
     <string name="account_kid">Kids profile</string>

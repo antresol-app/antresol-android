@@ -458,7 +458,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 composable<ComicReaderRoute> { entry ->
                     val route = entry.toRoute<ComicReaderRoute>()
                     ComicReaderScreen(
-                        viewModel = viewModel { ComicReaderViewModel(client, app.appScope, route.volumeId, route.fromStart) },
+                        viewModel = viewModel { ComicReaderViewModel(client, app.appScope, app.pendingWrites, route.volumeId, route.fromStart) },
                         onOpenVolume = { next ->
                             navController.navigate(ComicReaderRoute(next)) {
                                 popUpTo<ComicReaderRoute> { inclusive = true }

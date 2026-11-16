@@ -50,7 +50,7 @@ data class HomeContent(
 
 class HomeViewModel(
     private val client: AntresolClient,
-    private val pendingWrites: PendingWrites = PendingWrites(),
+    private val pendingWrites: PendingWrites,
 ) : ViewModel() {
     var state: LoadState<HomeContent> by mutableStateOf(LoadState.Loading)
         private set

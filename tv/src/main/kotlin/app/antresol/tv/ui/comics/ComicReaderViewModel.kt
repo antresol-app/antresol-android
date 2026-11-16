@@ -7,8 +7,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.api.attempt
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.ComicPages
+import app.antresol.core.playback.PendingWrites
 import app.antresol.core.reading.ComicProgress
 import app.antresol.tv.ui.LoadState
 import app.antresol.tv.ui.load
@@ -25,11 +27,13 @@ data class ComicVolume(val detail: BookDetail, val fileId: Long, val pages: Comi
 
 /**
  * Reads one comic volume page by page. The position is saved as `page:<n>` a moment after the
- * page changes and once more when the reader closes (on the app scope, so it survives the screen).
+ * page changes and once more when the reader closes (on the app scope, so it survives the screen;
+ * tracked in [pendingWrites], so the volume's page shows the new position after it).
  */
 class ComicReaderViewModel(
     private val client: AntresolClient,
     private val appScope: CoroutineScope,
+    private val pendingWrites: PendingWrites,
     private val volumeId: Long,
     private val fromStart: Boolean = false,
 ) : ViewModel() {
@@ -100,12 +104,11 @@ class ComicReaderViewModel(
         val volume = (state as? LoadState.Ready)?.value ?: return
         val current = page
         if (current == savedPage || volume.count == 0) return
-        runCatching { writer.saveProgress(volumeId, ComicProgress.update(current, volume.count)) }
-            .onSuccess { savedPage = current }
+        if (attempt { writer.saveProgress(volumeId, ComicProgress.update(current, volume.count)) } != null) savedPage = current
     }
 
     override fun onCleared() {
-        appScope.launch { save() }
+        pendingWrites.track(appScope.launch { save() })
     }
 
     private companion object {

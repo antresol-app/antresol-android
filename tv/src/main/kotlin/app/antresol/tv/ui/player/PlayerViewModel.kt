@@ -25,7 +25,7 @@ class PlayerViewModel(
     itemId: Long,
     resume: ResumeMode,
     preferences: TvPreferences = TvPreferences(),
-    pendingWrites: PendingWrites = PendingWrites(),
+    pendingWrites: PendingWrites,
 ) : VideoPlayerViewModel(
     context = context,
     client = client,

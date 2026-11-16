@@ -41,6 +41,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -126,7 +127,7 @@ class DetailViewModel(
     private val audio: AudioEngine,
     private val kind: String,
     private val id: Long,
-    private val pendingWrites: PendingWrites = PendingWrites(),
+    private val pendingWrites: PendingWrites,
 ) : ViewModel() {
     var state: LoadState<DetailModel> by mutableStateOf(LoadState.Loading)
         private set
@@ -153,6 +154,14 @@ class DetailViewModel(
 
     init {
         reload()
+        // A write that finishes with the page already back in front (a reader saves its last page as
+        // it closes, after this page resumed) is shown too.
+        viewModelScope.launch {
+            pendingWrites.completions.drop(1).collect {
+                job?.join()
+                refresh()
+            }
+        }
         if (kind in Trailers.KINDS) viewModelScope.launch { trailers = Trailers.fetch(client, id, kind) }
     }
 

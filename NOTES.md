@@ -1328,3 +1328,33 @@ while busy, `502` with a translated message when the fetch failed, `404` for an 
   embedded page (HTML, base URL, settings, bridge, toggle, destroy). Not verified: the embedded
   player on a real device (Robolectric draws no WebView content), and real video frames.
 
+
+## Review pass 2: bugs, duplicates between the apps, dead code (2026-11-16)
+
+From the duplication review (`AS-n`). Nothing here was run on a device.
+
+- Bugs: the TV live player's audio panel is as long as the rows it draws; the guide is asked for
+  once on opening (`showView`), the phone asks for a failed guide page again while scrolling near
+  the end, TV guide focus requesters are keyed by channel + programme; the TV comic reader's last
+  save is a tracked pending write and `DetailViewModel` re-reads on `PendingWrites.completions`;
+  `TrailerEmbedView` pauses the player and the WebView on stop (`LifecycleStartEffect`); phone
+  audio reports a 401 from the stream (`PlaybackException.isUnauthorized`, checked in the service:
+  the HTTP status does not cross the MediaSession); `attempt {}` (`core/api/Attempt.kt`) replaces
+  `runCatching` around suspend calls; overlapping optimistic toggles on the phone go through
+  `LoadViewModel.optimistic` (back to the value before the first, then a re-read); the TV's server
+  screens no longer read an HTTP error as «Can't reach the server».
+- Shared now: `LoadState` / `load` / `userMessage` / `LoadViewModel` (`ui-common`, package
+  `app.antresol.ui`; one 429 rule: a bare «HTTP 429» is «Too many attempts», a server sentence gets
+  «Try again in N s» when the server sent Retry-After); `ServerConnectState` (`ui/onboarding/`) for
+  the phone's and the TV's two connect screens; `buildAudioPlayer`; `playerMenu()` + `MenuOption` +
+  `PlayerMenu` + `qualityLabel` (`ui/playback/PlayerMenus.kt`); `PageProgressSaver`
+  (`core/reading/`) for the three readers; `HomeContent` (`core/model/`, the TV passes
+  `home.withoutBooks()`); `kindLabel`; `Kind.VIDEO`; `MediaUrls.hostPort`; the guide's
+  `LocalMinuteWidth` / `minutesToDp` / `stickyLabel` (`ui/channels/GuideScale.kt`); 13 strings both
+  apps spelled the same.
+- Tests: one `FakeServer` and `trailer-sample.mp4` in `test-fixtures/`, added to both apps' unit
+  tests by the root `build.gradle.kts` as a **java** source dir (the Kotlin plugin overwrites an
+  Android source set's `kotlin` dirs with its own, so `kotlin.srcDir` is silently dropped).
+- Left alone on purpose: the TV focus timers (AS-26), paged sources and grid sources (the two
+  apps' sort labels, playlist cards and paging differ), the detail models, profile sign-in,
+  rulers/timelines/blocks of the guide (each app's own `Text`, sizes and focus or touch).

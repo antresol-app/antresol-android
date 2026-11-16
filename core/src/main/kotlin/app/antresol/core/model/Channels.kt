@@ -1,5 +1,6 @@
 package app.antresol.core.model
 
+import app.antresol.core.channels.Channels
 import kotlinx.serialization.Serializable
 
 /**
@@ -87,6 +88,13 @@ data class ChannelProgram(
     /** The programme is a library title with its own page (not an external guide entry). */
     val isLibraryItem: Boolean
         get() = itemId > 0 && kind != KIND_EXTERNAL
+
+    /**
+     * [start] and [end] as epoch milliseconds, or null when they cannot be read. Parsed once: the
+     * guide asks for them for every programme on every pass.
+     */
+    val startMs: Long? by lazy(LazyThreadSafetyMode.PUBLICATION) { Channels.epochMs(start) }
+    val endMs: Long? by lazy(LazyThreadSafetyMode.PUBLICATION) { Channels.epochMs(end) }
 
     companion object {
         const val KIND_EXTERNAL = "external"

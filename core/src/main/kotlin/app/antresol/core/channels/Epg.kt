@@ -43,7 +43,7 @@ object Epg {
             val before = old[row.id]?.programs.orEmpty()
             val programs = (before + row.programs)
                 .distinctBy { it.id.ifEmpty { it.start + it.itemId } }
-                .sortedBy { Channels.epochMs(it.start) ?: 0L }
+                .sortedBy { it.startMs ?: 0L }
             row.copy(programs = programs)
         }
     }
@@ -56,8 +56,8 @@ object Epg {
         if (programs.isEmpty()) return null
         Channels.programAt(programs, anchorMs)?.let { return it }
         return programs.minByOrNull { program ->
-            val start = Channels.epochMs(program.start) ?: Long.MAX_VALUE
-            val end = Channels.epochMs(program.end) ?: Long.MAX_VALUE
+            val start = program.startMs ?: Long.MAX_VALUE
+            val end = program.endMs ?: Long.MAX_VALUE
             when {
                 anchorMs < start -> start - anchorMs
                 anchorMs >= end -> anchorMs - end + 1
@@ -71,16 +71,16 @@ object Epg {
      * before [visibleFromMs] (a long programme that began off-screen keeps the visible edge).
      */
     fun anchorFor(program: ChannelProgram, visibleFromMs: Long): Long {
-        val start = Channels.epochMs(program.start) ?: return visibleFromMs
-        val end = Channels.epochMs(program.end) ?: return start
+        val start = program.startMs ?: return visibleFromMs
+        val end = program.endMs ?: return start
         return start.coerceAtLeast(visibleFromMs).coerceAtMost(end - 1)
     }
 
     /** The median length of the programmes in [rows], in minutes (30 when unknown). */
     fun typicalMinutes(rows: List<ChannelEpgRow>): Float {
         val lengths = rows.flatMap { it.programs }.mapNotNull { program ->
-            val start = Channels.epochMs(program.start) ?: return@mapNotNull null
-            val end = Channels.epochMs(program.end) ?: return@mapNotNull null
+            val start = program.startMs ?: return@mapNotNull null
+            val end = program.endMs ?: return@mapNotNull null
             ((end - start) / 60_000f).takeIf { it > 0f }
         }.sorted()
         return if (lengths.isEmpty()) 30f else lengths[lengths.size / 2]
@@ -103,10 +103,25 @@ object Epg {
     fun floorTo(ms: Long, stepMs: Long): Long = Math.floorDiv(ms, stepMs) * stepMs
 
     /** The programmes of [row] that overlap `[fromMs, toMs)`. */
-    fun visible(row: ChannelEpgRow, fromMs: Long, toMs: Long): List<ChannelProgram> = row.programs.filter { program ->
-        val start = Channels.epochMs(program.start) ?: return@filter false
-        val end = Channels.epochMs(program.end) ?: return@filter false
+    fun visible(row: ChannelEpgRow, fromMs: Long, toMs: Long): List<ChannelProgram> = overlapping(row.programs, fromMs, toMs)
+
+    /** The [programs] that overlap `[fromMs, toMs)`. */
+    fun overlapping(programs: List<ChannelProgram>, fromMs: Long, toMs: Long): List<ChannelProgram> = programs.filter { program ->
+        val start = program.startMs ?: return@filter false
+        val end = program.endMs ?: return@filter false
         end > fromMs && start < toMs
+    }
+
+    /**
+     * The stretch of the timeline whose programmes a guide composes when [leftMs] is at its left
+     * edge and [viewMs] is in view: the view and as much again (at least an hour) on each side, so
+     * what a scroll or a D-pad move reveals is already there. It starts on a whole hour, so it stays
+     * the same while the guide scrolls within that hour.
+     */
+    fun composedWindow(leftMs: Long, viewMs: Long): LongRange {
+        val margin = maxOf(viewMs, HOUR_MS)
+        val left = floorTo(leftMs, HOUR_MS)
+        return (left - margin)..(left + HOUR_MS + viewMs + margin)
     }
 
     /**

@@ -5,6 +5,7 @@ import app.antresol.core.model.ChannelEpgRow
 import app.antresol.core.model.ChannelProgram
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 
@@ -48,6 +49,45 @@ class EpgTest {
     fun visibleProgrammesOverlapTheWindow() {
         val visible = Epg.visible(ChannelEpgRow(1, programs = row), ms("2026-11-11T21:30:00Z"), ms("2026-11-11T22:40:00Z"))
         assertEquals(listOf("b"), visible.map { it.id })
+    }
+
+    @Test
+    fun programmeTimesAreParsedOnTheProgramme() {
+        val program = p("a", "20:00", "21:30")
+        assertEquals(ms("2026-11-11T20:00:00Z"), program.startMs)
+        assertEquals(ms("2026-11-11T21:30:00Z"), program.endMs)
+        assertEquals(null, ChannelProgram(id = "x", start = "soon", end = "").startMs)
+        assertEquals(null, ChannelProgram(id = "x", start = "soon", end = "").endMs)
+        // A copy with other times reads its own.
+        assertEquals(ms("2026-11-11T22:00:00Z"), program.copy(start = "2026-11-11T22:00:00Z").startMs)
+    }
+
+    @Test
+    fun theComposedWindowCoversTheViewAndAScreenOnEachSide() {
+        val hour = Epg.HOUR_MS
+        val left = ms("2026-11-11T20:20:00Z")
+        val window = Epg.composedWindow(left, viewMs = 2 * hour)
+        assertEquals(ms("2026-11-11T18:00:00Z"), window.first)
+        assertEquals(ms("2026-11-11T01:00:00Z") + 24 * hour, window.last)
+        // The same window while the guide scrolls within the hour, so the rows are not recomposed by every frame.
+        assertEquals(window, Epg.composedWindow(ms("2026-11-11T20:00:00Z"), 2 * hour))
+        assertEquals(window, Epg.composedWindow(ms("2026-11-11T20:59:59Z"), 2 * hour))
+        // Everything in view, and a view more on each side, is inside wherever the edge is in the hour.
+        for (edge in listOf(left, ms("2026-11-11T20:00:00Z"), ms("2026-11-11T20:59:59Z"))) {
+            assertTrue(window.first <= edge - 2 * hour && window.last >= edge + 4 * hour)
+        }
+        // Before the first layout (nothing in view yet) there is still an hour on each side.
+        val unmeasured = Epg.composedWindow(left, viewMs = 0)
+        assertEquals(ms("2026-11-11T19:00:00Z"), unmeasured.first)
+        assertEquals(ms("2026-11-11T22:00:00Z"), unmeasured.last)
+    }
+
+    @Test
+    fun overlappingKeepsTheProgrammesOfAWindow() {
+        val programs = listOf(p("a", "18:00", "19:00"), p("b", "19:00", "21:00"), p("c", "21:00", "22:00"), ChannelProgram(id = "bad"))
+        val window = ms("2026-11-11T19:30:00Z") to ms("2026-11-11T21:00:00Z")
+        assertEquals(listOf("b"), Epg.overlapping(programs, window.first, window.second).map { it.id })
+        assertEquals(listOf("a", "b", "c"), Epg.overlapping(programs, ms("2026-11-11T18:59:00Z"), ms("2026-11-11T21:01:00Z")).map { it.id })
     }
 
     @Test

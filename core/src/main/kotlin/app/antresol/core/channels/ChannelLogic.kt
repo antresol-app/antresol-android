@@ -130,15 +130,15 @@ object Channels {
 
     /** How far [program] is at [nowMs], 0…1 ((now − start)/(end − start)); 0 for unknown times. */
     fun progress(program: ChannelProgram, nowMs: Long): Float {
-        val start = epochMs(program.start) ?: return 0f
-        val end = epochMs(program.end) ?: return 0f
+        val start = program.startMs ?: return 0f
+        val end = program.endMs ?: return 0f
         if (end <= start) return 0f
         return ((nowMs - start).toDouble() / (end - start)).coerceIn(0.0, 1.0).toFloat()
     }
 
     /** The programme on air at [nowMs] in a guide and the one after it (the first that has not ended). */
     fun onAir(programs: List<ChannelProgram>, nowMs: Long): Pair<ChannelProgram?, ChannelProgram?> {
-        val index = programs.indexOfFirst { (epochMs(it.end) ?: Long.MAX_VALUE) > nowMs }
+        val index = programs.indexOfFirst { (it.endMs ?: Long.MAX_VALUE) > nowMs }
         if (index < 0) return null to null
         return programs[index] to programs.getOrNull(index + 1)
     }
@@ -150,22 +150,22 @@ object Channels {
     fun showing(channel: Channel, nowMs: Long): ChannelProgram? {
         val now = channel.now ?: return null
         val next = channel.next ?: return now
-        val ended = (epochMs(now.end) ?: Long.MAX_VALUE) <= nowMs
-        val started = (epochMs(next.start) ?: Long.MAX_VALUE) <= nowMs
+        val ended = (now.endMs ?: Long.MAX_VALUE) <= nowMs
+        val started = (next.startMs ?: Long.MAX_VALUE) <= nowMs
         return if (ended && started) next else now
     }
 
     /** The programme on air at [atMs], or null (a gap, or [atMs] outside the list). */
     fun programAt(programs: List<ChannelProgram>, atMs: Long): ChannelProgram? = programs.firstOrNull { program ->
-        val start = epochMs(program.start) ?: return@firstOrNull false
-        val end = epochMs(program.end) ?: return@firstOrNull false
+        val start = program.startMs ?: return@firstOrNull false
+        val end = program.endMs ?: return@firstOrNull false
         atMs in start until end
     }
 
     /** [program] is on air at [nowMs]. */
     fun isOnAir(program: ChannelProgram, nowMs: Long): Boolean {
-        val start = epochMs(program.start) ?: return false
-        val end = epochMs(program.end) ?: return false
+        val start = program.startMs ?: return false
+        val end = program.endMs ?: return false
         return nowMs in start until end
     }
 

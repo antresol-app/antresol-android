@@ -35,6 +35,12 @@ fun programClock(context: Context, iso: String): String {
 }
 
 /**
+ * [ms] as a programme time (rounded like [programClock]) with a [format] the caller keeps: a guide
+ * draws hundreds of times, and making a [timeFormat] for each is slow.
+ */
+fun programClock(format: java.text.DateFormat, ms: Long): String = format.format(Date(Channels.displayMs(ms)))
+
+/**
  * The clock format of the interface: 24-hour «21:40» when it is in Russian (whatever the device's
  * 12/24-hour setting, as a Russian interface always reads), else the device's own format.
  */

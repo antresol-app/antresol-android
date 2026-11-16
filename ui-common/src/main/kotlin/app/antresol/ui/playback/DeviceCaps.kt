@@ -54,6 +54,7 @@ object DeviceCaps {
      * accepts. `supportedHeights` is not used: it counts portrait sizes (1920 for a 1080p decoder).
      * Computed once; [NO_LIMIT] caches "unknown".
      */
+    @Synchronized
     private fun decoderHeight(): Int? {
         val cached = decoderMaxHeight ?: runCatching {
             MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
@@ -75,6 +76,7 @@ object DeviceCaps {
      * Decoder MIME types. Video counts only hardware decoders: a software VP9/AV1/HEVC decoder
      * stutters on TV-class CPUs, and the server transcodes to H.264 instead.
      */
+    @Synchronized
     private fun decoders(): Set<String> = decoderMimes ?: runCatching {
         MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
             .filterNot { it.isEncoder }

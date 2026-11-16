@@ -36,6 +36,7 @@ import app.antresol.core.model.FileInfo
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
 import app.antresol.core.model.PlaybackCaps
+import app.antresol.core.model.Progress
 import app.antresol.core.model.Quality
 import app.antresol.core.model.SubTrack
 import app.antresol.core.playback.CodecSupport
@@ -52,9 +53,11 @@ import app.antresol.core.playback.videoApi
 import app.antresol.ui.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -281,6 +284,22 @@ open class VideoPlayerViewModel(
         phase = PlayerPhase.Loading
         startJob = viewModelScope.launch {
             try {
+                // Neither depends on the item's details, so both start alongside that request: the
+                // codec list (kept after its first use) and the resume point of [itemId] itself.
+                launch(Dispatchers.Default) { runCatching { DeviceCaps.current(context, limitToDisplay = options.limitToDisplay) } }
+                val early: Deferred<Result<Progress>>? = if (mode == ResumeMode.FromStart) {
+                    null
+                } else {
+                    async {
+                        try {
+                            Result.success(client.progress(itemId))
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Result.failure(e)
+                        }
+                    }
+                }
                 var detail = client.item(itemId)
                 if (detail.kind == Kind.SERIES || detail.kind == Kind.SEASON) {
                     val episode = Episodes.toPlay(detail) ?: throw PlaybackUnavailableException()
@@ -290,7 +309,14 @@ open class VideoPlayerViewModel(
                 item = detail
                 currentItemId = detail.id
                 findNextEpisode(detail)
-                val saved = if (mode == ResumeMode.FromStart) 0L else savedPositionMs(detail, file)
+                // A series or season plays one of its episodes: the early answer is not that episode's.
+                val asked = early?.takeIf { detail.id == itemId }
+                if (asked == null) early?.cancel()
+                val saved = when {
+                    mode == ResumeMode.FromStart -> 0L
+                    asked != null -> savedPositionMs(detail, file) { asked.await().getOrThrow() }
+                    else -> savedPositionMs(detail, file)
+                }
                 if (mode == ResumeMode.Ask && saved >= RESUME_PROMPT_MIN_MS) {
                     pendingFile = file
                     phase = PlayerPhase.AskResume(saved)
@@ -326,8 +352,12 @@ open class VideoPlayerViewModel(
      * The resume point from `/api/progress`; if that fails, the watched fraction the item came with.
      * Starting at 0 instead would overwrite the server's resume point with the first progress write.
      */
-    private suspend fun savedPositionMs(detail: ItemDetail, file: FileInfo): Long = try {
-        (Resume.videoStartSec(client.progress(detail.id)) * 1000).toLong()
+    private suspend fun savedPositionMs(
+        detail: ItemDetail,
+        file: FileInfo,
+        progress: suspend () -> Progress = { client.progress(detail.id) },
+    ): Long = try {
+        (Resume.videoStartSec(progress()) * 1000).toLong()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

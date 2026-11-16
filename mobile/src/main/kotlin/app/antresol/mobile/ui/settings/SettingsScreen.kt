@@ -68,7 +68,11 @@ import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
+import java.time.Instant
+import java.util.Date
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -99,10 +103,19 @@ class SettingsViewModel(private val client: AntresolClient) : LoadViewModel<Serv
     }
 
     private companion object {
-        suspend fun fetchInfo(client: AntresolClient): ServerInfo {
-            val health = runCatching { client.health() }.getOrNull()
+        /** The server's health (optional) and the devices: two independent requests, asked for together. */
+        suspend fun fetchInfo(client: AntresolClient): ServerInfo = coroutineScope {
+            val health = async {
+                try {
+                    client.health()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+            }
             val devices = client.devices().items.sortedByDescending { it.current }
-            return ServerInfo(health, devices)
+            ServerInfo(health.await(), devices)
         }
     }
 }

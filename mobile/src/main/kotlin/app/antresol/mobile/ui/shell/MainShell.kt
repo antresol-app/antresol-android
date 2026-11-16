@@ -122,6 +122,8 @@ import app.antresol.ui.language.uiLanguageApi
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.AntresolColors
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 private val VIDEO_KINDS = setOf(Kind.MOVIE, Kind.SERIES, Kind.SEASON, Kind.EPISODE)
@@ -322,7 +324,16 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 composable<MusicRoute> {
                     MusicScreen(
-                        viewModel = viewModel { LoadViewModel { MusicHome(client.musicHome().shelves, client.genres().genres) } },
+                        viewModel = viewModel {
+                            LoadViewModel {
+                                // Two independent requests: asked for together.
+                                coroutineScope {
+                                    val shelves = async { client.musicHome().shelves }
+                                    val genres = async { client.genres().genres }
+                                    MusicHome(shelves.await(), genres.await())
+                                }
+                            }
+                        },
                         onOpen = open,
                         onGrid = openGrid,
                         onSongs = { title -> navController.navigate(SongsRoute(title)) },

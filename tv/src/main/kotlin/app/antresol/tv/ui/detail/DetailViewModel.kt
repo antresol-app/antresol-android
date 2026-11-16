@@ -39,6 +39,8 @@ import app.antresol.tv.ui.load
 import app.antresol.ui.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -309,10 +311,21 @@ class DetailViewModel(
         Kind.ARTIST -> client.artist(id).toModel()
         Kind.PLAYLIST -> client.playlist(id).toModel()
         Kind.AUDIOBOOK, Kind.BOOK, Kind.COMIC, Kind.COMIC_VOLUME -> client.book(id).toModel()
-        else -> {
+        else -> coroutineScope {
             val item = client.item(id)
-            val progress = if (item.files.isNotEmpty()) runCatching { client.progress(item.id) }.getOrNull() else null
-            item.toModel(progress, EpisodeGuide.fetch(client, item))
+            // The progress and the episode guide need only the item: asked for together.
+            val progress = async {
+                if (item.files.isEmpty()) return@async null
+                try {
+                    client.progress(item.id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            val guide = async { EpisodeGuide.fetch(client, item) }
+            item.toModel(progress.await(), guide.await())
         }
     }
 }

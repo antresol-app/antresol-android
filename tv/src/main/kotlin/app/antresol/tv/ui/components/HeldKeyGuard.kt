@@ -14,6 +14,10 @@ import androidx.compose.ui.input.key.type
  * the release as a click and start playback. Until the release, OK goes nowhere once focus has
  * left the element that was long-pressed; while that element still has focus it gets the keys
  * itself, so it sees its own release.
+ *
+ * The release can be lost: it arrives while the opened page has nothing focused yet, and a key
+ * with no focused element never reaches [consume]. A first key-down (no repeat) is therefore a new
+ * press, ends the guard and is never swallowed.
  */
 object HeldKeyGuard {
     private var stillOnOwner: (() -> Boolean)? = null
@@ -33,9 +37,9 @@ object HeldKeyGuard {
             stillOnOwner = null
             return false
         }
-        val release = event.type == KeyEventType.KeyUp
-        if (release) stillOnOwner = null
-        return !owner()
+        val newPress = event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0
+        if (newPress || event.type == KeyEventType.KeyUp) stillOnOwner = null
+        return !newPress && !owner()
     }
 
     private val OK_KEYS = setOf(NativeKeyEvent.KEYCODE_DPAD_CENTER, NativeKeyEvent.KEYCODE_ENTER, NativeKeyEvent.KEYCODE_NUMPAD_ENTER)

@@ -146,7 +146,9 @@ private fun HomeContentView(
     }
 
     // Back from deep in the shelves returns to the top first, then leaves the app.
-    BackHandler(enabled = focus.focusedKey != null && focus.focusedKey != homeKey) {
+    // Derived: the focused key changes with every D-pad move, this only when focus leaves or returns to the top.
+    val backEnabled by remember(focus, homeKey) { derivedStateOf { focus.focusedKey != null && focus.focusedKey != homeKey } }
+    BackHandler(enabled = backEnabled) {
         scope.launch {
             listState.animateScrollToItem(0)
             focus.requester(homeKey).tryRequestFocus()

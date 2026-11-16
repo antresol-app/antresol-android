@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,7 +101,10 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
     val book = (content as? AudioContent.Audiobook)?.book
     val artwork = track?.cover ?: book?.card?.poster.orEmpty()
     val title = track?.title ?: book?.card?.title.orEmpty()
-    val tintCard = Card(id = track?.id ?: book?.card?.id ?: 0, kind = if (book != null) Kind.AUDIOBOOK else Kind.ALBUM, title = title, poster = artwork)
+    // The same instance between passes, so the background is not redrawn with every state change.
+    val tintCard = remember(track?.id, book?.card?.id, artwork, title) {
+        Card(id = track?.id ?: book?.card?.id ?: 0, kind = if (book != null) Kind.AUDIOBOOK else Kind.ALBUM, title = title, poster = artwork)
+    }
 
     Box(Modifier.fillMaxSize()) {
         HeroBackground(tintCard)
@@ -126,7 +130,7 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
                             is AudioContent.Audiobook -> content.book.authors.joinToString(", ")
                         }
                         if (byline.isNotEmpty()) Text(byline, style = Antresol.typography.bodyEmphasis, color = AntresolColors.LabelSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (content is AudioContent.Audiobook) ChapterLine(content, audio.positionMs)
+                        if (content is AudioContent.Audiobook) ChapterLine(content, audio)
                     }
                 }
                 Spacer(Modifier.weight(1f))
@@ -136,15 +140,7 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
                 viewModel.actionError?.let { error ->
                     Text(error.userMessage(LocalContext.current.resources), style = Antresol.typography.caption, color = AntresolColors.Red)
                 }
-                SeekBar(
-                    positionMs = audio.positionMs,
-                    bufferedMs = audio.positionMs,
-                    durationMs = audio.durationMs,
-                    onSeek = audio::skipBy,
-                    onToggle = audio::togglePlayPause,
-                    backStepMs = if (book != null) AudioEngine.BACK_STEP_MS else MUSIC_STEP_MS,
-                    forwardStepMs = if (book != null) AudioEngine.FORWARD_STEP_MS else MUSIC_STEP_MS,
-                )
+                PositionSeekBar(audio, isBook = book != null)
                 when (content) {
                     is AudioContent.Music -> MusicControls(viewModel, panel, openers, onPanel = { panel = it }, onMenu = { menu = it })
                     is AudioContent.Audiobook -> AudiobookControls(audio, openers, onMenu = { menu = it })
@@ -179,10 +175,24 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
     }
 }
 
+/** The seek bar reads the position (it ticks twice a second) here, so the screen around it is not recomposed with it. */
 @Composable
-private fun ChapterLine(content: AudioContent.Audiobook, positionMs: Long) {
+private fun PositionSeekBar(audio: AudioEngine, isBook: Boolean) {
+    SeekBar(
+        positionMs = audio.positionMs,
+        bufferedMs = audio.positionMs,
+        durationMs = audio.durationMs,
+        onSeek = audio::skipBy,
+        onToggle = audio::togglePlayPause,
+        backStepMs = if (isBook) AudioEngine.BACK_STEP_MS else MUSIC_STEP_MS,
+        forwardStepMs = if (isBook) AudioEngine.FORWARD_STEP_MS else MUSIC_STEP_MS,
+    )
+}
+
+@Composable
+private fun ChapterLine(content: AudioContent.Audiobook, audio: AudioEngine) {
     val chapters = content.chapters
-    val index = Chapters.indexAt(chapters, positionMs)
+    val index by remember(chapters, audio) { derivedStateOf { Chapters.indexAt(chapters, audio.positionMs) } }
     if (index < 0 || chapters.size < 2) return
     val chapter = chapters[index]
     val label = listOfNotNull(
@@ -301,8 +311,11 @@ private fun LyricsPanel(viewModel: NowPlayingViewModel) {
                 PanelMessage(stringResource(TvR.string.now_playing_no_lyrics))
                 return
             }
-            val lines = if (lyrics.synced && lyrics.lines.isNotEmpty()) lyrics.lines.map { it.text } else lyrics.plainText.lines()
-            val active = lyrics.lineIndexAt(viewModel.audio.positionMs)
+            val lines = remember(lyrics) {
+                if (lyrics.synced && lyrics.lines.isNotEmpty()) lyrics.lines.map { it.text } else lyrics.plainText.lines()
+            }
+            // Changes with the line, not with every tick of the position.
+            val active by remember(lyrics, viewModel) { derivedStateOf { lyrics.lineIndexAt(viewModel.audio.positionMs) } }
             val listState = rememberLazyListState()
             LaunchedEffect(active) {
                 if (active >= 0) listState.animateScrollToItem((active - 2).coerceAtLeast(0))

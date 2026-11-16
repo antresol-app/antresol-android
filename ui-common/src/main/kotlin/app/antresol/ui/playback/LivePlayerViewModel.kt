@@ -585,6 +585,7 @@ class LivePlayerViewModel(
         return ExoPlayer.Builder(context)
             .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(true))
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
+            .setLoadControl(videoLoadControl(context))
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
                 true,

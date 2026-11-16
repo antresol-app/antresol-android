@@ -1,5 +1,6 @@
 package app.antresol.ui.playback
 
+import android.app.ActivityManager
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.getValue
@@ -20,9 +21,11 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.ApiException
@@ -967,6 +970,7 @@ fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
     return ExoPlayer.Builder(context)
         .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(true))
         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
+        .setLoadControl(videoLoadControl(context))
         .setAudioAttributes(
             AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
             true,
@@ -974,3 +978,25 @@ fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
         .setHandleAudioBecomingNoisy(true)
         .build()
 }
+
+/**
+ * ExoPlayer's default load control, with the buffer's size capped on a low-RAM device: the default
+ * holds up to about 130 MB of a high-bitrate file in the Java heap, most of what such a device gives an app.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+internal fun videoLoadControl(context: Context): LoadControl {
+    val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+    val bytes = lowRamBufferBytes(manager.isLowRamDevice, manager.memoryClass) ?: return DefaultLoadControl()
+    return DefaultLoadControl.Builder().setTargetBufferBytes(bytes).setPrioritizeTimeOverSizeThresholds(false).build()
+}
+
+/**
+ * The buffer size for a low-RAM device (the system says so, or the app's heap limit [memoryClassMb] is
+ * at most [LOW_RAM_MEMORY_CLASS_MB]): a quarter of the heap, between 16 and 64 MB. Null elsewhere (ExoPlayer's default).
+ */
+internal fun lowRamBufferBytes(lowRamDevice: Boolean, memoryClassMb: Int): Int? {
+    if (!lowRamDevice && memoryClassMb > LOW_RAM_MEMORY_CLASS_MB) return null
+    return (memoryClassMb / 4).coerceIn(16, 64) * 1024 * 1024
+}
+
+private const val LOW_RAM_MEMORY_CLASS_MB = 192

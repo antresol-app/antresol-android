@@ -77,6 +77,7 @@ import app.antresol.ui.format.TrackLabels
 import app.antresol.ui.playback.PlaybackUnavailableException
 import app.antresol.ui.playback.PlayerPhase
 import app.antresol.ui.playback.VideoPlayerViewModel
+import app.antresol.ui.playback.rememberKeepScreenOn
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
@@ -135,12 +136,12 @@ fun VideoPlayerScreen(
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 internal fun VideoSurface(player: Player, keepLastFrame: Boolean = false) {
+    val keepScreenOn = rememberKeepScreenOn(player)
     AndroidView(
         factory = { context ->
             PlayerView(context).apply {
                 layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                 useController = false
-                keepScreenOn = true
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 setShutterBackgroundColor(AndroidColor.BLACK)
                 setKeepContentOnPlayerReset(keepLastFrame)
@@ -158,7 +159,10 @@ internal fun VideoSurface(player: Player, keepLastFrame: Boolean = false) {
                 this.player = player
             }
         },
-        update = { it.player = player },
+        update = {
+            it.player = player
+            it.keepScreenOn = keepScreenOn
+        },
         // The player outlives the view (it lives in the ViewModel): never keep a destroyed activity's view on it.
         onReset = { it.player = null },
         onRelease = { it.player = null },

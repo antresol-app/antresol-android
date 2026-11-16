@@ -66,6 +66,7 @@ import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.format.Durations
 import app.antresol.ui.playback.PlayerPhase
 import app.antresol.ui.playback.VideoPlayerViewModel
+import app.antresol.ui.playback.rememberKeepScreenOn
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
@@ -114,6 +115,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onExit: () -> Unit) {
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 internal fun VideoSurface(player: Player, keepLastFrame: Boolean = false) {
+    val keepScreenOn = rememberKeepScreenOn(player)
     AndroidView(
         factory = { context ->
             PlayerView(context).apply {
@@ -121,7 +123,6 @@ internal fun VideoSurface(player: Player, keepLastFrame: Boolean = false) {
                 useController = false
                 isFocusable = false
                 descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                keepScreenOn = true
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 setShutterBackgroundColor(AndroidColor.BLACK)
                 setKeepContentOnPlayerReset(keepLastFrame)
@@ -139,6 +140,7 @@ internal fun VideoSurface(player: Player, keepLastFrame: Boolean = false) {
                 this.player = player
             }
         },
+        update = { it.keepScreenOn = keepScreenOn },
         onRelease = { it.player = null },
         modifier = Modifier.fillMaxSize(),
     )

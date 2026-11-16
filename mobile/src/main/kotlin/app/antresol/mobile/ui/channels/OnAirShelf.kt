@@ -11,6 +11,7 @@ import app.antresol.mobile.ui.components.CardStyle
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.SectionTitle
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -19,6 +20,9 @@ import app.antresol.core.model.Channel
 import app.antresol.ui.R
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.rememberNowMs
+
+/** Home's turn at the shared channel refresh (the «ТВ» tab has its own). */
+private const val ON_AIR_WATCHER = "on-air"
 
 /** Channels shown on Home, at most. */
 private const val ON_AIR_MAX = 20
@@ -30,10 +34,11 @@ private const val ON_AIR_MAX = 20
 @Composable
 fun OnAirShelf(viewModel: ChannelsViewModel, onWatch: (Channel) -> Unit, onSeeAll: () -> Unit) {
     LifecycleStartEffect(viewModel) {
-        viewModel.startRefreshing()
-        onStopOrDispose { viewModel.stopRefreshing() }
+        viewModel.startRefreshing(ON_AIR_WATCHER)
+        onStopOrDispose { viewModel.stopRefreshing(ON_AIR_WATCHER) }
     }
-    val channels = viewModel.onAir.take(ON_AIR_MAX)
+    val onAir = viewModel.onAir
+    val channels = remember(onAir) { onAir.take(ON_AIR_MAX) }
     if (channels.isEmpty()) return
     ChannelShelf(
         title = stringResource(R.string.tv_on_air),

@@ -258,6 +258,7 @@ private fun ChannelList(
     onMenu: (Channel) -> Unit,
 ) {
     val shown = viewModel.shown
+    val reserveLogo = remember(shown) { reserveLogoSlot(shown.map { it.logoUrl }) }
     val last = viewModel.lastChannel
     var focusedId by rememberSaveable(viewModel.filter.key) { mutableStateOf(last?.id ?: shown.firstOrNull()?.id) }
     // Where focus starts: the last channel (a TV turns on where it was left), else the first.
@@ -314,7 +315,7 @@ private fun ChannelList(
                 itemsIndexed(shown, key = { _, channel -> channel.id }) { index, channel ->
                     TvChannelRow(
                         channel = channel,
-                        reserveLogo = reserveLogoSlot(shown.map { it.logoUrl }),
+                        reserveLogo = reserveLogo,
                         nowMs = nowMs,
                         last = channel.id == last?.id,
                         onClick = { onWatch(channel) },

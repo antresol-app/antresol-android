@@ -219,6 +219,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         UiLanguageModel(client.uiLanguageApi(), app.settings) { hostActivity?.let(MainActivity::restart) }
     }
     LaunchedEffect(uiLanguage) { uiLanguage.refresh() }
+    // One channel list for Home's «On Air Now» and the «ТВ» tab (in the shell's store, not a page's): one refresh, not two.
+    val channels: ChannelsViewModel = viewModel(key = "channels") { ChannelsViewModel(client.channelsApi()) }
 
     val open: (Card) -> Unit = { card -> navController.navigate(DetailRoute(card)) }
     val playVideo: (Long, ResumeMode) -> Unit = { id, mode -> VideoPlayerActivity.start(context, id, mode) }
@@ -291,7 +293,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onSeeAll = { shelf -> openGrid(GridSource.forShelf(ShelfPage.Home, shelf.id), shelf.title) },
                         onAir = {
                             OnAirShelf(
-                                viewModel = viewModel(key = "on-air") { ChannelsViewModel(client.channelsApi()) },
+                                viewModel = channels,
                                 onWatch = { channel -> watchChannel(channel, ChannelFilter.All) },
                                 onSeeAll = { selectTab(NavTab.Tv) },
                             )
@@ -300,7 +302,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 composable<ChannelsRoute> {
                     ChannelsScreen(
-                        viewModel = viewModel { ChannelsViewModel(client.channelsApi()) },
+                        viewModel = channels,
                         onWatch = watchChannel,
                     )
                 }

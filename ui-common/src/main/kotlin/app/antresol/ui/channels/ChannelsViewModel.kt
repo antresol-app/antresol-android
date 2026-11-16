@@ -1,5 +1,6 @@
 package app.antresol.ui.channels
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -94,40 +95,42 @@ class ChannelsViewModel(
     private var refreshJob: Job? = null
     private var guideJob: Job? = null
 
+    // The lists below are derived state: worked out once per change of what they read, not on every
+    // read from a composition (each key press and clock tick), and the same instances until then.
+
+    /** The filter while it still means something (a theme that is gone falls back to «All»). */
+    val filter: ChannelFilter by derivedStateOf { Channels.validFilter(channels.orEmpty(), requestedFilter) }
+
+    /** The themes for the filter row. */
+    val themes: List<String> by derivedStateOf { Channels.themes(channels.orEmpty()) }
+
+    /** The channels of the [filter], by number. */
+    val shown: List<Channel> by derivedStateOf { Channels.filter(channels.orEmpty(), filter) }
+
+    /** The last channel while the profile can still see it. */
+    val lastChannel: Channel? by derivedStateOf { Channels.lastChannel(channels.orEmpty(), lastChannelId) }
+
+    /** The channels with something on air, by number (the phone's home shelf). */
+    val onAir: List<Channel> by derivedStateOf { Channels.sortedByNumber(channels.orEmpty().filter { it.now != null }) }
+
+    /** The guide rows of the [filter], in list order. */
+    val shownGuide: List<ChannelEpgRow> by derivedStateOf {
+        val ids = shown.map { it.id }.toSet()
+        val byId = channels.orEmpty().associateBy { it.id }
+        guideRows.orEmpty().filter { it.id in ids }.map { row ->
+            val channel = byId[row.id]
+            val favorite = channel?.favorite ?: row.favorite
+            val logoUrl = row.logoUrl ?: channel?.logoUrl
+            if (favorite == row.favorite && logoUrl == row.logoUrl) row else row.copy(favorite = favorite, logoUrl = logoUrl)
+        }
+    }
+
+    /** The pages showing the list ([startRefreshing]); the refresh stops with the last one. */
+    private val watchers = HashSet<Any>()
+
     init {
         reload()
     }
-
-    /** The filter while it still means something (a theme that is gone falls back to «All»). */
-    val filter: ChannelFilter
-        get() = Channels.validFilter(channels.orEmpty(), requestedFilter)
-
-    /** The themes for the filter row. */
-    val themes: List<String>
-        get() = Channels.themes(channels.orEmpty())
-
-    /** The channels of the [filter], by number. */
-    val shown: List<Channel>
-        get() = Channels.filter(channels.orEmpty(), filter)
-
-    /** The last channel while the profile can still see it. */
-    val lastChannel: Channel?
-        get() = Channels.lastChannel(channels.orEmpty(), lastChannelId)
-
-    /** The channels with something on air, by number (the phone's home shelf). */
-    val onAir: List<Channel>
-        get() = Channels.sortedByNumber(channels.orEmpty().filter { it.now != null })
-
-    /** The guide rows of the [filter], in list order. */
-    val shownGuide: List<ChannelEpgRow>
-        get() {
-            val ids = shown.map { it.id }.toSet()
-            val byId = channels.orEmpty().associateBy { it.id }
-            return guideRows.orEmpty().filter { it.id in ids }.map { row ->
-                val channel = byId[row.id]
-                row.copy(favorite = channel?.favorite ?: row.favorite, logoUrl = row.logoUrl ?: channel?.logoUrl)
-            }
-        }
 
     fun select(filter: ChannelFilter) {
         requestedFilter = filter
@@ -186,9 +189,11 @@ class ChannelsViewModel(
     /**
      * A page shows the channels: refresh now when stale (or when the page comes back after a few
      * seconds, e.g. from the player, so the last channel and favourites are current), then every
-     * [Channels.REFRESH_MS].
+     * [Channels.REFRESH_MS]. Pages that share this view model (the phone's Home shelf and its «ТВ»
+     * tab) each pass their own [watcher] and share the one refresh.
      */
-    fun startRefreshing() {
+    fun startRefreshing(watcher: Any = this) {
+        watchers += watcher
         if (refreshJob?.isActive == true) return
         refreshJob = viewModelScope.launch {
             var first = true
@@ -225,7 +230,9 @@ class ChannelsViewModel(
 
     private var openedAt: Long? = null
 
-    fun stopRefreshing() {
+    fun stopRefreshing(watcher: Any = this) {
+        watchers -= watcher
+        if (watchers.isNotEmpty()) return
         refreshJob?.cancel()
         refreshJob = null
     }
@@ -270,7 +277,10 @@ class ChannelsViewModel(
     private suspend fun fetchNow() {
         try {
             val list = api.channels()
-            channels = Channels.sortedByNumber(list.channels)
+            // A channel that did not change stays the same instance, so its row or card is not
+            // recomposed by a refresh (an unchanged list is not written at all: the state compares it).
+            val known = channels.orEmpty().associateBy { it.id }
+            channels = Channels.sortedByNumber(list.channels).map { channel -> known[channel.id]?.takeIf { it == channel } ?: channel }
             lastChannelId = list.lastChannel ?: lastChannelId
             error = null
         } catch (e: CancellationException) {

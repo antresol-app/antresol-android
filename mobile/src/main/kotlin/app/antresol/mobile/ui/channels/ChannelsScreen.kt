@@ -45,6 +45,9 @@ import app.antresol.ui.channels.rememberNowMs
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 
+/** This page's turn at the channel refresh it shares with Home's «On Air Now». */
+private const val TV_PAGE_WATCHER = "tv-page"
+
 /**
  * «ТВ», a tab of its own: ONE numbered list of channels, like a television («Каналы»), or the
  * programme guide of the same list («Телегид»). Filters «Все · Избранное · <themes>» narrow both.
@@ -60,8 +63,8 @@ fun ChannelsScreen(
 ) {
     LifecycleStartEffect(viewModel) {
         viewModel.opened()
-        viewModel.startRefreshing()
-        onStopOrDispose { viewModel.stopRefreshing() }
+        viewModel.startRefreshing(TV_PAGE_WATCHER)
+        onStopOrDispose { viewModel.stopRefreshing(TV_PAGE_WATCHER) }
     }
     val bottom = LocalBottomBarPadding.current
     val direction = LocalLayoutDirection.current

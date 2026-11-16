@@ -469,7 +469,9 @@ class PlaybackConnection(
     private fun onConnected(connected: MediaController) {
         controller = connected
         connected.addListener(object : Player.Listener {
-            override fun onEvents(player: Player, events: Player.Events) = sync()
+            // The queue only changes with the timeline; copying a long one on every event is main-thread work.
+            override fun onEvents(player: Player, events: Player.Events) =
+                sync(queueChanged = events.contains(Player.EVENT_TIMELINE_CHANGED))
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 transitions++
@@ -502,7 +504,7 @@ class PlaybackConnection(
         }
     }
 
-    private fun sync() {
+    private fun sync(queueChanged: Boolean = true) {
         val c = controller ?: return
         isPlaying = c.isPlaying
         playWhenReady = c.playWhenReady
@@ -511,7 +513,7 @@ class PlaybackConnection(
         repeatMode = c.repeatMode
         speed = c.playbackParameters.speed
         if (c.playbackState == Player.STATE_READY) error = null
-        queue = List(c.mediaItemCount) { c.getMediaItemAt(it) }
+        if (queueChanged || queue.size != c.mediaItemCount) queue = List(c.mediaItemCount) { c.getMediaItemAt(it) }
         currentIndex = c.currentMediaItemIndex
         val item = c.currentMediaItem
         current = item?.toNowPlaying()

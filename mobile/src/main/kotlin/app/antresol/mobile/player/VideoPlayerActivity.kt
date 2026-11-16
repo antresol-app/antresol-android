@@ -104,7 +104,13 @@ class VideoPlayerActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
         }
 
-        val mode = intent.getStringExtra(EXTRA_RESUME)?.let { runCatching { ResumeMode.valueOf(it) }.getOrNull() } ?: ResumeMode.Ask
+        // Restored after the process was killed: carry on from the saved position, not from the
+        // launch's «from the beginning» or its prompt again. (A rotation keeps the view model.)
+        val mode = if (savedInstanceState != null) {
+            ResumeMode.Resume
+        } else {
+            intent.getStringExtra(EXTRA_RESUME)?.let { runCatching { ResumeMode.valueOf(it) }.getOrNull() } ?: ResumeMode.Ask
+        }
         val settings = app.settings
         viewModel = ViewModelProvider(
             this,

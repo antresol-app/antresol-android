@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LifecycleStartEffect
 
 /**
  * Trailers of servers that do not play them themselves (no `play`: public servers, trailers off):
@@ -96,6 +97,9 @@ object TrailerEmbed {
 
     /** Pauses a playing trailer, resumes a paused one. */
     const val TOGGLE_JS = "antresolToggle()"
+
+    /** Pauses the trailer (the app left the screen); the viewer resumes it. */
+    const val PAUSE_JS = "if (window.player && player.pauseVideo) player.pauseVideo()"
 }
 
 /** What the embedded trailer player shows. */
@@ -121,6 +125,18 @@ class TrailerEmbedState(val key: String) {
     /** Play/pause through the IFrame API (TV: OK on the remote). */
     fun toggle() {
         webView?.evaluateJavascript(TrailerEmbed.TOGGLE_JS, null)
+    }
+
+    /** The app went to the background: the player is paused and the WebView stops its work. */
+    internal fun onStop() {
+        val view = webView ?: return
+        view.evaluateJavascript(TrailerEmbed.PAUSE_JS, null)
+        view.onPause()
+    }
+
+    /** Back in front: the WebView works again; the trailer stays paused until the viewer resumes it. */
+    internal fun onStart() {
+        webView?.onResume()
     }
 
     fun reload() {
@@ -162,11 +178,16 @@ class TrailerEmbedState(val key: String) {
 
 /**
  * The full-screen WebView of [state]: JavaScript on, autoplay without a tap, black behind the
- * picture. It never takes focus (the screen's own keys drive it) and is destroyed with the screen.
+ * picture. It never takes focus (the screen's own keys drive it), is paused while the app is in the
+ * background (a WebView left alone keeps playing its sound) and is destroyed with the screen.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun TrailerEmbedView(state: TrailerEmbedState, modifier: Modifier = Modifier) {
+    LifecycleStartEffect(state) {
+        state.onStart()
+        onStopOrDispose { state.onStop() }
+    }
     AndroidView(
         factory = { context ->
             WebView(context).apply {

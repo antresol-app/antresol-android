@@ -44,13 +44,7 @@ import app.antresol.ui.trailers.TrailerEmbedState
 import app.antresol.ui.trailers.TrailerEmbedView
 import app.antresol.ui.trailers.TrailerPhase
 import app.antresol.ui.trailers.TrailerPlayerViewModel
-
-/** Test tags of the trailer screens. */
-internal object TrailerTags {
-    const val LOADING = "trailer-loading"
-    const val PLAYING = "trailer-playing"
-    const val FAILED = "trailer-failed"
-}
+import app.antresol.ui.trailers.TrailerTags
 
 /**
  * A trailer the server fetched, full screen in the app's own player: the trailer's name and a

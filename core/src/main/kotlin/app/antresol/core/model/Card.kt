@@ -17,6 +17,9 @@ object Kind {
     const val COMIC_VOLUME = "comic_volume"
 
     /** Books, audiobooks, comics and comic volumes (the TV apps have no books). */
+    /** What the video player plays; a series or season plays its next episode. Their pages offer trailers. */
+    val VIDEO = setOf(MOVIE, SERIES, SEASON, EPISODE)
+
     fun isBook(kind: String): Boolean = kind == BOOK || kind == AUDIOBOOK || kind == COMIC || kind == COMIC_VOLUME
 }
 

@@ -51,17 +51,11 @@ import app.antresol.ui.trailers.TrailerEmbedState
 import app.antresol.ui.trailers.TrailerEmbedView
 import app.antresol.ui.trailers.TrailerPhase
 import app.antresol.ui.trailers.TrailerPlayerViewModel
+import app.antresol.ui.trailers.TrailerTags
 import java.util.Locale
 import kotlinx.coroutines.delay
 
 private const val CONTROLS_HIDE_MS = 4_000L
-
-/** Test tags of the trailer screens. */
-internal object TrailerTags {
-    const val LOADING = "trailer-loading"
-    const val PLAYING = "trailer-playing"
-    const val FAILED = "trailer-failed"
-}
 
 /**
  * A trailer the server fetched, in the app's own player: the name and a spinner while the server

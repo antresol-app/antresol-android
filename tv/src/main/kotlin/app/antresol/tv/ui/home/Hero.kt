@@ -41,7 +41,7 @@ import app.antresol.core.model.Card
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
-import app.antresol.tv.ui.components.kindLabel
+import app.antresol.ui.components.kindLabel
 import app.antresol.tv.ui.components.trapHorizontalFocus
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons

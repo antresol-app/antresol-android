@@ -162,7 +162,7 @@ class DetailViewModel(
                 refresh()
             }
         }
-        if (kind in Trailers.KINDS) viewModelScope.launch { trailers = Trailers.fetch(client, id, kind) }
+        if (kind in Kind.VIDEO) viewModelScope.launch { trailers = Trailers.fetch(client, id, kind) }
     }
 
     fun reload() {

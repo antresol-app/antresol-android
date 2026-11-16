@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.antresol.core.api.MediaUrls
 import app.antresol.core.model.Me
 import app.antresol.core.session.StoredSession
 import app.antresol.mobile.R
@@ -34,7 +35,6 @@ import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** The avatar's sheet: who is signed in where, Settings, Switch Profile, Change Server and Sign Out. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,7 +70,7 @@ fun AccountSheet(
                         else -> stringResource(R.string.account_profile)
                     }
                     Text(role, style = Antresol.typography.caption)
-                    val host = session.serverUrl.toHttpUrlOrNull()?.let { "${it.host}:${it.port}" } ?: session.serverUrl
+                    val host = MediaUrls.hostPort(session.serverUrl)
                     Text(stringResource(UiR.string.server_connected_to, host), style = Antresol.typography.caption)
                 }
             }

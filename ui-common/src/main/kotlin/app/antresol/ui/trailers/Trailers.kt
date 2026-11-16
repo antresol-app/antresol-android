@@ -16,15 +16,12 @@ import kotlinx.coroutines.CancellationException
  * the YouTube app only on a device without a WebView.
  */
 object Trailers {
-    /** Kinds whose detail page offers trailers (a season or episode gets its series'). */
-    val KINDS = setOf(Kind.MOVIE, Kind.SERIES, Kind.SEASON, Kind.EPISODE)
-
     /**
      * The item's trailers, best first; empty for a [kind] without trailers and on any failure (the
      * button just stays hidden).
      */
     suspend fun fetch(client: AntresolClient, id: Long, kind: String? = null): List<Trailer> {
-        if (kind != null && kind !in KINDS) return emptyList()
+        if (kind != null && kind !in Kind.VIDEO) return emptyList()
         return try {
             client.trailers(id).trailers.filter { it.key.isNotBlank() }
         } catch (e: CancellationException) {

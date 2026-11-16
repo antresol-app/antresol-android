@@ -22,6 +22,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/** Test tags of the trailer screens. */
+object TrailerTags {
+    const val LOADING = "trailer-loading"
+    const val PLAYING = "trailer-playing"
+    const val FAILED = "trailer-failed"
+}
+
 /** What the trailer player shows. */
 sealed interface TrailerPhase {
     /** The server is fetching the trailer, or the player is buffering its start. */

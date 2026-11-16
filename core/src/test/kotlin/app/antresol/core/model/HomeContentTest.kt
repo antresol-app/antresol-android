@@ -1,9 +1,5 @@
-package app.antresol.tv.ui.home
+package app.antresol.core.model
 
-import app.antresol.core.model.Card
-import app.antresol.core.model.HomeResponse
-import app.antresol.core.model.Shelf
-import app.antresol.core.model.ShelfId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

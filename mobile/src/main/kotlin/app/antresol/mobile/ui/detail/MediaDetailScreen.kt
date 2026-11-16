@@ -58,7 +58,7 @@ import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.Shelf
 import app.antresol.mobile.ui.components.TrackRow
 import app.antresol.mobile.ui.components.focusClickable
-import app.antresol.mobile.ui.components.kindLabel
+import app.antresol.ui.components.kindLabel
 import app.antresol.mobile.ui.music.PlayShuffleRow
 import app.antresol.mobile.ui.playlists.ConfirmSheet
 import app.antresol.mobile.ui.playlists.PlaylistNameSheet

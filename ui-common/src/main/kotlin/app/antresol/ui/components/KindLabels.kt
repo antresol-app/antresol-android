@@ -1,4 +1,4 @@
-package app.antresol.tv.ui.components
+package app.antresol.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource

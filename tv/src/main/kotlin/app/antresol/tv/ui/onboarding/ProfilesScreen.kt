@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,6 +42,7 @@ import androidx.tv.material3.Glow
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import app.antresol.core.api.MediaUrls
 import app.antresol.core.model.Profile
 import app.antresol.core.pairing.PairingApi
 import app.antresol.core.pairing.PairingTicket
@@ -71,7 +71,6 @@ import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * Sign-in on a known server. The default is the QR sign-in with the phone ([PhoneSignInScreen]);
@@ -240,7 +239,7 @@ private fun ProfilePicker(
         )
         Spacer(Modifier.height(20.dp))
         Text(
-            text = stringResource(R.string.server_connected_to, serverUrl.toHttpUrlOrNull()?.let { "${it.host}:${it.port}" } ?: serverUrl),
+            text = stringResource(R.string.server_connected_to, MediaUrls.hostPort(serverUrl)),
             style = Antresol.typography.caption,
             color = AntresolColors.LabelTertiary,
         )

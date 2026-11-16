@@ -102,7 +102,7 @@ import app.antresol.mobile.ui.detail.ItemDetailViewModel
 import app.antresol.mobile.ui.detail.MediaDetailScreen
 import app.antresol.mobile.ui.detail.MediaDetailViewModel
 import app.antresol.mobile.ui.detail.VideoDetailScreen
-import app.antresol.mobile.ui.home.HomeContent
+import app.antresol.core.model.HomeContent
 import app.antresol.mobile.ui.home.HomeScreen
 import app.antresol.mobile.ui.music.ShuffleAllViewModel
 import app.antresol.mobile.ui.music.SongsScreen
@@ -129,8 +129,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-
-private val VIDEO_KINDS = setOf(Kind.MOVIE, Kind.SERIES, Kind.SEASON, Kind.EPISODE)
 
 /** Session actions that ask first: one mis-tap must not revoke the token or drop the server. */
 private enum class SessionAction { SignOut, ChangeServer }
@@ -241,7 +239,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     // Continue Watching: a tap carries on (video, audiobook, reader); a long press opens the page.
     val continueCard: (Card) -> Unit = { card ->
         when (card.kind) {
-            in VIDEO_KINDS -> playVideo(card.id, ResumeMode.Resume)
+            in Kind.VIDEO -> playVideo(card.id, ResumeMode.Resume)
             Kind.AUDIOBOOK, Kind.BOOK, Kind.COMIC, Kind.COMIC_VOLUME -> scope.launch {
                 val book = try {
                     client.book(card.id)
@@ -296,7 +294,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onOpen = open,
                         onContinue = continueCard,
                         // Videos play (resuming); a hero album or book opens its page.
-                        onPlay = { card -> if (card.kind in VIDEO_KINDS) playVideo(card.id, ResumeMode.Resume) else open(card) },
+                        onPlay = { card -> if (card.kind in Kind.VIDEO) playVideo(card.id, ResumeMode.Resume) else open(card) },
                         onSeeAll = { shelf -> openGrid(GridSource.forShelf(ShelfPage.Home, shelf.id), shelf.title) },
                         onAir = {
                             OnAirShelf(
@@ -374,7 +372,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 composable<DetailRoute> { entry ->
                     val route = entry.toRoute<DetailRoute>()
-                    if (route.kind in VIDEO_KINDS) {
+                    if (route.kind in Kind.VIDEO) {
                         VideoDetailScreen(
                             viewModel = viewModel { ItemDetailViewModel(client, route.id, app.pendingWrites) },
                             onOpen = open,

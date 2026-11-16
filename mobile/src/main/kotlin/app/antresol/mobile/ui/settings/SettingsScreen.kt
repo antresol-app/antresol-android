@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.api.MediaUrls
 import app.antresol.core.model.DeviceSession
 import app.antresol.core.model.Health
 import app.antresol.core.model.Me
@@ -83,7 +84,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** What the settings page loads from the server: its version and this profile's signed-in devices. */
 data class ServerInfo(val health: Health?, val devices: List<DeviceSession>)
@@ -193,7 +193,7 @@ fun SettingsScreen(
             header(R.string.settings_server)
             group {
                 val info = (viewModel.state as? LoadState.Ready)?.value
-                val host = session.serverUrl.toHttpUrlOrNull()?.let { "${it.host}:${it.port}" } ?: session.serverUrl
+                val host = MediaUrls.hostPort(session.serverUrl)
                 ValueRow(stringResource(R.string.settings_server_address), host)
                 Divider()
                 ValueRow(stringResource(R.string.settings_server_version), info?.health?.version?.ifBlank { null } ?: "—", tag = "settings-server-version")

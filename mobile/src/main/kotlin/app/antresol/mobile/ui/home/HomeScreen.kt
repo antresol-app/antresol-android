@@ -12,6 +12,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.antresol.core.model.Card
+import app.antresol.core.model.HomeContent
 import app.antresol.core.model.Shelf
 import app.antresol.core.model.ShelfId
 import app.antresol.ui.LoadState

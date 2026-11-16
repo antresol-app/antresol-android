@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import app.antresol.core.model.Card
+import app.antresol.core.model.HomeContent
 import app.antresol.core.model.ShelfId
 import app.antresol.ui.LoadState
 import app.antresol.tv.ui.components.CardShape

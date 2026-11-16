@@ -1,12 +1,9 @@
-package app.antresol.mobile.ui.home
+package app.antresol.core.model
 
-import app.antresol.core.model.Card
-import app.antresol.core.model.HomeResponse
-import app.antresol.core.model.Kind
-import app.antresol.core.model.Shelf
-import app.antresol.core.model.ShelfId
-
-/** What the home screen shows: the hero rotation and the non-empty `/api/home` shelves in server order. */
+/**
+ * What the home screen shows: the hero rotation and the non-empty `/api/home` shelves in server
+ * order. The TV, which has no books, builds it from [HomeResponse.withoutBooks].
+ */
 data class HomeContent(
     val hero: List<Card>,
     /** Title of the shelf the hero was borrowed from when the server sent no hero; null = "New in Library". */

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Text
+import app.antresol.core.api.MediaUrls
 import app.antresol.core.pairing.PairCode
 import app.antresol.core.pairing.PairingApi
 import app.antresol.core.pairing.PairingFlow
@@ -146,7 +147,7 @@ fun PhoneSignInScreen(
             PillButton(text = stringResource(UiR.string.server_change), onClick = onChangeServer, icon = AntresolIcons.Server)
         }
         Text(
-            text = stringResource(UiR.string.server_connected_to, hostPort(chooser.serverUrl)),
+            text = stringResource(UiR.string.server_connected_to, MediaUrls.hostPort(chooser.serverUrl)),
             style = Antresol.typography.caption,
             color = AntresolColors.LabelTertiary,
         )
@@ -237,9 +238,6 @@ private fun CodeAndStatus(
         )
     }
 }
-
-/** `host:port` of a server URL, as the TV shows it. */
-internal fun hostPort(url: String): String = url.toHttpUrlOrNull()?.let { "${it.host}:${it.port}" } ?: url
 
 /** `host:port/pair` of the pairing URL's origin, as the TV tells people to open it. */
 private fun pairPage(url: String): String {

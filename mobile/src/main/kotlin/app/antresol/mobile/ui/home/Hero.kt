@@ -45,7 +45,7 @@ import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.mobile.ui.components.GlassPillButton
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PrimaryPillButton
-import app.antresol.mobile.ui.components.kindLabel
+import app.antresol.ui.components.kindLabel
 import app.antresol.mobile.ui.shell.BottomBarSpace
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons

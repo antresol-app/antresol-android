@@ -69,7 +69,7 @@ import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.SegmentedPills
 import app.antresol.mobile.ui.components.focusClickable
-import app.antresol.mobile.ui.components.kindLabel
+import app.antresol.ui.components.kindLabel
 import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage

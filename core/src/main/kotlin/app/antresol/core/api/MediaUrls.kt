@@ -3,6 +3,7 @@ package app.antresol.core.api
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.net.URLEncoder
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * Builds absolute URLs for images and media. Images, subtitles and comic pages need the Bearer
@@ -101,6 +102,9 @@ class MediaUrls(baseUrl: String) {
 
         /** The server's default port, assumed when the user types a bare host. */
         const val DEFAULT_PORT = 8420
+
+        /** `host:port` of a server URL, as the apps show the server; [url] itself when it is not a URL. */
+        fun hostPort(url: String): String = url.toHttpUrlOrNull()?.let { "${it.host}:${it.port}" } ?: url
 
         /**
          * Turns user input such as `nas.local`, `192.168.1.5:8420/` or `https://media.example.com`

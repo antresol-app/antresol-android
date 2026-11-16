@@ -225,7 +225,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     }
     // Hero Play and Continue Watching: video cards resume in the player, anything else opens its page.
     val playCard: (Card) -> Unit = { card ->
-        if (card.kind in PLAYABLE_KINDS) play(card.id, ResumeMode.Resume) else open(card)
+        if (card.kind in Kind.VIDEO) play(card.id, ResumeMode.Resume) else open(card)
     }
     val nowPlaying: () -> Unit = { navController.navigate(NowPlayingRoute) { launchSingleTop = true } }
     val openGrid: (GridKind, String?) -> Unit = { kind, genre -> navController.navigate(GridRoute(kind.name, genre.orEmpty())) }
@@ -696,8 +696,6 @@ private fun gridTitle(kind: GridKind): Int = when (kind) {
     GridKind.Artists -> TvR.string.music_artists
     GridKind.Playlists -> TvR.string.music_playlists
 }
-
-private val PLAYABLE_KINDS = setOf(Kind.MOVIE, Kind.EPISODE, Kind.SERIES, Kind.SEASON)
 
 /** Server shelf ids (Home, Music) and the grid that lists all of it. */
 private val SHELF_GRIDS = mapOf(

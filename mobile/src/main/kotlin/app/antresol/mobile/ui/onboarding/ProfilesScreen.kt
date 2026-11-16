@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.antresol.core.api.ApiException
+import app.antresol.core.api.MediaUrls
 import app.antresol.core.model.Profile
 import app.antresol.core.session.AuthNotice
 import app.antresol.core.session.AuthState
@@ -64,7 +65,6 @@ import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** "Who's watching?": the server's profiles, then a password step for protected profiles. */
 @Composable
@@ -136,7 +136,7 @@ fun ProfilesScreen(session: SessionManager, state: AuthState.ChooseProfile) {
         }
         if (passwordFor == null) {
             Spacer(Modifier.height(12.dp))
-            val host = state.serverUrl.toHttpUrlOrNull()?.let { "${it.host}:${it.port}" } ?: state.serverUrl
+            val host = MediaUrls.hostPort(state.serverUrl)
             Text(
                 stringResource(R.string.server_connected_to, host),
                 style = Antresol.typography.caption,

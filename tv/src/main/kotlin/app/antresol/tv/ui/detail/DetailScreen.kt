@@ -68,7 +68,7 @@ import app.antresol.tv.ui.components.TvIcons
 import app.antresol.tv.ui.components.TvTextField
 import app.antresol.tv.ui.components.VerticalShelfScrolling
 import app.antresol.tv.ui.components.cardFocusKey
-import app.antresol.tv.ui.components.kindLabel
+import app.antresol.ui.components.kindLabel
 import app.antresol.tv.ui.components.rememberFocusMemory
 import app.antresol.tv.ui.components.remembersFocus
 import app.antresol.tv.ui.components.trapHorizontalFocus

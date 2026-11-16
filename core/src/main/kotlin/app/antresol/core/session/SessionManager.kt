@@ -258,8 +258,10 @@ class SessionManager(
         }
         val session = signedIn.session.copy(userName = user.name, avatar = user.avatar)
         mutex.withLock {
-            if ((_state.value as? AuthState.SignedIn)?.session?.token != session.token) return
-            store.update { it.signedIn(session) }
+            val current = (_state.value as? AuthState.SignedIn)?.session
+            if (current?.token != session.token) return
+            // Nothing to write when the name and avatar are the stored ones (every launch).
+            if (session != current) store.update { it.signedIn(session) }
             _state.value = AuthState.SignedIn(session, user)
         }
     }

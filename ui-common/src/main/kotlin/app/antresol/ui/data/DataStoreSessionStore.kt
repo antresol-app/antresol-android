@@ -11,7 +11,9 @@ import app.antresol.core.api.AntresolClient
 import app.antresol.core.session.DeviceIds
 import app.antresol.core.session.SessionState
 import app.antresol.core.session.SessionStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 private val Context.antresolSession: DataStore<Preferences> by preferencesDataStore(name = "antresol_session")
 
@@ -42,20 +44,21 @@ class DataStoreSessionStore(
         return id
     }
 
-    override suspend fun load(): SessionState {
+    // Keystore calls and the session JSON stay off the caller's (main) thread: `edit` runs its
+    // transform in the caller's context.
+    override suspend fun load(): SessionState = withContext(Dispatchers.IO) {
         val raw = store.data.first()[STATE]
         // Written before encryption (or while the cipher failed): seal it now.
-        if (raw != null && !raw.startsWith(SEALED_PREFIX)) return update { it }
-        return decode(raw)
+        if (raw != null && !raw.startsWith(SEALED_PREFIX)) update { it } else decode(raw)
     }
 
-    override suspend fun update(transform: (SessionState) -> SessionState): SessionState {
+    override suspend fun update(transform: (SessionState) -> SessionState): SessionState = withContext(Dispatchers.IO) {
         var result = SessionState()
         store.edit { prefs ->
             result = transform(decode(prefs[STATE]))
             prefs[STATE] = encode(result)
         }
-        return result
+        result
     }
 
     private fun encode(state: SessionState): String {

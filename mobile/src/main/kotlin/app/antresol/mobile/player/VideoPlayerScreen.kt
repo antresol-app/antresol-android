@@ -69,12 +69,11 @@ import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.RoundIconButton
 import app.antresol.mobile.ui.components.SkipSecondsButton
 import app.antresol.mobile.ui.components.TimeSlider
-import app.antresol.mobile.ui.userMessage
+import app.antresol.ui.userMessage
 import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.format.Durations
 import app.antresol.ui.format.TrackLabels
-import app.antresol.ui.playback.PlaybackUnavailableException
 import app.antresol.ui.playback.PlayerPhase
 import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.playback.rememberKeepScreenOn
@@ -391,11 +390,7 @@ private fun ResumePrompt(positionMs: Long, onChoose: (Boolean) -> Unit) {
 
 @Composable
 internal fun FailedPanel(error: Throwable, onRetry: () -> Unit, onBack: () -> Unit) {
-    val message = if (error is PlaybackUnavailableException) {
-        stringResource(UiR.string.error_playback)
-    } else {
-        error.userMessage(LocalContext.current.resources)
-    }
+    val message = error.userMessage(LocalContext.current.resources)
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.widthIn(max = 420.dp)) {
         Text(message, style = Antresol.typography.body, textAlign = TextAlign.Center)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

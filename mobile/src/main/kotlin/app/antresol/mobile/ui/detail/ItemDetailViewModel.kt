@@ -16,7 +16,8 @@ import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.PendingWrites
 import app.antresol.mobile.R
 import app.antresol.core.playback.Resume
-import app.antresol.mobile.ui.LoadViewModel
+import app.antresol.ui.LoadState
+import app.antresol.ui.LoadViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -111,7 +112,7 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
     )
 
     private fun mutate(change: (VideoDetail) -> VideoDetail, write: suspend (before: VideoDetail) -> Unit) {
-        val before = (state as? app.antresol.mobile.ui.LoadState.Ready)?.value ?: return
+        val before = (state as? LoadState.Ready)?.value ?: return
         update(change)
         viewModelScope.launch {
             try {

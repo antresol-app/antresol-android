@@ -50,7 +50,7 @@ import app.antresol.core.pairing.pairingApi
 import app.antresol.core.session.AuthNotice
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
-import app.antresol.tv.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.LoadingView
 import app.antresol.tv.ui.components.PillButton
@@ -60,8 +60,8 @@ import app.antresol.tv.ui.components.TvTextField
 import app.antresol.tv.ui.components.WhileNotTyping
 import app.antresol.tv.ui.components.rememberTvKeyboardOpen
 import app.antresol.tv.ui.components.tryRequestFocus
-import app.antresol.tv.ui.load
-import app.antresol.tv.ui.userMessage
+import app.antresol.ui.load
+import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.tv.R as TvR
 import app.antresol.ui.components.AntresolIcons

@@ -1,6 +1,7 @@
 package app.antresol.mobile.ui
 
 import app.antresol.core.model.Page
+import app.antresol.ui.LoadState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch

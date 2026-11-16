@@ -33,7 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.antresol.core.model.Card
-import app.antresol.mobile.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.components.CardSizes
 import app.antresol.mobile.ui.components.CardStyle

@@ -46,7 +46,7 @@ import app.antresol.tv.R as TvR
 import app.antresol.tv.playback.AudioContent
 import app.antresol.tv.playback.AudioEngine
 import app.antresol.tv.playback.SleepTimer
-import app.antresol.tv.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.components.MenuOption
 import app.antresol.tv.ui.components.MessageView
@@ -58,7 +58,7 @@ import app.antresol.tv.ui.components.TvIcons
 import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.tv.ui.home.HeroBackground
 import app.antresol.tv.ui.player.SeekBar
-import app.antresol.tv.ui.userMessage
+import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage

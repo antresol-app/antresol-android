@@ -94,7 +94,6 @@
     <string name="settings_language_system">Системный</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_app_version">Версия приложения</string>
-    <string name="error_too_many_attempts">Слишком много попыток. Попробуйте позже.</string>
     <string name="account_open">Аккаунт: %1$s</string>
     <string name="music_nothing_to_play">Нечего воспроизводить.</string>
     <string name="music_playback_failed">Не удалось начать воспроизведение. Проверьте подключение и попробуйте снова.</string>

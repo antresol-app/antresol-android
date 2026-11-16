@@ -12,9 +12,9 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
 import app.antresol.core.model.Page
 import app.antresol.core.model.ShuffleSource
-import app.antresol.tv.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.tv.ui.components.CardShape
-import app.antresol.tv.ui.load
+import app.antresol.ui.load
 import app.antresol.ui.R
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch

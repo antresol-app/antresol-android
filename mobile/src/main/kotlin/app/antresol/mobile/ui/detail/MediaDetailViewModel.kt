@@ -18,8 +18,8 @@ import app.antresol.core.model.Track
 import app.antresol.core.music.PlaylistEdits
 import app.antresol.core.playback.PendingWrites
 import app.antresol.mobile.R
-import app.antresol.mobile.ui.LoadState
-import app.antresol.mobile.ui.LoadViewModel
+import app.antresol.ui.LoadState
+import app.antresol.ui.LoadViewModel
 import app.antresol.mobile.ui.playlists.PlaylistPicker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch

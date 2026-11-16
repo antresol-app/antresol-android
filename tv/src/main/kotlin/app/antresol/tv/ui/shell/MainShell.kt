@@ -70,7 +70,7 @@ import app.antresol.core.session.SessionManager
 import app.antresol.tv.AntresolTvApp
 import app.antresol.tv.R as TvR
 import app.antresol.tv.playback.AudioContent
-import app.antresol.tv.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.browse.CardGridScreen
 import app.antresol.tv.ui.browse.CardGridViewModel
@@ -90,7 +90,7 @@ import app.antresol.tv.ui.detail.DetailScreen
 import app.antresol.tv.ui.detail.DetailViewModel
 import app.antresol.tv.ui.home.HomeScreen
 import app.antresol.tv.ui.home.HomeViewModel
-import app.antresol.tv.ui.load
+import app.antresol.ui.load
 import app.antresol.tv.ui.music.SongsScreen
 import app.antresol.tv.ui.music.SongsViewModel
 import app.antresol.tv.ui.nowplaying.NowPlayingScreen
@@ -105,7 +105,7 @@ import app.antresol.tv.ui.search.BrowseTarget
 import app.antresol.tv.ui.search.SearchScreen
 import app.antresol.tv.ui.search.SearchViewModel
 import app.antresol.tv.ui.settings.SettingsScreen
-import app.antresol.tv.ui.userMessage
+import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.core.channels.ChannelFilter
 import app.antresol.core.channels.LiveTvSession

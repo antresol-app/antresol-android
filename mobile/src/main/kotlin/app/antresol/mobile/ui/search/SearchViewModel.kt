@@ -10,8 +10,8 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
 import app.antresol.core.model.SearchResults
 import app.antresol.core.model.Track
-import app.antresol.mobile.ui.LoadState
-import app.antresol.mobile.ui.load
+import app.antresol.ui.LoadState
+import app.antresol.ui.load
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

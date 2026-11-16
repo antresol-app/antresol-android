@@ -44,7 +44,7 @@ import app.antresol.core.model.Kind
 import app.antresol.core.model.Track
 import app.antresol.mobile.R
 import app.antresol.mobile.playback.PlaybackConnection
-import app.antresol.mobile.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.mobile.ui.browse.GridSource

@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import app.antresol.mobile.ui.userMessage
+import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors

@@ -17,24 +17,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.Text
 import app.antresol.core.api.attempt
 import app.antresol.core.model.Card
 import app.antresol.core.model.Genre
 import app.antresol.core.model.Shelf
 import app.antresol.tv.R as TvR
-import app.antresol.tv.ui.LoadState
+import app.antresol.ui.LoadState
+import app.antresol.ui.LoadViewModel
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.LoadingView
 import app.antresol.tv.ui.components.MessageView
@@ -46,41 +43,25 @@ import app.antresol.tv.ui.components.cardFocusKey
 import app.antresol.tv.ui.components.rememberFocusMemory
 import app.antresol.tv.ui.components.remembersFocus
 import app.antresol.tv.ui.components.trapHorizontalFocus
-import app.antresol.tv.ui.load
 import app.antresol.ui.R
 import app.antresol.ui.theme.Antresol
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 
 /** What a shelf page shows: server shelves and, for Music, the genres. */
 data class ShelfPage(val shelves: List<Shelf>, val genres: List<Genre> = emptyList())
 
 /** Loads a shelf page such as `/api/music/home` or `/api/books/home`; empty shelves are dropped. */
-class ShelvesViewModel(
-    private val loader: suspend () -> List<Shelf>,
-    private val genres: (suspend () -> List<Genre>)? = null,
-) : ViewModel() {
-    var state: LoadState<ShelfPage> by mutableStateOf(LoadState.Loading)
-        private set
-
-    init {
-        reload()
-    }
-
-    fun reload() {
-        state = LoadState.Loading
-        viewModelScope.launch {
-            state = load {
-                coroutineScope {
-                    val genreList = genres?.let { async { attempt { it() }.orEmpty() } }
-                    val shelves = loader().filter { it.cards.isNotEmpty() }
-                    ShelfPage(shelves, genreList?.await().orEmpty())
-                }
+class ShelvesViewModel(loader: suspend () -> List<Shelf>, genres: (suspend () -> List<Genre>)? = null) :
+    LoadViewModel<ShelfPage>(
+        fetch = {
+            coroutineScope {
+                val genreList = genres?.let { async { attempt { it() }.orEmpty() } }
+                val shelves = loader().filter { it.cards.isNotEmpty() }
+                ShelfPage(shelves, genreList?.await().orEmpty())
             }
-        }
-    }
-}
+        },
+    )
 
 /**
  * A tab made of server shelves (Music, Books): page title with header links on the right

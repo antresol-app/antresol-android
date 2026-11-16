@@ -33,7 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import app.antresol.core.model.Card
-import app.antresol.tv.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.tv.ui.components.CardShape
 import app.antresol.tv.ui.components.CardSizes
 import app.antresol.tv.ui.components.ErrorView

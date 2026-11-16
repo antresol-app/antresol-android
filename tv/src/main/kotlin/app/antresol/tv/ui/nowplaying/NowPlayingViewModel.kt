@@ -9,8 +9,8 @@ import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.Lyrics
 import app.antresol.tv.playback.AudioEngine
-import app.antresol.tv.ui.LoadState
-import app.antresol.tv.ui.load
+import app.antresol.ui.LoadState
+import app.antresol.ui.load
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged

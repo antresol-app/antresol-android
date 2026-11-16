@@ -21,7 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
-import app.antresol.tv.ui.userMessage
+import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors

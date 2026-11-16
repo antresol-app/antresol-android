@@ -42,12 +42,12 @@ import androidx.compose.ui.unit.dp
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.Playlist
 import app.antresol.core.music.PlaylistEdits
-import app.antresol.mobile.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.mobile.ui.components.GlassTextField
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.focusClickable
-import app.antresol.mobile.ui.load
-import app.antresol.mobile.ui.userMessage
+import app.antresol.ui.load
+import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors

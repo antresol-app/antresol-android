@@ -12,8 +12,8 @@ import app.antresol.core.model.BookDetail
 import app.antresol.core.model.ComicPages
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.reading.ComicProgress
-import app.antresol.tv.ui.LoadState
-import app.antresol.tv.ui.load
+import app.antresol.ui.LoadState
+import app.antresol.ui.load
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay

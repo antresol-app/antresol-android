@@ -34,8 +34,8 @@ import app.antresol.core.reading.ComicProgress
 import app.antresol.tv.R as TvR
 import app.antresol.tv.playback.AudioContent
 import app.antresol.tv.playback.AudioEngine
-import app.antresol.tv.ui.LoadState
-import app.antresol.tv.ui.load
+import app.antresol.ui.LoadState
+import app.antresol.ui.load
 import app.antresol.ui.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job

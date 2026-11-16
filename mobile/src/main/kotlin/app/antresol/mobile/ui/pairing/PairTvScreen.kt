@@ -68,7 +68,7 @@ import app.antresol.mobile.ui.components.GlassTextField
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.focusClickable
-import app.antresol.mobile.ui.userMessage
+import app.antresol.ui.userMessage
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol

@@ -48,15 +48,15 @@ import app.antresol.core.session.AuthNotice
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
 import app.antresol.mobile.R as MobileR
-import app.antresol.mobile.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.GlassPillButton
 import app.antresol.mobile.ui.components.GlassTextField
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PrimaryPillButton
-import app.antresol.mobile.ui.load
-import app.antresol.mobile.ui.userMessage
+import app.antresol.ui.load
+import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ProfileAvatar

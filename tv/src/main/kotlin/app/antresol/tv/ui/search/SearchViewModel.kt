@@ -11,9 +11,9 @@ import app.antresol.core.model.Kind
 import app.antresol.core.model.SearchResults
 import app.antresol.core.model.Track
 import app.antresol.tv.playback.AudioEngine
-import app.antresol.tv.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.tv.ui.detail.DetailRow
-import app.antresol.tv.ui.load
+import app.antresol.ui.load
 import app.antresol.ui.R
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay

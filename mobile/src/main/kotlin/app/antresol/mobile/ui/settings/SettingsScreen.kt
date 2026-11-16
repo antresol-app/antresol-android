@@ -61,8 +61,8 @@ import app.antresol.mobile.player.qualityLabel
 import app.antresol.ui.language.UiLanguageModel
 import app.antresol.ui.language.UiLanguages
 import app.antresol.mobile.settings.AppSettings
-import app.antresol.mobile.ui.LoadState
-import app.antresol.mobile.ui.LoadViewModel
+import app.antresol.ui.LoadState
+import app.antresol.ui.LoadViewModel
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.components.BackBar
 import app.antresol.mobile.ui.components.ErrorView

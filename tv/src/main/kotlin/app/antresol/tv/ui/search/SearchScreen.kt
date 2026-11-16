@@ -38,7 +38,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.core.model.Card
 import app.antresol.tv.R as TvR
-import app.antresol.tv.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.FocusMemory
 import app.antresol.tv.ui.components.LoadingView

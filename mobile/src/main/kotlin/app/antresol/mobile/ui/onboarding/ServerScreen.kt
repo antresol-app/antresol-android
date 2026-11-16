@@ -34,7 +34,7 @@ import app.antresol.core.session.ServerNeedsSetupException
 import app.antresol.core.session.SessionManager
 import app.antresol.mobile.ui.components.GlassTextField
 import app.antresol.mobile.ui.components.PrimaryPillButton
-import app.antresol.mobile.ui.userMessage
+import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.LogoTile

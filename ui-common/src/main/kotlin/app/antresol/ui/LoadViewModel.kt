@@ -1,4 +1,4 @@
-package app.antresol.mobile.ui
+package app.antresol.ui
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf

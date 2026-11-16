@@ -82,7 +82,7 @@ import app.antresol.mobile.reader.ComicReaderViewModel
 import app.antresol.mobile.reader.PdfReaderScreen
 import app.antresol.mobile.reader.PdfReaderViewModel
 import app.antresol.mobile.settings.AppSettings
-import app.antresol.mobile.ui.LoadViewModel
+import app.antresol.ui.LoadViewModel
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.mobile.ui.browse.BooksScreen

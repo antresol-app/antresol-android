@@ -32,7 +32,7 @@ import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.Track
 import app.antresol.tv.R as TvR
 import app.antresol.tv.playback.AudioEngine
-import app.antresol.tv.ui.LoadState
+import app.antresol.ui.LoadState
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.LoadingView
 import app.antresol.tv.ui.components.MessageView
@@ -45,8 +45,8 @@ import app.antresol.tv.ui.components.VerticalShelfScrolling
 import app.antresol.tv.ui.components.rememberFocusMemory
 import app.antresol.tv.ui.components.remembersFocus
 import app.antresol.tv.ui.components.trapHorizontalFocus
-import app.antresol.tv.ui.load
-import app.antresol.tv.ui.userMessage
+import app.antresol.ui.load
+import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.format.Durations

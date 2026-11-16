@@ -46,7 +46,7 @@ import app.antresol.tv.ui.components.TvTextField
 import app.antresol.tv.ui.components.WhileNotTyping
 import app.antresol.tv.ui.components.rememberTvKeyboardOpen
 import app.antresol.tv.ui.components.tryRequestFocus
-import app.antresol.tv.ui.userMessage
+import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.ui.components.LogoTile
 import app.antresol.ui.theme.Antresol

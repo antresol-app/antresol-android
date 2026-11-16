@@ -41,7 +41,7 @@ import app.antresol.core.tvsetup.TvSetupListener
 import app.antresol.tv.R
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.tryRequestFocus
-import app.antresol.tv.ui.userMessage
+import app.antresol.ui.userMessage
 import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.QrCodeImage

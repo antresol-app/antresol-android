@@ -5,7 +5,7 @@ import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.ComicPages
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.reading.ComicProgress
-import app.antresol.mobile.ui.LoadViewModel
+import app.antresol.ui.LoadViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job

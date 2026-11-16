@@ -14,8 +14,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.antresol.core.model.Card
 import app.antresol.core.model.Shelf
 import app.antresol.core.model.ShelfId
-import app.antresol.mobile.ui.LoadState
-import app.antresol.mobile.ui.LoadViewModel
+import app.antresol.ui.LoadState
+import app.antresol.ui.LoadViewModel
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.components.CardStyle
 import app.antresol.mobile.ui.components.EmptyView

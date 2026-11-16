@@ -8,7 +8,8 @@ import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.reading.ComicProgress
-import app.antresol.mobile.ui.LoadViewModel
+import app.antresol.ui.LoadState
+import app.antresol.ui.LoadViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -111,7 +112,7 @@ class PdfReaderViewModel(
     }
 
     override fun onCleared() {
-        val book = (state as? app.antresol.mobile.ui.LoadState.Ready)?.value ?: return
+        val book = (state as? LoadState.Ready)?.value ?: return
         pendingWrites.track(
             appScope.launch {
                 save(book.document.pageCount)

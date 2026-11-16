@@ -1,10 +1,5 @@
 package app.antresol.tv.ui.home
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.model.Card
@@ -12,10 +7,7 @@ import app.antresol.core.model.HomeResponse
 import app.antresol.core.model.Kind
 import app.antresol.core.model.Shelf
 import app.antresol.core.model.ShelfId
-import app.antresol.tv.ui.LoadState
-import app.antresol.tv.ui.load
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+import app.antresol.ui.LoadViewModel
 
 /**
  * What the home screen shows: the hero rotation and the non-empty `/api/home` shelves in server
@@ -48,41 +40,10 @@ data class HomeContent(
     }
 }
 
-class HomeViewModel(
-    private val client: AntresolClient,
-    private val pendingWrites: PendingWrites,
-) : ViewModel() {
-    var state: LoadState<HomeContent> by mutableStateOf(LoadState.Loading)
-        private set
-
-    private var job: Job? = null
-
-    init {
-        reload()
-    }
-
-    /** Loads from scratch, showing the spinner (first load and "Try Again"). */
-    fun reload() {
-        job?.cancel()
-        state = LoadState.Loading
-        job = viewModelScope.launch { fetch() }
-    }
-
-    /**
-     * Refreshes in place whenever the screen comes back (from the player, a detail page), so
-     * Continue Watching reflects what was just played. Failures keep the shown content.
-     */
-    fun refresh() {
-        if (state !is LoadState.Ready || job?.isActive == true) return
-        job = viewModelScope.launch {
-            // The player's final progress write must land first, or Continue Watching shows the old position.
-            pendingWrites.await()
-            val fresh = load { HomeContent.from(client.home()) }
-            if (fresh is LoadState.Ready && fresh != state) state = fresh
-        }
-    }
-
-    private suspend fun fetch() {
-        state = load { HomeContent.from(client.home()) }
-    }
-}
+/**
+ * Loads Home. It refreshes in place whenever the screen comes back (from the player, a detail
+ * page) and when a final progress write lands, so Continue Watching reflects what was just played;
+ * failures keep the shown content.
+ */
+class HomeViewModel(client: AntresolClient, pendingWrites: PendingWrites) :
+    LoadViewModel<HomeContent>(staleAfterMs = 0, pendingWrites = pendingWrites, fetch = { HomeContent.from(client.home()) })

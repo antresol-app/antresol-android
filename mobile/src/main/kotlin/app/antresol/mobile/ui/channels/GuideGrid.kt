@@ -57,7 +57,6 @@ import app.antresol.ui.channels.timeFormat
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.roundToInt
 
 private val ChannelColumnWidth = 112.dp
@@ -102,9 +101,10 @@ fun GuideGrid(
         scroll.scrollTo(target)
     }
     LaunchedEffect(scroll) {
-        snapshotFlow { scroll.maxValue - scroll.value < scroll.viewportSize * 2 }
-            .distinctUntilChanged()
-            .collect { near -> if (near && scroll.maxValue > 0) onNearEnd() }
+        // Every scroll position near the end asks, not only arriving there: a page that failed is
+        // asked for again by scrolling on ([onNearEnd] ignores the call while a page is loading).
+        snapshotFlow { if (scroll.maxValue > 0 && scroll.maxValue - scroll.value < scroll.viewportSize * 2) scroll.value else -1 }
+            .collect { near -> if (near >= 0) onNearEnd() }
     }
     // The time at the visible left edge. Read in layout and derived state only, never in this
     // composition: the grid must not recompose with every frame of a scroll.

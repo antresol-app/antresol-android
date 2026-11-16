@@ -104,6 +104,9 @@ private fun Long.minutesToDp(): Dp = LocalMinuteWidth.current * (this / 60_000f)
 
 private fun Long.minutesToDp(minute: Dp): Dp = minute * (this / 60_000f)
 
+/** What tells a channel's programmes apart: the id, or the start when the source gives none. */
+private val ChannelProgram.key: String get() = id.ifEmpty { start }
+
 /** A programme picked in the guide with its channel row. */
 private data class Picked(val row: ChannelEpgRow, val program: ChannelProgram)
 
@@ -120,7 +123,6 @@ private data class Picked(val row: ChannelEpgRow, val program: ChannelProgram)
 fun GuideScreen(viewModel: ChannelsViewModel, nowMs: Long, canTakeFocus: () -> Boolean, header: @Composable () -> Unit, onPanel: (Boolean) -> Unit, onWatch: (Channel) -> Unit) {
     val rows = viewModel.guideRows
     val error = viewModel.guideError
-    LaunchedEffect(Unit) { if (rows == null && error == null) viewModel.loadGuide() }
     var picked by remember { mutableStateOf<Picked?>(null) }
     var selected by remember { mutableStateOf(0) }
     LaunchedEffect(picked != null) { onPanel(picked != null) }
@@ -204,7 +206,8 @@ private fun GuideGrid(
     val tick = Epg.tickMs(minute.value, 110f)
     val width = (toMs - fromMs).minutesToDp(minute)
     val requesters = remember { mutableMapOf<String, FocusRequester>() }
-    fun requester(program: ChannelProgram) = requesters.getOrPut(program.id.ifEmpty { program.start }) { FocusRequester() }
+    // Keyed by the channel too: programmes without an id that start together on two channels are different blocks.
+    fun requester(row: ChannelEpgRow, program: ChannelProgram) = requesters.getOrPut("${row.id}/${program.key}") { FocusRequester() }
     // The time position kept by vertical moves, and where focus is.
     var anchorMs by remember { mutableLongStateOf(nowMs) }
     var focusedRow by remember { mutableStateOf(rows.indexOfFirst { it.id == lastChannelId }.coerceAtLeast(0)) }
@@ -241,7 +244,7 @@ private fun GuideGrid(
         if (canTakeFocus()) {
             vertical = true
             if (!isComposed(target)) reveal(target, fromMs, scroll, density, minute)
-            requester(target).tryRequestFocus(8)
+            requester(rows[start], target).tryRequestFocus(8)
         }
     }
 
@@ -252,7 +255,7 @@ private fun GuideGrid(
         if (!inGrid) return false
         val row = rows.getOrNull(focusedRow) ?: return true
         val programs = Epg.visible(row, fromMs, toMs)
-        val index = programs.indexOfFirst { it.id == focusedProgram?.id }
+        val index = focusedProgram?.key.let { key -> programs.indexOfFirst { it.key == key } }
         val target = programs.getOrNull(index + step)
         if (index < 0 || target == null) {
             if (step > 0) onNearEnd()
@@ -260,7 +263,7 @@ private fun GuideGrid(
         }
         scope.launch {
             reveal(target, fromMs, scroll, density, minute)
-            requester(target).tryRequestFocus(6)
+            requester(row, target).tryRequestFocus(6)
         }
         return true
     }
@@ -278,7 +281,7 @@ private fun GuideGrid(
             }
             vertical = true
             if (!isComposed(program)) reveal(program, fromMs, scroll, density, minute)
-            requester(program).tryRequestFocus(6)
+            requester(rows[target], program).tryRequestFocus(6)
         }
         return true
     }
@@ -458,7 +461,7 @@ private fun Timeline(
     nowMs: Long,
     width: Dp,
     clock: java.text.DateFormat,
-    requester: (ChannelProgram) -> FocusRequester,
+    requester: (ChannelEpgRow, ChannelProgram) -> FocusRequester,
     onFocused: (ChannelProgram) -> Unit,
     onPick: (ChannelProgram) -> Unit,
 ) {
@@ -472,7 +475,7 @@ private fun Timeline(
             val start = programStart.coerceAtLeast(fromMs)
             val end = programEnd.coerceAtMost(toMs)
             // Keyed: a block keeps its state (and the focus) when the composed window moves along the row.
-            key(program.id.ifEmpty { program.start }) {
+            key(program.key) {
                 GuideBlock(
                     program = program,
                     onAir = nowMs in programStart until programEnd,
@@ -487,7 +490,7 @@ private fun Timeline(
                         .width((end - start).minutesToDp())
                         .fillMaxHeight()
                         .padding(horizontal = 1.dp, vertical = 3.dp)
-                        .focusRequester(requester(program))
+                        .focusRequester(requester(row, program))
                         .onFocusChanged { if (it.isFocused) onFocused(program) },
                 )
             }

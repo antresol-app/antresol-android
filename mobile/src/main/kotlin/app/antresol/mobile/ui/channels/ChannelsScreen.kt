@@ -176,7 +176,6 @@ private fun GuidePage(viewModel: ChannelsViewModel, nowMs: Long, padding: Paddin
     var pick by androidx.compose.runtime.remember { mutableStateOf<GuidePick?>(null) }
     val rows = viewModel.guideRows
     val guideError = viewModel.guideError
-    LaunchedEffect(Unit) { if (rows == null && guideError == null) viewModel.loadGuide() }
     Column(Modifier.fillMaxSize().background(AntresolColors.Background)) {
         PageTop(null)
         TitleRow(viewModel)

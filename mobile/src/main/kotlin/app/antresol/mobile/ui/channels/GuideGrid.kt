@@ -1,7 +1,6 @@
 package app.antresol.mobile.ui.channels
 
 import app.antresol.ui.channels.ChannelLogo
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +30,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -40,36 +38,27 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.offset
 import app.antresol.core.channels.Channels
 import app.antresol.core.channels.Epg
 import app.antresol.core.model.ChannelEpgRow
 import app.antresol.core.model.ChannelProgram
 import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.ui.R
+import app.antresol.ui.channels.LocalMinuteWidth
 import app.antresol.ui.channels.guideDayLabel
+import app.antresol.ui.channels.minutesToDp
 import app.antresol.ui.channels.programClock
+import app.antresol.ui.channels.stickyLabel
 import app.antresol.ui.channels.timeFormat
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
-import kotlin.math.roundToInt
 
 private val ChannelColumnWidth = 112.dp
 private val RowHeight = 68.dp
 private val RulerHeight = 32.dp
-
-/** Width of one minute, set per guide (see [Epg.minuteWidth]): a film of 90 min is 360 dp. */
-private val LocalMinuteWidth = androidx.compose.runtime.staticCompositionLocalOf { 4.dp }
-
-@Composable
-private fun Long.minutesToDp(): Dp = LocalMinuteWidth.current * (this / 60_000f)
-
-private fun Long.minutesToDp(minute: Dp): Dp = minute * (this / 60_000f)
 
 /**
  * «Телегид» on the phone: a sticky channel column (number, name, star), a time ruler with
@@ -331,24 +320,5 @@ private fun GuideBlock(
                 overflow = TextOverflow.Clip,
             )
         }
-    }
-}
-
-/** Narrowest visible part of a block that still gets its title and time. */
-private val MinTextWidth = 48.dp
-
-/**
- * Moves a block's label right by [inset] so it stays at the visible left edge when the programme
- * began off-screen; the same inset in every row (a short remainder shortens the title instead). A
- * sliver (less than [MinTextWidth] of the block left) shows no text rather than «…» over a clipped
- * time. [inset] reads the scroll position and is asked at layout, so scrolling the guide moves the
- * labels without recomposing a block.
- */
-private fun Modifier.stickyLabel(blockWidth: Density.() -> Float, inset: Density.() -> Float): Modifier = layout { measurable, constraints ->
-    val shift = inset()
-    val show = blockWidth() - shift >= MinTextWidth.toPx()
-    val placeable = measurable.measure(constraints.offset(horizontal = -shift.roundToInt()))
-    layout(constraints.constrainWidth(placeable.width + shift.roundToInt()), placeable.height) {
-        if (show) placeable.place(shift.roundToInt(), 0)
     }
 }

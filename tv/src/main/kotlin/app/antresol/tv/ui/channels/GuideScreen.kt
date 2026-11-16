@@ -1,6 +1,8 @@
 package app.antresol.tv.ui.channels
 
 import app.antresol.ui.channels.ChannelLogo
+import app.antresol.ui.channels.LocalMinuteWidth
+import app.antresol.ui.channels.minutesToDp
 import app.antresol.ui.channels.reserveLogoSlot
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -38,7 +40,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -46,7 +47,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -55,9 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.offset
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
@@ -70,8 +68,6 @@ import app.antresol.core.model.ChannelProgram
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.LoadingView
-import app.antresol.tv.ui.components.PillButton
-import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.ui.R
@@ -80,13 +76,13 @@ import app.antresol.ui.channels.ProgrammeStill
 import app.antresol.ui.channels.guideDayLabel
 import app.antresol.ui.channels.programClock
 import app.antresol.ui.channels.programmeArt
+import app.antresol.ui.channels.stickyLabel
 import app.antresol.ui.channels.timeFormat
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
-import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 private val ChannelColumnWidth = 168.dp
@@ -95,14 +91,6 @@ private val RulerHeight = 28.dp
 
 /** Lazy items before the first channel row: the page header and the sticky ruler. */
 private const val FIRST_ROW = 2
-
-/** Width of one minute, set per guide ([Epg.minuteWidth]): a 90-min film is 450 dp, short clips are stretched. */
-private val LocalMinuteWidth = androidx.compose.runtime.staticCompositionLocalOf { 5.dp }
-
-@Composable
-private fun Long.minutesToDp(): Dp = LocalMinuteWidth.current * (this / 60_000f)
-
-private fun Long.minutesToDp(minute: Dp): Dp = minute * (this / 60_000f)
 
 /** What tells a channel's programmes apart: the id, or the start when the source gives none. */
 private val ChannelProgram.key: String get() = id.ifEmpty { start }
@@ -592,24 +580,5 @@ private fun ProgramPanel(row: ChannelEpgRow, program: ChannelProgram, nowMs: Lon
         if (program.overview.isNotBlank()) {
             Text(program.overview, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
-    }
-}
-
-/** Narrowest visible part of a block that still gets its title and time. */
-private val MinTextWidth = 48.dp
-
-/**
- * Moves a block's label right by [inset] so it stays at the visible left edge when the programme
- * began off-screen; the same inset in every row (a short remainder shortens the title instead). A
- * sliver (less than [MinTextWidth] of the block left) shows no text rather than «…» over a clipped
- * time. [inset] reads the scroll position and is asked at layout, so scrolling the guide moves the
- * labels without recomposing a block.
- */
-private fun Modifier.stickyLabel(blockWidth: Density.() -> Float, inset: Density.() -> Float): Modifier = layout { measurable, constraints ->
-    val shift = inset()
-    val show = blockWidth() - shift >= MinTextWidth.toPx()
-    val placeable = measurable.measure(constraints.offset(horizontal = -shift.roundToInt()))
-    layout(constraints.constrainWidth(placeable.width + shift.roundToInt()), placeable.height) {
-        if (show) placeable.place(shift.roundToInt(), 0)
     }
 }

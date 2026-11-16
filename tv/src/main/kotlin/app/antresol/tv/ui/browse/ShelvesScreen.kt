@@ -179,7 +179,7 @@ fun ShelvesScreen(
                     if (state.value.shelves.isEmpty()) {
                         item(key = "empty") { MessageView(stringResource(R.string.state_empty), Modifier.padding(top = 120.dp)) }
                     }
-                    items(state.value.shelves, key = { it.id }) { shelf ->
+                    items(state.value.shelves, key = { it.id }, contentType = { "shelf" }) { shelf ->
                         ShelfRow(shelfId = shelf.id, title = shelf.title, cards = shelf.cards, onOpen = onOpen, focus = focus, onSeeAll = seeAll(shelf.id))
                     }
                 }

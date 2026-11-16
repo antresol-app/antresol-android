@@ -112,7 +112,7 @@ fun CardGridScreen(
                 .trapHorizontalFocus()
                 .focusGroup(),
         ) {
-            item(key = "header", span = { GridItemSpan(maxLineSpan) }) {
+            item(key = "header", span = { GridItemSpan(maxLineSpan) }, contentType = "header") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -153,7 +153,7 @@ fun CardGridScreen(
                         }
                     } else {
                         val cards = state.value.cards
-                        itemsIndexed(cards, key = { _, card -> gridKey(card) }) { index, card ->
+                        itemsIndexed(cards, key = { _, card -> gridKey(card) }, contentType = { _, _ -> "card" }) { index, card ->
                             MediaCard(
                                 card = card,
                                 onClick = { onOpen(card) },

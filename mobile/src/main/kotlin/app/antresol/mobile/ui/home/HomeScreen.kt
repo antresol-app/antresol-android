@@ -76,7 +76,7 @@ fun HomeScreen(
                     if (content.isEmpty) item("empty") { EmptyView(stringResource(R.string.home_empty)) }
                     if (content.shelves.isEmpty()) item("on-air") { onAir() }
                     content.shelves.forEachIndexed { index, shelf ->
-                        item(shelf.id) {
+                        item(shelf.id, contentType = "shelf") {
                             val continuing = shelf.id == ShelfId.CONTINUE
                             Shelf(
                                 title = shelf.title,

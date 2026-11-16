@@ -163,7 +163,7 @@ private fun HomeContentView(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 if (heroCard != null) {
-                    item(key = "hero") {
+                    item(key = "hero", contentType = "hero") {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -196,7 +196,7 @@ private fun HomeContentView(
                 } else {
                     item(key = "top") { Spacer(Modifier.height(88.dp)) }
                 }
-                items(content.shelves, key = { it.id }) { shelf ->
+                items(content.shelves, key = { it.id }, contentType = { "shelf" }) { shelf ->
                     ShelfRow(
                         shelfId = shelf.id,
                         title = shelf.title,

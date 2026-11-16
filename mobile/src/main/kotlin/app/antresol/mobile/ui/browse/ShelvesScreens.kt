@@ -169,7 +169,7 @@ private fun <T> ShelvesPage(
                     extra(state.value)
                     val list = shelves(state.value).filter { it.cards.isNotEmpty() }
                     if (list.isEmpty()) item("empty") { EmptyView(stringResource(UiR.string.state_empty)) }
-                    items(list, key = { it.id }) { shelf ->
+                    items(list, key = { it.id }, contentType = { "shelf" }) { shelf ->
                         Shelf(title = shelf.title, cards = shelf.cards, onOpen = onOpen, onSeeAll = { onSeeAll(shelf) })
                     }
                 }

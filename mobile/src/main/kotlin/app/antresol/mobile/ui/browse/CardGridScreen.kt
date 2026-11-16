@@ -153,7 +153,7 @@ fun CardGridScreen(
                     if (state.value.items.isEmpty()) {
                         fullWidth("empty") { EmptyView(stringResource(R.string.state_empty)) }
                     }
-                    items(state.value.items, key = { "${it.kind}:${it.id}" }) { card ->
+                    items(state.value.items, key = { "${it.kind}:${it.id}" }, contentType = { "card" }) { card ->
                         MediaCard(card = card, onClick = { onOpen(card) }, style = style ?: card.defaultStyle())
                     }
                     fullWidth("footer") {
@@ -169,5 +169,5 @@ fun CardGridScreen(
 }
 
 private fun LazyGridScope.fullWidth(key: String, content: @Composable () -> Unit) {
-    item(key = key, span = { GridItemSpan(maxLineSpan) }) { content() }
+    item(key = key, span = { GridItemSpan(maxLineSpan) }, contentType = key) { content() }
 }

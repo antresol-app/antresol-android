@@ -1,4 +1,4 @@
-package app.antresol.tv.fixtures
+package app.antresol.fixtures
 
 import android.graphics.Bitmap
 import android.graphics.Canvas

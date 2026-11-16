@@ -17,7 +17,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.antresol.core.model.Profile
 import app.antresol.core.session.AuthState
-import app.antresol.tv.fixtures.FakeServer
+import app.antresol.fixtures.FakeServer
 import app.antresol.tv.ui.components.TopNavHeight
 import app.antresol.tv.ui.shell.TAB_RESET_MS
 import app.antresol.tv.ui.shell.MainShell

@@ -17,7 +17,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.antresol.core.model.Profile
 import app.antresol.core.session.AuthState
-import app.antresol.mobile.fixtures.FakeServer
+import app.antresol.fixtures.FakeServer
 import app.antresol.mobile.player.TrailerPlayerActivity
 import app.antresol.ui.trailers.TrailerPhase
 import org.robolectric.Robolectric

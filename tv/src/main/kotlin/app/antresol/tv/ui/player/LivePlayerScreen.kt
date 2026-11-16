@@ -179,7 +179,6 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
     val selection = viewModel.trackSelection
     // a cleaned voice is not a row: «Очищенный перевод» last (core liveAudioEntries)
     val audioEntries = liveAudioEntries(viewModel.audioOptions, viewModel.trackSelection.audio?.name)
-    val audio = viewModel.audioOptions
     val subtitles = viewModel.subtitleOptions
 
     LaunchedEffect(banner, interactions, viewModel.isPlaying, state.channelId, panel) {
@@ -250,7 +249,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
 
     fun panelSize(): Int = when (panel) {
         Panel.Channels -> guide.channels.size
-        Panel.Audio -> audio.size
+        Panel.Audio -> audioEntries.size
         Panel.Subtitles -> subtitles.size + 1
         Panel.None -> 0
     }

@@ -13,9 +13,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -73,7 +77,9 @@ fun MiniPlayer(playback: PlaybackConnection, onOpen: () -> Unit, modifier: Modif
             )
             Column(Modifier.weight(1f)) {
                 Text(playing.title, style = Antresol.typography.bodyEmphasis, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val subtitle = if (playing.isAudiobook) playback.currentChapter?.title ?: playing.artist else playing.artist
+                // Changes with the chapter, not with every tick of the position.
+                val chapterTitle by remember(playback) { derivedStateOf { playback.currentChapter?.title } }
+                val subtitle = if (playing.isAudiobook) chapterTitle ?: playing.artist else playing.artist
                 if (subtitle.isNotBlank()) {
                     Text(subtitle, style = Antresol.typography.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -106,18 +112,21 @@ fun MiniPlayer(playback: PlaybackConnection, onOpen: () -> Unit, modifier: Modif
                 )
             }
         }
-        val fraction = if (playing.isAudiobook) {
-            playback.bookPositionMs.toFloat() / playback.bookDurationMs.coerceAtLeast(1)
-        } else {
-            playback.positionMs.toFloat() / playback.durationMs.coerceAtLeast(1)
-        }
+        // The position (polled four times a second) is read while drawing, so the bar itself is not recomposed with it.
         Box(
             Modifier
                 .align(Alignment.BottomStart)
                 .padding(horizontal = 12.dp)
-                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .fillMaxWidth()
                 .height(2.dp)
-                .background(AntresolColors.Label.copy(alpha = 0.8f)),
+                .drawBehind {
+                    val fraction = if (playing.isAudiobook) {
+                        playback.bookPositionMs.toFloat() / playback.bookDurationMs.coerceAtLeast(1)
+                    } else {
+                        playback.positionMs.toFloat() / playback.durationMs.coerceAtLeast(1)
+                    }
+                    drawRect(AntresolColors.Label.copy(alpha = 0.8f), size = size.copy(width = size.width * fraction.coerceIn(0f, 1f)))
+                },
         )
     }
 }

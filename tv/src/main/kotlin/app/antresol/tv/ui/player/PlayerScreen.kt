@@ -388,6 +388,8 @@ private fun handleMediaKey(event: KeyEvent, viewModel: PlayerViewModel): Boolean
         Key.MediaFastForward -> { { viewModel.seekBy(VideoPlayerViewModel.SEEK_STEP_MS) } }
         Key.MediaRewind -> { { viewModel.seekBy(-VideoPlayerViewModel.SEEK_STEP_MS) } }
         Key.MediaNext -> viewModel::playNext
+        Key.MediaSkipForward, Key.MediaStepForward -> { { viewModel.seekBy(VideoPlayerViewModel.SEEK_STEP_MS) } }
+        Key.MediaSkipBackward, Key.MediaStepBackward -> { { viewModel.seekBy(-VideoPlayerViewModel.SEEK_STEP_MS) } }
         else -> return false
     }
     if (event.type == KeyEventType.KeyDown) action()

@@ -6,8 +6,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.api.attempt
 import app.antresol.core.model.UiLanguage
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** The interface languages the apps have; "" is «как у профиля» (the profile's own language). */
@@ -62,7 +62,7 @@ class UiLanguageModel(
         private set
 
     fun refresh() {
-        viewModelScope.launch { apply(runCatchingNonCancel { api.get() } ?: return@launch) }
+        viewModelScope.launch { apply(attempt { api.get() } ?: return@launch) }
     }
 
     fun choose(language: String) {
@@ -70,7 +70,7 @@ class UiLanguageModel(
         saving = true
         viewModelScope.launch {
             try {
-                apply(runCatchingNonCancel { api.set(language) } ?: return@launch)
+                apply(attempt { api.set(language) } ?: return@launch)
             } finally {
                 saving = false
             }
@@ -84,13 +84,5 @@ class UiLanguageModel(
             cache.profileLanguage = effective
             onChanged()
         }
-    }
-
-    private suspend fun <T> runCatchingNonCancel(block: suspend () -> T): T? = try {
-        block()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (_: Exception) {
-        null
     }
 }

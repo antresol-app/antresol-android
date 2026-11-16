@@ -20,7 +20,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.util.Util
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -223,8 +222,7 @@ class LivePlayerViewModel(
                 loadExternal(current, null)
                 return
             }
-            val http = error.cause as? HttpDataSource.InvalidResponseCodeException
-            if (http?.responseCode == 401) {
+            if (error.isUnauthorized) {
                 // The media key died with its session; reopening fetches a new one.
                 viewModelScope.launch { this@LivePlayerViewModel.client.mediaKeys.invalidate() }
             }

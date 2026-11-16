@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.Text
+import app.antresol.core.api.attempt
 import app.antresol.core.model.Card
 import app.antresol.core.model.Genre
 import app.antresol.core.model.Shelf
@@ -72,7 +73,7 @@ class ShelvesViewModel(
         viewModelScope.launch {
             state = load {
                 coroutineScope {
-                    val genreList = genres?.let { async { runCatching { it() }.getOrDefault(emptyList()) } }
+                    val genreList = genres?.let { async { attempt { it() }.orEmpty() } }
                     val shelves = loader().filter { it.cards.isNotEmpty() }
                     ShelfPage(shelves, genreList?.await().orEmpty())
                 }

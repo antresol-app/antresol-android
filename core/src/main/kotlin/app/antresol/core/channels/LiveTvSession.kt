@@ -1,6 +1,7 @@
 package app.antresol.core.channels
 
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.api.attempt
 import app.antresol.core.model.Channel
 import app.antresol.core.model.ChannelProgram
 import app.antresol.core.model.PlaybackPrefs
@@ -216,7 +217,7 @@ class LiveTvSession(
     fun setFavorite(channelId: Long, favorite: Boolean) {
         setFavoriteLocally(channelId, favorite)
         scope.launch {
-            val ok = runCatchingNonCancel { api.setFavorite(channelId, favorite) } != null
+            val ok = attempt { api.setFavorite(channelId, favorite) } != null
             if (!ok) setFavoriteLocally(channelId, !favorite)
         }
     }
@@ -317,7 +318,7 @@ class LiveTvSession(
     private suspend fun openExternal(channelId: Long) {
         while (externalIndex < externalSources.size) {
             val source = externalSources[externalIndex]
-            val url = runCatchingNonCancel { api.externalUrl(source.url) }
+            val url = attempt { api.externalUrl(source.url) }
             if (url != null) {
                 _state.update {
                     if (it.channelId != channelId) it
@@ -354,12 +355,12 @@ class LiveTvSession(
         if (lastMarked == channelId) return
         lastMarked = channelId
         scope.launch {
-            if (runCatchingNonCancel { api.setLast(channelId) } == null && lastMarked == channelId) lastMarked = null
+            if (attempt { api.setLast(channelId) } == null && lastMarked == channelId) lastMarked = null
         }
     }
 
     private suspend fun loadPrefs() {
-        val prefs = runCatchingNonCancel { api.prefs() } ?: return
+        val prefs = attempt { api.prefs() } ?: return
         _state.update { it.copy(prefs = prefs) }
     }
 
@@ -370,21 +371,13 @@ class LiveTvSession(
     }
 
     private suspend fun loadChannels() {
-        val channels = runCatchingNonCancel { api.channels() } ?: return
+        val channels = attempt { api.channels() } ?: return
         _state.update { it.copy(channels = Channels.sortedByNumber(channels)) }
     }
 
     private suspend fun loadGuide(channelId: Long) {
-        val programs = runCatchingNonCancel { api.guide(channelId) } ?: return
+        val programs = attempt { api.guide(channelId) } ?: return
         _state.update { if (it.channelId == channelId) it.copy(programs = programs) else it }
-    }
-
-    private suspend fun <T> runCatchingNonCancel(block: suspend () -> T): T? = try {
-        block()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (_: Exception) {
-        null
     }
 
     companion object {

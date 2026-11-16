@@ -18,11 +18,11 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.api.attempt
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Chapter
 import app.antresol.core.model.Track
@@ -33,6 +33,7 @@ import app.antresol.core.playback.PlaybackTiming
 import app.antresol.core.playback.ScrobbleTracker
 import app.antresol.core.playback.playbackApi
 import app.antresol.ui.playback.TranscodeSeekingPlayer
+import app.antresol.ui.playback.isUnauthorized
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -194,11 +195,7 @@ class AudioEngine(
 
             override fun onPlayerError(e: PlaybackException) {
                 error = e
-                // Streams carry the Bearer header outside AntresolClient: a 401 here (device revoked)
-                // must still reach the session, which then returns the app to the profile picker.
-                if ((e.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode == 401) {
-                    scope.launch { runCatching { clientProvider()?.me() } }
-                }
+                if (e.isUnauthorized) scope.launch { attempt { clientProvider()?.me() } }
             }
         })
     }
@@ -566,7 +563,7 @@ class AudioEngine(
         updatePosition()
         val track = currentTrack
         if (track != null && scrobble?.onPlayed(played) == true) {
-            scope.launch { runCatching { clientProvider()?.recordPlay(track.id) } }
+            scope.launch { attempt { clientProvider()?.recordPlay(track.id) } }
         }
         sleepEndsAt?.let { endsAt ->
             sleepRemainingMs = (endsAt - now).coerceAtLeast(0)

@@ -19,7 +19,6 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -29,6 +28,7 @@ import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.ApiException
+import app.antresol.core.api.attempt
 import app.antresol.core.model.AudioTrack
 import app.antresol.core.playback.AudioMenu
 import app.antresol.core.model.EpisodeCard
@@ -248,13 +248,12 @@ open class VideoPlayerViewModel(
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            val http = error.cause as? HttpDataSource.InvalidResponseCodeException
-            if (http?.responseCode == 401) {
+            if (error.isUnauthorized) {
                 // The media key died: its device session was revoked or deleted. Drop the key, and let
                 // an authenticated call report the 401 so the app returns to the profile picker.
                 appScope.launch {
                     this@VideoPlayerViewModel.client.mediaKeys.invalidate()
-                    runCatching { this@VideoPlayerViewModel.client.me() }
+                    attempt { this@VideoPlayerViewModel.client.me() }
                 }
             }
             recover(error)

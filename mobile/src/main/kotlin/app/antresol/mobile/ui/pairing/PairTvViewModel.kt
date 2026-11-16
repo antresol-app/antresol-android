@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.api.attempt
 import app.antresol.core.model.PairApproved
 import app.antresol.core.model.PairLookup
 import app.antresol.core.model.Profile
@@ -220,7 +221,7 @@ class PairTvViewModel(
         viewModelScope.launch {
             step = try {
                 val lookup = api.lookup(code)
-                val profiles = if (isAdmin) runCatching { api.profiles() }.getOrDefault(emptyList()) else emptyList()
+                val profiles = if (isAdmin) attempt { api.profiles() }.orEmpty() else emptyList()
                 PairStep.Confirm(lookup, profiles, ownUserId)
             } catch (e: CancellationException) {
                 throw e

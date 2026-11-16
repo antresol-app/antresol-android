@@ -7,6 +7,7 @@ import android.os.SystemClock
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
@@ -18,6 +19,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import app.antresol.core.api.attempt
 import app.antresol.core.playback.PlaybackReporter
 import app.antresol.core.playback.PlaybackTiming
 import app.antresol.core.playback.ScrobbleTracker
@@ -26,6 +28,7 @@ import app.antresol.mobile.AntresolMobileApp
 import app.antresol.mobile.MainActivity
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.playback.TranscodeSeekingPlayer
+import app.antresol.ui.playback.isUnauthorized
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
@@ -91,6 +94,11 @@ class PlaybackService : MediaSessionService() {
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
             if (timeline.isEmpty) onCurrentItem(null, repeated = false)
+        }
+
+        // Seen here, not in the app's MediaController: the HTTP status does not cross the session.
+        override fun onPlayerError(error: PlaybackException) {
+            if (error.isUnauthorized) scope.launch { attempt { app.session.client?.me() } }
         }
     }
 

@@ -122,6 +122,31 @@ class MediaUrls(baseUrl: String) {
             return result.toString().trimEnd('/')
         }
 
+        /** The widths the server shrinks an image to (`?w=`; `imageWidths` in the server's images.go). */
+        val IMAGE_WIDTHS = listOf(160, 240, 320, 480, 640, 960, 1280, 1920)
+
+        /**
+         * [url] at the server's smallest step at least [widthPx] wide, the rule of the web app. As it
+         * is when no step is wide enough (the original then, never a smaller copy scaled up) and for
+         * a URL with one size: not an image of the server at [baseUrl], a video frame
+         * (`/api/images/frame/`), a URL that already has a query.
+         */
+        fun sizedImage(baseUrl: String, url: String, widthPx: Int): String {
+            val images = "$baseUrl/api/images/"
+            if (widthPx <= 0 || !url.startsWith(images) || url.startsWith("${images}frame/") || url.contains('?')) return url
+            val step = IMAGE_WIDTHS.firstOrNull { it >= widthPx } ?: return url
+            return "$url?w=$step"
+        }
+
+        /**
+         * The image width a [widthPx] by [heightPx] box needs. A picture that only has to fit inside
+         * needs the box's width. One that fills the box and is cut to it ([crop]) may be wider than the
+         * box (a 16:9 backdrop behind a tall phone hero), so it needs the width of the widest artwork
+         * (16:9) at the box's height.
+         */
+        fun neededImageWidth(widthPx: Int, heightPx: Int, crop: Boolean): Int =
+            if (crop) maxOf(widthPx, (heightPx * 16 + 8) / 9) else widthPx
+
         internal fun formatSeconds(sec: Double): String =
             if (sec == Math.floor(sec)) sec.toLong().toString() else "%.3f".format(java.util.Locale.ROOT, sec)
     }

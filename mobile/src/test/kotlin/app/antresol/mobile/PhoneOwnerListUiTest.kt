@@ -100,6 +100,8 @@ class PhoneOwnerListUiTest {
         settle()
         shot("owner-phone-series-cast")
         assertEquals("Bearer test-device-token", fake.imageAuth["/api/images/cast/Ada%20Lovelace"])
+        // At a width step of the server, not the original.
+        assertTrue(fake.requests.any { it.contains("/api/images/cast/Ada%20Lovelace?w=") })
 
         // One trailer, which the server plays: straight to the trailer player.
         list().performScrollToNode(hasTestTag("detail-trailer"))

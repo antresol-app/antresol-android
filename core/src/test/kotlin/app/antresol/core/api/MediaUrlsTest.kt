@@ -33,6 +33,42 @@ class MediaUrlsTest {
     }
 
     @Test
+    fun sizedImageTakesTheSmallestStepAtLeastAsWide() {
+        val base = "http://nas.local:8420"
+        val poster = "$base/api/images/local/19/poster"
+        assertEquals("$poster?w=160", MediaUrls.sizedImage(base, poster, 96))
+        assertEquals("$poster?w=160", MediaUrls.sizedImage(base, poster, 160))
+        assertEquals("$poster?w=240", MediaUrls.sizedImage(base, poster, 161))
+        assertEquals("$poster?w=480", MediaUrls.sizedImage(base, poster, 330))
+        assertEquals("$poster?w=1920", MediaUrls.sizedImage(base, poster, 1920))
+        // A different width is a different URL, so a small cached copy is never drawn in a bigger view.
+        assertEquals(MediaUrls.IMAGE_WIDTHS.size, MediaUrls.IMAGE_WIDTHS.map { MediaUrls.sizedImage(base, poster, it) }.toSet().size)
+    }
+
+    @Test
+    fun sizedImageKeepsTheUrlWhenNoStepFitsOrTheImageHasOneSize() {
+        val base = "http://nas.local:8420"
+        val poster = "$base/api/images/a%20b.jpg"
+        assertEquals(poster, MediaUrls.sizedImage(base, poster, 1921)) // wider than every step: the original
+        assertEquals(poster, MediaUrls.sizedImage(base, poster, 0))
+        val frame = "$base/api/images/frame/42"
+        assertEquals(frame, MediaUrls.sizedImage(base, frame, 320)) // video frames have one fixed size
+        assertEquals("$poster?v=2", MediaUrls.sizedImage(base, "$poster?v=2", 320))
+        assertEquals("https://cdn/x.jpg", MediaUrls.sizedImage(base, "https://cdn/x.jpg", 320))
+        assertEquals("http://other:8420/api/images/p", MediaUrls.sizedImage(base, "http://other:8420/api/images/p", 320))
+        assertEquals("$base/api/comics/7/page/0", MediaUrls.sizedImage(base, "$base/api/comics/7/page/0", 320))
+    }
+
+    @Test
+    fun neededImageWidthCoversACroppedWidePicture() {
+        assertEquals(300, MediaUrls.neededImageWidth(300, 450, crop = false))
+        // A 16:9 backdrop cut to a tall box needs the box's height in 16:9.
+        assertEquals(3200, MediaUrls.neededImageWidth(1080, 1800, crop = true))
+        assertEquals(1920, MediaUrls.neededImageWidth(1920, 1080, crop = true))
+        assertEquals(2000, MediaUrls.neededImageWidth(2000, 900, crop = true))
+    }
+
+    @Test
     fun buildsMediaUrls() {
         assertEquals("http://nas.local:8420/api/stream/12?mk=k1", urls.stream(12, "k1"))
         assertEquals("http://nas.local:8420/api/download/12", urls.download(12))

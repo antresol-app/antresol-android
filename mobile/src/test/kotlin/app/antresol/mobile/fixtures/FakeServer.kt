@@ -54,7 +54,8 @@ class FakeServer {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val path = request.path.orEmpty()
                 requests += "${request.method} $path"
-                if (path.startsWith("/api/images/")) imageAuth[path] = request.getHeader("Authorization").orEmpty()
+                // Keyed without the `?w=` the apps ask a sized image with.
+                if (path.startsWith("/api/images/")) imageAuth[path.substringBefore('?')] = request.getHeader("Authorization").orEmpty()
                 return answer(request.method.orEmpty(), path)
             }
         }

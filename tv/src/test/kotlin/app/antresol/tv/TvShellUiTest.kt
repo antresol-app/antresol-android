@@ -243,6 +243,8 @@ class TvShellUiTest {
         shot("shell-series-cast")
         // The TV loader asks for the absolute cast photo URL with the profile's Bearer token.
         assertEquals("Bearer test-device-token", fake.imageAuth["/api/images/cast/Ada%20Lovelace"])
+        // At a width step of the server, not the original.
+        assertTrue(fake.requests.any { it.contains("/api/images/cast/Ada%20Lovelace?w=") })
         compose.onAllNodes(hasText("Grace Hopper"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty().let(::assertTrue)
     }
 
@@ -264,7 +266,7 @@ class TvShellUiTest {
         val busyAsks = fake.requests.count { it.endsWith(frame) }
         assertTrue("frame asked while busy", busyAsks >= 1)
         // The fallback was drawn: the series backdrop, not the empty placeholder.
-        assertTrue(fake.requests.any { it.endsWith("/api/images/local/${FakeServer.SERIES_ID}/backdrop") })
+        assertTrue(fake.requests.any { it.substringBefore('?').endsWith("/api/images/local/${FakeServer.SERIES_ID}/backdrop") })
 
         fake.framesBusy = false
         key(KeyEvent.KEYCODE_BACK)

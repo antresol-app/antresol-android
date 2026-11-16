@@ -49,16 +49,14 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.ui.components.AntresolIcons
+import app.antresol.ui.playback.MenuOption
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 
-/** One choice of an [OptionsPanel]; [badge] is a small capsule after the label («Очищено»). */
 /** Frames an [OptionsPanel] keeps asking for focus until it has it. */
 private const val PANEL_FOCUS_FRAMES = 10
-
-data class MenuOption(val label: String, val selected: Boolean, val badge: String? = null, val onSelect: () -> Unit)
 
 /**
  * An opaque panel on the right, over a dimmed page, with a list of choices; picking one applies it

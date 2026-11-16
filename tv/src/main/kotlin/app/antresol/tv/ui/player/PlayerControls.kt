@@ -33,8 +33,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -43,21 +41,15 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import app.antresol.core.model.PlayMode
-import app.antresol.core.model.Quality
-import app.antresol.tv.ui.components.MenuOption
 import app.antresol.tv.ui.components.OptionsPanel
-import app.antresol.ui.R
 import app.antresol.ui.format.Durations
-import app.antresol.ui.format.TrackLabels
+import app.antresol.ui.playback.PlayerMenu
 import app.antresol.ui.playback.VideoPlayerViewModel
+import app.antresol.ui.playback.playerMenu
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
-
-/** The side menus of the player. */
-enum class PlayerMenu { Audio, Subtitles, Quality }
 
 /**
  * The focusable progress bar: Left/Right seek (10 s by default), OK toggles pause. It thickens and shows a
@@ -194,60 +186,6 @@ private val PlayerButtonSize = 48.dp
 /** The audio, subtitle or quality choices of the player in an [OptionsPanel]. */
 @Composable
 fun TrackMenu(menu: PlayerMenu, viewModel: PlayerViewModel, onDismiss: () -> Unit) {
-    val resources = LocalContext.current.resources
-    val title = stringResource(
-        when (menu) {
-            PlayerMenu.Audio -> R.string.detail_audio
-            PlayerMenu.Subtitles -> R.string.detail_subtitles
-            PlayerMenu.Quality -> R.string.detail_quality
-        },
-    )
-    val options = when (menu) {
-        PlayerMenu.Audio -> viewModel.audioMenu.let { m ->
-            // a cleaned voice-over is not a row: «Очищенный перевод» under the voices
-            m.rows.map { row ->
-                MenuOption(
-                    TrackLabels.audio(resources, row.track),
-                    row.checked,
-                    badge = if (row.track.isCleaned) resources.getString(R.string.track_cleaned) else null,
-                ) { viewModel.selectAudio(row.plays) }
-            } + listOfNotNull(
-                m.toggle?.let { t ->
-                    MenuOption(resources.getString(R.string.track_cleaned_toggle), t.on, badge = null) { viewModel.selectAudio(t.target) }
-                },
-            )
-        }
-        PlayerMenu.Subtitles -> listOf(
-            MenuOption(stringResource(R.string.detail_subtitles_off), viewModel.selectedSubtitle == null) { viewModel.selectSubtitle(null) },
-        ) + viewModel.subtitleTracks.map { track ->
-            MenuOption(TrackLabels.subtitle(resources, track), track.index == viewModel.selectedSubtitle?.index) { viewModel.selectSubtitle(track) }
-        }
-        PlayerMenu.Quality -> Quality.ALL.map { value ->
-            MenuOption(qualityLabel(value), value == viewModel.quality) { viewModel.selectQuality(value) }
-        }
-    }
-    val note = if (menu == PlayerMenu.Quality) streamNote(viewModel) else null
-    OptionsPanel(title = title, options = options, onDismiss = onDismiss, note = note)
-}
-
-/** "Auto", "Original" or "720p". */
-@Composable
-fun qualityLabel(value: String): String = when (value) {
-    Quality.AUTO -> stringResource(R.string.quality_auto)
-    Quality.ORIGINAL -> stringResource(R.string.quality_original)
-    else -> "${value}p"
-}
-
-/** "Direct Stream · container mkv isn't supported…": how the server delivers the stream and why. */
-@Composable
-private fun streamNote(viewModel: PlayerViewModel): String? {
-    val play = viewModel.source?.play ?: return null
-    val mode = stringResource(
-        when (play.mode) {
-            PlayMode.DIRECT -> R.string.player_mode_direct
-            PlayMode.REMUX -> R.string.player_mode_remux
-            else -> R.string.player_mode_transcode
-        },
-    )
-    return listOf(mode, play.reason).filter { it.isNotBlank() }.joinToString(" · ")
+    val content = playerMenu(menu, viewModel)
+    OptionsPanel(title = content.title, options = content.options, onDismiss = onDismiss, note = content.note)
 }

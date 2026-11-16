@@ -64,6 +64,7 @@ import app.antresol.tv.ui.home.HeroBackground
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.format.Durations
+import app.antresol.ui.playback.PlayerMenu
 import app.antresol.ui.playback.PlayerPhase
 import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.playback.rememberKeepScreenOn

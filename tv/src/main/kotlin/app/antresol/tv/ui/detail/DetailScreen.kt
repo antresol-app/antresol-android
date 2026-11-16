@@ -57,7 +57,7 @@ import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.FocusMemory
 import app.antresol.tv.ui.components.LoadingView
-import app.antresol.tv.ui.components.MenuOption
+import app.antresol.ui.playback.MenuOption
 import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle

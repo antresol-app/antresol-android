@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -20,8 +19,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.util.Util
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
@@ -90,7 +87,7 @@ class LivePlayerViewModel(
 ) : ViewModel() {
     private val client: AntresolClient = client.pinned()
 
-    val player: ExoPlayer = buildPlayer()
+    val player: ExoPlayer = buildVideoPlayer(context, this.client)
 
     private val session = LiveTvSession(api, viewModelScope, channelId, filter, platform)
 
@@ -421,14 +418,27 @@ class LivePlayerViewModel(
         return name?.replaceFirstChar { it.titlecase() } ?: context.getString(app.antresol.ui.R.string.tv_track_n, index + 1)
     }
 
-    /** The external track options' selection: the remembered choice, else the device's language, else the profile's. */
-    private fun applyExternalTracks() {
-        val program = ChannelProgram(audio = streamAudio, subtitles = streamSubtitles)
+    /**
+     * Selects the audio and subtitle tracks; subtitles off disables the text renderer.
+     *
+     * A channel of the server: the renditions for the programme on air. The HLS `NAME` of an
+     * `EXT-X-MEDIA` is the [androidx.media3.common.Format.label] of its track, so the override
+     * picks the group whose label equals the entry's `name`.
+     *
+     * An external stream: its own track options; the remembered choice, else the device's
+     * language, else the profile's.
+     */
+    private fun applyTracks() {
+        if (released) return
+        val external = loaded?.external == true || (loaded == null && isExternal)
+        val program = if (external) ChannelProgram(audio = streamAudio, subtitles = streamSubtitles) else onAirProgram
         val selection = LiveTracks.select(program, state.prefs, trackChoice, systemLanguages)
         trackSelection = selection
         val groups = player.currentTracks.groups
+        fun find(type: Int, track: ProgramTrack): Pair<Tracks.Group, Int>? =
+            if (external) groups.byIndex(type, track) else groups.rendition(type, track)?.let { it to 0 }
         val builder = player.trackSelectionParameters.buildUpon()
-        selection.audio?.let { wanted -> groups.byIndex(C.TRACK_TYPE_AUDIO, wanted) }?.let { (group, track) ->
+        selection.audio?.let { wanted -> find(C.TRACK_TYPE_AUDIO, wanted) }?.let { (group, track) ->
             builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, track))
         }
         val subtitles = selection.subtitles
@@ -436,7 +446,7 @@ class LivePlayerViewModel(
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
         } else {
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            groups.byIndex(C.TRACK_TYPE_TEXT, subtitles)?.let { (group, track) ->
+            find(C.TRACK_TYPE_TEXT, subtitles)?.let { (group, track) ->
                 builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, track))
             }
         }
@@ -450,37 +460,6 @@ class LivePlayerViewModel(
         val group = filter { it.type == type }.getOrNull(index) ?: return null
         val supported = (0 until group.length).firstOrNull(group::isTrackSupported) ?: return null
         return group to supported
-    }
-
-    /**
-     * Selects the renditions for the programme on air: the HLS `NAME` of an `EXT-X-MEDIA` is the
-     * [androidx.media3.common.Format.label] of its track, so the override picks the group whose
-     * label equals the entry's `name`. Subtitles off disables the text renderer.
-     */
-    private fun applyTracks() {
-        if (released) return
-        if (loaded?.external == true || (loaded == null && isExternal)) {
-            applyExternalTracks()
-            return
-        }
-        val selection = LiveTracks.select(onAirProgram, state.prefs, trackChoice, systemLanguages)
-        trackSelection = selection
-        val groups = player.currentTracks.groups
-        val builder = player.trackSelectionParameters.buildUpon()
-        selection.audio?.let { wanted -> groups.rendition(C.TRACK_TYPE_AUDIO, wanted) }?.let { group ->
-            builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
-        }
-        val subtitles = selection.subtitles
-        if (subtitles == null) {
-            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-        } else {
-            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            groups.rendition(C.TRACK_TYPE_TEXT, subtitles)?.let { group ->
-                builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
-            }
-        }
-        val next = builder.build()
-        if (next != player.trackSelectionParameters) player.trackSelectionParameters = next
     }
 
     /**
@@ -574,21 +553,5 @@ class LivePlayerViewModel(
         session.stop()
         player.removeListener(listener)
         player.release()
-    }
-
-    private fun buildPlayer(): ExoPlayer {
-        // The playlist URL and every segment line carry ?mk=; the shared client adds no Bearer then.
-        val http = OkHttpDataSource.Factory(client.httpClient)
-        val dataSources = DefaultDataSource.Factory(context, http)
-        return ExoPlayer.Builder(context)
-            .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(true))
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
-            .setLoadControl(videoLoadControl(context))
-            .setAudioAttributes(
-                AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
-                true,
-            )
-            .setHandleAudioBecomingNoisy(true)
-            .build()
     }
 }

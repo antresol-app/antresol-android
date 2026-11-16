@@ -48,7 +48,7 @@ import app.antresol.tv.playback.AudioEngine
 import app.antresol.tv.playback.SleepTimer
 import app.antresol.ui.LoadState
 import app.antresol.tv.ui.LocalMediaUrls
-import app.antresol.tv.ui.components.MenuOption
+import app.antresol.ui.playback.MenuOption
 import app.antresol.tv.ui.components.MessageView
 import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.tv.ui.components.PillButton

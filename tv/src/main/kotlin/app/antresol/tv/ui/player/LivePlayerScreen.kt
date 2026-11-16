@@ -29,7 +29,7 @@ import app.antresol.tv.ui.components.listRowColors
 import app.antresol.tv.ui.components.VerticalShelfScrolling
 import app.antresol.tv.ui.components.RoundIconButton
 import app.antresol.tv.ui.components.OptionsPanel
-import app.antresol.tv.ui.components.MenuOption
+import app.antresol.ui.playback.MenuOption
 import app.antresol.tv.ui.channels.filterTitle
 import app.antresol.tv.ui.channels.LiveProgressBar
 import app.antresol.tv.ui.channels.KeyHint

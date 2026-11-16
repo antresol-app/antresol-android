@@ -19,7 +19,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.antresol.tv.AntresolTvTheme
-import app.antresol.tv.ui.components.MenuOption
+import app.antresol.ui.playback.MenuOption
 import app.antresol.tv.ui.components.OptionsPanel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

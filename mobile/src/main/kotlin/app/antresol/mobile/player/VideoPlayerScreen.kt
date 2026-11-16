@@ -59,7 +59,6 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
-import app.antresol.core.model.PlayMode
 import app.antresol.core.model.Quality
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.components.GlassIconButton
@@ -69,11 +68,12 @@ import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.RoundIconButton
 import app.antresol.mobile.ui.components.SkipSecondsButton
 import app.antresol.mobile.ui.components.TimeSlider
+import app.antresol.ui.playback.PlayerMenu
+import app.antresol.ui.playback.playerMenu
 import app.antresol.ui.userMessage
 import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.format.Durations
-import app.antresol.ui.format.TrackLabels
 import app.antresol.ui.playback.PlayerPhase
 import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.playback.rememberKeepScreenOn
@@ -87,7 +87,6 @@ private const val CONTROLS_HIDE_MS = 4_000L
 private const val NOTICE_MS = 3_500L
 private const val SEEK_FLASH_MS = 700L
 
-private enum class PlayerMenu { Audio, Subtitles, Quality }
 
 /**
  * The landscape video player: the picture edge to edge with controls on top. A tap shows or
@@ -430,44 +429,10 @@ private fun UpNextPanel(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit, onCanc
     }
 }
 
-private data class MenuOption(val label: String, val selected: Boolean, val badge: String? = null, val onSelect: () -> Unit)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MenuSheet(menu: PlayerMenu, viewModel: VideoPlayerViewModel, onDismiss: () -> Unit) {
-    val resources = LocalContext.current.resources
-    val title = stringResource(
-        when (menu) {
-            PlayerMenu.Audio -> UiR.string.detail_audio
-            PlayerMenu.Subtitles -> UiR.string.detail_subtitles
-            PlayerMenu.Quality -> UiR.string.detail_quality
-        },
-    )
-    val options = when (menu) {
-        PlayerMenu.Audio -> viewModel.audioMenu.let { m ->
-            // a cleaned voice-over is not a row: «Очищенный перевод» under the voices
-            m.rows.map { row ->
-                MenuOption(
-                    TrackLabels.audio(resources, row.track),
-                    row.checked,
-                    badge = if (row.track.isCleaned) resources.getString(UiR.string.track_cleaned) else null,
-                ) { viewModel.selectAudio(row.plays) }
-            } + listOfNotNull(
-                m.toggle?.let { t ->
-                    MenuOption(resources.getString(UiR.string.track_cleaned_toggle), t.on, badge = null) { viewModel.selectAudio(t.target) }
-                },
-            )
-        }
-        PlayerMenu.Subtitles -> listOf(
-            MenuOption(stringResource(UiR.string.detail_subtitles_off), viewModel.selectedSubtitle == null) { viewModel.selectSubtitle(null) },
-        ) + viewModel.subtitleTracks.map { track ->
-            MenuOption(TrackLabels.subtitle(resources, track), track.index == viewModel.selectedSubtitle?.index) { viewModel.selectSubtitle(track) }
-        }
-        PlayerMenu.Quality -> Quality.ALL.map { value ->
-            MenuOption(qualityLabel(value), value == viewModel.quality) { viewModel.selectQuality(value) }
-        }
-    }
-    val note = if (menu == PlayerMenu.Quality) streamNote(viewModel) else null
+    val content = playerMenu(menu, viewModel)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -475,11 +440,11 @@ private fun MenuSheet(menu: PlayerMenu, viewModel: VideoPlayerViewModel, onDismi
         shape = AntresolShapes.sheet,
     ) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
-            Text(title, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-            if (note != null) {
+            Text(content.title, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            content.note?.let { note ->
                 Text(note, style = Antresol.typography.caption, modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 8.dp))
             }
-            options.forEach { option ->
+            content.options.forEach { option ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -513,27 +478,6 @@ internal fun CleanedBadge(text: String) {
             .border(1.dp, AntresolColors.LabelTertiary, AntresolShapes.badge)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
-}
-
-@Composable
-fun qualityLabel(value: String): String = when (value) {
-    Quality.AUTO -> stringResource(UiR.string.quality_auto)
-    Quality.ORIGINAL -> stringResource(UiR.string.quality_original)
-    else -> "${value}p"
-}
-
-/** "Direct Stream · container mkv isn't supported…": how the server delivers the stream and why. */
-@Composable
-private fun streamNote(viewModel: VideoPlayerViewModel): String? {
-    val play = viewModel.source?.play ?: return null
-    val mode = stringResource(
-        when (play.mode) {
-            PlayMode.DIRECT -> UiR.string.player_mode_direct
-            PlayMode.REMUX -> UiR.string.player_mode_remux
-            else -> UiR.string.player_mode_transcode
-        },
-    )
-    return listOf(mode, play.reason).filter { it.isNotBlank() }.joinToString(" · ")
 }
 
 /** A short message pill at the top (for example, subtitles that failed to load). */

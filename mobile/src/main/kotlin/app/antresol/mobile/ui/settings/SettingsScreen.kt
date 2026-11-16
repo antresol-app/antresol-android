@@ -57,7 +57,7 @@ import app.antresol.core.model.Quality
 import app.antresol.core.session.StoredSession
 import app.antresol.mobile.BuildConfig
 import app.antresol.mobile.R
-import app.antresol.mobile.player.qualityLabel
+import app.antresol.ui.playback.qualityLabel
 import app.antresol.ui.language.UiLanguageModel
 import app.antresol.ui.language.UiLanguages
 import app.antresol.mobile.settings.AppSettings

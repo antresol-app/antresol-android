@@ -44,13 +44,13 @@ import app.antresol.tv.R as TvR
 import app.antresol.ui.language.UiLanguageModel
 import app.antresol.ui.language.UiLanguages
 import app.antresol.tv.settings.TvSettings
-import app.antresol.tv.ui.components.MenuOption
+import app.antresol.ui.playback.MenuOption
 import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.listRowColors
 import app.antresol.tv.ui.components.tryRequestFocus
-import app.antresol.tv.ui.player.qualityLabel
+import app.antresol.ui.playback.qualityLabel
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ProfileAvatar

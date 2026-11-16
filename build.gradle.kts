@@ -50,7 +50,7 @@ subprojects {
             }
             // The fake server of the shell UI tests and its media: one copy, compiled into both apps' unit tests.
             sourceSets.getByName("test") {
-                kotlin.srcDir(rootProject.file("test-fixtures/kotlin"))
+                java.srcDir(rootProject.file("test-fixtures/kotlin"))
                 resources.srcDir(rootProject.file("test-fixtures/resources"))
             }
         }

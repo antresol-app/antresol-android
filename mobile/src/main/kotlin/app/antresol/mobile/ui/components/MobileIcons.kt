@@ -117,18 +117,9 @@ object MobileIcons {
         close()
     }
 
-    val Plus: ImageVector = lineIcon("Plus") {
-        moveTo(12f, 5f)
-        lineTo(12f, 19f)
-        moveTo(5f, 12f)
-        lineTo(19f, 12f)
-    }
+    val Plus: ImageVector = AntresolIcons.Plus
 
-    val Check: ImageVector = lineIcon("Check") {
-        moveTo(5f, 12.5f)
-        lineTo(10f, 17.5f)
-        lineTo(19f, 7f)
-    }
+    val Check: ImageVector = AntresolIcons.Check
 
     /** A circled check: "watched". */
     val CheckCircle: ImageVector = lineIcon("CheckCircle") {
@@ -190,18 +181,7 @@ object MobileIcons {
         lineTo(6f, 18f)
     }
 
-    val Eye: ImageVector = lineIcon("Eye") {
-        moveTo(2.5f, 12f)
-        quadTo(7f, 5f, 12f, 5f)
-        quadTo(17f, 5f, 21.5f, 12f)
-        quadTo(17f, 19f, 12f, 19f)
-        quadTo(7f, 19f, 2.5f, 12f)
-        close()
-        moveTo(12f, 9f)
-        arcToRelative(3f, 3f, 0f, true, true, 0f, 6f)
-        arcToRelative(3f, 3f, 0f, true, true, 0f, -6f)
-        close()
-    }
+    val Eye: ImageVector = AntresolIcons.Eye
 
     val EyeOff: ImageVector = lineIcon("EyeOff") {
         moveTo(2.5f, 12f)
@@ -223,14 +203,7 @@ object MobileIcons {
         lineTo(6f, 18f)
     }
 
-    val SkipNext: ImageVector = lineIcon("SkipNext") {
-        moveTo(6f, 6f)
-        lineTo(15f, 12f)
-        lineTo(6f, 18f)
-        close()
-        moveTo(18f, 6f)
-        lineTo(18f, 18f)
-    }
+    val SkipNext: ImageVector = AntresolIcons.SkipNext
 
     val Shuffle: ImageVector = lineIcon("Shuffle") {
         moveTo(4f, 7f)
@@ -260,17 +233,9 @@ object MobileIcons {
         lineTo(12.4f, 14f)
     }
 
-    val Star: ImageVector = lineIcon("Star") { star() }
+    val Star: ImageVector = AntresolIcons.Star
 
-    val StarFilled: ImageVector = ImageVector.Builder("StarFilled", 24.dp, 24.dp, 24f, 24f).apply {
-        path(
-            fill = SolidColor(Color.Black),
-            stroke = SolidColor(Color.Black),
-            strokeLineWidth = 1.9f,
-            strokeLineJoin = StrokeJoin.Round,
-            pathBuilder = { star() },
-        )
-    }.build()
+    val StarFilled: ImageVector = AntresolIcons.StarFilled
 
     /** Lines with a play mark: the play queue. */
     val Queue: ImageVector = lineIcon("Queue") {
@@ -350,20 +315,6 @@ object MobileIcons {
         moveTo(7.5f, 14.5f)
         lineTo(5f, 17f)
         lineTo(7.5f, 19.5f)
-    }
-
-    private fun PathBuilder.star() {
-        moveTo(12f, 3.6f)
-        lineTo(14.29f, 9.44f)
-        lineTo(20.56f, 9.82f)
-        lineTo(15.71f, 13.81f)
-        lineTo(17.29f, 19.88f)
-        lineTo(12f, 16.5f)
-        lineTo(6.71f, 19.88f)
-        lineTo(8.29f, 13.81f)
-        lineTo(3.44f, 9.82f)
-        lineTo(9.71f, 9.44f)
-        close()
     }
 
     private fun PathBuilder.roundedRect(left: Float, top: Float, right: Float, bottom: Float, r: Float) {

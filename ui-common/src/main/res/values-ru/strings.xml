@@ -28,21 +28,18 @@
     <string name="action_play_from_start">Смотреть сначала</string>
     <string name="action_shuffle">Перемешать</string>
     <string name="action_add_watchlist">Буду смотреть</string>
-    <string name="action_remove_watchlist">Убрать из «Буду смотреть»</string>
     <string name="action_mark_watched">Отметить просмотренным</string>
     <string name="action_mark_unwatched">Отметить непросмотренным</string>
     <string name="action_read">Читать</string>
     <string name="action_listen">Слушать</string>
     <string name="action_retry">Повторить</string>
     <string name="action_cancel">Отмена</string>
-    <string name="action_see_all">Все</string>
 
     <!-- Сортировка -->
     <string name="sort_recent">Недавно добавленные</string>
     <string name="sort_title">По названию</string>
     <string name="sort_year">По году</string>
     <string name="sort_artist">По исполнителю</string>
-    <string name="sort_author">По автору</string>
 
     <!-- Герой -->
     <string name="hero_new_in_library">Новое в библиотеке</string>
@@ -78,7 +75,6 @@
     <string name="quality_original">Оригинал</string>
 
     <!-- Поиск -->
-    <string name="search_hint">Фильмы, сериалы, музыка, книги</string>
     <string name="search_no_results">По запросу «%1$s» ничего не найдено</string>
 
     <!-- Состояния -->
@@ -99,7 +95,6 @@
     <string name="track_number">Дорожка %1$d</string>
     <string name="subtitle_forced">%1$s (форсированные)</string>
     <!-- Подключение и учётная запись -->
-    <string name="server_subtitle">Введите адрес компьютера, на котором работает Antresol. Порт 8420 добавится сам.</string>
     <string name="server_connecting">Подключение…</string>
     <string name="server_invalid_address">Это не похоже на адрес сервера.</string>
     <string name="server_not_antresol">По этому адресу отвечает не сервер Antresol.</string>
@@ -116,7 +111,6 @@
     <string name="search_section_songs">Песни</string>
     <string name="search_section_audiobooks">Аудиокниги</string>
     <string name="search_section_books">Книги</string>
-    <string name="search_section_comics">Комиксы</string>
     <string name="search_prompt">Ищите фильмы, сериалы, музыку и книги в своей медиатеке.</string>
     <string name="detail_volumes">Тома</string>
     <string name="detail_albums">Альбомы</string>
@@ -140,7 +134,6 @@
     <string name="detail_episode_title">%1$d. %2$s</string>
     <string name="detail_watched">Просмотрено</string>
     <string name="detail_in_watchlist">В «Буду смотреть»</string>
-    <string name="detail_versions">Версий: %1$d</string>
     <string name="player_resume_title">Продолжить просмотр?</string>
     <string name="player_resume_from">Продолжить с %1$s</string>
     <string name="player_pause">Пауза</string>
@@ -182,8 +175,6 @@
     <string name="tv_go_live">В эфир</string>
     <string name="tv_channel_number">%1$d · %2$s</string>
     <string name="tv_nothing">Сейчас ничего</string>
-    <string name="tv_next">Далее: %1$s</string>
-    <string name="tv_next_at">В %1$s — %2$s</string>
     <string name="tv_time">%1$s–%2$s</string>
     <string name="tv_starting">Канал запускается…</string>
     <string name="tv_failed">Канал не показывается</string>
@@ -196,9 +187,6 @@
     <string name="tv_back">К каналам</string>
     <string name="tv_empty">Каналов пока нет</string>
     <string name="tv_empty_hint">Каналы появятся сами, когда в медиатеке наберётся хотя бы шесть фильмов одного жанра или сериал от восьми серий.</string>
-    <string name="tv_next_at_long">Далее в %1$s — %2$s</string>
-    <string name="tv_guide_hint">Каналы</string>
-    <string name="tv_watching">Сейчас смотрите</string>
     <string name="tv_all_channels">Все каналы</string>
     <string name="tv_ok_actions">Звук, субтитры, избранное</string>
     <string name="ui_language">Язык интерфейса</string>
@@ -218,21 +206,14 @@
     <string name="tv_favorites_empty_hint">Удерживайте канал пальцем или кнопкой OK, чтобы добавить его в избранное.</string>
     <string name="tv_last_channel">Последний канал</string>
     <string name="tv_watch_now">Смотреть</string>
-    <string name="tv_now">Сейчас</string>
     <string name="tv_tomorrow">Завтра</string>
     <string name="tv_yesterday">Вчера</string>
     <string name="tv_today">Сегодня</string>
     <string name="tv_minutes">%1$d мин</string>
-    <string name="tv_audio_subtitles">Звук и субтитры</string>
     <string name="tv_channel_list">Список каналов</string>
-    <string name="tv_details">Подробнее</string>
     <string name="tv_on_air_until">В эфире до %1$s</string>
-    <string name="tv_starts_at">Начало в %1$s</string>
-    <string name="tv_ended">Закончилась в %1$s</string>
-    <string name="tv_guide_empty">В этом окне передач нет</string>
     <string name="track_cleaned_toggle">Очищенный перевод</string>
     <string name="track_cleaned">Очищено</string>
-    <string name="track_cleaned_hint">Озвучка без оригинальных голосов</string>
     <!-- Поиск серверов в локальной сети -->
     <string name="server_subtitle_discovery">Выберите сервер, найденный в вашей сети, или введите адрес компьютера, на котором работает Antresol.</string>
     <string name="server_found_title">В вашей сети</string>

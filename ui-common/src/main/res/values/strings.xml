@@ -30,21 +30,18 @@
     <string name="action_play_from_start">Play from Beginning</string>
     <string name="action_shuffle">Shuffle</string>
     <string name="action_add_watchlist">Want to Watch</string>
-    <string name="action_remove_watchlist">Remove from Want to Watch</string>
     <string name="action_mark_watched">Mark as Watched</string>
     <string name="action_mark_unwatched">Mark as Unwatched</string>
     <string name="action_read">Read</string>
     <string name="action_listen">Listen</string>
     <string name="action_retry">Try Again</string>
     <string name="action_cancel">Cancel</string>
-    <string name="action_see_all">See All</string>
 
     <!-- Sorting -->
     <string name="sort_recent">Recently Added</string>
     <string name="sort_title">By Title</string>
     <string name="sort_year">By Year</string>
     <string name="sort_artist">By Artist</string>
-    <string name="sort_author">By Author</string>
 
     <!-- Hero -->
     <string name="hero_new_in_library">New in Library</string>
@@ -80,7 +77,6 @@
     <string name="quality_original">Original</string>
 
     <!-- Search -->
-    <string name="search_hint">Movies, shows, music, books</string>
     <string name="search_no_results">No results for “%1$s”</string>
 
     <!-- States -->
@@ -101,7 +97,6 @@
     <string name="track_number">Track %1$d</string>
     <string name="subtitle_forced">%1$s (Forced)</string>
     <!-- Onboarding and account -->
-    <string name="server_subtitle">Enter the address of the computer running Antresol. The default port 8420 is added for you.</string>
     <string name="server_connecting">Connecting…</string>
     <string name="server_invalid_address">That doesn’t look like a server address.</string>
     <string name="server_not_antresol">This address answers, but it isn’t an Antresol server.</string>
@@ -118,7 +113,6 @@
     <string name="search_section_songs">Songs</string>
     <string name="search_section_audiobooks">Audiobooks</string>
     <string name="search_section_books">Books</string>
-    <string name="search_section_comics">Comics</string>
     <string name="search_prompt">Find movies, shows, music and books in your library.</string>
     <string name="detail_volumes">Volumes</string>
     <string name="detail_albums">Albums</string>
@@ -140,7 +134,6 @@
     <string name="detail_episode_title">%1$d. %2$s</string>
     <string name="detail_watched">Watched</string>
     <string name="detail_in_watchlist">In Want to Watch</string>
-    <string name="detail_versions">%1$d versions</string>
     <string name="player_resume_title">Resume watching?</string>
     <string name="player_resume_from">Resume from %1$s</string>
     <string name="player_pause">Pause</string>
@@ -182,8 +175,6 @@
     <string name="tv_go_live">Go Live</string>
     <string name="tv_channel_number">%1$d · %2$s</string>
     <string name="tv_nothing">Nothing on now</string>
-    <string name="tv_next">Next: %1$s</string>
-    <string name="tv_next_at">At %1$s — %2$s</string>
     <string name="tv_time">%1$s–%2$s</string>
     <string name="tv_starting">Starting the channel…</string>
     <string name="tv_failed">The channel can’t be shown</string>
@@ -196,9 +187,6 @@
     <string name="tv_back">Back to Channels</string>
     <string name="tv_empty">No channels yet</string>
     <string name="tv_empty_hint">Channels appear by themselves once the library has at least six movies of a genre or a series with eight episodes.</string>
-    <string name="tv_next_at_long">Next at %1$s — %2$s</string>
-    <string name="tv_guide_hint">Channels</string>
-    <string name="tv_watching">Watching</string>
     <string name="tv_all_channels">All Channels</string>
     <string name="tv_ok_actions">Audio, subtitles, favourite</string>
     <string name="ui_language">Interface Language</string>
@@ -218,21 +206,14 @@
     <string name="tv_favorites_empty_hint">Touch and hold a channel, or hold OK on it, to add it to Favourites.</string>
     <string name="tv_last_channel">Last channel</string>
     <string name="tv_watch_now">Watch</string>
-    <string name="tv_now">Now</string>
     <string name="tv_tomorrow">Tomorrow</string>
     <string name="tv_yesterday">Yesterday</string>
     <string name="tv_today">Today</string>
     <string name="tv_minutes">%1$d min</string>
-    <string name="tv_audio_subtitles">Audio and Subtitles</string>
     <string name="tv_channel_list">Channel List</string>
-    <string name="tv_details">Details</string>
     <string name="tv_on_air_until">On air until %1$s</string>
-    <string name="tv_starts_at">Starts at %1$s</string>
-    <string name="tv_ended">Ended at %1$s</string>
-    <string name="tv_guide_empty">No programmes in this window</string>
     <string name="track_cleaned_toggle">Clean voice-over</string>
     <string name="track_cleaned">Cleaned</string>
-    <string name="track_cleaned_hint">The voice-over with the original voices taken out</string>
     <!-- LAN discovery on the "Connect to your server" screens -->
     <string name="server_subtitle_discovery">Choose a server found on your network, or enter the address of the computer running Antresol.</string>
     <string name="server_found_title">On your network</string>

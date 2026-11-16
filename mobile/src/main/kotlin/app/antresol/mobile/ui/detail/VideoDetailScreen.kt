@@ -240,7 +240,7 @@ private fun VideoDetailContent(
                 }
                 if (item.kind != Kind.SERIES || librarySeasons.isNotEmpty()) {
                     GlassPillButton(
-                        text = stringResource(R.string.detail_watched),
+                        text = stringResource(UiR.string.detail_watched),
                         icon = if (detail.watched) MobileIcons.CheckCircle else MobileIcons.Circle,
                         onClick = viewModel::toggleWatched,
                         modifier = buttonModifier.testTag("toggle-watched"),

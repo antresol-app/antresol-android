@@ -58,8 +58,6 @@
     <string name="settings_subtitles_hint">Включаются автоматически, если у видео есть субтитры на этом языке.</string>
     <string name="settings_off">Выкл.</string>
     <string name="settings_language">Язык</string>
-    <string name="settings_app_language">Язык приложения</string>
-    <string name="language_system">Как в системе</string>
     <string name="settings_app_version">Antresol для Android TV %1$s</string>
     <string name="settings_about_text">Клиент для вашего медиасервера Antresol.</string>
 

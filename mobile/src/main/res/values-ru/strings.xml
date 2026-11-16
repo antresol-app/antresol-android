@@ -3,7 +3,6 @@
     <!-- Shell -->
     <string name="card_open_page">Открыть страницу</string>
     <string name="back">Назад</string>
-    <string name="account">Аккаунт</string>
     <string name="account_kid">Детский профиль</string>
     <string name="account_profile">Профиль</string>
 
@@ -37,15 +36,11 @@
     <!-- Detail -->
     <string name="detail_watchlist">Буду смотреть</string>
     <string name="detail_want">Хочу прочитать</string>
-    <string name="detail_watched">Просмотрено</string>
     <string name="detail_up_next">Далее</string>
     <string name="detail_episodes">Эпизоды</string>
-    <string name="detail_genres">Жанры</string>
     <string name="detail_about">Описание</string>
     <string name="detail_file">Файл</string>
-    <string name="detail_rated">Рейтинг %1$s</string>
     <string name="detail_episode_code">С%1$d · Э%2$d</string>
-    <string name="detail_pages">Страниц: %1$d</string>
     <string name="detail_mark_season_watched">Отметить сезон просмотренным</string>
     <string name="detail_mark_season_unwatched">Снять отметку с сезона</string>
     <string name="detail_action_failed">Не удалось сохранить изменение. Проверьте подключение и попробуйте ещё раз.</string>
@@ -91,7 +86,6 @@
     <string name="settings_autoplay">Автозапуск следующей серии</string>
     <string name="settings_autoplay_detail">Через 10 секунд после конца серии</string>
     <string name="settings_language">Язык</string>
-    <string name="settings_language_system">Системный</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_app_version">Версия приложения</string>
     <string name="account_open">Аккаунт: %1$s</string>

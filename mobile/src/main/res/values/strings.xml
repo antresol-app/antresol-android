@@ -5,7 +5,6 @@
     <!-- Shell -->
     <string name="card_open_page">Open page</string>
     <string name="back">Back</string>
-    <string name="account">Account</string>
     <string name="account_kid">Kids profile</string>
     <string name="account_profile">Profile</string>
 
@@ -39,15 +38,11 @@
     <!-- Detail -->
     <string name="detail_watchlist">Watchlist</string>
     <string name="detail_want">Want to Read</string>
-    <string name="detail_watched">Watched</string>
     <string name="detail_up_next">Up Next</string>
     <string name="detail_episodes">Episodes</string>
-    <string name="detail_genres">Genres</string>
     <string name="detail_about">About</string>
     <string name="detail_file">File</string>
-    <string name="detail_rated">Rated %1$s</string>
     <string name="detail_episode_code">S%1$d · E%2$d</string>
-    <string name="detail_pages">%1$d pages</string>
     <string name="detail_mark_season_watched">Mark Season as Watched</string>
     <string name="detail_mark_season_unwatched">Mark Season as Unwatched</string>
     <string name="detail_action_failed">Couldn’t save the change. Check the connection and try again.</string>
@@ -93,7 +88,6 @@
     <string name="settings_autoplay">Autoplay Next Episode</string>
     <string name="settings_autoplay_detail">Starts after a 10-second countdown</string>
     <string name="settings_language">Language</string>
-    <string name="settings_language_system">System</string>
     <string name="settings_about">About</string>
     <string name="settings_app_version">App Version</string>
     <string name="account_open">Account: %1$s</string>

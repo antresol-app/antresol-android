@@ -15,6 +15,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,8 @@ import app.antresol.ui.image.rememberArtworkTint
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -110,10 +113,33 @@ fun NoticeSnackbar(notice: Int?, host: SnackbarHostState, onShown: () -> Unit) {
     // Shown from the page's scope, not from the effect: [onShown] clears the notice, which restarts
     // the effect and would take a snackbar shown inside it down again at once.
     val scope = rememberCoroutineScope()
+    val snackbars = remember(scope, host) { NoticeSnackbars(scope, host) }
     LaunchedEffect(notice) {
         if (notice != null) {
             onShown()
-            scope.launch { host.showSnackbar(resources.getString(notice)) }
+            snackbars.show(resources.getString(notice))
+        }
+    }
+}
+
+/**
+ * The snackbars of a page's notices on [host], shown from [scope]. A message that is already
+ * showing or waiting is not queued a second time (five taps on a toggle while offline are one
+ * sentence, not the same one five times in a row): it is shown anew in its place.
+ */
+class NoticeSnackbars(private val scope: CoroutineScope, private val host: SnackbarHostState) {
+    private val shown = HashMap<String, Job>()
+
+    fun show(message: String) {
+        // Cancelling takes the snackbar down (or out of the queue).
+        shown.remove(message)?.cancel()
+        shown[message] = scope.launch {
+            val self = coroutineContext[Job]
+            try {
+                host.showSnackbar(message)
+            } finally {
+                if (shown[message] === self) shown.remove(message)
+            }
         }
     }
 }

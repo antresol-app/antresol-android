@@ -54,4 +54,41 @@ class NoticeSnackbarTest {
         compose.waitForIdle()
         assertEquals(compose.activity.getString(R.string.detail_action_failed), host.currentSnackbarData?.visuals?.message)
     }
+
+    @Test
+    fun theSameNoticeAgainIsOneSnackbarNotAQueueOfThem() {
+        val host = SnackbarHostState()
+        var notice by mutableStateOf<Int?>(null)
+        var playlist by mutableStateOf<PlaylistNotice?>(null)
+        compose.setContent {
+            NoticeSnackbar(notice, host) { notice = null }
+            PlaylistNoticeSnackbar(playlist, host) { playlist = null }
+            SnackbarHost(host)
+        }
+        // Offline, a toggle tapped five times: five refusals, the same sentence.
+        val failed = compose.activity.getString(R.string.detail_action_failed)
+        repeat(5) {
+            notice = R.string.detail_action_failed
+            compose.waitForIdle()
+        }
+        assertEquals(failed, host.currentSnackbarData?.visuals?.message)
+        // Another sentence waits its turn, once however often it came.
+        val other = compose.activity.getString(app.antresol.ui.R.string.action_cancel)
+        repeat(3) {
+            playlist = PlaylistNotice(app.antresol.ui.R.string.action_cancel)
+            compose.waitForIdle()
+        }
+        assertEquals(failed, host.currentSnackbarData?.visuals?.message)
+        host.currentSnackbarData?.dismiss()
+        compose.waitForIdle()
+        assertEquals(other, host.currentSnackbarData?.visuals?.message)
+        host.currentSnackbarData?.dismiss()
+        compose.waitForIdle()
+        // Nothing was queued behind them.
+        assertEquals(null, host.currentSnackbarData)
+        // And a sentence that was shown and is gone is shown again when it comes again.
+        notice = R.string.detail_action_failed
+        compose.waitForIdle()
+        assertEquals(failed, host.currentSnackbarData?.visuals?.message)
+    }
 }

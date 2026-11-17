@@ -44,6 +44,7 @@ import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.Playlist
 import app.antresol.core.music.PlaylistEdits
 import app.antresol.ui.LoadState
+import app.antresol.mobile.ui.detail.NoticeSnackbars
 import app.antresol.mobile.ui.components.GlassTextField
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.focusClickable
@@ -270,10 +271,11 @@ fun PlaylistNoticeSnackbar(notice: PlaylistNotice?, host: SnackbarHostState, onS
     val resources = LocalContext.current.resources
     // From the page's scope, as in NoticeSnackbar: [onShown] restarts the effect.
     val scope = rememberCoroutineScope()
+    val snackbars = remember(scope, host) { NoticeSnackbars(scope, host) }
     LaunchedEffect(notice) {
         if (notice != null) {
             onShown()
-            scope.launch { host.showSnackbar(if (notice.arg != null) resources.getString(notice.res, notice.arg) else resources.getString(notice.res)) }
+            snackbars.show(if (notice.arg != null) resources.getString(notice.res, notice.arg) else resources.getString(notice.res))
         }
     }
 }

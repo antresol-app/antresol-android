@@ -15,10 +15,12 @@ import app.antresol.core.model.ChannelEpg
 import app.antresol.core.model.ChannelEpgRow
 import app.antresol.core.model.ChannelList
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** The server calls of the «ТВ» page; [AntresolClient.channelsApi] is the real one. */
 interface ChannelsApi {
@@ -95,8 +97,11 @@ class ChannelsViewModel(
     private var refreshJob: Job? = null
     private var guideJob: Job? = null
 
-    /** The guide's next page failed and no page was showing the channels to ask again for: [startRefreshing] does. */
+    /** The guide's next page failed and its job gave up (nobody was looking, or too many failures): [startRefreshing] asks again. */
     private var guidePageWanted = false
+
+    /** Completed by an explicit [loadMoreGuide] while the job waits between two requests. */
+    private var guideAskNow: CompletableDeferred<Unit>? = null
 
     // The lists below are derived state: worked out once per change of what they read, not on every
     // read from a composition (each key press and clock tick), and the same instances until then.
@@ -244,6 +249,7 @@ class ChannelsViewModel(
     /** (Re)loads the guide from 3 h before now: one page of [Epg.PAGE_HOURS] hours. */
     fun loadGuide() {
         guideJob?.cancel()
+        guidePageWanted = false
         guideError = null
         val from = Epg.origin(clock())
         guideJob = viewModelScope.launch {
@@ -266,14 +272,24 @@ class ChannelsViewModel(
      * page that failed is asked for again by this job itself, [GUIDE_RETRY_MS] later and then with
      * twice the pause each time (up to [GUIDE_RETRY_MAX_MS]), while a page shows the channels; the
      * calls in between are ignored, so a request that fails at once (no network) is not sent with
-     * every frame. When no page is left, the next [startRefreshing] asks.
+     * every frame. After [GUIDE_ATTEMPTS] requests in a row the job gives up (an answer that will
+     * not change, a watcher that is not the guide): the next call or [startRefreshing] asks again.
+     *
+     * [explicit]: the viewer asked for more (Right at the guide's end on a TV). It is not ignored
+     * during the pause: the page is asked for now ([GUIDE_ASK_MIN_MS] after the failure at the
+     * earliest, so a held key is one request a second), and the pauses and the count start over.
      */
-    fun loadMoreGuide() {
-        if (guideJob?.isActive == true || guideRows == null) return
+    fun loadMoreGuide(explicit: Boolean = false) {
+        if (guideRows == null) return
+        if (guideJob?.isActive == true) {
+            if (explicit) guideAskNow?.complete(Unit)
+            return
+        }
         if (guideToMs >= Epg.limit(clock())) return
         guidePageWanted = false
         guideJob = viewModelScope.launch {
             var pause = GUIDE_RETRY_MS
+            var attempts = 0
             while (true) {
                 val from = guideToMs
                 try {
@@ -286,13 +302,20 @@ class ChannelsViewModel(
                 } catch (_: Exception) {
                     // Asked again below.
                 }
-                delay(pause)
-                pause = (pause * 2).coerceAtMost(GUIDE_RETRY_MAX_MS)
-                if (watchers.isEmpty()) {
-                    guidePageWanted = true
-                    return@launch
+                if (++attempts >= GUIDE_ATTEMPTS) break
+                val askNow = CompletableDeferred<Unit>().also { guideAskNow = it }
+                delay(GUIDE_ASK_MIN_MS)
+                val asked = withTimeoutOrNull(pause - GUIDE_ASK_MIN_MS) { askNow.await() } != null
+                guideAskNow = null
+                if (watchers.isEmpty()) break
+                if (asked) {
+                    pause = GUIDE_RETRY_MS
+                    attempts = 0
+                } else {
+                    pause = (pause * 2).coerceAtMost(GUIDE_RETRY_MAX_MS)
                 }
             }
+            guidePageWanted = true
         }
     }
 
@@ -320,5 +343,9 @@ class ChannelsViewModel(
         const val OPENED_EVERY_MS = 10 * 60_000L
         const val GUIDE_RETRY_MS = 3_000L
         const val GUIDE_RETRY_MAX_MS = 30_000L
+        const val GUIDE_ASK_MIN_MS = 1_000L
+
+        /** Requests for one guide page before the job gives up: 0, 3, 9, 21 and 45 s after the first. */
+        const val GUIDE_ATTEMPTS = 5
     }
 }

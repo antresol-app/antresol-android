@@ -183,7 +183,7 @@ private fun GuideGrid(
     lastChannelId: Long?,
     canTakeFocus: () -> Boolean,
     onPick: (ChannelEpgRow, ChannelProgram) -> Unit,
-    onNearEnd: () -> Unit,
+    onNearEnd: (explicit: Boolean) -> Unit,
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -247,7 +247,8 @@ private fun GuideGrid(
         val index = focusedProgram?.key.let { key -> programs.indexOfFirst { it.key == key } }
         val target = programs.getOrNull(index + step)
         if (index < 0 || target == null) {
-            if (step > 0) onNearEnd()
+            // Right at the loaded end: the viewer asks for more (also while a failed page waits to be asked for again).
+            if (step > 0) onNearEnd(true)
             return true
         }
         scope.launch {
@@ -344,7 +345,7 @@ private fun GuideGrid(
                                     anchorMs = Epg.anchorFor(program, visibleFromMs())
                                 }
                                 scope.launch { reveal(program, fromMs, scroll, density, minute) }
-                                if (toMs - (program.endMs ?: 0L) < 2 * Epg.HOUR_MS) onNearEnd()
+                                if (toMs - (program.endMs ?: 0L) < 2 * Epg.HOUR_MS) onNearEnd(false)
                             },
                             onPick = { program -> onPick(row, program) },
                         )

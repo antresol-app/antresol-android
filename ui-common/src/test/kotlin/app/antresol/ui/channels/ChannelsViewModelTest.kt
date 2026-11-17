@@ -218,6 +218,88 @@ class ChannelsViewModelTest {
     }
 
     @Test
+    fun theViewersOwnRequestIsNotIgnoredWhileAFailedGuidePageWaits() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.startRefreshing()
+        runCurrent()
+        vm.showView(ChannelsView.Guide)
+        runCurrent()
+        val to = vm.guideToMs
+        epgFails = true
+        vm.loadMoreGuide()
+        // 0, 3, 9, 21 s: four failures, the pause is 24 s now.
+        advanceTimeBy(21_000)
+        runCurrent()
+        assertEquals(5, epgFroms.size)
+        // Right at the guide's end 5 s into the pause: asked for at once, not 19 s later.
+        advanceTimeBy(5_000)
+        vm.loadMoreGuide(explicit = true)
+        runCurrent()
+        assertEquals(6, epgFroms.size)
+        // The key held: one request a second, not one per repeat.
+        repeat(10) {
+            advanceTimeBy(100)
+            vm.loadMoreGuide(explicit = true)
+            runCurrent()
+        }
+        assertEquals(7, epgFroms.size)
+        // The pauses start over: 3 s after the last answer the job asks by itself.
+        advanceTimeBy(2_999)
+        runCurrent()
+        assertEquals(7, epgFroms.size)
+        epgFails = false
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(8, epgFroms.size)
+        assertEquals(to + 6 * 3_600_000L, vm.guideToMs)
+        // A scroll position (not the viewer's key) during the pause is still ignored.
+        epgFails = true
+        vm.loadMoreGuide()
+        runCurrent()
+        repeat(5) {
+            advanceTimeBy(500)
+            vm.loadMoreGuide()
+            runCurrent()
+        }
+        assertEquals(9, epgFroms.size)
+        vm.stopRefreshing()
+    }
+
+    @Test
+    fun aGuidePageThatKeepsFailingIsNotAskedForForEver() = runTest(dispatcher) {
+        val vm = viewModel()
+        // The phone's Home shelf watches the channels for as long as Home is shown.
+        vm.startRefreshing()
+        runCurrent()
+        vm.showView(ChannelsView.Guide)
+        runCurrent()
+        val to = vm.guideToMs
+        epgFails = true
+        vm.loadMoreGuide()
+        // Five requests (0, 3, 9, 21, 45 s), then none, however long the page stays.
+        advanceTimeBy(45_000)
+        runCurrent()
+        assertEquals(6, epgFroms.size)
+        advanceTimeBy(3_600_000)
+        runCurrent()
+        assertEquals(6, epgFroms.size)
+        // The viewer scrolls on, or the page comes back: asked for again.
+        vm.loadMoreGuide()
+        runCurrent()
+        assertEquals(7, epgFroms.size)
+        advanceTimeBy(45_000)
+        runCurrent()
+        assertEquals(11, epgFroms.size)
+        epgFails = false
+        vm.startRefreshing(watcher = "guide")
+        runCurrent()
+        assertEquals(12, epgFroms.size)
+        assertEquals(to + 6 * 3_600_000L, vm.guideToMs)
+        vm.stopRefreshing("guide")
+        vm.stopRefreshing()
+    }
+
+    @Test
     fun theGuideShowsTheChannelListsLogos() = runTest(dispatcher) {
         val vm = viewModel()
         runCurrent()

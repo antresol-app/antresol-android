@@ -55,4 +55,20 @@ class TrailerEmbedStateTest {
         assertTrue(shadow.wasOnPauseCalled())
         assertEquals(null, shadow.lastLoadedUrl)
     }
+
+    @Test
+    fun theScreenIsKeptOnOnlyWhileTheTrailerPlays() {
+        report(1)
+        assertTrue(view.keepScreenOn)
+        report(2) // paused
+        assertEquals(false, view.keepScreenOn)
+        report(3) // buffering: about to play
+        assertTrue(view.keepScreenOn)
+        report(0) // ended
+        assertEquals(false, view.keepScreenOn)
+        report(1)
+        state.bridge.onError(150)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(false, view.keepScreenOn)
+    }
 }

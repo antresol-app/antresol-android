@@ -182,6 +182,8 @@ class TrailerEmbedState(val key: String) {
             main.post {
                 // A page dropped in the background may still report: it is not the player any more.
                 if (dropped) return@post
+                // The screen stays on while the trailer plays (or is about to), as in the other players.
+                webView?.keepScreenOn = state == STATE_PLAYING || state == STATE_BUFFERING
                 when (state) {
                     STATE_PLAYING -> phase = EmbedPhase.Playing
                     STATE_ENDED -> phase = EmbedPhase.Finished
@@ -191,13 +193,18 @@ class TrailerEmbedState(val key: String) {
 
         @JavascriptInterface
         fun onError(code: Int) {
-            main.post { if (!dropped) phase = EmbedPhase.Failed(code) }
+            main.post {
+                if (dropped) return@post
+                webView?.keepScreenOn = false
+                phase = EmbedPhase.Failed(code)
+            }
         }
     }
 
     private companion object {
         const val STATE_ENDED = 0
         const val STATE_PLAYING = 1
+        const val STATE_BUFFERING = 3
         const val INVALID_KEY = -1
     }
 }
@@ -222,6 +229,7 @@ fun TrailerEmbedView(state: TrailerEmbedState, modifier: Modifier = Modifier) {
                 setBackgroundColor(Color.BLACK)
                 isFocusable = false
                 isFocusableInTouchMode = false
+                // On while the player loads; then it follows the player's state (see the bridge).
                 keepScreenOn = true
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true

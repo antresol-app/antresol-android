@@ -54,7 +54,7 @@ class ChannelsViewModelTest {
         override suspend fun epg(fromIso: String, hours: Int): ChannelEpg {
             epgFroms += fromIso
             if (epgFails) throw IOException("offline")
-            return ChannelEpg(channels = channels.map { ChannelEpgRow(it.id, it.number, it.name, programs = listOf(ChannelProgram(id = "${it.id}-$fromIso"))) })
+            return ChannelEpg(channels = channels.map { ChannelEpgRow(it.id, it.number, it.name, programs = listOf(ChannelProgram(id = "${it.id}-$fromIso", start = fromIso))) })
         }
 
         override suspend fun opened() {

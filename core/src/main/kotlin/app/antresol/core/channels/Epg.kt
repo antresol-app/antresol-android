@@ -35,76 +35,96 @@ object Epg {
 
     /**
      * [page] merged into [rows]: the channels in [page]'s order (the list order, which may have
-     * changed), each with its programmes from both, by start, each programme once ([joined]).
-     * [page] is the newer answer: what [rows] have that starts inside its window `[from, to)` is
-     * dropped, so a schedule the server rebuilt since (it reuses the programme ids) is shown as the
-     * page has it, not mixed with the old one.
+     * changed), each with what [rows] know of it and the page's programmes ([mergedRow]).
+     *
+     * The guide pages forward only: a page's window starts where the one before ended, and a
+     * reload starts from nothing. So [page] is always the newer answer about a later stretch.
      */
     fun merge(rows: List<ChannelEpgRow>, page: ChannelEpg): List<ChannelEpgRow> {
         val old = rows.associateBy { it.id }
         val from = Channels.epochMs(page.from)
-        val to = Channels.epochMs(page.to)
         return page.channels.map { row ->
-            val before = old[row.id]?.programs.orEmpty().filterNot { program ->
-                val start = program.startMs
-                from != null && to != null && start != null && start >= from && start < to
-            }
-            row.copy(programs = joined(before + row.programs))
+            row.copy(programs = mergedRow(old[row.id]?.programs.orEmpty(), row.programs, from, library = !row.external))
         }
     }
 
     /**
      * What tells a channel's programmes apart, for the merge, a guide's blocks and the focus: the id,
-     * or the start when the source gives none ([joined] leaves one programme per key and per start).
+     * or the start when the source gives none ([mergedRow] leaves one programme per key).
      */
     fun key(program: ChannelProgram): String = program.id.ifEmpty { program.start }
 
     /**
-     * [programs] (the older page's first) by start, each programme once. A programme across a page's
-     * edge comes with both pages, and the server joins the parts of a film (its files, back to back)
-     * within a page only: the same programme may come again with a later end (its second part began
-     * in the next page), or as its remaining parts with their own id and start. So:
-     * - of two programmes with one key or one start the one given later (the newer page's) stays:
-     *   a page that still has a programme's first part has at least as much of it as the page before,
-     *   and after a rebuild of the schedule the id is another programme's;
-     * - one of the same title that starts before the one before it ends is the rest of it. Unless it
-     *   is exactly as long: then it is the same files in another order, the end of this showing
-     *   joined by the server with the beginning of the title's next showing, and only what is after
-     *   this showing's end is kept, as a programme of its own;
-     * - a repeat of a title starts where the first showing ends and stays a programme of its own.
-     * - a library title that is still on when another one starts (the page before had it across its
-     *   edge, and the schedule was rebuilt since) ends there. Programmes of an external guide have
-     *   no item and may overlap.
+     * One channel's programmes after a newer [page] (its window starts at [from]; null when
+     * unknown) was added to the [known] ones: by start, one programme per [key].
+     *
+     * The server answers the schedule entries that overlap the window and joins the files of one
+     * title only among those, under the id of the first of them; and it may have rebuilt the
+     * schedule since the page before (other programmes, the ids used again). So:
+     * 1. An empty [page] says nothing: [known] stays.
+     * 2. The page is the truth from `cut` on, the earlier of [from] and its first programme's
+     *    start. Every known programme that starts at or after `cut` goes, and so does one whose key
+     *    the page gives (the id is another programme's now). Every page programme stays, none is
+     *    joined with another of the page (of two with one key, which no server sends, the later).
+     * 3. A [library] channel shows one title at a time. The known programme still on when the
+     *    page's first one starts:
+     *    - is the same title, and the page's starts before [from]: one programme cut by the seam
+     *      (the page has its last files under their own id). The known one keeps its key and start
+     *      and gets the page copy's end, when the page goes on with something else after it and
+     *      the rows have nothing of the title right before it. Otherwise the title is (or may be)
+     *      shown again back to back: the server ends a programme where its first file comes again,
+     *      so the page's first programme is then the end of this showing with the beginning of the
+     *      next. The known programme keeps its end and the page's starts there: two blocks of the
+     *      title side by side, each cut where a file starts, never one that spans two showings;
+     *    - otherwise ends at `cut`.
+     *    The same title from [from] on (not before) is not a continuation: the page before had an
+     *    entry across the seam that this page does not have, so the schedule was rebuilt.
+     *    A seam exactly between two files of a title gives two blocks (it looks like a repeat).
+     * 4. An external (XMLTV) channel's programmes are never joined or cut; they may overlap.
+     *
+     * A programme whose start cannot be read has no place in the grid and is left out.
      */
-    fun joined(programs: List<ChannelProgram>): List<ChannelProgram> {
-        // One programme per key, the one given last.
-        val newest = HashMap<String, ChannelProgram>()
-        for (program in programs) newest[key(program)] = program
-        val out = ArrayList<ChannelProgram>(programs.size)
-        // The sort is stable: of two with one start the one given later comes second.
-        for (next in programs.sortedBy { it.startMs ?: 0L }) {
-            if (key(next).isNotEmpty() && newest[key(next)] !== next) continue
-            val last = out.lastOrNull()
-            val lastStart = last?.startMs ?: Long.MIN_VALUE
-            val lastEnd = last?.endMs ?: Long.MIN_VALUE
-            val nextStart = next.startMs ?: Long.MAX_VALUE
-            val nextEnd = next.endMs ?: Long.MIN_VALUE
+    fun mergedRow(known: List<ChannelProgram>, page: List<ChannelProgram>, from: Long?, library: Boolean): List<ChannelProgram> {
+        // One programme per key, the one given last; by start (the sort is stable).
+        val byKey = LinkedHashMap<String, ChannelProgram>()
+        for (program in page) if (program.startMs != null) byKey[key(program)] = program
+        val newer = byKey.values.sortedBy { it.startMs }
+        val first = newer.firstOrNull() ?: return known
+        val firstStart = first.startMs ?: return known
+        val cut = if (from == null) firstStart else minOf(from, firstStart)
+        val kept = known.filterTo(ArrayList()) { program -> (program.startMs ?: Long.MAX_VALUE) < cut && key(program) !in byKey }
+        val out = ArrayList<ChannelProgram>(kept.size + newer.size)
+        val head = kept.lastOrNull()
+        val headEnd = head?.endMs
+        val firstEnd = first.endMs
+        if (library && head != null && headEnd != null && firstEnd != null && headEnd > firstStart) {
+            // `headEnd > firstStart >= cut`: the known programme is still on when the page's first one starts.
+            val sameTitle = head.itemId != 0L && head.itemId == first.itemId
+            val acrossTheSeam = sameTitle && (from == null || firstStart < from)
+            // Something else follows it in the page: the title's run ends with it, it has no file twice.
+            val second = newer.getOrNull(1)
+            val runEnds = second != null && !(second.itemId == first.itemId && second.startMs == firstEnd)
+            kept.removeAt(kept.lastIndex)
+            // Right after another programme of the title: the head is part of a run of repeats.
+            val inRun = kept.lastOrNull()?.let { it.itemId == head.itemId && it.endMs == head.startMs } == true
+            out += kept
             when {
-                last == null -> out += next
-                (next.start.isNotEmpty() && last.start == next.start) || nextStart == lastStart -> out[out.lastIndex] = next
-                last.itemId != 0L && last.itemId == next.itemId && nextStart < lastEnd -> when {
-                    nextEnd <= lastEnd -> Unit
-                    nextStart > lastStart && nextEnd - nextStart == lastEnd - lastStart -> out += next.copy(start = last.end)
-                    else -> out[out.lastIndex] = last.copy(end = next.end)
+                acrossTheSeam && ((runEnds && !inRun) || firstEnd <= headEnd) -> out += head.copy(end = first.end)
+                acrossTheSeam -> {
+                    out += head
+                    out += first.copy(start = head.end)
                 }
-                // Two library titles never run at once: the one that starts later is what the newer page says.
-                last.itemId != 0L && next.itemId != 0L && nextStart < lastEnd -> {
-                    out[out.lastIndex] = last.copy(end = next.start)
-                    out += next
+                else -> {
+                    out += head.copy(end = iso(cut))
+                    out += first
                 }
-                else -> out += next
             }
+            out += newer.drop(1)
+        } else {
+            out += kept
+            out += newer
         }
+        check(out.map(::key).let { it.size == it.toSet().size }) { "two programmes with one key in a guide row" }
         return out
     }
 

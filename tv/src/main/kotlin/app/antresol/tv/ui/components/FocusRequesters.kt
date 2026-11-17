@@ -1,5 +1,6 @@
 package app.antresol.tv.ui.components
 
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -29,13 +30,29 @@ class FocusRequesters<K : Any> {
 
     /**
      * Focuses [key]'s element once it is attached, as [FocusRequester.tryRequestFocus] does. The
-     * requester is looked up on every frame: the element may attach with another than the one this
-     * call made for it.
+     * requester is looked up after each frame's wait, at the moment it is asked: the element may
+     * attach during the wait with another than the one this call would have made for it. A
+     * requester made here for an element that never came is not kept, also when the request is
+     * cancelled during a wait.
      */
     suspend fun tryRequestFocus(key: K, frames: Int = 4, allowed: () -> Boolean = { true }): Boolean {
-        repeat(frames) { if (get(key).tryRequestFocus(frames = 1, allowed = allowed)) return true }
-        dropUnused(key)
-        return false
+        try {
+            repeat(frames) {
+                withFrameNanos { }
+                // Asked on every frame: the page may have started leaving meanwhile (or, just
+                // arrived, may not be the current one yet for a frame).
+                if (!allowed()) return@repeat
+                try {
+                    get(key).requestFocus()
+                    return true
+                } catch (_: IllegalStateException) {
+                    // Not attached yet.
+                }
+            }
+            return false
+        } finally {
+            dropUnused(key)
+        }
     }
 
     /** Focuses [key]'s element right now, if it is composed. */

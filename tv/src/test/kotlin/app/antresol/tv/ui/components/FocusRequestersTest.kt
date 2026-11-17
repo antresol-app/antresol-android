@@ -5,17 +5,24 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.BroadcastFrameClock
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
@@ -80,15 +87,55 @@ class FocusRequestersTest {
         assertNotSame(one, requesters["two"])
     }
 
+    /** A focus request by key waiting for [clock]'s next frame; the result once it is over. */
+    private fun request(requesters: FocusRequesters<String>, clock: BroadcastFrameClock, result: (Boolean) -> Unit): Job {
+        lateinit var job: Job
+        compose.runOnUiThread {
+            job = CoroutineScope(clock + Dispatchers.Unconfined).launch { result(requesters.tryRequestFocus("k", frames = 1)) }
+        }
+        return job
+    }
+
     @Test
     fun aFocusRequestGoesToTheRequesterTheElementCameBackWith() {
         val requesters = FocusRequesters<String>()
         val own = FocusRequester() // the element's, from when it was composed; its entry was dropped when it left
-        val made = requesters["k"] // made for a focus request while the element was away
-        requesters.attached("k", own)
-        // The element is back with its own: asking by key reaches it, the one made meanwhile is attached to nothing.
+        var shown by mutableStateOf(false)
+        compose.setContent {
+            if (shown) {
+                Box(Modifier.size(20.dp).focusRequester(own).focusable().testTag("k"))
+                DisposableEffect(Unit) {
+                    requesters.attached("k", own)
+                    onDispose { requesters.detached("k", own) }
+                }
+            }
+        }
+        val clock = BroadcastFrameClock()
+        var focused: Boolean? = null
+        request(requesters, clock) { focused = it }
+        // The element comes back, with its own requester, while the request waits for its frame.
+        shown = true
+        compose.waitForIdle()
+        compose.runOnUiThread { clock.sendFrame(0L) }
+        assertEquals(true, focused)
+        compose.onNodeWithTag("k").assertIsFocused()
         assertSame(own, requesters["k"])
-        assertNotSame(made, requesters["k"])
+        assertEquals(1, requesters.size)
+    }
+
+    @Test
+    fun aFocusRequestCancelledWhileItWaitsLeavesNothingBehind() {
+        val requesters = FocusRequesters<String>()
+        val clock = BroadcastFrameClock()
+        val job = request(requesters, clock) { }
+        compose.runOnUiThread { job.cancel() }
+        assertEquals(0, requesters.size)
+        // Nor does one that waited in vain.
+        var focused: Boolean? = null
+        request(requesters, clock) { focused = it }
+        compose.runOnUiThread { clock.sendFrame(0L) }
+        assertEquals(false, focused)
+        assertEquals(0, requesters.size)
     }
 
     @Test

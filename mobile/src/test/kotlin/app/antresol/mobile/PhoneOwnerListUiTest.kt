@@ -193,8 +193,21 @@ class PhoneOwnerListUiTest {
         assertTrue(page.data.contains("origin: 'https://www.youtube.com'"))
         assertTrue(web.settings.javaScriptEnabled)
         assertEquals(false, web.settings.mediaPlaybackRequiresUserGesture)
+        // A link tapped in the player does not replace the player page; the player's own frame loads.
+        val client = shadowOf(web).webViewClient
+        assertTrue(client.shouldOverrideUrlLoading(web, navigation("https://www.youtube.com/watch?v=movieTeaser2", mainFrame = true)))
+        assertEquals(false, client.shouldOverrideUrlLoading(web, navigation("https://www.youtube-nocookie.com/embed/movieTeaser2", mainFrame = false)))
         activity.onBackPressedDispatcher.onBackPressed()
         assertTrue(activity.isFinishing)
+    }
+
+    private fun navigation(url: String, mainFrame: Boolean) = object : android.webkit.WebResourceRequest {
+        override fun getUrl(): android.net.Uri = android.net.Uri.parse(url)
+        override fun isForMainFrame() = mainFrame
+        override fun isRedirect() = false
+        override fun hasGesture() = true
+        override fun getMethod() = "GET"
+        override fun getRequestHeaders() = emptyMap<String, String>()
     }
 
     private fun trailerActivity(play: String, key: String, name: String): TrailerPlayerActivity {

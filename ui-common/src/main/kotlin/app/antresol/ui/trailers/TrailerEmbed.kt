@@ -175,7 +175,8 @@ class TrailerEmbedState(val key: String) {
 
 /**
  * The full-screen WebView of [state]: JavaScript on, autoplay without a tap, black behind the
- * picture. It never takes focus (the screen's own keys drive it), is paused while the app is in the
+ * picture. It never takes focus (the screen's own keys drive it), never leaves the player page for a
+ * link tapped in it, is paused while the app is in the
  * background (a WebView left alone keeps playing its sound) and is destroyed with the screen.
  */
 @SuppressLint("SetJavaScriptEnabled")
@@ -198,6 +199,12 @@ fun TrailerEmbedView(state: TrailerEmbedState, modifier: Modifier = Modifier) {
                 settings.mediaPlaybackRequiresUserGesture = false
                 webChromeClient = WebChromeClient()
                 webViewClient = object : WebViewClient() {
+                    // The page is the player and nothing else: a link tapped in it (the video's title, the
+                    // YouTube logo) would replace the player with a web site that has no way back. The
+                    // player's own frame still loads.
+                    override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean =
+                        request.isForMainFrame
+
                     override fun onReceivedError(view: WebView, request: android.webkit.WebResourceRequest, error: android.webkit.WebResourceError) {
                         // Only the page itself failing counts (no network); a failed ad or image does not.
                         if (request.isForMainFrame || request.url.toString().endsWith("/iframe_api")) {

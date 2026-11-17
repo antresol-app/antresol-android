@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -77,6 +78,24 @@ class FocusRequestersTest {
         compose.waitForIdle()
         assertEquals(1, requesters.size)
         assertNotSame(one, requesters["two"])
+    }
+
+    @Test
+    fun aFocusRequestGoesToTheRequesterTheElementCameBackWith() {
+        val requesters = FocusRequesters<String>()
+        val own = FocusRequester() // the element's, from when it was composed; its entry was dropped when it left
+        val made = requesters["k"] // made for a focus request while the element was away
+        requesters.attached("k", own)
+        // The element is back with its own: asking by key reaches it, the one made meanwhile is attached to nothing.
+        assertSame(own, requesters["k"])
+        assertNotSame(made, requesters["k"])
+    }
+
+    @Test
+    fun aFocusRequestForAnElementThatNeverCameLeavesNothingBehind() {
+        val requesters = FocusRequesters<String>()
+        assertEquals(false, requesters.requestFocus("gone"))
+        assertEquals(0, requesters.size)
     }
 
     @Test

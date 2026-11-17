@@ -197,7 +197,6 @@ private fun GuideGrid(
     val requesters = remember { FocusRequesters<String>() }
     // Keyed by the channel too: programmes without an id that start together on two channels are different blocks.
     fun requesterKey(row: ChannelEpgRow, program: ChannelProgram) = "${row.id}/${program.key}"
-    fun requester(row: ChannelEpgRow, program: ChannelProgram) = requesters[requesterKey(row, program)]
     // The time position kept by vertical moves, and where focus is.
     var anchorMs by remember { mutableLongStateOf(nowMs) }
     var focusedRow by remember { mutableStateOf(rows.indexOfFirst { it.id == lastChannelId }.coerceAtLeast(0)) }
@@ -234,7 +233,7 @@ private fun GuideGrid(
         if (canTakeFocus()) {
             vertical = true
             if (!isComposed(target)) reveal(target, fromMs, scroll, density, minute)
-            requester(rows[start], target).tryRequestFocus(8)
+            requesters.tryRequestFocus(requesterKey(rows[start], target), 8)
         }
     }
 
@@ -253,7 +252,7 @@ private fun GuideGrid(
         }
         scope.launch {
             reveal(target, fromMs, scroll, density, minute)
-            requester(row, target).tryRequestFocus(6)
+            requesters.tryRequestFocus(requesterKey(row, target), 6)
         }
         return true
     }
@@ -271,7 +270,7 @@ private fun GuideGrid(
             }
             vertical = true
             if (!isComposed(program)) reveal(program, fromMs, scroll, density, minute)
-            requester(rows[target], program).tryRequestFocus(6)
+            requesters.tryRequestFocus(requesterKey(rows[target], program), 6)
         }
         return true
     }

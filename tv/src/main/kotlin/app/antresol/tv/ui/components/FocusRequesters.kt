@@ -10,7 +10,10 @@ import androidx.compose.ui.platform.InspectorInfo
  * Focus requesters by key (a card, a programme of the guide), kept only while an element on screen
  * uses them: a long grid or a guide paged hours ahead does not leave one behind for everything that
  * was ever scrolled past. A requester asked for before its element is composed (focus restoration)
- * is the one the element then gets.
+ * is the one the element then gets. An element that comes back with a requester of its own (a lazy
+ * slot reused: it kept the one it was composed with) replaces one nobody uses, so focus is asked
+ * for by key ([tryRequestFocus], [requestFocus]): they take the key's requester at that moment and
+ * leave none behind for a key that never came.
  */
 class FocusRequesters<K : Any> {
     private class Entry(val requester: FocusRequester) {
@@ -23,6 +26,31 @@ class FocusRequesters<K : Any> {
     val size: Int get() = entries.size
 
     operator fun get(key: K): FocusRequester = entries.getOrPut(key) { Entry(FocusRequester()) }.requester
+
+    /**
+     * Focuses [key]'s element once it is attached, as [FocusRequester.tryRequestFocus] does. The
+     * requester is looked up on every frame: the element may attach with another than the one this
+     * call made for it.
+     */
+    suspend fun tryRequestFocus(key: K, frames: Int = 4, allowed: () -> Boolean = { true }): Boolean {
+        repeat(frames) { if (get(key).tryRequestFocus(frames = 1, allowed = allowed)) return true }
+        dropUnused(key)
+        return false
+    }
+
+    /** Focuses [key]'s element right now, if it is composed. */
+    fun requestFocus(key: K): Boolean = try {
+        get(key).requestFocus()
+        true
+    } catch (_: IllegalStateException) {
+        dropUnused(key)
+        false
+    }
+
+    /** A requester made for a focus request whose element never came is not kept. */
+    private fun dropUnused(key: K) {
+        if (entries[key]?.users == 0) entries.remove(key)
+    }
 
     internal fun attached(key: K, requester: FocusRequester) {
         val entry = entries[key]?.takeIf { it.requester === requester || it.users > 0 }

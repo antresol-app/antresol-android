@@ -43,19 +43,14 @@ class FocusMemory(initialKey: String?) {
      */
     suspend fun restore(fallbackKey: String, allowed: () -> Boolean = { true }): Boolean {
         val key = focusedKey
-        if (key != null && key != fallbackKey && requester(key).tryRequestFocus(allowed = allowed)) return true
-        return requester(fallbackKey).tryRequestFocus(allowed = allowed)
+        if (key != null && key != fallbackKey && requesters.tryRequestFocus(key, allowed = allowed)) return true
+        return requesters.tryRequestFocus(fallbackKey, allowed = allowed)
     }
 
     /** Focuses the remembered element right now, if there is one and it is composed. */
     fun focusRemembered(): Boolean {
         val key = focusedKey ?: return false
-        return try {
-            requester(key).requestFocus()
-            true
-        } catch (_: IllegalStateException) {
-            false
-        }
+        return requesters.requestFocus(key)
     }
 
     companion object {

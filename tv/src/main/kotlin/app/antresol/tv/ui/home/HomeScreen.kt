@@ -46,7 +46,6 @@ import app.antresol.tv.ui.components.cardFocusKey
 import app.antresol.tv.ui.components.defaultShape
 import app.antresol.tv.ui.components.rememberFocusMemory
 import app.antresol.tv.ui.components.remembersFocus
-import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.ui.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -152,7 +151,7 @@ private fun HomeContentView(
     BackHandler(enabled = backEnabled) {
         scope.launch {
             listState.animateScrollToItem(0)
-            focus.requester(homeKey).tryRequestFocus()
+            focus.requesters.tryRequestFocus(homeKey)
         }
     }
 

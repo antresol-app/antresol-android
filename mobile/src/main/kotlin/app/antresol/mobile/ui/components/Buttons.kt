@@ -14,9 +14,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,7 +62,12 @@ private fun PillButton(
             .background(fill)
             .then(if (border != null) Modifier.border(1.dp, border, AntresolShapes.pill) else Modifier)
             .focusClickable(AntresolShapes.pill, enabled = enabled, onClick = onClick)
-            .alpha(if (enabled) 1f else 0.5f)
+            // A layer that is always there: `alpha(1f)` is no modifier at all, and when a disabled pill
+            // became enabled (the first letter of a password) the chain changed and the fill was not drawn.
+            .graphicsLayer {
+                alpha = if (enabled) 1f else 0.5f
+                clip = true
+            }
             // 14 dp keeps "Перемешать" whole in a half-width pill on a 360 dp phone.
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),

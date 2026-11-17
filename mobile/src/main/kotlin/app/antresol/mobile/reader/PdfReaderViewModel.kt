@@ -44,13 +44,16 @@ class PdfDocument(file: File) : Closeable {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<Int, Int>, Bitmap>) = size > CACHED_PAGES
     }
 
-    /** Renders page [index] [widthPx] wide on white (smaller when the page would be over [MAX_PAGE_PIXELS]). */
+    /** The most pixels of a page here, see [pdfMaxPagePixels]. */
+    private val maxPagePixels = pdfMaxPagePixels(Runtime.getRuntime().maxMemory())
+
+    /** Renders page [index] [widthPx] wide on white (smaller when the page would be over [maxPagePixels]). */
     suspend fun render(index: Int, widthPx: Int): Bitmap? = withContext(Dispatchers.IO) {
         lock.withLock {
             if (closed) return@withLock null
             rendered[index to widthPx]?.let { return@withLock it }
             renderer.openPage(index).use { page ->
-                val (width, height) = pdfRenderSize(page.width, page.height, widthPx)
+                val (width, height) = pdfRenderSize(page.width, page.height, widthPx, maxPagePixels)
                 Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
                     bitmap.eraseColor(Color.WHITE)
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -90,16 +93,23 @@ class PdfDocument(file: File) : Closeable {
 /** The widest a PDF page is rendered. */
 private const val MAX_PAGE_WIDTH_PX = 2_400
 
-/** The most pixels of one rendered PDF page: 16 MB as ARGB_8888 (a 2400 px wide A4 page would be 32 MB). */
+/** The most pixels of one rendered PDF page on a small heap: 16 MB as ARGB_8888 (a 2400 px wide A4 page would be 32 MB). */
 internal const val MAX_PAGE_PIXELS = 4_000_000
 
 /**
- * The bitmap size of a [pageWidth] by [pageHeight] page (points) drawn [widthPx] wide: the page's
- * shape, at most [MAX_PAGE_WIDTH_PX] wide and at most [MAX_PAGE_PIXELS] in all.
+ * The most pixels of one rendered PDF page for an app heap of [heapBytes]: a sixteenth of the heap
+ * as ARGB_8888 (three pages are kept), never under [MAX_PAGE_PIXELS]. A 512 MB heap (tablets, where
+ * the screen is wider than a 4 MP A4 page) gives 8.4 MP: an A4 page at the full [MAX_PAGE_WIDTH_PX].
  */
-internal fun pdfRenderSize(pageWidth: Int, pageHeight: Int, widthPx: Int): Pair<Int, Int> {
+internal fun pdfMaxPagePixels(heapBytes: Long): Int = (heapBytes / 16 / 4).coerceIn(MAX_PAGE_PIXELS.toLong(), Int.MAX_VALUE.toLong()).toInt()
+
+/**
+ * The bitmap size of a [pageWidth] by [pageHeight] page (points) drawn [widthPx] wide: the page's
+ * shape, at most [MAX_PAGE_WIDTH_PX] wide and at most [maxPixels] in all.
+ */
+internal fun pdfRenderSize(pageWidth: Int, pageHeight: Int, widthPx: Int, maxPixels: Int = MAX_PAGE_PIXELS): Pair<Int, Int> {
     val aspect = pageHeight.coerceAtLeast(1).toDouble() / pageWidth.coerceAtLeast(1)
-    val widest = Math.sqrt(MAX_PAGE_PIXELS / aspect).toInt()
+    val widest = Math.sqrt(maxPixels / aspect).toInt()
     val width = widthPx.coerceAtMost(MAX_PAGE_WIDTH_PX).coerceAtMost(widest).coerceAtLeast(1)
     return width to (width * aspect).toInt().coerceAtLeast(1)
 }

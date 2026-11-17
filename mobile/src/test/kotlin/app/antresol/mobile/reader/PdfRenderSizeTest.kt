@@ -21,6 +21,19 @@ class PdfRenderSizeTest {
     }
 
     @Test
+    fun aLargeHeapRendersALargePageAtItsFullWidth() {
+        val mb = 1024L * 1024
+        // A small heap keeps the 4 MP limit; a tablet's 512 MB heap has room for A4 at 2400 px.
+        assertEquals(MAX_PAGE_PIXELS, pdfMaxPagePixels(128 * mb))
+        assertEquals(MAX_PAGE_PIXELS, pdfMaxPagePixels(192 * mb))
+        assertEquals(2_400 to 3_396, pdfRenderSize(595, 842, 2_400, pdfMaxPagePixels(512 * mb)))
+        // In between, as wide as a sixteenth of the heap allows.
+        val (width, height) = pdfRenderSize(595, 842, 2_400, pdfMaxPagePixels(384 * mb))
+        assertTrue(width in 2_000..2_200)
+        assertTrue(width.toLong() * height * 4 <= 384 * mb / 16)
+    }
+
+    @Test
     fun aWidePageIsCappedByItsWidth() {
         // A landscape slide is short: the width limit applies before the pixel limit.
         assertEquals(2_400 to 1_350, pdfRenderSize(1600, 900, 5_000))

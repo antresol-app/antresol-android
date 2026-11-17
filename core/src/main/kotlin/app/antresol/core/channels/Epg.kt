@@ -36,41 +36,72 @@ object Epg {
     /**
      * [page] merged into [rows]: the channels in [page]'s order (the list order, which may have
      * changed), each with its programmes from both, by start, each programme once ([joined]).
+     * [page] is the newer answer: what [rows] have that starts inside its window `[from, to)` is
+     * dropped, so a schedule the server rebuilt since (it reuses the programme ids) is shown as the
+     * page has it, not mixed with the old one.
      */
     fun merge(rows: List<ChannelEpgRow>, page: ChannelEpg): List<ChannelEpgRow> {
         val old = rows.associateBy { it.id }
+        val from = Channels.epochMs(page.from)
+        val to = Channels.epochMs(page.to)
         return page.channels.map { row ->
-            val before = old[row.id]?.programs.orEmpty()
+            val before = old[row.id]?.programs.orEmpty().filterNot { program ->
+                val start = program.startMs
+                from != null && to != null && start != null && start >= from && start < to
+            }
             row.copy(programs = joined(before + row.programs))
         }
     }
 
     /**
      * What tells a channel's programmes apart, for the merge, a guide's blocks and the focus: the id,
-     * or the start when the source gives none ([joined] leaves one programme per start).
+     * or the start when the source gives none ([joined] leaves one programme per key and per start).
      */
     fun key(program: ChannelProgram): String = program.id.ifEmpty { program.start }
 
     /**
-     * [programs] by start, each programme once. A programme across a page's edge comes with both
-     * pages, and the server joins the parts of a film (its files, back to back) within a page only:
-     * the same programme may come again with a later end (its second part began in the next page),
-     * or as its remaining parts with their own id and start. So a programme that starts with the
-     * one before it (or has its id) is that programme, the longer of the two; and one of the same
-     * title that starts before the one before it ends is the rest of it. A repeat of a title starts
-     * where the first showing ends and stays a programme of its own.
+     * [programs] (the older page's first) by start, each programme once. A programme across a page's
+     * edge comes with both pages, and the server joins the parts of a film (its files, back to back)
+     * within a page only: the same programme may come again with a later end (its second part began
+     * in the next page), or as its remaining parts with their own id and start. So:
+     * - of two programmes with one key or one start the one given later (the newer page's) stays:
+     *   a page that still has a programme's first part has at least as much of it as the page before,
+     *   and after a rebuild of the schedule the id is another programme's;
+     * - one of the same title that starts before the one before it ends is the rest of it. Unless it
+     *   is exactly as long: then it is the same files in another order, the end of this showing
+     *   joined by the server with the beginning of the title's next showing, and only what is after
+     *   this showing's end is kept, as a programme of its own;
+     * - a repeat of a title starts where the first showing ends and stays a programme of its own.
+     * - a library title that is still on when another one starts (the page before had it across its
+     *   edge, and the schedule was rebuilt since) ends there. Programmes of an external guide have
+     *   no item and may overlap.
      */
     fun joined(programs: List<ChannelProgram>): List<ChannelProgram> {
+        // One programme per key, the one given last.
+        val newest = HashMap<String, ChannelProgram>()
+        for (program in programs) newest[key(program)] = program
         val out = ArrayList<ChannelProgram>(programs.size)
+        // The sort is stable: of two with one start the one given later comes second.
         for (next in programs.sortedBy { it.startMs ?: 0L }) {
+            if (key(next).isNotEmpty() && newest[key(next)] !== next) continue
             val last = out.lastOrNull()
+            val lastStart = last?.startMs ?: Long.MIN_VALUE
             val lastEnd = last?.endMs ?: Long.MIN_VALUE
-            val longer = (next.endMs ?: Long.MIN_VALUE) > lastEnd
+            val nextStart = next.startMs ?: Long.MAX_VALUE
+            val nextEnd = next.endMs ?: Long.MIN_VALUE
             when {
                 last == null -> out += next
-                (next.start.isNotEmpty() && last.start == next.start) || key(last) == key(next) -> if (longer) out[out.lastIndex] = next
-                last.itemId != 0L && last.itemId == next.itemId && (next.startMs ?: Long.MAX_VALUE) < lastEnd ->
-                    if (longer) out[out.lastIndex] = last.copy(end = next.end)
+                (next.start.isNotEmpty() && last.start == next.start) || nextStart == lastStart -> out[out.lastIndex] = next
+                last.itemId != 0L && last.itemId == next.itemId && nextStart < lastEnd -> when {
+                    nextEnd <= lastEnd -> Unit
+                    nextStart > lastStart && nextEnd - nextStart == lastEnd - lastStart -> out += next.copy(start = last.end)
+                    else -> out[out.lastIndex] = last.copy(end = next.end)
+                }
+                // Two library titles never run at once: the one that starts later is what the newer page says.
+                last.itemId != 0L && next.itemId != 0L && nextStart < lastEnd -> {
+                    out[out.lastIndex] = last.copy(end = next.start)
+                    out += next
+                }
                 else -> out += next
             }
         }

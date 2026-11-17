@@ -79,6 +79,88 @@ class EpgTest {
         assertEquals(2, merged(listOf(p("x1", "20:00", "21:00")), listOf(p("x2", "20:30", "21:30"))).size)
     }
 
+    private fun film(id: String, start: String, end: String, item: Long = 7, title: String = "") = p(id, start, end).copy(itemId = item, title = title)
+
+    /** A page as the server answers it: its window `[from, to)` and one channel's programmes. */
+    private fun page(from: String, to: String, vararg programs: ChannelProgram) =
+        ChannelEpg(from = "2026-11-11T$from:00Z", to = "2026-11-11T$to:00Z", channels = listOf(ChannelEpgRow(1, programs = programs.toList())))
+
+    private fun merged(vararg pages: ChannelEpg): List<ChannelProgram> {
+        val programs = pages.fold(emptyList<ChannelEpgRow>()) { rows, page -> Epg.merge(rows, page) }[0].programs
+        // Whatever the pages hold: a row never has two programmes with one key (the blocks and the TV's focus go by it).
+        assertEquals(programs.map(Epg::key), programs.map(Epg::key).distinct())
+        return programs
+    }
+
+    private fun List<ChannelProgram>.times() = map { Triple(it.id, it.start.substring(11, 16), it.end.substring(11, 16)) }
+
+    @Test
+    fun aScheduleRebuiltBetweenTwoPagesIsShownAsTheNewerPageHasIt() {
+        // The server rebuilds the schedule from an entry on and numbers the new entries from there:
+        // the id of the programme across the edge (22:00) is now a shorter programme of another title.
+        val rebuilt = merged(
+            page("16:00", "22:00", film("c-50", "19:00", "21:00", item = 5), film("c-51", "21:00", "23:30", item = 7, title = "Old")),
+            page("22:00", "23:59", film("c-51", "21:00", "22:40", item = 8, title = "New"), film("c-52", "22:40", "23:20", item = 9)),
+        )
+        assertEquals(listOf(Triple("c-50", "19:00", "21:00"), Triple("c-51", "21:00", "22:40"), Triple("c-52", "22:40", "23:20")), rebuilt.times())
+        assertEquals("New", rebuilt[1].title)
+        // The same start under another id: the newer page's, also when it is the shorter one.
+        assertEquals(
+            listOf(Triple("c-60", "21:00", "22:10")),
+            merged(page("16:00", "22:00", film("c-51", "21:00", "23:30")), page("22:00", "23:59", film("c-60", "21:00", "22:10", item = 8))).times(),
+        )
+    }
+
+    @Test
+    fun aTitleMovedByARebuildIsNotJoinedWithItsOldPlace() {
+        // 20:00–22:00 before the rebuild, 21:00–23:00 after it: not one film of three hours.
+        val moved = merged(
+            page("15:00", "21:00", film("c-51", "20:00", "22:00")),
+            page("21:00", "23:59", film("c-53", "21:00", "23:00")),
+        )
+        assertTrue(moved.none { it.endMs!! - it.startMs!! > 2 * Epg.HOUR_MS })
+        assertEquals(listOf(Triple("c-51", "20:00", "22:00"), Triple("c-53", "22:00", "23:00")), moved.times())
+        // What the older rows have inside the newer page's window is the newer page's to tell.
+        val replaced = merged(
+            page("15:00", "23:59", film("c-51", "20:00", "22:00"), film("c-52", "22:00", "23:00", item = 8)),
+            page("21:00", "23:59", film("c-53", "21:30", "23:30")),
+        )
+        assertEquals(listOf(Triple("c-51", "20:00", "22:00"), Triple("c-53", "22:00", "23:30")), replaced.times())
+    }
+
+    @Test
+    fun anIdUsedAgainAfterARebuildIsOneProgrammeInTheRow() {
+        // The older c-52 goes (one key, one block); the programme across the edge ends where the newer page's begins.
+        val row = merged(
+            page("17:00", "23:00", film("c-51", "21:00", "21:30", item = 1), film("c-52", "21:30", "22:00", item = 2), film("c-53", "22:00", "23:10", item = 3)),
+            page("23:00", "23:59", film("c-52", "22:50", "23:50", item = 4)),
+        )
+        assertEquals(listOf(Triple("c-51", "21:00", "21:30"), Triple("c-53", "22:00", "22:50"), Triple("c-52", "22:50", "23:50")), row.times())
+    }
+
+    @Test
+    fun aFilmShownThreeTimesInARowIsNotJoinedAcrossItsShowings() {
+        // Two files of 50 min, three showings from 18:00. The server joins a film's files by its first
+        // file IN THE PAGE: a page that begins in the second file of showing 2 (20:30) answers that
+        // file joined with the first file of showing 3, and then showing 3's second file alone.
+        val showings = merged(
+            page("14:30", "20:30", film("1-1", "18:00", "19:40"), film("1-3", "19:40", "21:20")),
+            page("20:30", "23:59", film("1-4", "20:30", "22:10"), film("1-6", "22:10", "23:00"), film("1-7", "23:00", "23:50", item = 8)),
+        )
+        // Showing 2 keeps its end; showing 3 is two blocks (its files), since nothing says they are one.
+        assertEquals(
+            listOf(Triple("1-1", "18:00", "19:40"), Triple("1-3", "19:40", "21:20"), Triple("1-4", "21:20", "22:10"), Triple("1-6", "22:10", "23:00"), Triple("1-7", "23:00", "23:50")),
+            showings.times(),
+        )
+        // Merging the page again changes nothing.
+        val again = merged(
+            page("14:30", "20:30", film("1-1", "18:00", "19:40"), film("1-3", "19:40", "21:20")),
+            page("20:30", "23:59", film("1-4", "20:30", "22:10"), film("1-6", "22:10", "23:00"), film("1-7", "23:00", "23:50", item = 8)),
+            page("20:30", "23:59", film("1-4", "20:30", "22:10"), film("1-6", "22:10", "23:00"), film("1-7", "23:00", "23:50", item = 8)),
+        )
+        assertEquals(showings.times(), again.times())
+    }
+
     @Test
     fun visibleProgrammesOverlapTheWindow() {
         val visible = Epg.visible(ChannelEpgRow(1, programs = row), ms("2026-11-11T21:30:00Z"), ms("2026-11-11T22:40:00Z"))

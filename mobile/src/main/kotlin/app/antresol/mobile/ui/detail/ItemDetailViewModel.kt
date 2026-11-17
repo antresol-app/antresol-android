@@ -76,19 +76,26 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
         notice = res
     }
 
-    fun toggleWatchlist() = mutate(
-        change = { it.copy(item = it.item.copy(inWatchlist = !it.item.inWatchlist)) },
-        write = { before -> if (before.item.inWatchlist) client.removeFromWatchlist(id) else client.addToWatchlist(id) },
-    )
+    // Every change below sets a value worked out from what the page shows at the tap, never «the
+    // opposite of what is there»: when a refused write is undone the accepted ones are made again
+    // on the value before all of them, where an opposite would be the wrong one.
 
-    fun toggleWatched() = mutate(
-        change = { detail ->
-            val watched = !detail.watched
+    fun toggleWatchlist() {
+        val wanted = !(shown ?: return).item.inWatchlist
+        mutate(
+            change = { it.copy(item = it.item.copy(inWatchlist = wanted)) },
+            write = { if (wanted) client.addToWatchlist(id) else client.removeFromWatchlist(id) },
+        )
+    }
+
+    fun toggleWatched() {
+        val watched = !(shown ?: return).watched
+        mutate(
             // The server resets the position either way (0 when watched, deleted when not).
-            detail.copy(watched = watched, positionMs = 0, item = detail.item.withEpisodes { it.copy(watched = watched, progress = 0.0) })
-        },
-        write = { before -> client.setWatched(id, !before.watched) },
-    )
+            change = { detail -> detail.copy(watched = watched, positionMs = 0, item = detail.item.withEpisodes { it.copy(watched = watched, progress = 0.0) }) },
+            write = { client.setWatched(id, watched) },
+        )
+    }
 
     /** Marks the library episodes of season item [seasonId] ([episodes]) watched, or unwatched when all are. */
     fun toggleSeasonWatched(seasonId: Long, episodes: List<EpisodeCard>) {
@@ -110,10 +117,10 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
         write = { client.setWatched(episode.id, !episode.watched) },
     )
 
-    private fun mutate(change: (VideoDetail) -> VideoDetail, write: suspend (before: VideoDetail) -> Unit) {
-        val before = (state as? LoadState.Ready)?.value ?: return
-        optimistic(change, onFailure = { notice = R.string.detail_action_failed }) { write(before) }
-    }
+    private val shown: VideoDetail? get() = (state as? LoadState.Ready)?.value
+
+    private fun mutate(change: (VideoDetail) -> VideoDetail, write: suspend () -> Unit) =
+        optimistic(change, onFailure = { notice = R.string.detail_action_failed }, write = write)
 
     private companion object {
         suspend fun fetchDetail(client: AntresolClient, id: Long): VideoDetail {

@@ -151,11 +151,70 @@ class ChannelsViewModelTest {
         assertEquals(to, vm.guideToMs)
         // Scrolling on after a pause asks again; a page that loads is merged as ever.
         advanceTimeBy(3_000)
+        runCurrent()
         epgFails = false
         vm.loadMoreGuide()
         runCurrent()
         assertEquals(3, epgFroms.size)
         assertEquals(to + 6 * 3_600_000L, vm.guideToMs)
+    }
+
+    @Test
+    fun aGuidePageThatFailedIsAskedForAgainWithoutAnotherScroll() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.startRefreshing()
+        runCurrent()
+        vm.showView(ChannelsView.Guide)
+        runCurrent()
+        val to = vm.guideToMs
+        epgFails = true
+        // The phone: the request fails at once, the fling goes on to the end of the scroll within the
+        // pause (every call ignored), and at the end nothing calls any more.
+        repeat(5) {
+            vm.loadMoreGuide()
+            runCurrent()
+        }
+        assertEquals(2, epgFroms.size)
+        // 3 s later the page is asked for again by itself, then 6 s after that; the network is back by then.
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(3, epgFroms.size)
+        assertEquals(to, vm.guideToMs)
+        advanceTimeBy(5_999)
+        runCurrent()
+        assertEquals(3, epgFroms.size)
+        epgFails = false
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(4, epgFroms.size)
+        assertEquals(epgFroms[1], epgFroms[3])
+        assertEquals(to + 6 * 3_600_000L, vm.guideToMs)
+        vm.stopRefreshing()
+    }
+
+    @Test
+    fun aGuidePageThatFailedWaitsForThePageToComeBack() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.startRefreshing()
+        runCurrent()
+        vm.showView(ChannelsView.Guide)
+        runCurrent()
+        val to = vm.guideToMs
+        epgFails = true
+        vm.loadMoreGuide()
+        runCurrent()
+        // The app is left during the pause: nothing is asked while nobody looks.
+        vm.stopRefreshing()
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertEquals(2, epgFroms.size)
+        // Back: the page is asked for, though the scroll position did not change.
+        epgFails = false
+        vm.startRefreshing()
+        runCurrent()
+        assertEquals(3, epgFroms.size)
+        assertEquals(to + 6 * 3_600_000L, vm.guideToMs)
+        vm.stopRefreshing()
     }
 
     @Test

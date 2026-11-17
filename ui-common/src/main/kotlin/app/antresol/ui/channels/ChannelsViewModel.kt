@@ -95,8 +95,8 @@ class ChannelsViewModel(
     private var refreshJob: Job? = null
     private var guideJob: Job? = null
 
-    /** When the last next page of the guide failed (never: far in the past). */
-    private var guidePageFailedAt = Long.MIN_VALUE / 2
+    /** The guide's next page failed and no page was showing the channels to ask again for: [startRefreshing] does. */
+    private var guidePageWanted = false
 
     // The lists below are derived state: worked out once per change of what they read, not on every
     // read from a composition (each key press and clock tick), and the same instances until then.
@@ -197,6 +197,7 @@ class ChannelsViewModel(
      */
     fun startRefreshing(watcher: Any = this) {
         watchers += watcher
+        if (guidePageWanted) loadMoreGuide()
         if (refreshJob?.isActive == true) return
         refreshJob = viewModelScope.launch {
             var first = true
@@ -261,24 +262,36 @@ class ChannelsViewModel(
 
     /**
      * The guide scrolled near its loaded end: the next page, up to 47 h ahead. The pages ask on every
-     * scroll position there, so after a page failed the next one is asked for [GUIDE_RETRY_MS] later
-     * at the earliest: a request that fails at once (no network) is not sent again with every frame.
+     * scroll position there, and a phone that reached the end of its scroll never asks again. So a
+     * page that failed is asked for again by this job itself, [GUIDE_RETRY_MS] later and then with
+     * twice the pause each time (up to [GUIDE_RETRY_MAX_MS]), while a page shows the channels; the
+     * calls in between are ignored, so a request that fails at once (no network) is not sent with
+     * every frame. When no page is left, the next [startRefreshing] asks.
      */
     fun loadMoreGuide() {
         if (guideJob?.isActive == true || guideRows == null) return
-        if (clock() - guidePageFailedAt < GUIDE_RETRY_MS) return
-        val from = guideToMs
-        if (from >= Epg.limit(clock())) return
+        if (guideToMs >= Epg.limit(clock())) return
+        guidePageWanted = false
         guideJob = viewModelScope.launch {
-            try {
-                val page = api.epg(Epg.iso(from), Epg.PAGE_HOURS)
-                guideRows = Epg.merge(guideRows.orEmpty(), page)
-                guideToMs = from + Epg.PAGE_HOURS * Epg.HOUR_MS
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Scrolling there again retries, after a pause.
-                guidePageFailedAt = clock()
+            var pause = GUIDE_RETRY_MS
+            while (true) {
+                val from = guideToMs
+                try {
+                    val page = api.epg(Epg.iso(from), Epg.PAGE_HOURS)
+                    guideRows = Epg.merge(guideRows.orEmpty(), page)
+                    guideToMs = from + Epg.PAGE_HOURS * Epg.HOUR_MS
+                    return@launch
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Asked again below.
+                }
+                delay(pause)
+                pause = (pause * 2).coerceAtMost(GUIDE_RETRY_MAX_MS)
+                if (watchers.isEmpty()) {
+                    guidePageWanted = true
+                    return@launch
+                }
             }
         }
     }
@@ -306,5 +319,6 @@ class ChannelsViewModel(
         const val RETURN_REFRESH_MS = 3_000L
         const val OPENED_EVERY_MS = 10 * 60_000L
         const val GUIDE_RETRY_MS = 3_000L
+        const val GUIDE_RETRY_MAX_MS = 30_000L
     }
 }

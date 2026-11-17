@@ -24,8 +24,15 @@ class TrailerEmbedStateTest {
     }
     private val shadow = shadowOf(view)
 
-    private fun report(playerState: Int) {
-        state.bridge.onState(playerState)
+    /** The page of load [load] (the current one unless said) reports the player's state. */
+    private fun report(playerState: Int, load: Int = state.loads) {
+        state.bridge.onState(load, playerState)
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    /** The page of load [load] runs its first script. */
+    private fun pageRuns(load: Int = state.loads) {
+        state.bridge.onPage(load)
         shadowOf(Looper.getMainLooper()).idle()
     }
 
@@ -49,7 +56,36 @@ class TrailerEmbedStateTest {
     }
 
     @Test
+    fun whatADroppedPageReportsAfterTheReturnIsNotShown() {
+        pageRuns()
+        state.onStop()
+        state.onStart()
+        assertEquals(2, state.loads)
+        assertTrue("movieTeaser2" in shadow.lastLoadDataWithBaseURL.data && "onPage(2)" in shadow.lastLoadDataWithBaseURL.data)
+        // The first page's cancelled loads and its player's last words arrive only now (stop and
+        // start close together): the trailer that is loading stays, no error page over it.
+        state.onPageFailed()
+        state.bridge.onError(1, 5)
+        report(0, load = 1)
+        assertEquals(EmbedPhase.Loading, state.phase)
+        // The new page runs: from now on a failed load is its own.
+        pageRuns(load = 1)
+        state.onPageFailed()
+        assertEquals(EmbedPhase.Loading, state.phase)
+        pageRuns()
+        state.onPageFailed()
+        assertEquals(EmbedPhase.Failed(-2), state.phase)
+        // «Try again» loads once more; the page before it is not listened to.
+        state.reload()
+        report(1, load = 2)
+        assertEquals(EmbedPhase.Loading, state.phase)
+        report(1)
+        assertEquals(EmbedPhase.Playing, state.phase)
+    }
+
+    @Test
     fun aPageThatDoesNotLoadIsAnError() {
+        pageRuns()
         state.onPageFailed()
         assertEquals(EmbedPhase.Failed(-2), state.phase)
         assertEquals(false, view.keepScreenOn)
@@ -75,7 +111,7 @@ class TrailerEmbedStateTest {
         report(0) // ended
         assertEquals(false, view.keepScreenOn)
         report(1)
-        state.bridge.onError(150)
+        state.bridge.onError(state.loads, 150)
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(false, view.keepScreenOn)
     }

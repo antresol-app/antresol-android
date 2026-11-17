@@ -60,9 +60,10 @@ object TrailerEmbed {
     /**
      * The player page for [key] (a valid key, see [isValidKey]) under [origin]: the IFrame API fills the page,
      * starts playing at once and reports playing, ended and errors to [BRIDGE]; [TOGGLE_JS]
-     * pauses or resumes it.
+     * pauses or resumes it. Every report carries [load], the number of this load of the page, and
+     * the page says that it runs before anything else: what an earlier load still reports is told apart.
      */
-    fun html(key: String, origin: String): String {
+    fun html(key: String, origin: String, load: Int = 0): String {
         require(isValidKey(key)) { "Invalid trailer key" }
         return """
             <!doctype html>
@@ -70,6 +71,7 @@ object TrailerEmbed {
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
             <style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}#player{position:absolute;top:0;left:0;width:100%;height:100%;border:0}</style>
+            <script>$BRIDGE.onPage($load);</script>
             </head><body>
             <div id="player"></div>
             <script>
@@ -82,8 +84,8 @@ object TrailerEmbed {
                 playerVars: { autoplay: 1, playsinline: 1, rel: 0, origin: '$origin' },
                 events: {
                   onReady: function (e) { e.target.playVideo(); },
-                  onStateChange: function (e) { $BRIDGE.onState(e.data); },
-                  onError: function (e) { $BRIDGE.onError(e.data); }
+                  onStateChange: function (e) { $BRIDGE.onState($load, e.data); },
+                  onError: function (e) { $BRIDGE.onError($load, e.data); }
                 }
               });
             }
@@ -168,17 +170,24 @@ class TrailerEmbedState(val key: String) {
         webView?.let(::load)
     }
 
+    /** The number of the page's last load, and of the last load whose page said that it runs. */
+    internal var loads = 0
+        private set
+    private var running = 0
+
     internal fun load(view: WebView) {
         val origin = TrailerEmbed.origin(view.context.packageName)
-        view.loadDataWithBaseURL("$origin/", TrailerEmbed.html(key, origin), "text/html", "utf-8", null)
+        view.loadDataWithBaseURL("$origin/", TrailerEmbed.html(key, origin, ++loads), "text/html", "utf-8", null)
     }
 
     /**
      * The page or the IFrame API's script did not load (main thread). Not for a page dropped in the
-     * background, whose cancelled loads may be reported: it is not the player any more.
+     * background, whose cancelled loads may be reported: it is not the player any more. Such a
+     * report may also come late, after the return loaded the page again: until the new page runs
+     * (it has nothing of its own to fail before that) a failure is the old page's.
      */
     internal fun onPageFailed() {
-        if (dropped) return
+        if (dropped || running != loads) return
         webView?.keepScreenOn = false
         phase = EmbedPhase.Failed(NETWORK_ERROR)
     }
@@ -188,10 +197,16 @@ class TrailerEmbedState(val key: String) {
 
     internal inner class Bridge {
         @JavascriptInterface
-        fun onState(state: Int) {
+        fun onPage(load: Int) {
+            main.post { if (load == loads) running = load }
+        }
+
+        @JavascriptInterface
+        fun onState(load: Int, state: Int) {
             main.post {
-                // A page dropped in the background may still report: it is not the player any more.
-                if (dropped) return@post
+                // A page dropped in the background may still report (also after the page was loaded
+                // again): it is not the player any more.
+                if (dropped || load != loads) return@post
                 // The screen stays on while the trailer plays (or is about to), as in the other players.
                 webView?.keepScreenOn = state == STATE_PLAYING || state == STATE_BUFFERING
                 when (state) {
@@ -202,9 +217,9 @@ class TrailerEmbedState(val key: String) {
         }
 
         @JavascriptInterface
-        fun onError(code: Int) {
+        fun onError(load: Int, code: Int) {
             main.post {
-                if (dropped) return@post
+                if (dropped || load != loads) return@post
                 webView?.keepScreenOn = false
                 phase = EmbedPhase.Failed(code)
             }

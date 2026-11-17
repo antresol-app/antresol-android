@@ -43,7 +43,7 @@ class TrailerEmbedLayoutTest {
         compose.waitForIdle()
         val web = findWebView(compose.activity.window.decorView) ?: error("no WebView")
         val bridge = shadowOf(web).getJavascriptInterface(TrailerEmbed.BRIDGE)
-        bridge.javaClass.getMethod("onState", Int::class.javaPrimitiveType).invoke(bridge, 1)
+        bridge.javaClass.getMethod("onState", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType).invoke(bridge, 1, 1)
         shadowOf(Looper.getMainLooper()).idle()
         compose.waitForIdle()
         val density = Density(compose.activity)

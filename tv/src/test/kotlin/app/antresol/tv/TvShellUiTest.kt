@@ -358,7 +358,7 @@ class TvShellUiTest {
         assertEquals(false, web.settings.mediaPlaybackRequiresUserGesture)
         // The player reports «playing» through the bridge; OK then pauses it through the IFrame API.
         val bridge = shadow.getJavascriptInterface(TrailerEmbed.BRIDGE) ?: error("no bridge")
-        bridge.javaClass.getMethod("onState", Int::class.javaPrimitiveType).apply { isAccessible = true }.invoke(bridge, 1)
+        bridge.javaClass.getMethod("onState", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType).apply { isAccessible = true }.invoke(bridge, 1, 1)
         waitFor(hasTestTag("trailer-playing"))
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         assertEquals("antresolToggle()", shadow.lastEvaluatedJavascript)
@@ -379,7 +379,7 @@ class TvShellUiTest {
         val shadow = org.robolectric.Shadows.shadowOf(web)
         assertEquals(false, shadow.wasOnPauseCalled())
         val bridge = shadow.getJavascriptInterface(TrailerEmbed.BRIDGE) ?: error("no bridge")
-        bridge.javaClass.getMethod("onState", Int::class.javaPrimitiveType).apply { isAccessible = true }.invoke(bridge, 1)
+        bridge.javaClass.getMethod("onState", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType).apply { isAccessible = true }.invoke(bridge, 1, 1)
         waitFor(hasTestTag("trailer-playing"))
         compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
         assertEquals(TrailerEmbed.PAUSE_JS, shadow.lastEvaluatedJavascript)

@@ -7,13 +7,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -80,22 +83,37 @@ fun TrailerPlayerScreen(viewModel: TrailerPlayerViewModel, onExit: () -> Unit) {
 
 /**
  * A trailer the server does not fetch, in the official embedded player (a WebView), its own
- * controls on the picture; our back button over it. Back leaves and destroys the WebView.
+ * controls on the picture. Nothing of ours lies over the player (YouTube's rule for embeds): our
+ * back button has a strip of its own inside the safe area, beside the player in landscape and
+ * above it in portrait, and the player is 16:9 in what is left. Back leaves and destroys the WebView.
  */
 @Composable
 fun TrailerEmbedScreen(trailerKey: String, name: String, onExit: () -> Unit) {
     val state = remember(trailerKey) { TrailerEmbedState(trailerKey) }
     val phase = state.phase
     LaunchedEffect(phase) { if (phase == EmbedPhase.Finished) onExit() }
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        TrailerEmbedView(state, Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing))
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+        // By the window's shape, not the device's orientation: a tablet may show the activity upright.
+        val landscape = maxWidth > maxHeight
+        Box(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = if (landscape) EMBED_BACK_STRIP else 0.dp, top = if (landscape) 0.dp else EMBED_BACK_STRIP),
+            contentAlignment = Alignment.Center,
+        ) {
+            // The player's own shape: in a wider frame it lays its controls out over the whole frame and
+            // cuts them at the picture's edge (the link and full-screen buttons came out halved).
+            TrailerEmbedView(state, Modifier.aspectRatio(16f / 9f).testTag(TrailerTags.EMBED))
+        }
         when (phase) {
             EmbedPhase.Loading -> LoadingState(name, onExit)
             EmbedPhase.Playing -> Box(
                 Modifier
                     .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(16.dp)
+                    .size(EMBED_BACK_STRIP)
                     .testTag(TrailerTags.PLAYING),
+                contentAlignment = Alignment.Center,
             ) {
                 GlassIconButton(MobileIcons.ChevronLeft, stringResource(UiR.string.player_back), onExit)
             }
@@ -104,6 +122,9 @@ fun TrailerEmbedScreen(trailerKey: String, name: String, onExit: () -> Unit) {
         }
     }
 }
+
+/** The strip the embedded player leaves for our back button (40 dp) at the start or the top. */
+private val EMBED_BACK_STRIP = 56.dp
 
 @Composable
 private fun PlayingLayer(viewModel: TrailerPlayerViewModel, onExit: () -> Unit) {

@@ -27,6 +27,9 @@ object TrailerTags {
     const val LOADING = "trailer-loading"
     const val PLAYING = "trailer-playing"
     const val FAILED = "trailer-failed"
+
+    /** The embedded player's rectangle (the WebView). */
+    const val EMBED = "trailer-embed"
 }
 
 /** What the trailer player shows. */

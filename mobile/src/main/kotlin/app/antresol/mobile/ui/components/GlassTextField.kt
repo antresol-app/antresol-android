@@ -18,6 +18,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -28,7 +34,10 @@ import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
 
-/** A single-line field on the dark glass control (radius 12), with an optional leading icon and trailing action. */
+/**
+ * A single-line field on the dark glass control (radius 12), with an optional leading icon and trailing action.
+ * [placeholder] is also the field's name for a screen reader: the visible one goes away with the first letter.
+ */
 @Composable
 fun GlassTextField(
     value: String,
@@ -55,7 +64,7 @@ fun GlassTextField(
         visualTransformation = if (concealed) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().semantics { contentDescription = placeholder },
         decorationBox = { inner ->
             Row(
                 modifier = Modifier
@@ -72,7 +81,8 @@ fun GlassTextField(
                 }
                 Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                     if (value.isEmpty()) {
-                        Text(placeholder, style = textStyle.copy(color = AntresolColors.LabelTertiary), maxLines = 1)
+                        // Said once, as the field's name.
+                        Text(placeholder, style = textStyle.copy(color = AntresolColors.LabelTertiary), maxLines = 1, modifier = Modifier.clearAndSetSemantics {})
                     }
                     inner()
                 }
@@ -91,5 +101,16 @@ fun GlassTextField(
                 }
             }
         },
+    )
+}
+
+/** The red message under a form's field. A screen reader says it when it appears or changes. */
+@Composable
+fun FormError(message: String) {
+    Text(
+        message,
+        style = Antresol.typography.caption.copy(color = AntresolColors.Red),
+        textAlign = TextAlign.Center,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
     )
 }

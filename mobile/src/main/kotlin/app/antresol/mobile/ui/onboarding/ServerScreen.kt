@@ -27,6 +27,7 @@ import app.antresol.core.discovery.DiscoveredServer
 import app.antresol.core.discovery.DiscoveryState
 import app.antresol.core.discovery.ServerFinder
 import app.antresol.core.session.SessionManager
+import app.antresol.mobile.ui.components.FormError
 import app.antresol.mobile.ui.components.GlassTextField
 import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.ui.onboarding.rememberServerConnectState
@@ -99,7 +100,7 @@ fun ServerScreen(session: SessionManager, finder: ServerFinder) {
             modifier = Modifier.testTag("server-address"),
         )
         error?.let {
-            Text(it, style = Antresol.typography.caption.copy(color = AntresolColors.Red), textAlign = TextAlign.Center)
+            FormError(it)
         }
         PrimaryPillButton(
             text = stringResource(if (busy) R.string.server_connecting else R.string.server_connect),

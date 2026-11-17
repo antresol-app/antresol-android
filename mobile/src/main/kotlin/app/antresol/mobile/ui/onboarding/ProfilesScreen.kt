@@ -52,6 +52,7 @@ import app.antresol.mobile.R as MobileR
 import app.antresol.ui.LoadState
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.GlassPillButton
+import app.antresol.mobile.ui.components.FormError
 import app.antresol.mobile.ui.components.GlassTextField
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
@@ -213,7 +214,7 @@ private fun ProfilePicker(
         }
     }
     error?.let {
-        Text(it, style = Antresol.typography.caption.copy(color = AntresolColors.Red), textAlign = TextAlign.Center)
+        FormError(it)
     }
 }
 
@@ -254,7 +255,7 @@ private fun PasswordStep(
             .testTag("password"),
     )
     error?.let {
-        Text(it, style = Antresol.typography.caption.copy(color = AntresolColors.Red), textAlign = TextAlign.Center)
+        FormError(it)
     }
     PrimaryPillButton(
         text = stringResource(R.string.profile_sign_in),

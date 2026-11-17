@@ -37,15 +37,16 @@ class PdfDocument(file: File) : Closeable {
     val pageCount: Int get() = aspectRatios.size
 
     /**
-     * The last few rendered pages, so scrolling back a page does not render it again. Evicted bitmaps
-     * are left to the garbage collector: a page still on screen may be drawing one.
+     * The last few rendered pages (most recently used last), so scrolling back a page does not render
+     * it again: as many as [pdfCachedPages] allows. Evicted bitmaps are left to the garbage
+     * collector: a page still on screen may be drawing one.
      */
-    private val rendered = object : LinkedHashMap<Pair<Int, Int>, Bitmap>(CACHED_PAGES + 1, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<Int, Int>, Bitmap>) = size > CACHED_PAGES
-    }
+    private val rendered = LinkedHashMap<Pair<Int, Int>, Bitmap>(4, 0.75f, true)
+
+    private val heapBytes = Runtime.getRuntime().maxMemory()
 
     /** The most pixels of a page here, see [pdfMaxPagePixels]. */
-    private val maxPagePixels = pdfMaxPagePixels(Runtime.getRuntime().maxMemory())
+    private val maxPagePixels = pdfMaxPagePixels(heapBytes)
 
     /** Renders page [index] [widthPx] wide on white (smaller when the page would be over [maxPagePixels]). */
     suspend fun render(index: Int, widthPx: Int): Bitmap? = withContext(Dispatchers.IO) {
@@ -58,6 +59,12 @@ class PdfDocument(file: File) : Closeable {
                     bitmap.eraseColor(Color.WHITE)
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                     rendered[index to widthPx] = bitmap
+                    val keep = pdfCachedPages(heapBytes, rendered.values.maxOf { it.allocationByteCount.toLong() })
+                    val eldest = rendered.keys.iterator()
+                    while (rendered.size > keep && eldest.hasNext()) {
+                        eldest.next()
+                        eldest.remove()
+                    }
                 }
             }
         }
@@ -85,23 +92,30 @@ class PdfDocument(file: File) : Closeable {
         runCatching { descriptor.close() }
     }
 
-    private companion object {
-        const val CACHED_PAGES = 3
-    }
 }
 
 /** The widest a PDF page is rendered. */
 private const val MAX_PAGE_WIDTH_PX = 2_400
 
-/** The most pixels of one rendered PDF page on a small heap: 16 MB as ARGB_8888 (a 2400 px wide A4 page would be 32 MB). */
+/** The most pixels of one rendered PDF page on a small heap: 16 MB as ARGB_8888. */
 internal const val MAX_PAGE_PIXELS = 4_000_000
 
 /**
- * The most pixels of one rendered PDF page for an app heap of [heapBytes]: a sixteenth of the heap
- * as ARGB_8888 (three pages are kept), never under [MAX_PAGE_PIXELS]. A 512 MB heap (tablets, where
- * the screen is wider than a 4 MP A4 page) gives 8.4 MP: an A4 page at the full [MAX_PAGE_WIDTH_PX].
+ * The most pixels of one rendered PDF page for an app heap of [heapBytes]: an eighth of the heap as
+ * ARGB_8888, never under [MAX_PAGE_PIXELS]. An A4 page at the full [MAX_PAGE_WIDTH_PX] is 2400×3396,
+ * 8.15 MP or 32.6 MB: a 256 MB heap (what phones and tablets give an app) allows 8.39 MP, so it is
+ * rendered whole; 192 MB gives 6.3 MP (A4 2108 px wide), 128 MB 4.2 MP (1721 px). The bitmap is
+ * outside the Java heap (Android 8 on), the heap only tells how much memory the device has to spare.
  */
-internal fun pdfMaxPagePixels(heapBytes: Long): Int = (heapBytes / 16 / 4).coerceIn(MAX_PAGE_PIXELS.toLong(), Int.MAX_VALUE.toLong()).toInt()
+internal fun pdfMaxPagePixels(heapBytes: Long): Int = (heapBytes / 8 / 4).coerceIn(MAX_PAGE_PIXELS.toLong(), Int.MAX_VALUE.toLong()).toInt()
+
+/**
+ * How many rendered pages of [pageBytes] each are kept for an app heap of [heapBytes]: what fits a
+ * quarter of the heap, one to three. So two of the pages cut by [pdfMaxPagePixels] or just under it
+ * (A4 at 2400 px on a 256 MB heap: 65 MB), three of anything smaller (a phone's 1080 px page is
+ * 6.6 MB) and of the largest pages from 384 MB on.
+ */
+internal fun pdfCachedPages(heapBytes: Long, pageBytes: Long): Int = (heapBytes / 4 / pageBytes.coerceAtLeast(1)).coerceIn(1, 3).toInt()
 
 /**
  * The bitmap size of a [pageWidth] by [pageHeight] page (points) drawn [widthPx] wide: the page's

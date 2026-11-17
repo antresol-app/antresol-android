@@ -20,17 +20,42 @@ class PdfRenderSizeTest {
         assertEquals(842.0 / 595, height.toDouble() / width, 0.01)
     }
 
+    private val mb = 1024L * 1024
+
     @Test
-    fun aLargeHeapRendersALargePageAtItsFullWidth() {
-        val mb = 1024L * 1024
-        // A small heap keeps the 4 MP limit; a tablet's 512 MB heap has room for A4 at 2400 px.
-        assertEquals(MAX_PAGE_PIXELS, pdfMaxPagePixels(128 * mb))
-        assertEquals(MAX_PAGE_PIXELS, pdfMaxPagePixels(192 * mb))
-        assertEquals(2_400 to 3_396, pdfRenderSize(595, 842, 2_400, pdfMaxPagePixels(512 * mb)))
-        // In between, as wide as a sixteenth of the heap allows.
-        val (width, height) = pdfRenderSize(595, 842, 2_400, pdfMaxPagePixels(384 * mb))
-        assertTrue(width in 2_000..2_200)
-        assertTrue(width.toLong() * height * 4 <= 384 * mb / 16)
+    fun anOrdinaryHeapRendersALargePageAtItsFullWidth() {
+        // A4 at 2400 px is 2400×3396, 32.6 MB: an eighth of a 256 MB heap (33.5 MB) has room for it.
+        for (heap in listOf(256, 384, 512)) assertEquals("heap $heap", 2_400 to 3_396, pdfRenderSize(595, 842, 2_400, pdfMaxPagePixels(heap * mb)))
+        // Under that, as wide as an eighth of the heap allows: 2108 px at 192 MB, 1721 px at 128 MB.
+        for ((heap, expected) in listOf(192 to 2_108, 128 to 1_721)) {
+            val (width, height) = pdfRenderSize(595, 842, 2_400, pdfMaxPagePixels(heap * mb))
+            assertEquals("heap $heap", expected, width)
+            assertTrue(width.toLong() * height * 4 <= heap * mb / 8)
+        }
+        // Never under 4 MP.
+        assertEquals(MAX_PAGE_PIXELS, pdfMaxPagePixels(64 * mb))
+        assertEquals(MAX_PAGE_PIXELS, pdfMaxPagePixels(96 * mb))
+    }
+
+    @Test
+    fun asManyPagesAreKeptAsMemoryAllows() {
+        val a4 = 2_400L * 3_396 * 4
+        // Two of the largest pages on a 256 MB heap (65 MB), three from 384 MB on.
+        assertEquals(2, pdfCachedPages(256 * mb, a4))
+        assertEquals(3, pdfCachedPages(384 * mb, a4))
+        assertEquals(3, pdfCachedPages(512 * mb, a4))
+        // A page cut to the heap's limit: two; a phone page (1080 px, 6.6 MB): three.
+        assertEquals(2, pdfCachedPages(192 * mb, 2_108L * 2_983 * 4))
+        assertEquals(2, pdfCachedPages(128 * mb, 1_721L * 2_435 * 4))
+        assertEquals(3, pdfCachedPages(128 * mb, 1_080L * 1_528 * 4))
+        // Always the page on screen, also where the 4 MP floor is more than a quarter of the heap.
+        assertEquals(1, pdfCachedPages(64 * mb, 16 * mb))
+        assertEquals(1, pdfCachedPages(32 * mb, 16 * mb))
+        for (heap in listOf(64L, 96, 128, 192, 256, 384, 512)) {
+            val page = pdfMaxPagePixels(heap * mb) * 4L
+            val kept = pdfCachedPages(heap * mb, page)
+            assertTrue("heap $heap", kept == 1 || kept * page <= heap * mb / 4)
+        }
     }
 
     @Test

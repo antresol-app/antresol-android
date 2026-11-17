@@ -37,6 +37,7 @@ class ChannelsViewModelTest {
     private val favorites = mutableListOf<Pair<Long, Boolean>>()
     private var favoriteFails = false
     private val epgFroms = mutableListOf<String>()
+    private var epgFails = false
 
     private val api = object : ChannelsApi {
         override suspend fun channels(): ChannelList {
@@ -52,6 +53,7 @@ class ChannelsViewModelTest {
 
         override suspend fun epg(fromIso: String, hours: Int): ChannelEpg {
             epgFroms += fromIso
+            if (epgFails) throw IOException("offline")
             return ChannelEpg(channels = channels.map { ChannelEpgRow(it.id, it.number, it.name, programs = listOf(ChannelProgram(id = "${it.id}-$fromIso"))) })
         }
 
@@ -130,6 +132,30 @@ class ChannelsViewModelTest {
         assertEquals(2, epgFroms.size)
         assertEquals(to + 6 * 3_600_000L, vm.guideToMs)
         assertEquals(2, vm.shownGuide.first().programs.size)
+    }
+
+    @Test
+    fun aGuidePageThatFailedIsNotAskedForAgainAtOnce() = runTest(dispatcher) {
+        val vm = viewModel()
+        runCurrent()
+        vm.showView(ChannelsView.Guide)
+        runCurrent()
+        val to = vm.guideToMs
+        epgFails = true
+        // The guide asks on every scroll position near the end: one request, not one per frame.
+        repeat(5) {
+            vm.loadMoreGuide()
+            runCurrent()
+        }
+        assertEquals(2, epgFroms.size)
+        assertEquals(to, vm.guideToMs)
+        // Scrolling on after a pause asks again; a page that loads is merged as ever.
+        advanceTimeBy(3_000)
+        epgFails = false
+        vm.loadMoreGuide()
+        runCurrent()
+        assertEquals(3, epgFroms.size)
+        assertEquals(to + 6 * 3_600_000L, vm.guideToMs)
     }
 
     @Test

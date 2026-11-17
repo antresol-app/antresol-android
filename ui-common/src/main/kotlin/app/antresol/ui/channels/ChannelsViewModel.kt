@@ -95,6 +95,9 @@ class ChannelsViewModel(
     private var refreshJob: Job? = null
     private var guideJob: Job? = null
 
+    /** When the last next page of the guide failed (never: far in the past). */
+    private var guidePageFailedAt = Long.MIN_VALUE / 2
+
     // The lists below are derived state: worked out once per change of what they read, not on every
     // read from a composition (each key press and clock tick), and the same instances until then.
 
@@ -256,9 +259,14 @@ class ChannelsViewModel(
         }
     }
 
-    /** The guide scrolled near its loaded end: the next page, up to 47 h ahead. */
+    /**
+     * The guide scrolled near its loaded end: the next page, up to 47 h ahead. The pages ask on every
+     * scroll position there, so after a page failed the next one is asked for [GUIDE_RETRY_MS] later
+     * at the earliest: a request that fails at once (no network) is not sent again with every frame.
+     */
     fun loadMoreGuide() {
         if (guideJob?.isActive == true || guideRows == null) return
+        if (clock() - guidePageFailedAt < GUIDE_RETRY_MS) return
         val from = guideToMs
         if (from >= Epg.limit(clock())) return
         guideJob = viewModelScope.launch {
@@ -269,7 +277,8 @@ class ChannelsViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // Scrolling there again retries.
+                // Scrolling there again retries, after a pause.
+                guidePageFailedAt = clock()
             }
         }
     }
@@ -296,5 +305,6 @@ class ChannelsViewModel(
     private companion object {
         const val RETURN_REFRESH_MS = 3_000L
         const val OPENED_EVERY_MS = 10 * 60_000L
+        const val GUIDE_RETRY_MS = 3_000L
     }
 }

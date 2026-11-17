@@ -187,10 +187,11 @@ class PhoneOwnerListUiTest {
         shot(activity, "owner-phone-trailer-embed-loading")
         val web = findWebView(activity.window.decorView) ?: error("no WebView")
         val page = shadowOf(web).lastLoadDataWithBaseURL ?: error("nothing loaded")
-        assertEquals("https://www.youtube.com/", page.baseUrl)
+        // The app's identity, as the site asks of a WebView: never the site's own address.
+        assertEquals("https://app.antresol.mobile/", page.baseUrl)
         assertTrue(page.data.contains("videoId: 'movieTeaser2'"))
         assertTrue(page.data.contains("host: 'https://www.youtube-nocookie.com'"))
-        assertTrue(page.data.contains("origin: 'https://www.youtube.com'"))
+        assertTrue(page.data.contains("origin: 'https://app.antresol.mobile'"))
         assertTrue(web.settings.javaScriptEnabled)
         assertEquals(false, web.settings.mediaPlaybackRequiresUserGesture)
         // A link tapped in the player does not replace the player page; the player's own frame loads.

@@ -22,13 +22,18 @@ import androidx.lifecycle.compose.LifecycleStartEffect
  * Trailers of servers that do not play them themselves (no `play`: public servers, trailers off):
  * the official YouTube IFrame player in a full-screen WebView inside the app.
  *
- * YouTube refuses embeds without a referrer (player error 153), so the page is loaded with
- * `loadDataWithBaseURL` under [ORIGIN] (the WebView then sends it as the Referer) and the player
- * is told the same `origin`. The iframe itself comes from the privacy-enhanced host [EMBED_HOST].
+ * YouTube refuses embeds without a referrer (player error 153) and those whose referrer is its own
+ * site (error 152-4, «embedder identity denied»): an app's WebView has to send `https://` + the app's
+ * id (YouTube API Services, Required Minimum Functionality: API Client Identity). So the page is
+ * loaded with `loadDataWithBaseURL` under [origin] (the WebView then sends it as the Referer) and
+ * the player is told the same `origin`. The iframe itself comes from the privacy-enhanced host [EMBED_HOST].
  */
 object TrailerEmbed {
-    /** The page's base URL and the player's `origin`. */
-    const val ORIGIN = "https://www.youtube.com"
+    /** The page's base URL and the player's `origin` for the app [packageName]: `https://` + the id in lower case. */
+    fun origin(packageName: String): String = "https://" + packageName.lowercase()
+
+    /** The IFrame API's script. */
+    const val API = "https://www.youtube.com/iframe_api"
 
     /** Where the IFrame API builds the player iframe: `<host>/embed/<key>?autoplay=1&playsinline=1&rel=0…`. */
     const val EMBED_HOST = "https://www.youtube-nocookie.com"
@@ -53,11 +58,11 @@ object TrailerEmbed {
     }
 
     /**
-     * The player page for [key] (a valid key, see [isValidKey]): the IFrame API fills the page,
+     * The player page for [key] (a valid key, see [isValidKey]) under [origin]: the IFrame API fills the page,
      * starts playing at once and reports playing, ended and errors to [BRIDGE]; [TOGGLE_JS]
      * pauses or resumes it.
      */
-    fun html(key: String): String {
+    fun html(key: String, origin: String): String {
         require(isValidKey(key)) { "Invalid trailer key" }
         return """
             <!doctype html>
@@ -74,7 +79,7 @@ object TrailerEmbed {
                 host: '$EMBED_HOST',
                 videoId: '$key',
                 width: '100%', height: '100%',
-                playerVars: { autoplay: 1, playsinline: 1, rel: 0, origin: '$ORIGIN' },
+                playerVars: { autoplay: 1, playsinline: 1, rel: 0, origin: '$origin' },
                 events: {
                   onReady: function (e) { e.target.playVideo(); },
                   onStateChange: function (e) { $BRIDGE.onState(e.data); },
@@ -87,7 +92,7 @@ object TrailerEmbed {
               if (player.getPlayerState() === 1) player.pauseVideo(); else player.playVideo();
             }
             </script>
-            <script src="$ORIGIN/iframe_api"></script>
+            <script src="$API"></script>
             </body></html>
         """.trimIndent()
     }
@@ -143,7 +148,8 @@ class TrailerEmbedState(val key: String) {
     }
 
     internal fun load(view: WebView) {
-        view.loadDataWithBaseURL(TrailerEmbed.ORIGIN + "/", TrailerEmbed.html(key), "text/html", "utf-8", null)
+        val origin = TrailerEmbed.origin(view.context.packageName)
+        view.loadDataWithBaseURL("$origin/", TrailerEmbed.html(key, origin), "text/html", "utf-8", null)
     }
 
     /** The page's bridge; WebView calls it on a background thread. */

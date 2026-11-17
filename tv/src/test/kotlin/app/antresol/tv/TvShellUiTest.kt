@@ -348,9 +348,10 @@ class TvShellUiTest {
         val web = findWebView(compose.activity.window.decorView) ?: error("no WebView")
         val shadow = org.robolectric.Shadows.shadowOf(web)
         val page = shadow.lastLoadDataWithBaseURL ?: error("nothing loaded")
-        assertEquals("https://www.youtube.com/", page.baseUrl)
+        val origin = "https://" + compose.activity.packageName
+        assertEquals("$origin/", page.baseUrl)
         assertEquals("text/html", page.mimeType)
-        for (part in listOf("videoId: 'movieTeaser2'", "host: 'https://www.youtube-nocookie.com'", "autoplay: 1", "playsinline: 1", "rel: 0", "origin: 'https://www.youtube.com'", "https://www.youtube.com/iframe_api")) {
+        for (part in listOf("videoId: 'movieTeaser2'", "host: 'https://www.youtube-nocookie.com'", "autoplay: 1", "playsinline: 1", "rel: 0", "origin: '$origin'", "https://www.youtube.com/iframe_api")) {
             assertTrue("page has $part", page.data.contains(part))
         }
         assertTrue(web.settings.javaScriptEnabled)

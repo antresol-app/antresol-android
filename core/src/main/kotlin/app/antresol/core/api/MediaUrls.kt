@@ -127,11 +127,13 @@ class MediaUrls(baseUrl: String) {
          * [url] at the server's smallest step at least [widthPx] wide, the rule of the web app. As it
          * is when no step is wide enough (the original then, never a smaller copy scaled up) and for
          * a URL with one size: not an image of the server at [baseUrl], a video frame
-         * (`/api/images/frame/`), a URL that already has a query.
+         * (`/api/images/frame/`), a URL that already has a query. And for a picture that may be
+         * [transparent] (a logo): the server's smaller copies are JPEG, so it would come back on a
+         * black box; the web app never sizes a logo either. The place that draws the image says so.
          */
-        fun sizedImage(baseUrl: String, url: String, widthPx: Int): String {
+        fun sizedImage(baseUrl: String, url: String, widthPx: Int, transparent: Boolean = false): String {
             val images = "$baseUrl/api/images/"
-            if (widthPx <= 0 || !url.startsWith(images) || url.startsWith("${images}frame/") || url.contains('?')) return url
+            if (transparent || widthPx <= 0 || !url.startsWith(images) || url.startsWith("${images}frame/") || url.contains('?')) return url
             val step = IMAGE_WIDTHS.firstOrNull { it >= widthPx } ?: return url
             return "$url?w=$step"
         }

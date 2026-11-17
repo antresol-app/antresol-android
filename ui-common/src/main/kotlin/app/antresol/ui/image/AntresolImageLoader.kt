@@ -40,6 +40,12 @@ object AntresolImageLoader {
      */
     const val FITS_BOX = "antresol_fits_box"
 
+    /**
+     * Request parameter of a picture that may be transparent (a logo): it is asked for as it is, never
+     * as the server's smaller copy (a JPEG, which has no transparency), see [SizedImageInterceptor].
+     */
+    const val TRANSPARENT = "antresol_transparent"
+
     private fun create(context: Context, okHttpClient: OkHttpClient, baseUrl: () -> String?): ImageLoader {
         val appContext = context.applicationContext
         val memory = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -85,7 +91,8 @@ private class SizedImageInterceptor(private val baseUrl: () -> String?) : Interc
             fitsBox -> MediaUrls.neededTileWidth(width, height, crop)
             else -> MediaUrls.neededImageWidth(width, height, crop)
         }
-        val sized = MediaUrls.sizedImage(base.trimEnd('/'), url, needed)
+        val transparent = request.parameters.value<Boolean>(AntresolImageLoader.TRANSPARENT) == true
+        val sized = MediaUrls.sizedImage(base.trimEnd('/'), url, needed, transparent)
         return chain.proceed(if (sized == url) request else request.newBuilder().data(sized).build())
     }
 }

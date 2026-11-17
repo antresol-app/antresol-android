@@ -16,11 +16,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.antresol.ui.image.AntresolImageLoader
 import app.antresol.ui.theme.AntresolShapes
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 
 /**
  * The neutral box a channel's uploaded logo sits in: an opaque mid-dark grey (iOS system grey 5),
@@ -63,8 +66,13 @@ fun ChannelLogo(url: String?, height: Dp, modifier: Modifier = Modifier, reserve
             .padding(horizontal = height * 0.14f, vertical = height * 0.12f)
             .testTag("channel-logo"),
     ) {
+        val context = LocalContext.current
+        // A logo is drawn on the box above: it is asked for as it is, never as the server's smaller JPEG copy.
+        val request = remember(url, context) {
+            ImageRequest.Builder(context).data(url).setParameter(AntresolImageLoader.TRANSPARENT, true, memoryCacheKey = null).build()
+        }
         AsyncImage(
-            model = url,
+            model = request,
             contentDescription = null,
             contentScale = ContentScale.Fit,
             onError = { failed = true },

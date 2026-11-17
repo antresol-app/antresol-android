@@ -60,6 +60,15 @@ class MediaUrlsTest {
     }
 
     @Test
+    fun aPictureThatMayBeTransparentIsNeverSized() {
+        // The server's smaller copies are JPEG: a transparent logo would come back on black.
+        val base = "http://nas.local:8420"
+        val logo = "$base/api/images/local/19/logo"
+        assertEquals(logo, MediaUrls.sizedImage(base, logo, 320, transparent = true))
+        assertEquals("$logo?w=320", MediaUrls.sizedImage(base, logo, 320))
+    }
+
+    @Test
     fun neededTileWidthIsTheLargerSideOfACroppedTile() {
         assertEquals(450, MediaUrls.neededTileWidth(300, 450, crop = true)) // a square cover fills a poster tile
         assertEquals(480, MediaUrls.neededTileWidth(480, 270, crop = true)) // a wide tile: its width

@@ -35,6 +35,11 @@ kotlin {
     }
 }
 
+composeCompiler {
+    // The :core models are immutable; see the file.
+    stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file("compose_stability.conf"))
+}
+
 dependencies {
     api(project(":core"))
     api(platform(libs.androidx.compose.bom))

@@ -49,6 +49,11 @@ kotlin {
     }
 }
 
+composeCompiler {
+    // The :core models are immutable; see the file.
+    stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file("compose_stability.conf"))
+}
+
 dependencies {
     implementation(project(":ui-common"))
     implementation(libs.androidx.core.ktx)

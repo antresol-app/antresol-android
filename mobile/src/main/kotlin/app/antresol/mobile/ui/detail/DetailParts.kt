@@ -15,6 +15,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,6 +36,7 @@ import app.antresol.ui.image.rememberArtworkTint
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
+import kotlinx.coroutines.launch
 
 /**
  * The top of a detail page: an artwork-tinted glow fading to black behind [artwork], the back
@@ -105,10 +107,13 @@ fun InfoLine(label: String, value: String) {
 @Composable
 fun NoticeSnackbar(notice: Int?, host: SnackbarHostState, onShown: () -> Unit) {
     val resources = LocalContext.current.resources
+    // Shown from the page's scope, not from the effect: [onShown] clears the notice, which restarts
+    // the effect and would take a snackbar shown inside it down again at once.
+    val scope = rememberCoroutineScope()
     LaunchedEffect(notice) {
         if (notice != null) {
             onShown()
-            host.showSnackbar(resources.getString(notice))
+            scope.launch { host.showSnackbar(resources.getString(notice)) }
         }
     }
 }

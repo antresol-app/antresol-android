@@ -5,11 +5,18 @@ Native Android and Android TV apps for the self-hosted
 
 ## Building
 
-    ./gradlew :core:test :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug   # unit tests + both apps
+    ./gradlew :core:test :ui-common:testDebugUnitTest :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug   # unit tests + both apps (what CI runs)
     ANTRESOL_TEST_SERVER=1 ./gradlew :core:test :tv:testDebugUnitTest :mobile:testDebugUnitTest   # plus live tests against http://127.0.0.1:8420
 
     ./gradlew :tv:assembleRelease :mobile:assembleRelease :tv:bundleRelease :mobile:bundleRelease   # release APKs/AABs
     scripts/update-screenshots.sh   # regenerate docs/screenshots from the live UI tests
+
+There are no instrumented tests (no `androidTest` source set): the UI tests are Robolectric and run inside
+the unit-test tasks above. To drive an app by hand without a server, start `scripts/fake-server.py`
+(Python 3, nothing to install; `--help` for the port) and type its address on the app's server screen:
+`http://10.0.2.2:8420` in an emulator, `--host 0.0.0.0` and the computer's address for a device. It plays
+the small library of the tests' `FakeServer` plus live channels with a programme guide cut into pages as
+the server cuts them; debug and release builds both accept it (plain HTTP is allowed).
 
 Create `local.properties` with `sdk.dir=<Android SDK>` in a fresh clone. JDK 17+. Release signing, versioning and CI:
 [docs/RELEASE.md](docs/RELEASE.md). Store listings: [docs/PLAY_STORE.md](docs/PLAY_STORE.md). Screenshots:

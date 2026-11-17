@@ -1,6 +1,5 @@
 package app.antresol.mobile.player
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -68,7 +67,6 @@ fun TrailerPlayerScreen(viewModel: TrailerPlayerViewModel, onExit: () -> Unit) {
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onForeground() }
     val phase = viewModel.phase
     LaunchedEffect(phase) { if (phase == TrailerPhase.Finished) onExit() }
-    BackHandler(onBack = onExit)
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         VideoSurface(viewModel.player)
         when (phase) {
@@ -89,7 +87,6 @@ fun TrailerEmbedScreen(trailerKey: String, name: String, onExit: () -> Unit) {
     val state = remember(trailerKey) { TrailerEmbedState(trailerKey) }
     val phase = state.phase
     LaunchedEffect(phase) { if (phase == EmbedPhase.Finished) onExit() }
-    BackHandler(onBack = onExit)
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         TrailerEmbedView(state, Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing))
         when (phase) {

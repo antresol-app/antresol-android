@@ -2,7 +2,6 @@ package app.antresol.mobile.player
 
 import android.graphics.Color as AndroidColor
 import android.view.ViewGroup
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -105,7 +104,6 @@ fun VideoPlayerScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onForeground() }
     val phase = viewModel.phase
     LaunchedEffect(phase) { if (phase == PlayerPhase.Finished) onExit() }
-    BackHandler(onBack = onExit)
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         VideoSurface(viewModel.player)

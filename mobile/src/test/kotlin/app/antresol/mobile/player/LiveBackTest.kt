@@ -15,7 +15,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
-/** Back on the live player closes the sheet, then the channel strip, and only then leaves. */
+/**
+ * Back on the live player closes the sheet, then the channel strip, and only then leaves: with
+ * nothing open no handler is on, so the system's own Back (and its preview) finishes the activity.
+ */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [35])
 class LiveBackTest {
@@ -24,7 +27,7 @@ class LiveBackTest {
 
     private var guide = false
     private var menu = false
-    private var exits = 0
+    private val exits get() = if (compose.activity.isFinishing) 1 else 0
 
     private fun setUp(guideOpen: Boolean, menuOpen: Boolean) {
         compose.setContent {
@@ -37,7 +40,6 @@ class LiveBackTest {
                 menuOpen = m,
                 onCloseMenu = { m = false },
                 onCloseGuide = { g = false },
-                onExit = { exits++ },
             )
         }
         compose.waitForIdle()

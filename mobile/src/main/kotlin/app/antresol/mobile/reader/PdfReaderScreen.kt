@@ -1,7 +1,6 @@
 package app.antresol.mobile.reader
 
 import android.graphics.Bitmap
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -60,7 +59,6 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun PdfReaderScreen(viewModel: PdfReaderViewModel, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when (val state = viewModel.state) {
             LoadState.Loading -> ReaderStateBox(onBack) { LoadingView() }

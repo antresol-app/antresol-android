@@ -118,7 +118,8 @@ private enum class Overlay { Hidden, Banner, Controls, Guide }
 
 /**
  * Back on the live player closes what is open over the picture first: the audio/subtitle sheet,
- * then the channel strip; only with neither open does it leave the player.
+ * then the channel strip. With neither open the handler is off and Back is the system's: it leaves
+ * the player, with the system's back preview.
  */
 @Composable
 internal fun LiveBackHandler(
@@ -126,14 +127,9 @@ internal fun LiveBackHandler(
     menuOpen: Boolean,
     onCloseMenu: () -> Unit,
     onCloseGuide: () -> Unit,
-    onExit: () -> Unit,
 ) {
-    BackHandler {
-        when {
-            menuOpen -> onCloseMenu()
-            guideOpen -> onCloseGuide()
-            else -> onExit()
-        }
+    BackHandler(enabled = menuOpen || guideOpen) {
+        if (menuOpen) onCloseMenu() else onCloseGuide()
     }
 }
 
@@ -170,7 +166,6 @@ fun LivePlayerScreen(
         menuOpen = menu != null,
         onCloseMenu = { menu = null },
         onCloseGuide = { overlay = Overlay.Hidden },
-        onExit = onExit,
     )
     var touches by remember { mutableIntStateOf(0) }
     LaunchedEffect(overlay, touches, viewModel.isPlaying, state.channelId, menu) {

@@ -1,6 +1,5 @@
 package app.antresol.mobile.reader
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -69,7 +68,6 @@ import kotlin.math.roundToInt
  */
 @Composable
 fun ComicReaderScreen(viewModel: ComicReaderViewModel, onBack: () -> Unit, onOpenVolume: (Long) -> Unit) {
-    BackHandler(onBack = onBack)
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when (val state = viewModel.state) {
             LoadState.Loading -> ReaderStateBox(onBack) { LoadingView() }

@@ -483,6 +483,15 @@ class EpgTest {
     }
 
     @Test
+    fun aRulerTimeCutByTheChannelColumnIsNotDrawn() {
+        // Nothing scrolled: the first time is drawn; scrolled past its first pixel: not («AM» alone said nothing).
+        assertTrue(Epg.rulerLabelShown(5f, 0))
+        assertTrue(Epg.rulerLabelShown(120f, 120))
+        assertEquals(false, Epg.rulerLabelShown(120f, 121))
+        assertEquals(false, Epg.rulerLabelShown(5f, 80))
+    }
+
+    @Test
     fun stickyLabelsPinToTheVisibleEdge() {
         val min = 60_000L
         // Starts in view: no offset.

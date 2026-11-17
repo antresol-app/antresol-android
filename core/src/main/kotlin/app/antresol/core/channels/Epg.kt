@@ -179,6 +179,13 @@ object Epg {
         return minutes * 60_000L
     }
 
+    /**
+     * Whether the ruler draws a tick's time: only when it begins at or after the visible left edge
+     * ([labelLeft] and [visibleLeft] from the ruler's start, in the same unit). One that begins
+     * before it would be cut by the channel column and read as another time or none.
+     */
+    fun rulerLabelShown(labelLeft: Float, visibleLeft: Int): Boolean = labelLeft >= visibleLeft
+
     /** [ms] rounded down to a multiple of [stepMs]. */
     fun floorTo(ms: Long, stepMs: Long): Long = Math.floorDiv(ms, stepMs) * stepMs
 

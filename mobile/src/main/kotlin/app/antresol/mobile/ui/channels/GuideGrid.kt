@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -125,7 +126,7 @@ fun GuideGrid(
                 modifier = Modifier.width(ChannelColumnWidth).padding(start = 16.dp),
             )
             Box(Modifier.weight(1f).fillMaxHeight().horizontalScroll(scroll)) {
-                Ruler(fromMs, toMs, composed, nowMs, width, tick, clock)
+                Ruler(fromMs, toMs, composed, nowMs, width, tick, clock) { scroll.value }
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(AntresolColors.Hairline))
@@ -180,9 +181,9 @@ private fun GuideChannelCell(row: ChannelEpgRow, last: Boolean, onClick: () -> U
 
 /** The ticks with their times (those around the view, see [Epg.composedWindow]) and the now mark. */
 @Composable
-private fun Ruler(fromMs: Long, toMs: Long, composed: LongRange, nowMs: Long, width: Dp, stepMs: Long, clock: java.text.DateFormat) {
+private fun Ruler(fromMs: Long, toMs: Long, composed: LongRange, nowMs: Long, width: Dp, stepMs: Long, clock: java.text.DateFormat, scrolledPx: () -> Int) {
     Box(Modifier.width(width).fillMaxHeight()) {
-        RulerTicks(fromMs, minOf(toMs, composed.last), maxOf(fromMs, composed.first), stepMs, clock)
+        RulerTicks(fromMs, minOf(toMs, composed.last), maxOf(fromMs, composed.first), stepMs, clock, scrolledPx)
         if (nowMs in fromMs until toMs) {
             Box(
                 Modifier
@@ -196,18 +197,26 @@ private fun Ruler(fromMs: Long, toMs: Long, composed: LongRange, nowMs: Long, wi
     }
 }
 
-/** The ticks from [firstMs] to [toMs]; apart from the now mark, so the clock's tick does not redraw them. */
+/**
+ * The ticks from [firstMs] to [toMs]; apart from the now mark, so the clock's tick does not redraw them.
+ * A time that begins left of the visible edge ([scrolledPx] of the ruler are scrolled away) would
+ * be cut by the channel column («AM» of «4:30 AM»): it is not drawn ([Epg.rulerLabelShown]).
+ */
 @Composable
-private fun BoxScope.RulerTicks(fromMs: Long, toMs: Long, firstMs: Long, stepMs: Long, clock: java.text.DateFormat) {
+private fun BoxScope.RulerTicks(fromMs: Long, toMs: Long, firstMs: Long, stepMs: Long, clock: java.text.DateFormat, scrolledPx: () -> Int) {
     var tick = Epg.floorTo(firstMs, stepMs)
     if (tick < firstMs) tick += stepMs
     while (tick < toMs) {
         val x = (tick - fromMs).minutesToDp()
+        val labelX = x + 5.dp
         Box(Modifier.offset(x = x).align(Alignment.BottomStart).width(1.dp).height(8.dp).background(AntresolColors.LabelTertiary))
         Text(
             programClock(clock, tick),
             style = Antresol.typography.caption,
-            modifier = Modifier.offset(x = x + 5.dp).align(Alignment.CenterStart),
+            // Read when drawn, not composed: the ruler does not recompose while the guide scrolls.
+            modifier = Modifier.offset(x = labelX).align(Alignment.CenterStart).graphicsLayer {
+                alpha = if (Epg.rulerLabelShown(labelX.toPx(), scrolledPx())) 1f else 0f
+            },
         )
         tick += stepMs
     }

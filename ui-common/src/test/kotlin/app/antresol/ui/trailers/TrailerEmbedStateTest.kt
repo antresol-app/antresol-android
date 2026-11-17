@@ -37,14 +37,22 @@ class TrailerEmbedStateTest {
         assertEquals("about:blank", shadow.lastLoadedUrl)
         assertNull(shadow.lastEvaluatedJavascript)
         assertTrue(shadow.wasOnPauseCalled())
-        // What the dropped page still reports is not shown.
+        // What the dropped page still reports is not shown, nor its cancelled loads as an error.
         report(1)
+        state.onPageFailed()
         assertEquals(EmbedPhase.Loading, state.phase)
         // Back in front it is loaded again (and starts).
         state.onStart()
         assertNotSame(first, shadow.lastLoadDataWithBaseURL)
         report(1)
         assertEquals(EmbedPhase.Playing, state.phase)
+    }
+
+    @Test
+    fun aPageThatDoesNotLoadIsAnError() {
+        state.onPageFailed()
+        assertEquals(EmbedPhase.Failed(-2), state.phase)
+        assertEquals(false, view.keepScreenOn)
     }
 
     @Test

@@ -173,6 +173,16 @@ class TrailerEmbedState(val key: String) {
         view.loadDataWithBaseURL("$origin/", TrailerEmbed.html(key, origin), "text/html", "utf-8", null)
     }
 
+    /**
+     * The page or the IFrame API's script did not load (main thread). Not for a page dropped in the
+     * background, whose cancelled loads may be reported: it is not the player any more.
+     */
+    internal fun onPageFailed() {
+        if (dropped) return
+        webView?.keepScreenOn = false
+        phase = EmbedPhase.Failed(NETWORK_ERROR)
+    }
+
     /** The page's bridge; WebView calls it on a background thread. */
     internal val bridge = Bridge()
 
@@ -206,6 +216,7 @@ class TrailerEmbedState(val key: String) {
         const val STATE_PLAYING = 1
         const val STATE_BUFFERING = 3
         const val INVALID_KEY = -1
+        const val NETWORK_ERROR = -2
     }
 }
 
@@ -244,9 +255,7 @@ fun TrailerEmbedView(state: TrailerEmbedState, modifier: Modifier = Modifier) {
 
                     override fun onReceivedError(view: WebView, request: android.webkit.WebResourceRequest, error: android.webkit.WebResourceError) {
                         // Only the page itself failing counts (no network); a failed ad or image does not.
-                        if (request.isForMainFrame || request.url.toString().endsWith("/iframe_api")) {
-                            state.phase = EmbedPhase.Failed(NETWORK_ERROR)
-                        }
+                        if (request.isForMainFrame || request.url.toString().endsWith("/iframe_api")) state.onPageFailed()
                     }
                 }
                 addJavascriptInterface(state.bridge, TrailerEmbed.BRIDGE)
@@ -263,5 +272,3 @@ fun TrailerEmbedView(state: TrailerEmbedState, modifier: Modifier = Modifier) {
         modifier = modifier,
     )
 }
-
-private const val NETWORK_ERROR = -2

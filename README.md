@@ -13,10 +13,12 @@ Native Android and Android TV apps for the self-hosted
 
 There are no instrumented tests (no `androidTest` source set): the UI tests are Robolectric and run inside
 the unit-test tasks above. To drive an app by hand without a server, start `scripts/fake-server.py`
-(Python 3, nothing to install; `--help` for the port) and type its address on the app's server screen:
-`http://10.0.2.2:8420` in an emulator, `--host 0.0.0.0` and the computer's address for a device. It plays
+(Python 3, nothing to install; `--help` for the options) and type its address on the app's server screen:
+`http://10.0.2.2:8421` in an emulator, `--host 0.0.0.0` and the computer's address for a device (its port
+is 8421, not the 8420 the live tests above look for a real server on). It plays
 the small library of the tests' `FakeServer` plus live channels with a programme guide cut into pages as
-the server cuts them; debug and release builds both accept it (plain HTTP is allowed).
+the server cuts them (`--rebuild-after 1` rebuilds the schedule between the first two pages, as the server
+may); debug and release builds both accept it (plain HTTP is allowed).
 
 Create `local.properties` with `sdk.dir=<Android SDK>` in a fresh clone. JDK 17+. Release signing, versioning and CI:
 [docs/RELEASE.md](docs/RELEASE.md). Store listings: [docs/PLAY_STORE.md](docs/PLAY_STORE.md). Screenshots:

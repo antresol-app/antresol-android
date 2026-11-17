@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """A small fake Antresol server for driving the apps by hand (an emulator or a device).
 
-    scripts/fake-server.py [--port 8420] [--host 0.0.0.0] [--trailer <YouTube id>]
+    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>]
 
 It answers what test-fixtures' FakeServer answers (one passwordless profile, home, grids, a film and
 a series page, trailers) with the same JSON, plus live channels and the programme guide. In an
-emulator the address is http://10.0.2.2:8420 (type it: the server screen also finds the real
-servers of the home network). Nothing plays except the server-played trailer of «Movie 1»; its
+emulator the address is http://10.0.2.2:8421 (type it: the server screen also finds the real
+servers of the home network). The port is not 8420, the one the live tests (ANTRESOL_TEST_SERVER=1)
+look for a real server on. Nothing plays except the server-played trailer of «Movie 1»; its
 «Teaser» has no `play`, so it opens the embedded YouTube player with --trailer's video.
 
-The guide is one fixed schedule per channel (it depends on the channel and the UTC day only), cut
+The guide is one fixed schedule per channel (it depends on the channel and the UTC day the script
+was started on: it stays as it is when midnight passes during a run), cut
 into pages the way the server's `epgGrid` does: the schedule entries that overlap [from, from+hours),
 then the parts of one film (same item, another file, back to back) joined into one programme whose
 id is its first entry IN THE PAGE. So a programme across a page edge is sent by both pages, and a
 film in parts (channel 1 shows nothing else) comes cut differently by each: with another end, or
 with another id and start.
+
+With --rebuild-after N the schedule is rebuilt once, after the Nth guide page was answered, the way
+the server does it (a file went missing, an external title failed): the entries that start an hour
+or more after that moment are dropped and made again from there, numbered on from the last one
+kept. So the pages asked for later have other titles and times under ids the earlier pages used.
 """
 import argparse
 import json
@@ -37,6 +44,10 @@ MIN = 60_000
 LENGTHS = [[50, 50], [45, 25, 120, 30], [50, 95, 10, 45], [70, 145, 25], [15, 30, 15, 60], [120, 90], [105, 45, 30], [25, 25, 50, 20]]
 favorites = {2}
 last_channel = [3]
+# The schedule's day: fixed for the run.
+DAY = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+# --rebuild-after: guide pages still to answer before the rebuild (None: never), and when it happened (ms).
+rebuild = {"pages_left": None, "at": None}
 
 
 def movie_card(i, **extra):
@@ -103,14 +114,17 @@ def png(path, sized=False):
 
 
 def entries(channel):
-    """The channel's schedule entries (seq, item, file, start, end in ms) from yesterday to three days ahead."""
-    day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    at, end = int((day - timedelta(days=1)).timestamp() * 1000), int((day + timedelta(days=3)).timestamp() * 1000)
+    """The channel's schedule entries (seq, item, file, start, end in ms) from the day before the run's to three days after."""
+    at, end = int((DAY - timedelta(days=1)).timestamp() * 1000), int((DAY + timedelta(days=3)).timestamp() * 1000)
     lengths, out, seq = LENGTHS[channel - 1], [], 0
+    # After a rebuild: the entries from `cut` on are other titles (and, but for channel 1, other lengths).
+    cut, rebuilt = (rebuild["at"] + 60 * MIN if rebuild["at"] is not None else None), False
     while at < end:
-        length = lengths[seq % len(lengths)] * MIN
-        # Channel 1: a film is two files, back to back.
+        # Channel 1: a film is two files, back to back; it is cut between two films.
+        rebuilt = rebuilt or (cut is not None and at >= cut and (channel != 1 or seq % 2 == 0))
+        length = lengths[(seq + rebuilt) % len(lengths)] * MIN
         film, part = (seq // 2, seq % 2) if channel == 1 else (seq, 0)
+        film += 500 * rebuilt
         out.append({"seq": seq, "item": channel * 1000 + film, "file": channel * 100000 + film * 10 + part, "start": at, "end": at + length})
         at, seq = at + length, seq + 1
     return out
@@ -159,6 +173,11 @@ def epg(query, now_ms):
     hours = min(int(query.get("hours", ["0"])[0] or 0) or 6, 24)
     to_ms = from_ms + hours * 60 * MIN
     rows = [{**channel(n), "programs": programs(n, from_ms, to_ms)} for n in range(1, len(LENGTHS) + 1)]
+    if rebuild["pages_left"]:
+        rebuild["pages_left"] -= 1
+        if not rebuild["pages_left"]:
+            rebuild["at"] = now_ms
+            print(f"schedule rebuilt from {iso(now_ms + 60 * MIN)} on", flush=True)
     return {"from": iso(from_ms), "to": iso(to_ms), "channels": rows}
 
 
@@ -227,10 +246,12 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     args = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    args.add_argument("--port", type=int, default=8420)
+    args.add_argument("--port", type=int, default=8421)
     args.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to let a device on the network in")
     args.add_argument("--trailer", default=Handler.embed_key, help="the YouTube video the embedded trailer plays")
+    args.add_argument("--rebuild-after", type=int, metavar="PAGES", help="rebuild the schedule once, after this many guide pages were answered")
     options = args.parse_args()
     Handler.embed_key = options.trailer
+    rebuild["pages_left"] = options.rebuild_after
     print(f"http://127.0.0.1:{options.port} (in an emulator: http://10.0.2.2:{options.port})", flush=True)
     ThreadingHTTPServer((options.host, options.port), Handler).serve_forever()

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
@@ -59,6 +58,7 @@ import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.Shelf
 import app.antresol.mobile.ui.components.TrackRow
 import app.antresol.mobile.ui.components.focusClickable
+import app.antresol.mobile.ui.components.pageListPadding
 import app.antresol.ui.components.kindLabel
 import app.antresol.mobile.ui.music.PlayShuffleRow
 import app.antresol.mobile.ui.playlists.ConfirmSheet
@@ -149,7 +149,7 @@ private fun MediaDetailContent(
     val bottom = LocalBottomBarPadding.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = bottom.calculateBottomPadding() + 24.dp),
+        contentPadding = pageListPadding(bottom.calculateBottomPadding() + 24.dp),
     ) {
         item("header") {
             DetailHeader(

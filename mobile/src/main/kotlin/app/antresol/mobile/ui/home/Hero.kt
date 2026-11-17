@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,6 +48,7 @@ import app.antresol.mobile.ui.components.GlassPillButton
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.ui.components.kindLabel
+import app.antresol.mobile.ui.components.PageSideInsets
 import app.antresol.mobile.ui.shell.BottomBarSpace
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
@@ -86,7 +89,8 @@ fun Hero(
     // A phone on its side: the hero fills the screen between the floating header and the tab bar.
     val short = configuration.screenHeightDp < SHORT_SCREEN_DP
     val height: Dp = when {
-        short -> screenHeight - BottomBarSpace
+        // The bar floats above the system's navigation area: the buttons end clear of it, not at its edge.
+        short -> screenHeight - BottomBarSpace - WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         tablet -> min(screenHeight * 0.66f, 620.dp)
         else -> min(width * 1.42f, screenHeight * 0.74f)
     }
@@ -111,6 +115,7 @@ fun Hero(
             Row(
                 modifier = Modifier
                     .align(if (tablet) Alignment.BottomStart else Alignment.BottomCenter)
+                    .windowInsetsPadding(PageSideInsets)
                     .padding(horizontal = if (short) PageGutter else if (tablet) 32.dp else 0.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -207,8 +212,9 @@ private fun HeroPage(
                 )
             }
         }
-        // Never under the tab header that floats over the hero.
+        // Never under the tab header that floats over the hero, nor under a cutout at the side (the backdrop is).
         val clearHeader = Modifier
+            .windowInsetsPadding(PageSideInsets)
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(top = HEADER_CLEARANCE)
         if (short) {

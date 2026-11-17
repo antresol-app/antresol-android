@@ -20,15 +20,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
@@ -57,7 +54,9 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -108,6 +107,7 @@ import app.antresol.mobile.ui.music.ShuffleAllViewModel
 import app.antresol.mobile.ui.music.SongsScreen
 import app.antresol.mobile.ui.music.SongsViewModel
 import app.antresol.mobile.ui.nowplaying.MiniPlayer
+import app.antresol.mobile.ui.components.PageSideInsets
 import app.antresol.mobile.ui.nowplaying.MiniPlayerSpace
 import app.antresol.mobile.ui.nowplaying.NowPlayingScreen
 import app.antresol.mobile.ui.search.SearchScreen
@@ -281,8 +281,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
             NavHost(
                 navController = navController,
                 startDestination = HomeRoute,
-                // Pages keep clear of a camera cutout or a side navigation bar in landscape (nothing in portrait).
-                modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
+                modifier = Modifier.fillMaxSize(),
                 enterTransition = { fadeIn(tween(200)) },
                 exitTransition = { fadeOut(tween(200)) },
                 popEnterTransition = { fadeIn(tween(200)) },
@@ -305,27 +304,27 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         },
                     )
                 }
-                composable<ChannelsRoute> {
+                padded<ChannelsRoute> {
                     ChannelsScreen(
                         viewModel = channels,
                         onWatch = watchChannel,
                     )
                 }
-                composable<MoviesRoute> {
+                padded<MoviesRoute> {
                     CardGridScreen(
                         title = context.getString(R.string.nav_movies),
                         viewModel = viewModel { CardGridViewModel(client, GridSource.Items(Kind.MOVIE)) },
                         onOpen = open,
                     )
                 }
-                composable<ShowsRoute> {
+                padded<ShowsRoute> {
                     CardGridScreen(
                         title = context.getString(R.string.nav_tv_shows),
                         viewModel = viewModel { CardGridViewModel(client, GridSource.Items(Kind.SERIES)) },
                         onOpen = open,
                     )
                 }
-                composable<MusicRoute> {
+                padded<MusicRoute> {
                     MusicScreen(
                         viewModel = viewModel {
                             LoadViewModel {
@@ -344,14 +343,14 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onPlayTracks = { tracks -> playback.playTracks(tracks) },
                     )
                 }
-                composable<BooksRoute> {
+                padded<BooksRoute> {
                     BooksScreen(
                         viewModel = viewModel { LoadViewModel { client.booksHome().shelves } },
                         onOpen = open,
                         onGrid = openGrid,
                     )
                 }
-                composable<SearchRoute> {
+                padded<SearchRoute> {
                     SearchScreen(
                         viewModel = viewModel { SearchViewModel(client) },
                         playback = playback,
@@ -361,7 +360,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onNowPlaying = { showNowPlaying = true },
                     )
                 }
-                composable<GridRoute> { entry ->
+                padded<GridRoute> { entry ->
                     val route = entry.toRoute<GridRoute>()
                     CardGridScreen(
                         title = route.title,
@@ -389,7 +388,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         )
                     }
                 }
-                composable<SongsRoute> { entry ->
+                padded<SongsRoute> { entry ->
                     SongsScreen(
                         viewModel = viewModel { SongsViewModel(client, starred = false) },
                         title = entry.toRoute<SongsRoute>().title,
@@ -397,7 +396,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onBack = back,
                     )
                 }
-                composable<ComicReaderRoute> { entry ->
+                padded<ComicReaderRoute> { entry ->
                     val route = entry.toRoute<ComicReaderRoute>()
                     ComicReaderScreen(
                         viewModel = viewModel {
@@ -411,7 +410,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         },
                     )
                 }
-                composable<PdfReaderRoute> { entry ->
+                padded<PdfReaderRoute> { entry ->
                     val route = entry.toRoute<PdfReaderRoute>()
                     PdfReaderScreen(
                         viewModel = viewModel {
@@ -420,7 +419,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onBack = back,
                     )
                 }
-                composable<SettingsRoute> {
+                padded<SettingsRoute> {
                     val activity = LocalContext.current as? ComponentActivity
                     SettingsScreen(
                         viewModel = viewModel { SettingsViewModel(client) },
@@ -435,7 +434,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         language = uiLanguage,
                     )
                 }
-                composable<PairTvRoute> {
+                padded<PairTvRoute> {
                     PairTvScreen(
                         viewModel = viewModel {
                             PairTvViewModel(
@@ -525,6 +524,17 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
 }
 
 /** Confirms Sign Out or Change Server; Cancel is the safe default. */
+/**
+ * A page that keeps clear of a camera cutout or a side navigation bar in landscape (nothing in
+ * portrait). Home and the detail pages are plain `composable`s: their backdrops go edge to edge and
+ * they pad their content themselves ([PageSideInsets]).
+ */
+private inline fun <reified T : Any> NavGraphBuilder.padded(noinline content: @Composable (NavBackStackEntry) -> Unit) {
+    composable<T> { entry ->
+        Box(Modifier.fillMaxSize().windowInsetsPadding(PageSideInsets)) { content(entry) }
+    }
+}
+
 @Composable
 private fun SessionActionDialog(action: SessionAction, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val (title, body, confirmLabel) = when (action) {

@@ -2,8 +2,8 @@ package app.antresol.mobile.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,9 +22,12 @@ import app.antresol.mobile.ui.components.CardStyle
 import app.antresol.mobile.ui.components.EmptyView
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.LoadingView
+import app.antresol.mobile.ui.components.PageSideInsets
 import app.antresol.mobile.ui.components.RefreshBox
 import app.antresol.mobile.ui.components.Shelf
 import app.antresol.mobile.ui.components.TabHeader
+import app.antresol.mobile.ui.components.fullBleed
+import app.antresol.mobile.ui.components.pageListPadding
 import app.antresol.ui.R
 import app.antresol.ui.theme.AntresolColors
 
@@ -51,7 +54,7 @@ fun HomeScreen(
     RefreshBox(viewModel.refreshing, onRefresh = viewModel::pullToRefresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = bottom.calculateBottomPadding() + 16.dp),
+            contentPadding = pageListPadding(bottom.calculateBottomPadding() + 16.dp),
         ) {
             when (val state = viewModel.state) {
                 LoadState.Loading -> {
@@ -68,9 +71,11 @@ fun HomeScreen(
                         if (content.hero.isEmpty()) {
                             TabHeader()
                         } else {
-                            Box {
+                            // The hero's backdrop goes edge to edge; what lies over it keeps clear of the cutout.
+                            val sides = PageSideInsets
+                            Box(Modifier.fullBleed(sides)) {
                                 Hero(content.hero, content.heroSource, onPlay = onPlay, onDetails = onOpen)
-                                TabHeader(Modifier.align(Alignment.TopCenter))
+                                TabHeader(Modifier.align(Alignment.TopCenter).windowInsetsPadding(sides))
                             }
                         }
                     }

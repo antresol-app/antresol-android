@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -27,7 +28,9 @@ import androidx.compose.ui.unit.dp
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.components.BackBar
 import app.antresol.mobile.ui.components.PageGutter
+import app.antresol.mobile.ui.components.PageSideInsets
 import app.antresol.mobile.ui.components.focusClickable
+import app.antresol.mobile.ui.components.fullBleed
 import app.antresol.ui.image.rememberArtworkTint
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
@@ -47,14 +50,16 @@ fun DetailHeader(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val tint by rememberArtworkTint(tintUrl, AntresolColors.BrandStart)
-    Box(modifier.fillMaxWidth()) {
+    // The tint and the artwork go edge to edge; the bar and the content keep clear of a cutout at the side.
+    val sides = PageSideInsets
+    Box(modifier.fullBleed(sides).fillMaxWidth()) {
         Box(
             Modifier
                 .matchParentSize()
                 .background(Brush.verticalGradient(0f to tint, 0.7f to tint.copy(alpha = 0.25f), 1f to AntresolColors.Background)),
         )
         Box(Modifier.matchParentSize(), content = artwork)
-        Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().windowInsetsPadding(sides)) {
             BackBar(onBack, actions = actions)
             Column(
                 modifier = Modifier
@@ -111,7 +116,7 @@ fun NoticeSnackbar(notice: Int?, host: SnackbarHostState, onShown: () -> Unit) {
 /** A full-size centred box for loading and error states under the back button. */
 @Composable
 fun DetailStateBox(onBack: () -> Unit, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxSize().background(AntresolColors.Background)) {
+    Column(Modifier.fillMaxSize().background(AntresolColors.Background).windowInsetsPadding(PageSideInsets)) {
         BackBar(onBack)
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { content() }
     }

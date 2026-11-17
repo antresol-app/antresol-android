@@ -70,6 +70,7 @@ import app.antresol.mobile.ui.components.RefreshBox
 import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.SegmentedPills
 import app.antresol.mobile.ui.components.focusClickable
+import app.antresol.mobile.ui.components.pageListPadding
 import app.antresol.ui.components.kindLabel
 import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
@@ -169,7 +170,7 @@ private fun VideoDetailContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = bottom.calculateBottomPadding() + 24.dp),
+        contentPadding = pageListPadding(bottom.calculateBottomPadding() + 24.dp),
     ) {
         item("header") {
             val artHeight = min(configuration.screenWidthDp.dp * 0.9f, configuration.screenHeightDp.dp * 0.5f)

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -59,6 +60,7 @@ import app.antresol.mobile.ui.components.Shelf
 import app.antresol.mobile.ui.components.TrackRow
 import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.mobile.ui.components.pageListPadding
+import app.antresol.mobile.ui.components.PageSideInsets
 import app.antresol.ui.components.kindLabel
 import app.antresol.mobile.ui.music.PlayShuffleRow
 import app.antresol.mobile.ui.playlists.ConfirmSheet
@@ -102,7 +104,7 @@ fun MediaDetailScreen(
             is LoadState.Failed -> DetailStateBox(onBack) { ErrorView(state.error, onRetry = viewModel::reload) }
             is LoadState.Ready -> MediaDetailContent(state.value, viewModel, playback, onOpen, onBack, onRead, onPlaylistDialog = { dialog = it })
         }
-        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(LocalBottomBarPadding.current))
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).windowInsetsPadding(PageSideInsets).padding(LocalBottomBarPadding.current))
     }
     val title = (viewModel.state as? LoadState.Ready)?.value?.card?.title.orEmpty()
     when (dialog) {

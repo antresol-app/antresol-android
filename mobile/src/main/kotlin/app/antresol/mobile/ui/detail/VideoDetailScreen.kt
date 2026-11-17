@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -71,6 +72,7 @@ import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.SegmentedPills
 import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.mobile.ui.components.pageListPadding
+import app.antresol.mobile.ui.components.PageSideInsets
 import app.antresol.ui.components.kindLabel
 import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
@@ -126,6 +128,8 @@ fun VideoDetailScreen(
             snackbar,
             Modifier
                 .align(Alignment.BottomCenter)
+                // The page is not padded as a whole (its header goes edge to edge): keep clear of the cutout.
+                .windowInsetsPadding(PageSideInsets)
                 .padding(LocalBottomBarPadding.current),
         )
     }

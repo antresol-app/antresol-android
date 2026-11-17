@@ -1477,3 +1477,49 @@ Robolectric, in the unit-test tasks. «On a device» here means the release APKs
   :tv:assembleRelease` green: core 228 (9 skipped), ui-common 34, tv 51, mobile 53; R8 keeps the
   serializers (109 and 107 classes). The guide, landscape, logos and the trailer were driven in the
   emulators with debug builds (TV API 34, phone API 36).
+
+## Review pass 5: the delta review's findings (2026-11-17)
+
+- Video buffer (D-1): a third of `memoryClass` on every device (the buffer is `byte[]` in the Java
+  heap whatever RAM the device has), at least 16 MB, ExoPlayer's default from a 414 MB heap on, at
+  most 64 MB on a low-RAM device. 48 → 16 MB, 64 → 21, 128 → 42, 192 → 64, 256 → 85, 512 → default
+  138; at 80 Mbit/s that is 1.7 / 2.2 / 4.4 / 6.7 / 8.9 / 14 s.
+- Guide merge (D-2): the server numbers a rebuilt schedule on from the last entry kept, so ids
+  come again (`builder.go`, `extras.go`: `DELETE … WHERE seq >= ?`). The newer page wins: for one
+  key or one start its copy stays, what the rows had inside its window is dropped, a library title
+  across the seam ends where the newer page's begins. One block per key by construction. What the
+  older page showed before the seam stays as it was (stale after a rebuild; where an id was used
+  again, a hole): only reloading the guide would correct it.
+- A film in several files shown back to back (D-9): the page that starts inside showing 2 gets its
+  last files joined with the first of showing 3. A continuation exactly as long as the programme
+  it continues is taken for that (the same files, rotated): showing 2 keeps its end, showing 3 is
+  two blocks. It cannot be told from a single-file film moved by a rebuild to an overlapping time,
+  or from a film in three files whose first and last are equally long: the server would have to
+  send whole programmes (or the showing's first entry, seq or start, with each programme).
+- A guide page that failed (D-3) is asked for again by its own job (3 s, 6 s, … 30 s) while a page
+  shows the channels, and by `startRefreshing` after that.
+- Optimistic changes must be absolute (D-4): `LoadViewModel.optimistic` replays the accepted ones
+  on the value before all of them.
+- PDF (D-7): a page may take an eighth of the heap (A4 at 2400 px, 32.6 MB, from 256 MB), the
+  rendered pages kept are what fits a quarter of it (1–3).
+- `scripts/fake-server.py`: port 8421 (8420 is the live tests'), the schedule's day fixed for the
+  run, `--rebuild-after N` rebuilds the schedule after the Nth guide page.
+- Embedded trailer on the phone: nothing of ours over the player (YouTube's embed rules). The back
+  button has a 56 dp strip inside the safe area: beside the player when the window is wider than
+  tall, above it otherwise (a tablet; the activity is `sensorLandscape` on a phone). The player is
+  16:9 in what is left: in a wider WebView the embed lays its controls out over the whole frame and
+  cuts them at the picture's edge (the link and full-screen buttons came out halved); the WebView
+  itself never cut anything. The TV's screen is 16:9 and draws nothing over the player.
+- Found on the way: `NoticeSnackbar` / `PlaylistNoticeSnackbar` never showed anything. They showed
+  the snackbar inside a `LaunchedEffect` keyed by the notice and cleared the notice first, which
+  restarted the effect. A refused toggle was undone silently, since the first phone commits; no
+  test looked for the text. Now shown from the page's scope.
+- Driven in the emulators (fake server): TV debug build, the guide with `--rebuild-after 1`: Right
+  and Left pass through a row across the rebuilt seam, no overlaps, a hole where an id came again;
+  the embedded trailer plays on the TV emulator (`-gpu host`). Phone RELEASE build (R8): server
+  screen, profile, Home, a film's page, the server-played trailer in the app's player, the embedded
+  trailer, the guide with a second page. Phone debug build: the embedded trailer in both landscape
+  orientations and upright in a tablet-sized window, the detail snackbar on a 600 dp wide landscape
+  window. The fake server answers 404 to `/api/play`, so the film player itself was not driven.
+- Not verified: D-1 and D-7 on a device with a small heap (tests only); D-3 on a phone with the
+  network cut; a real server's rebuild; a real TV or phone.

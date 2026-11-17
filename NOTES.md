@@ -1426,3 +1426,54 @@ Robolectric, in the unit-test tasks. «On a device» here means the release APKs
 - Not verified: a real phone or TV; TalkBack itself (the semantics were read with `uiautomator`
   and in tests); the PDF reader and the comic readers (the fake library has no books); music;
   a live channel playing; predictive-back previews; the TV keyboard.
+
+## Review pass 4: the guide's page seams, landscape, the trailer embed, the branch review (2026-11-17)
+
+- `scripts/fake-server.py` (README, «Building») replaces the throwaway port of pass 3: the tests'
+  `FakeServer` answers plus eight channels and a guide. One schedule per channel for the day, cut
+  into pages by a copy of the server's `epgGrid` (`Store.Range` + `programs()`: the entries that
+  overlap the window, the files of one title joined, the id of the first entry IN THE WINDOW).
+  Channel 1 shows only films in two files; channels 2 and 5 have a transparent logo; the series has
+  a transparent `logo`; an image asked for with `?w=` comes on black, as the server's JPEG copies do.
+- The guide's overlap (pass 3, t12): not the placement. With that fixture, base 65d144d and the
+  branch draw every ordinary row right over three pages, down and back (one origin, one minute
+  width; the composed window only filters). Pass 3's fixture made the picture. But the server does
+  send overlapping programmes at a page seam for a title in several files: page 1 `1-40`
+  9:20–11:00, page 2 `1-41` 10:10–11:00 (drawn over it), and where the seam is in the first file,
+  the same id twice with two ends (the short one was kept: a hole). Both on base and branch, TV and
+  phone. `Epg.joined`: one programme per start (the longer), a title's overlapping parts joined, a
+  repeat (starts where the first showing ends) left alone; `Epg.key` for merge, blocks and focus.
+  A seam exactly between two files still gives two blocks of one title (nothing tells it from a
+  repeat). The server could send whole programmes instead; not touched here.
+- Phone landscape (AU-2): the side insets moved from the NavHost to the pages (`padded<Route>`);
+  Home and the detail pages pad their list (`pageListPadding`) and their header spans it again
+  (`fullBleed(insets)`) with its own content padded. The short hero ends above the navigation area,
+  so Play/Details end clear of the tab bar instead of touching it. On a detail page the bar
+  lies over the buttons at the top of the scroll, as it lies over any content; the list has the
+  bar's height as bottom padding. The embedded trailer's WebView keeps its safe-drawing padding.
+- Embedded trailer: never played because the page was loaded under `https://www.youtube.com`:
+  the embed answers «Error code: 152 - 4», `PLAYABILITY_ERROR_CODE_EMBEDDER_IDENTITY_DENIED` (seen
+  with the same Referer from the host; the app showed «This video can't be played right now»).
+  Under `https://<application id>` (YouTube API Services, Required Minimum Functionality: API
+  Client Identity; the Apple apps do the same) it plays in the phone emulator (`-gpu host`). The
+  console still logs the IFrame API's `postMessage` origin warnings while the frame loads; harmless.
+- Images with transparency: the apps draw neither title logos nor picture avatars (`Card.logo` is
+  parsed and unused); the channel logo was never sized, but only by the shape of its URL. It now
+  says so (`AntresolImageLoader.TRANSPARENT`). Any logo added later must do the same.
+- From the branch review (`RV-n`): optimistic writes keep the accepted change without the re-read
+  (RV-3); the small video buffer only at ≤ 2 GB or `isLowRamDevice`, a third of the heap, 32–64 MB
+  (RV-5); a failed guide page waits 3 s (RV-8); 429 with the wait time (RV-10; the test is in `:tv`,
+  `:ui-common`'s unit tests have no resources); PDF pages capped by a sixteenth of the heap, at
+  least 4 MP, zoom still does not re-render (RV-7); `FocusRequesters.tryRequestFocus(key)` looks
+  the requester up on every frame and drops one nobody used (RV-4); a trailer left while loading
+  is dropped and loaded again on return, since `autoplay` starts it whatever the page's scripts do
+  (RV-2); the trailer keeps the screen on while playing or buffering only (RV-9); an episode's
+  poster may be its 16:9 still, so in a tall tile it is asked for at its cut width
+  (`MediaUrls.artworkFitsTile`, RV-6).
+- Not verified: RV-2, RV-4, RV-5, RV-7, RV-9 on a device (tests only); the trailer on the TV
+  emulator and on a real device; a real server's guide with a film in several files; RTL.
+- Verified on the final tree: `./gradlew :core:test :ui-common:testDebugUnitTest
+  :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug :mobile:assembleRelease
+  :tv:assembleRelease` green: core 228 (9 skipped), ui-common 34, tv 51, mobile 53; R8 keeps the
+  serializers (109 and 107 classes). The guide, landscape, logos and the trailer were driven in the
+  emulators with debug builds (TV API 34, phone API 36).

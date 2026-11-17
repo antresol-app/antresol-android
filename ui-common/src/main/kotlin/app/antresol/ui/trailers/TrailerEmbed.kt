@@ -129,16 +129,37 @@ class TrailerEmbedState(val key: String) {
         webView?.evaluateJavascript(TrailerEmbed.TOGGLE_JS, null)
     }
 
-    /** The app went to the background: the player is paused and the WebView stops its work. */
+    /** The app was left while the player was loading and its page was dropped; [onStart] loads it again. */
+    private var dropped = false
+
+    /**
+     * The app went to the background: the player is paused and the WebView stops its work. While the
+     * player is still loading there is nothing to pause yet, and it would start by itself once loaded
+     * (a paused WebView still runs its scripts) and play behind the launcher: the page is dropped.
+     */
     internal fun onStop() {
         val view = webView ?: return
-        view.evaluateJavascript(TrailerEmbed.PAUSE_JS, null)
+        if (phase == EmbedPhase.Loading) {
+            dropped = true
+            view.stopLoading()
+            view.loadUrl("about:blank")
+        } else {
+            view.evaluateJavascript(TrailerEmbed.PAUSE_JS, null)
+        }
         view.onPause()
     }
 
-    /** Back in front: the WebView works again; the trailer stays paused until the viewer resumes it. */
+    /**
+     * Back in front: the WebView works again; the trailer stays paused until the viewer resumes it,
+     * and one that was left while loading is loaded (and starts) now.
+     */
     internal fun onStart() {
-        webView?.onResume()
+        val view = webView ?: return
+        view.onResume()
+        if (dropped) {
+            dropped = false
+            if (phase == EmbedPhase.Loading) load(view)
+        }
     }
 
     fun reload() {
@@ -153,12 +174,14 @@ class TrailerEmbedState(val key: String) {
     }
 
     /** The page's bridge; WebView calls it on a background thread. */
-    internal val bridge: Any = Bridge()
+    internal val bridge = Bridge()
 
-    private inner class Bridge {
+    internal inner class Bridge {
         @JavascriptInterface
         fun onState(state: Int) {
             main.post {
+                // A page dropped in the background may still report: it is not the player any more.
+                if (dropped) return@post
                 when (state) {
                     STATE_PLAYING -> phase = EmbedPhase.Playing
                     STATE_ENDED -> phase = EmbedPhase.Finished
@@ -168,7 +191,7 @@ class TrailerEmbedState(val key: String) {
 
         @JavascriptInterface
         fun onError(code: Int) {
-            main.post { phase = EmbedPhase.Failed(code) }
+            main.post { if (!dropped) phase = EmbedPhase.Failed(code) }
         }
     }
 

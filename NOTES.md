@@ -1366,3 +1366,63 @@ From the duplication review (`AS-n`). Nothing here was run on a device.
 - Left alone on purpose: the other TV focus timers (AS-26), paged sources and grid sources (the two
   apps' sort labels, playlist cards and paging differ), the detail models, profile sign-in,
   rulers/timelines/blocks of the guide (each app's own `Text`, sizes and focus or touch).
+
+
+## Review pass 3: first run on an emulator, leftovers (2026-11-17)
+
+There are no instrumented tests in this repo (no `androidTest` source set): every UI test is
+Robolectric, in the unit-test tasks. «On a device» here means the release APKs driven by hand.
+
+- How it was run: `:mobile:assembleRelease :tv:assembleRelease` (R8, unsigned without the keystore;
+  `verifyReleaseSerialization` OK), signed with the debug key (`apksigner`), installed in headless
+  emulators (phone: API 36 google_apis arm64, Pixel 6; TV: API 34 android-tv arm64, 1080p; both
+  `-gpu swiftshader_indirect -memory 2048`), against a throwaway Python port of `FakeServer` on
+  `10.0.2.2` with channels, an EPG and the 30 s test clip as every file (`/api/play` → direct).
+  Driven with `adb shell input`, read with `uiautomator dump` and `screencap`. The server screen
+  finds the real servers of the LAN through the emulator's NAT: type the fake address.
+- An emulator quirk, not the app: after the landscape player the launcher/Home stay landscape,
+  because the system rewrites `user_rotation` when rotation is locked.
+- What ran (release builds): phone — server screen, profiles, password, Home, grids, film page,
+  channels, guide, film player to the end with the Up Next panel and its Cancel, system Back out of
+  the players, trailer chooser, landscape, font scale 1.3; TV — setup and typed address, sign-in
+  with the remote, Home, grid, film page, player (Previous and Stop keys), channels, guide. No
+  crash in either app. The embedded YouTube trailer loaded its frame and then reported a player
+  error on the emulator (software GPU), so the embed itself is still not seen playing anywhere.
+- Found there, fixed: a `PrimaryPillButton` that became enabled lost its white fill («Sign In» after
+  the first letter of the password; debug and release alike). `Modifier.alpha(1f)` is no modifier,
+  so the chain changed; the pill now has a `graphicsLayer` that is always present. Robolectric
+  never showed it: keep such a state change in mind for anything that swaps `alpha()` in and out.
+- PDF reader (AP-14): `pdfRenderSize` caps a page at 4 MP (the shape kept), `PdfDocument` keeps the
+  last three rendered pages (not recycled on eviction: a page on screen may draw one). Page sizes
+  are still read on opening.
+- `compose_stability.conf` (AP-21): `app.antresol.core.model.*` is stable for the three Compose
+  modules. A promise: the package holds immutable values only. Checked once with the compiler
+  report (`reportsDestination`): `stable card: Card`.
+- TV `FocusRequesters` (AP-23): requesters counted by the elements using them
+  (`Modifier.focusRequester(requesters, key)`), dropped with the last one; `FocusMemory` and the
+  guide use it. The channel list's `rowFocus` is one per channel and stays a map.
+- Tile artwork (`FITS_BOX`) asks for the larger side of a cropped tile
+  (`MediaUrls.neededTileWidth`): exact for a square cover in a poster tile, one step more than
+  needed for a poster.
+- Phone: `GlassTextField` is named by its placeholder for TalkBack, `FormError` is a polite live
+  region (AU-12; autofill needs Compose 1.8's `ContentType`, the BOM here is 1.7); the seek slider
+  says «12:34 of 1:02:00» (AU-10); Back handlers that repeated the system's Back are gone, the
+  live player's is on only with something open (AU-15); detail pages pull to refresh (AU-13).
+- TV film player: Stop leaves, Previous starts again (`mediaKeyAction`, AU-23). The embedded
+  trailer's WebView refuses main-frame navigations (AS-6).
+- Looked at and left: AP-22 (nothing left: `ShelvesViewModel` is a `LoadViewModel`, whose `reload`
+  cancels the running job; `VideoSession.open`'s catch only matters for a cancelled caller and its
+  callers already stop the detached session); Coil's memory cache on `onTrimMemory` (Coil 2 does it
+  itself: its `SystemCallbacks` trims the cache); AU-10's height and AU-9 (the Slider's own touch
+  node is 16 dp whatever height is set outside, and Compose stretches a small clickable to 48 dp
+  when hit-testing: the 44 dp player buttons report 48 dp bounds on the emulator; making the boxes
+  48 dp would move every header); AP-25 (the keyboard poll: the replacement cannot be tried on the
+  TV keyboards that report no insets); AU-22 (moves every page's top padding); the remote's Search
+  key (needs the shell's focus logic); AU-27 (no count strings to pluralise yet).
+- Verified on the final tree: `./gradlew :core:test :ui-common:testDebugUnitTest
+  :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug :mobile:assembleRelease
+  :tv:assembleRelease` green: core 225 (9 skipped), ui-common 28, tv 48, mobile 52; R8 keeps the
+  serializers (109 and 107 classes); unsigned release APKs 4.72 MB (phone) and 3.71 MB (TV).
+- Not verified: a real phone or TV; TalkBack itself (the semantics were read with `uiautomator`
+  and in tests); the PDF reader and the comic readers (the fake library has no books); music;
+  a live channel playing; predictive-back previews; the TV keyboard.

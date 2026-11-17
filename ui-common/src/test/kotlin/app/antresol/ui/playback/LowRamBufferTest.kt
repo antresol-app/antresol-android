@@ -50,6 +50,18 @@ class LowRamBufferTest {
     }
 
     @Test
+    fun theSmallestBufferIsAboveWhatAnMp4MayReadOneTrackAhead() {
+        // Mp4Extractor.MAXIMUM_READ_AHEAD_BYTES_STREAM (Media3 1.5.1): with a target at or under it
+        // a poorly interleaved MP4 fills the buffer with one track and never starts.
+        val readAhead = 10 * mb
+        for (heap in listOf(16, 24, 32, 48, 64)) {
+            for (lowRam in listOf(false, true)) {
+                assertTrue("heap $heap", videoBufferBytes(lowRam, gb, heap)!! >= readAhead + 4 * mb)
+            }
+        }
+    }
+
+    @Test
     fun aLowRamDeviceIsCappedWhateverItsMemoryAndHeap() {
         assertEquals(64, megabytes(heap = 384, ramGb = 4, lowRam = true))
         assertEquals(64, megabytes(heap = 512, ramGb = 8, lowRam = true))

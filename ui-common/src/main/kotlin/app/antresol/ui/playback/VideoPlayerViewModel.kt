@@ -1039,6 +1039,15 @@ internal fun videoBufferBytes(lowRamDevice: Boolean, totalRamBytes: Long, memory
     return if (megabytes >= DEFAULT_BUFFER_MB) null else megabytes * 1024 * 1024
 }
 
+/**
+ * Must stay above 10 MB. `DefaultLoadControl` (Media3 1.5.1) stops loading once the target is
+ * allocated however little is buffered in time, and a track that got no sample by then leaves its
+ * renderer not ready: «Playback stuck buffering and not loading» 4 s later. An MP4 cannot get
+ * there with more than 10 MB: `Mp4Extractor` reads no track further than that ahead of another
+ * (`MAXIMUM_READ_AHEAD_BYTES_STREAM`). Matroska is read as it lies, with no such bound: a file
+ * whose sound lies more than the target behind its picture stalls with any target (16 MB is 1.6 s
+ * at 80 Mbit/s, 6.4 s at 20; ExoPlayer's own 138 MB is 13.8 s at 80); muxers interleave within a second.
+ */
 private const val MIN_BUFFER_MB = 16
 private const val LOW_RAM_MAX_BUFFER_MB = 64
 

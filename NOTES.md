@@ -1523,3 +1523,59 @@ Robolectric, in the unit-test tasks. «On a device» here means the release APKs
   window. The fake server answers 404 to `/api/play`, so the film player itself was not driven.
 - Not verified: D-1 and D-7 on a device with a small heap (tests only); D-3 on a phone with the
   network cut; a real server's rebuild; a real TV or phone.
+
+## Review pass 6: the second delta review's findings (2026-11-17)
+
+- The guide merge (E-1, E-4, E-5) was patched three times and each review found another wrong
+  case: `Epg.joined` rebuilt the schedule from the programmes' lengths. It is gone. `Epg.mergedRow`
+  goes by how the app pages (forward only, each window starts where the one before ended; a reload
+  starts from nothing) and how the server answers (`Store.Range` is `end > from AND start < to`;
+  `programs()` joins a title's files only inside the window and ends a programme where its first
+  file comes again):
+  1. The page is the truth from `cut` on (the earlier of its `from` and its first programme's
+     start): every known programme that starts at or after `cut` goes, and one whose key the page
+     gives. No page programme is dropped or joined with another of the page.
+  2. A library row's programme still on when the page's first one starts: the same title, the
+     page's starting before `from` → one programme cut by the seam, extended to the page copy's end
+     under its own key; any other → it ends at `cut`. The same title starting AT `from` is not a
+     continuation (the entry the rows had across the seam is not in the page: a rebuild).
+  3. External rows: replaced by start from `cut` on, never joined or cut.
+  4. An empty row says nothing. 5. One programme per key (`check` in the function).
+  Known limits, all shown as two blocks of one title side by side rather than an invented one:
+  a seam exactly between two files; a film repeated back to back with the seam in a later file
+  (the page then starts with «end of this showing + beginning of the next»: the known showing keeps
+  its end, the page's programme starts there); a page that ends inside the film (never with 6 h
+  pages). A title moved by a rebuild to a start before the seam and still overlapping its old
+  place gives the same answers as a film cut in its second file: one block (stale start). What an
+  older page showed before `cut` stays (stale after a rebuild; a hole where its id was used again).
+  The server could end all of this by sending whole programmes or each programme's first entry.
+- The guide's retry (E-2, E-3): five requests for a page (0, 3, 9, 21, 45 s), then it waits for
+  the next call (a scroll position, a key) or `startRefreshing`. `loadMoreGuide(explicit = true)`
+  (Right at the guide's end on the TV) ends the pause: asked for 1 s after the failure at the
+  earliest (a held key), pauses and count start over. Scroll positions are still ignored in a pause.
+- `ItemDetailViewModelTest` (E-6): three taps (on, off, on), both «on» refused: the page ends on
+  «off», not what it showed after the last tap; the waits fail when they give up; the page's
+  coroutines run on one thread and no write is answered before all three arrived (no race on the
+  counter, no sleeps for the order).
+- Embedded trailer (E-7): the page's reports carry the number of their load and the page says
+  that it runs (`onPage`) before anything else; a failed load before that, or a report of an
+  earlier load, is the dropped page's. Chromium's timing itself was not seen (unit test only).
+- Snackbars (E-8): `NoticeSnackbars` shows a sentence that is showing or waiting anew in its place.
+- Video buffer (E-9), from the Media3 1.5.1 sources: the stall is real (`DefaultLoadControl`
+  `shouldContinueLoading`: target allocated and `prioritizeTimeOverSizeThresholds` off → no
+  loading whatever is buffered; `ExoPlayerImplInternal`: not loading, under 0.5 s buffered,
+  renderers not ready for 4 s → «Playback stuck buffering and not loading»). It needs a track
+  without a sample in the first `target` bytes. MP4 cannot: `Mp4Extractor` reads no track more than
+  10 MB ahead (`MAXIMUM_READ_AHEAD_BYTES_STREAM`), under the 16 MB floor. Matroska has no such
+  bound, so no floor is «enough»: 16 MB is 1.6 s of skew at 80 Mbit/s (32 MB was 3.2 s, the default
+  138 MB is 13.8 s). The floor stays; the comment and a test say it must stay above 10 MB.
+- The guides' ruler: a time that begins left of the visible edge was cut by the channel column
+  («AM» of «4:30 AM»; the phone's ruler did the same). It is not drawn until it fits.
+- Checked: the required Gradle line (core 241 tests, 9 skipped; ui-common 42; tv 54; mobile 61).
+  TV emulator (API 34) with `scripts/fake-server.py`: Right across three seams and Left back, the
+  blocks read from the accessibility tree: per channel ordered, no overlap, no hole, and every
+  programme of one 24 h window of the server present as one block (the seam inside a film's first
+  and second file included). With `--rebuild-after 1` the same from the second page's first
+  programme on, the stale stretch before it ending where the page's programme begins. The ruler's
+  first time is not drawn while cut. Not verified: E-7 with Chromium's real timing, E-8 on a phone,
+  the phone guide, a real server's rebuild, a real TV.

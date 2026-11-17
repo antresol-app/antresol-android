@@ -36,7 +36,7 @@ object AntresolImageLoader {
 
     /**
      * Request parameter of artwork drawn in a box of its own shape (a poster in a poster tile, a cover
-     * in a square): the box's width is all the image needs, see [SizedImageInterceptor].
+     * in a square): the box's larger side is all the image needs, see [SizedImageInterceptor].
      */
     const val FITS_BOX = "antresol_fits_box"
 
@@ -79,7 +79,12 @@ private class SizedImageInterceptor(private val baseUrl: () -> String?) : Interc
         val width = (chain.size.width as? Dimension.Pixels)?.px ?: return chain.proceed(request)
         val height = (chain.size.height as? Dimension.Pixels)?.px
         val fitsBox = request.parameters.value<Boolean>(AntresolImageLoader.FITS_BOX) == true
-        val needed = if (fitsBox || height == null) width else MediaUrls.neededImageWidth(width, height, crop = request.scale == Scale.FILL)
+        val crop = request.scale == Scale.FILL
+        val needed = when {
+            height == null -> width
+            fitsBox -> MediaUrls.neededTileWidth(width, height, crop)
+            else -> MediaUrls.neededImageWidth(width, height, crop)
+        }
         val sized = MediaUrls.sizedImage(base.trimEnd('/'), url, needed)
         return chain.proceed(if (sized == url) request else request.newBuilder().data(sized).build())
     }

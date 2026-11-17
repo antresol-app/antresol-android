@@ -145,6 +145,16 @@ class MediaUrls(baseUrl: String) {
         fun neededImageWidth(widthPx: Int, heightPx: Int, crop: Boolean): Int =
             if (crop) maxOf(widthPx, (heightPx * 16 + 8) / 9) else widthPx
 
+        /**
+         * The image width a [widthPx] by [heightPx] tile needs for artwork of about the tile's shape (a
+         * poster in a poster tile). Cut to the tile ([crop]), a picture less tall than the tile (a
+         * square cover or a 16:9 frame the server gives as the poster) is scaled to the tile's height, so
+         * a tall tile asks for its height: enough for a square, and a wide picture is stretched 1.8
+         * times instead of 2.7.
+         */
+        fun neededTileWidth(widthPx: Int, heightPx: Int, crop: Boolean): Int =
+            if (crop) maxOf(widthPx, heightPx) else widthPx
+
         internal fun formatSeconds(sec: Double): String =
             if (sec == Math.floor(sec)) sec.toLong().toString() else "%.3f".format(java.util.Locale.ROOT, sec)
     }

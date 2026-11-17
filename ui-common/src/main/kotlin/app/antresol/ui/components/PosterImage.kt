@@ -64,7 +64,7 @@ fun ArtworkImage(
         if (!loaded) PlaceholderTitle(title, Modifier.matchParentSize())
         if (model != null) {
             val context = LocalContext.current
-            // Tile artwork sits in a box of its own shape, so the server's copy only has to be the box's width.
+            // Tile artwork sits in a box of about its own shape, so the server's copy only has to be the box's larger side.
             val request = remember(model, context) {
                 ImageRequest.Builder(context).data(model).setParameter(AntresolImageLoader.FITS_BOX, true, memoryCacheKey = null).build()
             }

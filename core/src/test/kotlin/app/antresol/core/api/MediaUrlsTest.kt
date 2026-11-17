@@ -60,6 +60,14 @@ class MediaUrlsTest {
     }
 
     @Test
+    fun neededTileWidthIsTheLargerSideOfACroppedTile() {
+        assertEquals(450, MediaUrls.neededTileWidth(300, 450, crop = true)) // a square cover fills a poster tile
+        assertEquals(480, MediaUrls.neededTileWidth(480, 270, crop = true)) // a wide tile: its width
+        assertEquals(200, MediaUrls.neededTileWidth(200, 200, crop = true))
+        assertEquals(300, MediaUrls.neededTileWidth(300, 450, crop = false)) // fitted inside: never wider than the box
+    }
+
+    @Test
     fun neededImageWidthCoversACroppedWidePicture() {
         assertEquals(300, MediaUrls.neededImageWidth(300, 450, crop = false))
         // A 16:9 backdrop cut to a tall box needs the box's height in 16:9.

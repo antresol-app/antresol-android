@@ -13,15 +13,33 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "en")
 class UserMessageTest {
-    private val resources = RuntimeEnvironment.getApplication().resources
+    private val resources get() = RuntimeEnvironment.getApplication().resources
+
+    private fun throttled(message: String, retryAfterSec: Long? = null) = ApiException(429, message, retryAfterSec = retryAfterSec).userMessage(resources)
 
     @Test
     fun aThrottledRequestSaysHowLongToWait() {
-        // No sentence from the server (the client's "HTTP 429"): ours, with the wait time when it is known.
-        assertEquals("Too many attempts. Try again later. Try again in 30 s.", ApiException(429, "HTTP 429", retryAfterSec = 30).userMessage(resources))
-        assertEquals("Too many attempts. Try again later.", ApiException(429, "HTTP 429").userMessage(resources))
+        // No sentence from the server (the client's "HTTP 429"): ours, with the wait time when it is known. One instruction, not two.
+        assertEquals("Too many attempts. Try again in 30 s.", throttled("HTTP 429", 30))
+        assertEquals("Too many attempts. Try again later.", throttled("HTTP 429"))
         // The server's sentence, with the wait time.
-        assertEquals("Slow down. Try again in 5 s.", ApiException(429, "Slow down.", retryAfterSec = 5).userMessage(resources))
-        assertEquals("Slow down.", ApiException(429, "Slow down.").userMessage(resources))
+        assertEquals("Slow down. Try again in 5 s.", throttled("Slow down.", 5))
+        assertEquals("Slow down.", throttled("Slow down."))
+    }
+
+    @Test
+    fun aWaitOfNoTimeIsNotShownAsSeconds() {
+        assertEquals("Too many attempts. Try again later.", throttled("HTTP 429", 0))
+        assertEquals("Too many attempts. Try again later.", throttled("HTTP 429", -1))
+        assertEquals("Slow down.", throttled("Slow down.", 0))
+    }
+
+    @Test
+    @Config(qualifiers = "ru")
+    fun theSameInRussian() {
+        assertEquals("Слишком много попыток. Повторите через 30 с.", throttled("HTTP 429", 30))
+        assertEquals("Слишком много попыток. Попробуйте позже.", throttled("HTTP 429"))
+        assertEquals("Слишком много попыток. Попробуйте позже.", throttled("HTTP 429", 0))
+        assertEquals("Не так быстро. Повторите через 5 с.", throttled("Не так быстро.", 5))
     }
 }

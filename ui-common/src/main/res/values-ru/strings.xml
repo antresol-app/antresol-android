@@ -85,6 +85,7 @@
     <string name="error_session_expired">Сеанс завершён. Выберите профиль снова.</string>
     <string name="error_retry_after">Повторите через %1$d с.</string>
     <string name="error_too_many_attempts">Слишком много попыток. Попробуйте позже.</string>
+    <string name="error_too_many_attempts_wait">Слишком много попыток. Повторите через %1$d с.</string>
     <string name="error_too_many_streams">В этом профиле уже идёт просмотр на другом устройстве.</string>
 
     <!-- Форматирование -->

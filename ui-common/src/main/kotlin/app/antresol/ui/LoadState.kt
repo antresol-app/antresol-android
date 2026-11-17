@@ -39,17 +39,18 @@ fun Throwable.userMessage(resources: Resources): String = when (this) {
     is TrailerUnavailableException -> resources.getString(R.string.trailer_unavailable)
     is ApiException -> when {
         status == 200 -> resources.getString(R.string.error_generic)
-        // No localized `error` from the server (the client falls back to "HTTP 429"): ours, plus how long to wait when it says.
-        isTooManySessions && message.orEmpty().startsWith("HTTP ") -> listOfNotNull(
-            resources.getString(R.string.error_too_many_attempts),
-            retryAfterSec?.let { resources.getString(R.string.error_retry_after, it) },
-        ).joinToString(" ")
+        // No localized `error` from the server (the client falls back to "HTTP 429"): ours, with how long to wait
+        // when it says (one sentence either way; a wait of 0 s is «later»).
+        isTooManySessions && message.orEmpty().startsWith("HTTP ") -> waitSec?.let { resources.getString(R.string.error_too_many_attempts_wait, it) }
+            ?: resources.getString(R.string.error_too_many_attempts)
         // Throttled (e.g. too many sign-in attempts): the server's sentence plus how long to wait.
-        isTooManySessions && retryAfterSec != null ->
-            listOfNotNull(message, resources.getString(R.string.error_retry_after, retryAfterSec)).joinToString(" ")
+        isTooManySessions && waitSec != null -> listOfNotNull(message, resources.getString(R.string.error_retry_after, waitSec)).joinToString(" ")
         else -> message ?: resources.getString(R.string.error_generic)
     }
     is InvalidServerAddressException -> resources.getString(R.string.server_invalid_address)
     is IOException -> resources.getString(R.string.error_network)
     else -> resources.getString(R.string.error_generic)
 }
+
+/** The server's `Retry-After` when it is a time to wait (a positive number of seconds). */
+private val ApiException.waitSec: Long? get() = retryAfterSec?.takeIf { it > 0 }

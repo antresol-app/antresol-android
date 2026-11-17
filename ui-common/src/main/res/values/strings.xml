@@ -87,6 +87,7 @@
     <string name="error_session_expired">You were signed out. Choose your profile again.</string>
     <string name="error_retry_after">Try again in %1$d s.</string>
     <string name="error_too_many_attempts">Too many attempts. Try again later.</string>
+    <string name="error_too_many_attempts_wait">Too many attempts. Try again in %1$d s.</string>
     <string name="error_too_many_streams">This profile is already watching on another device.</string>
 
     <!-- Formatting -->

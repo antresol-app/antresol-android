@@ -23,7 +23,10 @@ class LoadViewModelTest {
     private var fetches = 0
     private var failures = 0
 
-    private inner class Page : LoadViewModel<Set<String>>(fetch = { fetches++; server }) {
+    /** The page cannot be read (the network is gone). */
+    private var offline = false
+
+    private inner class Page : LoadViewModel<Set<String>>(fetch = { fetches++; if (offline) throw IOException("offline"); server }) {
         /** Adds [tag] at once; the server accepts or refuses it when [answer] completes. */
         fun add(tag: String, answer: CompletableDeferred<Boolean>) = optimistic({ it + tag }, onFailure = { failures++ }) {
             if (!answer.await()) throw IOException("refused")
@@ -84,6 +87,24 @@ class LoadViewModelTest {
         assertEquals(setOf("a", "c"), page.shown)
         assertEquals(1, failures)
         assertEquals(2, fetches)
+    }
+
+    @Test
+    fun anAcceptedWriteStaysWhenThePageCannotBeReadAgain() = runTest(dispatcher) {
+        val page = Page()
+        runCurrent()
+        val first = CompletableDeferred<Boolean>()
+        val second = CompletableDeferred<Boolean>()
+        page.add("b", first)
+        page.add("c", second)
+        second.complete(true)
+        offline = true
+        first.complete(false)
+        runCurrent()
+        // The re-read failed: the refused change is undone, the accepted one is still shown.
+        assertEquals(2, fetches)
+        assertEquals(setOf("a", "c"), page.shown)
+        assertEquals(1, failures)
     }
 
     @Test

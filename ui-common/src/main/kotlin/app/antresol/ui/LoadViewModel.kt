@@ -34,9 +34,12 @@ open class LoadViewModel<T>(
     private var loadedAt = 0L
     private var job: Job? = null
 
-    /** [optimistic] writes in flight, how many overlapped, the value before the first, and whether one failed. */
+    /** An [optimistic] change and whether the server took it. */
+    private inner class Write(val change: (T) -> T, var accepted: Boolean = false)
+
+    /** [optimistic] writes in flight, those that overlapped (in the order made), the value before the first, and whether one failed. */
     private var writes = 0
-    private var overlapping = 0
+    private val overlapping = ArrayList<Write>()
     private var beforeWrites: T? = null
     private var writeFailed = false
 
@@ -92,22 +95,24 @@ open class LoadViewModel<T>(
 
     /**
      * Shows [change] at once and sends [write]; a failed write undoes the change and calls
-     * [onFailure]. When several overlap and one fails, the page goes back to the value before the
-     * first of them and is then re-read: a snapshot taken per write would also wipe a later change
-     * that the server accepted.
+     * [onFailure]. When several overlap and one fails, the page shows the value before the first of
+     * them with the accepted changes made again, and is then re-read: a snapshot taken per write
+     * would also wipe a later change that the server accepted, and so would going back to the first
+     * value whenever the re-read does not happen (another load is running) or fails.
      */
     protected fun optimistic(change: (T) -> T, onFailure: () -> Unit, write: suspend () -> Unit) {
         val ready = state as? LoadState.Ready ?: return
         if (writes++ == 0) {
             beforeWrites = ready.value
-            overlapping = 0
+            overlapping.clear()
             writeFailed = false
         }
-        overlapping++
+        val made = Write(change).also(overlapping::add)
         update(change)
         viewModelScope.launch {
             try {
                 write()
+                made.accepted = true
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -115,8 +120,8 @@ open class LoadViewModel<T>(
                 onFailure()
             } finally {
                 if (--writes == 0 && writeFailed) {
-                    beforeWrites?.let { before -> update { before } }
-                    if (overlapping > 1) refresh(force = true)
+                    beforeWrites?.let { before -> update { overlapping.filter { it.accepted }.fold<Write, T>(before) { value, write -> write.change(value) } } }
+                    if (overlapping.size > 1) refresh(force = true)
                 }
             }
         }

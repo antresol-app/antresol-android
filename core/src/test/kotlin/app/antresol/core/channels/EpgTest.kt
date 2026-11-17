@@ -46,6 +46,40 @@ class EpgTest {
     }
 
     @Test
+    fun aProgrammeAcrossAPageEdgeIsOneBlock() {
+        fun film(id: String, start: String, end: String, item: Long = 7) = p(id, start, end).copy(itemId = item)
+        fun merged(first: List<ChannelProgram>, second: List<ChannelProgram>) = Epg.merge(
+            Epg.merge(emptyList(), ChannelEpg(channels = listOf(ChannelEpgRow(1, programs = first)))),
+            ChannelEpg(channels = listOf(ChannelEpgRow(1, programs = second))),
+        )[0].programs.map { Triple(it.id, it.start.substring(11, 16), it.end.substring(11, 16)) }
+
+        // Sent again by the next page, with or without an id: once.
+        assertEquals(listOf(Triple("a", "20:00", "21:30")), merged(listOf(p("a", "20:00", "21:30")), listOf(p("a", "20:00", "21:30"))))
+        assertEquals(listOf(Triple("", "20:00", "21:30")), merged(listOf(p("", "20:00", "21:30")), listOf(p("", "20:00", "21:30"))))
+        // A film in two parts, the page's edge (21:00) in its first part: the next page has it whole.
+        assertEquals(
+            listOf(Triple("1-4", "20:10", "21:50"), Triple("1-6", "21:50", "22:30")),
+            merged(listOf(film("1-4", "20:10", "21:00")), listOf(film("1-4", "20:10", "21:50"), film("1-6", "21:50", "22:30", item = 8))),
+        )
+        // The edge in its second part: the next page has only that part, under its own id and start.
+        assertEquals(
+            listOf(Triple("1-3", "19:00", "20:00"), Triple("1-4", "20:10", "22:20")),
+            merged(
+                listOf(film("1-3", "19:00", "20:00", item = 6), film("1-4", "20:10", "21:50")),
+                listOf(film("1-5", "21:00", "22:20")),
+            ),
+        )
+        // The same start under another id (the schedule was rebuilt between the pages): one block.
+        assertEquals(listOf(Triple("1-9", "20:00", "21:30")), merged(listOf(film("1-4", "20:00", "21:00")), listOf(film("1-9", "20:00", "21:30", item = 8))))
+        // A repeat of the title right after it, and programmes without an item, stay apart.
+        assertEquals(
+            listOf(Triple("1-4", "20:00", "21:00"), Triple("1-5", "21:00", "22:00")),
+            merged(listOf(film("1-4", "20:00", "21:00")), listOf(film("1-5", "21:00", "22:00"))),
+        )
+        assertEquals(2, merged(listOf(p("x1", "20:00", "21:00")), listOf(p("x2", "20:30", "21:30"))).size)
+    }
+
+    @Test
     fun visibleProgrammesOverlapTheWindow() {
         val visible = Epg.visible(ChannelEpgRow(1, programs = row), ms("2026-11-11T21:30:00Z"), ms("2026-11-11T22:40:00Z"))
         assertEquals(listOf("b"), visible.map { it.id })

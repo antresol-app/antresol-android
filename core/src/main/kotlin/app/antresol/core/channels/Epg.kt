@@ -35,17 +35,46 @@ object Epg {
 
     /**
      * [page] merged into [rows]: the channels in [page]'s order (the list order, which may have
-     * changed), each with its programmes from both, by start, without duplicates (same id).
+     * changed), each with its programmes from both, by start, each programme once ([joined]).
      */
     fun merge(rows: List<ChannelEpgRow>, page: ChannelEpg): List<ChannelEpgRow> {
         val old = rows.associateBy { it.id }
         return page.channels.map { row ->
             val before = old[row.id]?.programs.orEmpty()
-            val programs = (before + row.programs)
-                .distinctBy { it.id.ifEmpty { it.start + it.itemId } }
-                .sortedBy { it.startMs ?: 0L }
-            row.copy(programs = programs)
+            row.copy(programs = joined(before + row.programs))
         }
+    }
+
+    /**
+     * What tells a channel's programmes apart, for the merge, a guide's blocks and the focus: the id,
+     * or the start when the source gives none ([joined] leaves one programme per start).
+     */
+    fun key(program: ChannelProgram): String = program.id.ifEmpty { program.start }
+
+    /**
+     * [programs] by start, each programme once. A programme across a page's edge comes with both
+     * pages, and the server joins the parts of a film (its files, back to back) within a page only:
+     * the same programme may come again with a later end (its second part began in the next page),
+     * or as its remaining parts with their own id and start. So a programme that starts with the
+     * one before it (or has its id) is that programme, the longer of the two; and one of the same
+     * title that starts before the one before it ends is the rest of it. A repeat of a title starts
+     * where the first showing ends and stays a programme of its own.
+     */
+    fun joined(programs: List<ChannelProgram>): List<ChannelProgram> {
+        val out = ArrayList<ChannelProgram>(programs.size)
+        for (next in programs.sortedBy { it.startMs ?: 0L }) {
+            val last = out.lastOrNull()
+            val lastEnd = last?.endMs ?: Long.MIN_VALUE
+            val longer = (next.endMs ?: Long.MIN_VALUE) > lastEnd
+            when {
+                last == null -> out += next
+                (next.start.isNotEmpty() && last.start == next.start) || key(last) == key(next) -> if (longer) out[out.lastIndex] = next
+                last.itemId != 0L && last.itemId == next.itemId && (next.startMs ?: Long.MAX_VALUE) < lastEnd ->
+                    if (longer) out[out.lastIndex] = last.copy(end = next.end)
+                else -> out += next
+            }
+        }
+        return out
     }
 
     /**

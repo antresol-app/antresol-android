@@ -235,7 +235,7 @@ private fun Timeline(
             val start = programStart.coerceAtLeast(fromMs)
             val end = programEnd.coerceAtMost(toMs)
             // Keyed: a block keeps its state when the composed window moves along the row.
-            key(program.id.ifEmpty { program.start }) {
+            key(Epg.key(program)) {
                 GuideBlock(
                     program = program,
                     onAir = nowMs in programStart until programEnd,

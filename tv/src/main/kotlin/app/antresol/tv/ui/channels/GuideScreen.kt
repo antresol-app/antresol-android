@@ -92,8 +92,8 @@ private val RulerHeight = 28.dp
 /** Lazy items before the first channel row: the page header and the sticky ruler. */
 private const val FIRST_ROW = 2
 
-/** What tells a channel's programmes apart: the id, or the start when the source gives none. */
-private val ChannelProgram.key: String get() = id.ifEmpty { start }
+/** What tells a channel's programmes apart (the merge's key). */
+private val ChannelProgram.key: String get() = Epg.key(this)
 
 /** A programme picked in the guide with its channel row. */
 private data class Picked(val row: ChannelEpgRow, val program: ChannelProgram)

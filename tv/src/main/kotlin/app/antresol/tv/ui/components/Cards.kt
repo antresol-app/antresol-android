@@ -31,6 +31,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Glow
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import app.antresol.core.api.MediaUrls
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
 import app.antresol.tv.ui.LocalMediaUrls
@@ -112,6 +113,7 @@ fun MediaCard(
                 title = card.title,
                 shape = outline,
                 fallbackUrl = if (shape == CardShape.Wide) urls?.image(card.wideFallback) else null,
+                fitsBox = MediaUrls.artworkFitsTile(card.kind, wideTile = shape == CardShape.Wide),
                 modifier = Modifier
                     .fillMaxSize()
                     .alpha(WatchedStyle.artworkAlpha(card.watched, focused)),

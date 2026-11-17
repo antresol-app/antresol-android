@@ -1,5 +1,6 @@
 package app.antresol.core.api
 
+import app.antresol.core.model.Kind
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.net.URLEncoder
@@ -156,6 +157,14 @@ class MediaUrls(baseUrl: String) {
          */
         fun neededTileWidth(widthPx: Int, heightPx: Int, crop: Boolean): Int =
             if (crop) maxOf(widthPx, heightPx) else widthPx
+
+        /**
+         * Whether the artwork of a card of [kind] has about the shape of its tile, so that
+         * [neededTileWidth] is enough. Not an episode outside a wide tile: its `poster` is its own
+         * 16:9 still when it has one, which a tall tile cuts from a much wider picture
+         * ([neededImageWidth]: 534 px for a 200 by 300 tile, not 300).
+         */
+        fun artworkFitsTile(kind: String, wideTile: Boolean): Boolean = wideTile || kind != Kind.EPISODE
 
         internal fun formatSeconds(sec: Double): String =
             if (sec == Math.floor(sec)) sec.toLong().toString() else "%.3f".format(java.util.Locale.ROOT, sec)

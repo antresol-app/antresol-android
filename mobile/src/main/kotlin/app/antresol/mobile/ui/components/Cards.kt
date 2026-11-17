@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.antresol.core.api.MediaUrls
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
 import app.antresol.mobile.R
@@ -114,6 +115,7 @@ fun MediaCard(
             ArtworkImage(
                 url = urls?.image(image),
                 fallbackUrl = if (style == CardStyle.Wide) urls?.image(card.wideFallback) else null,
+                fitsBox = MediaUrls.artworkFitsTile(card.kind, wideTile = style == CardStyle.Wide),
                 title = card.title,
                 shape = if (circle) CircleShape else AntresolShapes.card,
                 modifier = Modifier

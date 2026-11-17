@@ -50,6 +50,12 @@ fun ArtworkImage(
      * composition of this artwork (a later visit) asks for [url] again; failures are not cached.
      */
     fallbackUrl: String? = null,
+    /**
+     * The artwork has about the box's shape (a poster in a poster tile), so the server's copy only has
+     * to be the box's larger side. False for a picture that may be much wider than the box (an
+     * episode's still in a poster tile, `MediaUrls.artworkFitsTile`): it is asked for at its cut width.
+     */
+    fitsBox: Boolean = true,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     var failed by remember(url) { mutableStateOf(false) }
@@ -65,8 +71,8 @@ fun ArtworkImage(
         if (model != null) {
             val context = LocalContext.current
             // Tile artwork sits in a box of about its own shape, so the server's copy only has to be the box's larger side.
-            val request = remember(model, context) {
-                ImageRequest.Builder(context).data(model).setParameter(AntresolImageLoader.FITS_BOX, true, memoryCacheKey = null).build()
+            val request = remember(model, context, fitsBox) {
+                ImageRequest.Builder(context).data(model).setParameter(AntresolImageLoader.FITS_BOX, fitsBox, memoryCacheKey = null).build()
             }
             AsyncImage(
                 model = request,

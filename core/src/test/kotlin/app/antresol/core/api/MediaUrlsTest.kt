@@ -7,6 +7,7 @@ import okhttp3.Request
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.Duration
@@ -74,6 +75,18 @@ class MediaUrlsTest {
         assertEquals(480, MediaUrls.neededTileWidth(480, 270, crop = true)) // a wide tile: its width
         assertEquals(200, MediaUrls.neededTileWidth(200, 200, crop = true))
         assertEquals(300, MediaUrls.neededTileWidth(300, 450, crop = false)) // fitted inside: never wider than the box
+    }
+
+    @Test
+    fun anEpisodesStillInATallTileIsAskedForAtItsCutWidth() {
+        // An episode's poster may be its 16:9 still: in a poster or square tile it is not the tile's shape.
+        assertEquals(false, MediaUrls.artworkFitsTile("episode", wideTile = false))
+        assertTrue(MediaUrls.artworkFitsTile("episode", wideTile = true))
+        assertTrue(MediaUrls.artworkFitsTile("movie", wideTile = false))
+        assertTrue(MediaUrls.artworkFitsTile("album", wideTile = false))
+        // What it then needs in a 200 by 300 tile: the still's width at the tile's height, not the tile's larger side.
+        assertEquals(534, MediaUrls.neededImageWidth(200, 300, crop = true))
+        assertEquals(300, MediaUrls.neededTileWidth(200, 300, crop = true))
     }
 
     @Test

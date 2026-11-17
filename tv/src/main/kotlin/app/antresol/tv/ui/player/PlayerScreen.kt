@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,7 +100,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onExit: () -> Unit) {
             is PlayerPhase.AskResume -> Backdrop(viewModel.item) {
                 ResumePrompt(viewModel.item, phase.positionMs, onChoose = viewModel::chooseResume)
             }
-            PlayerPhase.Playing -> PlayingOverlay(viewModel)
+            PlayerPhase.Playing -> PlayingOverlay(viewModel, onExit)
             is PlayerPhase.UpNext -> UpNextOverlay(phase, onPlayNow = viewModel::playNext, onCancel = viewModel::cancelUpNext)
             is PlayerPhase.Failed -> Backdrop(viewModel.item) { ErrorView(phase.error, onRetry = viewModel::retry) }
             PlayerPhase.Finished -> Unit
@@ -207,20 +208,21 @@ private fun TitleBlock(item: ItemDetail?) {
 
 /** Video with the transport controls, the buffering spinner and the track menus. */
 @Composable
-private fun PlayingOverlay(viewModel: PlayerViewModel) {
+private fun PlayingOverlay(viewModel: PlayerViewModel, onExit: () -> Unit) {
     // The position ticks twice a second for the whole film: it is read by the seek bar only (the
     // lambdas below), and the rest is the same between passes, so nothing is recomposed while the
     // controls are hidden.
     val source = viewModel.source
     val audioChoice = remember(source) { viewModel.audioTracks.size > 1 }
     val subtitleChoice = remember(source) { viewModel.subtitleTracks.isNotEmpty() }
+    val exit by rememberUpdatedState(onExit)
     val actions = remember(viewModel) {
         TransportActions(
             onSeek = viewModel::seekBy,
             onToggle = viewModel::togglePlayPause,
             onNext = viewModel::playNext,
             onScrubKey = { handleScrubKey(it, viewModel) },
-            onMediaKey = { handleMediaKey(it, viewModel) },
+            onMediaKey = { handleMediaKey(it, viewModel) { exit() } },
             onHiddenKey = { event, show -> handleHiddenKey(event, viewModel, show) },
         )
     }
@@ -375,25 +377,42 @@ private fun handleScrubKey(event: KeyEvent, viewModel: PlayerViewModel): Boolean
     return true
 }
 
+/** What a remote's media key does in the film player. */
+internal enum class MediaKeyAction { TogglePlay, Play, Pause, Forward, Backward, Next, Restart, Stop }
+
+internal fun mediaKeyAction(key: Key): MediaKeyAction? = when (key) {
+    Key.MediaPlayPause -> MediaKeyAction.TogglePlay
+    Key.MediaPlay -> MediaKeyAction.Play
+    Key.MediaPause -> MediaKeyAction.Pause
+    Key.MediaFastForward, Key.MediaSkipForward, Key.MediaStepForward -> MediaKeyAction.Forward
+    Key.MediaRewind, Key.MediaSkipBackward, Key.MediaStepBackward -> MediaKeyAction.Backward
+    Key.MediaNext -> MediaKeyAction.Next
+    // «Previous» starts the film again, as on a disc player; there is no previous-episode route.
+    Key.MediaPrevious -> MediaKeyAction.Restart
+    // «Stop» leaves the player (the position is saved like on Back).
+    Key.MediaStop -> MediaKeyAction.Stop
+    else -> null
+}
+
 /** Remote media keys and number keys work whether or not the controls are showing. */
-private fun handleMediaKey(event: KeyEvent, viewModel: PlayerViewModel): Boolean {
+private fun handleMediaKey(event: KeyEvent, viewModel: PlayerViewModel, onExit: () -> Unit): Boolean {
     val digit = DigitKeys.indexOf(event.key)
     if (digit >= 0) {
         if (event.type == KeyEventType.KeyDown) viewModel.jumpToTenth(digit)
         return true
     }
-    val action: (() -> Unit) = when (event.key) {
-        Key.MediaPlayPause -> viewModel::togglePlayPause
-        Key.MediaPlay -> { { viewModel.player.play() } }
-        Key.MediaPause -> { { viewModel.player.pause() } }
-        Key.MediaFastForward -> { { viewModel.seekBy(VideoPlayerViewModel.SEEK_STEP_MS) } }
-        Key.MediaRewind -> { { viewModel.seekBy(-VideoPlayerViewModel.SEEK_STEP_MS) } }
-        Key.MediaNext -> viewModel::playNext
-        Key.MediaSkipForward, Key.MediaStepForward -> { { viewModel.seekBy(VideoPlayerViewModel.SEEK_STEP_MS) } }
-        Key.MediaSkipBackward, Key.MediaStepBackward -> { { viewModel.seekBy(-VideoPlayerViewModel.SEEK_STEP_MS) } }
-        else -> return false
+    val action = mediaKeyAction(event.key) ?: return false
+    if (event.type != KeyEventType.KeyDown) return true
+    when (action) {
+        MediaKeyAction.TogglePlay -> viewModel.togglePlayPause()
+        MediaKeyAction.Play -> viewModel.player.play()
+        MediaKeyAction.Pause -> viewModel.player.pause()
+        MediaKeyAction.Forward -> viewModel.seekBy(VideoPlayerViewModel.SEEK_STEP_MS)
+        MediaKeyAction.Backward -> viewModel.seekBy(-VideoPlayerViewModel.SEEK_STEP_MS)
+        MediaKeyAction.Next -> viewModel.playNext()
+        MediaKeyAction.Restart -> viewModel.seekTo(0)
+        MediaKeyAction.Stop -> onExit()
     }
-    if (event.type == KeyEventType.KeyDown) action()
     return true
 }
 

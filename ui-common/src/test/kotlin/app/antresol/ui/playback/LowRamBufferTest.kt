@@ -8,22 +8,27 @@ import org.junit.Test
 class LowRamBufferTest {
     private val mb = 1024 * 1024
 
+    private val gb = 1024L * 1024 * 1024
+
     @Test
-    fun ordinaryDevicesKeepTheDefault() {
-        assertNull(lowRamBufferBytes(lowRamDevice = false, memoryClassMb = 256))
-        assertNull(lowRamBufferBytes(lowRamDevice = false, memoryClassMb = 512))
+    fun ordinaryDevicesKeepTheDefaultWhateverTheirHeap() {
+        assertNull(lowRamBufferBytes(lowRamDevice = false, totalRamBytes = 4 * gb, memoryClassMb = 256))
+        // A 3–4 GB phone or TV box often reports a 192 MB (or smaller) heap: not low on memory.
+        assertNull(lowRamBufferBytes(lowRamDevice = false, totalRamBytes = 3 * gb, memoryClassMb = 192))
+        assertNull(lowRamBufferBytes(lowRamDevice = false, totalRamBytes = 2 * gb + 1, memoryClassMb = 128))
     }
 
     @Test
-    fun smallHeapsGetAQuarterOfTheHeap() {
-        assertEquals(48 * mb, lowRamBufferBytes(lowRamDevice = false, memoryClassMb = 192))
-        assertEquals(32 * mb, lowRamBufferBytes(lowRamDevice = false, memoryClassMb = 128))
-        assertEquals(16 * mb, lowRamBufferBytes(lowRamDevice = false, memoryClassMb = 48))
+    fun aDeviceWithTwoGigabytesOrLessGetsAThirdOfTheHeap() {
+        assertEquals(64 * mb, lowRamBufferBytes(lowRamDevice = false, totalRamBytes = 2 * gb, memoryClassMb = 192))
+        assertEquals(42 * mb, lowRamBufferBytes(lowRamDevice = false, totalRamBytes = 2 * gb - 200 * mb, memoryClassMb = 128))
+        // Never under 32 MB: 13 s of a 20 Mbit/s file.
+        assertEquals(32 * mb, lowRamBufferBytes(lowRamDevice = false, totalRamBytes = gb, memoryClassMb = 48))
     }
 
     @Test
-    fun aLowRamDeviceIsCappedWhateverItsHeap() {
-        assertEquals(64 * mb, lowRamBufferBytes(lowRamDevice = true, memoryClassMb = 384))
-        assertEquals(24 * mb, lowRamBufferBytes(lowRamDevice = true, memoryClassMb = 96))
+    fun aLowRamDeviceIsCappedWhateverItsMemory() {
+        assertEquals(64 * mb, lowRamBufferBytes(lowRamDevice = true, totalRamBytes = 4 * gb, memoryClassMb = 384))
+        assertEquals(32 * mb, lowRamBufferBytes(lowRamDevice = true, totalRamBytes = 4 * gb, memoryClassMb = 96))
     }
 }

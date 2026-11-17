@@ -1015,17 +1015,21 @@ fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun videoLoadControl(context: Context): LoadControl {
     val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-    val bytes = lowRamBufferBytes(manager.isLowRamDevice, manager.memoryClass) ?: return DefaultLoadControl()
+    val memory = ActivityManager.MemoryInfo().also(manager::getMemoryInfo)
+    val bytes = lowRamBufferBytes(manager.isLowRamDevice, memory.totalMem, manager.memoryClass) ?: return DefaultLoadControl()
     return DefaultLoadControl.Builder().setTargetBufferBytes(bytes).setPrioritizeTimeOverSizeThresholds(false).build()
 }
 
 /**
- * The buffer size for a low-RAM device (the system says so, or the app's heap limit [memoryClassMb] is
- * at most [LOW_RAM_MEMORY_CLASS_MB]): a quarter of the heap, between 16 and 64 MB. Null elsewhere (ExoPlayer's default).
+ * The buffer size for a low-RAM device: the system says so, or it has at most [LOW_RAM_TOTAL_BYTES] of
+ * memory. Not the app's heap limit: ordinary phones and TV boxes with 3–4 GB report 192 MB too. A
+ * third of the heap [memoryClassMb], between 32 and 64 MB: 32 MB is 13 s of a 20 Mbit/s file and 3 s
+ * of an 80 Mbit/s remux, which less would not carry over a Wi-Fi stall. Null elsewhere (ExoPlayer's default).
  */
-internal fun lowRamBufferBytes(lowRamDevice: Boolean, memoryClassMb: Int): Int? {
-    if (!lowRamDevice && memoryClassMb > LOW_RAM_MEMORY_CLASS_MB) return null
-    return (memoryClassMb / 4).coerceIn(16, 64) * 1024 * 1024
+internal fun lowRamBufferBytes(lowRamDevice: Boolean, totalRamBytes: Long, memoryClassMb: Int): Int? {
+    if (!lowRamDevice && totalRamBytes > LOW_RAM_TOTAL_BYTES) return null
+    return (memoryClassMb / 3).coerceIn(32, 64) * 1024 * 1024
 }
 
-private const val LOW_RAM_MEMORY_CLASS_MB = 192
+/** A device sold as «2 GB» reports a little less than that. */
+private const val LOW_RAM_TOTAL_BYTES = 2L * 1024 * 1024 * 1024

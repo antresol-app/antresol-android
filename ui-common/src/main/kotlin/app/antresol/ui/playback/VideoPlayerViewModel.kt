@@ -1009,27 +1009,41 @@ fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
 }
 
 /**
- * ExoPlayer's default load control, with the buffer's size capped on a low-RAM device: the default
- * holds up to about 130 MB of a high-bitrate file in the Java heap, most of what such a device gives an app.
+ * ExoPlayer's default load control, with the buffer's size bound by the app's heap: the default holds
+ * up to about 138 MB of a high-bitrate file in the Java heap, more than most devices give an app.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun videoLoadControl(context: Context): LoadControl {
     val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     val memory = ActivityManager.MemoryInfo().also(manager::getMemoryInfo)
-    val bytes = lowRamBufferBytes(manager.isLowRamDevice, memory.totalMem, manager.memoryClass) ?: return DefaultLoadControl()
+    val bytes = videoBufferBytes(manager.isLowRamDevice, memory.totalMem, manager.memoryClass) ?: return DefaultLoadControl()
     return DefaultLoadControl.Builder().setTargetBufferBytes(bytes).setPrioritizeTimeOverSizeThresholds(false).build()
 }
 
 /**
- * The buffer size for a low-RAM device: the system says so, or it has at most [LOW_RAM_TOTAL_BYTES] of
- * memory. Not the app's heap limit: ordinary phones and TV boxes with 3–4 GB report 192 MB too. A
- * third of the heap [memoryClassMb], between 32 and 64 MB: 32 MB is 13 s of a 20 Mbit/s file and 3 s
- * of an 80 Mbit/s remux, which less would not carry over a Wi-Fi stall. Null elsewhere (ExoPlayer's default).
+ * The video buffer's size: a third of the heap [memoryClassMb] on every device, since the buffer is
+ * `byte[]` in that heap whatever memory the device has (a 3 GB TV box gives an app 128–192 MB and
+ * plays a 60–80 Mbit/s remux). At least [MIN_BUFFER_MB] (under it nothing of such a file is left to
+ * play from: 16 MB is 2 s at 60 Mbit/s; a heap that makes this more than a third is 48 MB or less),
+ * and null (ExoPlayer's default) where a third is the default's [DEFAULT_BUFFER_MB] or more. A
+ * low-RAM device (the system says so, or it has at most [LOW_RAM_TOTAL_BYTES] of memory) gets no
+ * more than [LOW_RAM_MAX_BUFFER_MB] whatever its heap.
+ *
+ * Heap → buffer (at 60 / 80 Mbit/s): 48 → 16 MB (2.2 / 1.7 s), 64 → 21 (2.9 / 2.2 s), 128 → 42
+ * (5.9 / 4.4 s), 192 → 64 (8.9 / 6.7 s), 256 → 85 (11.9 / 8.9 s; low-RAM 64), 512 → the default
+ * 138 (19 / 14 s; low-RAM 64).
  */
-internal fun lowRamBufferBytes(lowRamDevice: Boolean, totalRamBytes: Long, memoryClassMb: Int): Int? {
-    if (!lowRamDevice && totalRamBytes > LOW_RAM_TOTAL_BYTES) return null
-    return (memoryClassMb / 3).coerceIn(32, 64) * 1024 * 1024
+internal fun videoBufferBytes(lowRamDevice: Boolean, totalRamBytes: Long, memoryClassMb: Int): Int? {
+    val lowRam = lowRamDevice || totalRamBytes <= LOW_RAM_TOTAL_BYTES
+    val megabytes = (memoryClassMb / 3).coerceAtLeast(MIN_BUFFER_MB).let { if (lowRam) minOf(it, LOW_RAM_MAX_BUFFER_MB) else it }
+    return if (megabytes >= DEFAULT_BUFFER_MB) null else megabytes * 1024 * 1024
 }
+
+private const val MIN_BUFFER_MB = 16
+private const val LOW_RAM_MAX_BUFFER_MB = 64
+
+/** `DefaultLoadControl`'s own target for a video with sound: 2000 + 200 segments of 64 KB, and a little for text. */
+private const val DEFAULT_BUFFER_MB = 138
 
 /** A device sold as «2 GB» reports a little less than that. */
 private const val LOW_RAM_TOTAL_BYTES = 2L * 1024 * 1024 * 1024

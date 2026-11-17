@@ -69,7 +69,7 @@ object AntresolImageLoader {
     }
 }
 
-/** The app's heap limit (MB) at or under which a device counts as low on memory, as for the video buffer. */
+/** The app's heap limit (MB) at or under which a device counts as low on memory for decoding images. */
 private const val LOW_RAM_MEMORY_CLASS_MB = 192
 
 /**

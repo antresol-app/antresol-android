@@ -23,9 +23,10 @@ class FocusMemory(initialKey: String?) {
     var focusedKey: String? by mutableStateOf(initialKey)
         private set
 
-    private val requesters = mutableMapOf<String, FocusRequester>()
+    /** Kept while the element is on screen: only [focusedKey] has to outlive it. */
+    internal val requesters = FocusRequesters<String>()
 
-    fun requester(key: String): FocusRequester = requesters.getOrPut(key) { FocusRequester() }
+    fun requester(key: String): FocusRequester = requesters[key]
 
     fun onFocused(key: String) {
         focusedKey = key
@@ -84,8 +85,8 @@ fun rememberFocusMemory(): FocusMemory {
 
 /** Registers this focusable under [key] in [memory]. Put it before the focusable modifier. */
 fun Modifier.remembersFocus(memory: FocusMemory, key: String): Modifier =
-    focusRequester(memory.requester(key)).onFocusChanged { if (it.isFocused) memory.onFocused(key) }
+    focusRequester(memory.requesters, key).onFocusChanged { if (it.isFocused) memory.onFocused(key) }
 
 /** Like [remembersFocus] for a focus group (sort pills): remembered while any child has focus. */
 fun Modifier.remembersGroupFocus(memory: FocusMemory, key: String): Modifier =
-    focusRequester(memory.requester(key)).onFocusChanged { if (it.hasFocus) memory.onFocused(key) }
+    focusRequester(memory.requesters, key).onFocusChanged { if (it.hasFocus) memory.onFocused(key) }

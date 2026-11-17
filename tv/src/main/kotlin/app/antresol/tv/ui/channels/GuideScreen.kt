@@ -39,8 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -66,6 +64,8 @@ import app.antresol.core.model.Channel
 import app.antresol.core.model.ChannelEpgRow
 import app.antresol.core.model.ChannelProgram
 import app.antresol.tv.ui.LocalMediaUrls
+import app.antresol.tv.ui.components.FocusRequesters
+import app.antresol.tv.ui.components.focusRequester
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.LoadingView
 import app.antresol.tv.ui.components.ScreenPaddingH
@@ -193,9 +193,11 @@ private fun GuideGrid(
     val minute = remember(rows.isNotEmpty()) { Epg.minuteWidth(rows, 170f, 5f, 28f).dp }
     val tick = Epg.tickMs(minute.value, 110f)
     val width = (toMs - fromMs).minutesToDp(minute)
-    val requesters = remember { mutableMapOf<String, FocusRequester>() }
+    // Only the blocks on screen keep one: the guide is paged hours ahead.
+    val requesters = remember { FocusRequesters<String>() }
     // Keyed by the channel too: programmes without an id that start together on two channels are different blocks.
-    fun requester(row: ChannelEpgRow, program: ChannelProgram) = requesters.getOrPut("${row.id}/${program.key}") { FocusRequester() }
+    fun requesterKey(row: ChannelEpgRow, program: ChannelProgram) = "${row.id}/${program.key}"
+    fun requester(row: ChannelEpgRow, program: ChannelProgram) = requesters[requesterKey(row, program)]
     // The time position kept by vertical moves, and where focus is.
     var anchorMs by remember { mutableLongStateOf(nowMs) }
     var focusedRow by remember { mutableStateOf(rows.indexOfFirst { it.id == lastChannelId }.coerceAtLeast(0)) }
@@ -332,7 +334,8 @@ private fun GuideGrid(
                             nowMs = nowMs,
                             width = width,
                             clock = clock,
-                            requester = ::requester,
+                            requesters = requesters,
+                            requesterKey = ::requesterKey,
                             onFocused = { program ->
                                 focusedRow = index
                                 focusedProgram = program
@@ -449,7 +452,8 @@ private fun Timeline(
     nowMs: Long,
     width: Dp,
     clock: java.text.DateFormat,
-    requester: (ChannelEpgRow, ChannelProgram) -> FocusRequester,
+    requesters: FocusRequesters<String>,
+    requesterKey: (ChannelEpgRow, ChannelProgram) -> String,
     onFocused: (ChannelProgram) -> Unit,
     onPick: (ChannelProgram) -> Unit,
 ) {
@@ -478,7 +482,7 @@ private fun Timeline(
                         .width((end - start).minutesToDp())
                         .fillMaxHeight()
                         .padding(horizontal = 1.dp, vertical = 3.dp)
-                        .focusRequester(requester(row, program))
+                        .focusRequester(requesters, requesterKey(row, program))
                         .onFocusChanged { if (it.isFocused) onFocused(program) },
                 )
             }

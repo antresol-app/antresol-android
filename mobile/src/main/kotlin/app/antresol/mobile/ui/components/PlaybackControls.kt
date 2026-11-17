@@ -26,12 +26,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.antresol.mobile.R
 import app.antresol.ui.format.Durations
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
@@ -53,6 +56,8 @@ fun TimeSlider(
     var dragging by remember { mutableStateOf<Float?>(null) }
     val duration = durationMs.coerceAtLeast(1)
     val shown = dragging?.let { (it * duration).toLong() } ?: positionMs.coerceIn(0, duration)
+    // TalkBack reads the time instead of a percentage.
+    val spoken = stringResource(R.string.time_slider_position, Durations.clock(shown), Durations.clock(durationMs))
     Column(modifier.fillMaxWidth()) {
         Slider(
             value = dragging ?: (positionMs.toFloat() / duration).coerceIn(0f, 1f),
@@ -88,7 +93,7 @@ fun TimeSlider(
                     drawStopIndicator = null,
                 )
             },
-            modifier = Modifier.fillMaxWidth().height(28.dp).testTag("time-slider"),
+            modifier = Modifier.fillMaxWidth().height(28.dp).semantics { stateDescription = spoken }.testTag("time-slider"),
         )
         Row(Modifier.fillMaxWidth()) {
             Text(Durations.clock(shown), style = Antresol.typography.caption, modifier = Modifier.weight(1f))

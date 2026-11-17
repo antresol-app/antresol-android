@@ -63,6 +63,8 @@
     <string name="sleep_end_of_chapter">End of Chapter</string>
     <string name="sleep_end_of_track">End of Track</string>
     <string name="sleep_end_short">End</string>
+    <!-- What a screen reader says for the seek slider: «12:34 of 1:02:00» -->
+    <string name="time_slider_position">%1$s of %2$s</string>
     <string name="reader_unavailable">This book can’t be opened.</string>
     <string name="reader_page_of">Page %1$d of %2$d</string>
     <string name="reader_next_volume">Next Volume</string>

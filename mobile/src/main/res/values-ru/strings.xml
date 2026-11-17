@@ -61,6 +61,8 @@
     <string name="sleep_end_of_chapter">В конце главы</string>
     <string name="sleep_end_of_track">В конце трека</string>
     <string name="sleep_end_short">Конец</string>
+    <!-- What a screen reader says for the seek slider: «12:34 of 1:02:00» -->
+    <string name="time_slider_position">%1$s из %2$s</string>
     <string name="reader_unavailable">Эту книгу не удаётся открыть.</string>
     <string name="reader_page_of">Страница %1$d из %2$d</string>
     <string name="reader_next_volume">Следующий том</string>

@@ -36,16 +36,25 @@ class PdfDocument(file: File) : Closeable {
 
     val pageCount: Int get() = aspectRatios.size
 
-    /** Renders page [index] [widthPx] wide on white. */
+    /**
+     * The last few rendered pages, so scrolling back a page does not render it again. Evicted bitmaps
+     * are left to the garbage collector: a page still on screen may be drawing one.
+     */
+    private val rendered = object : LinkedHashMap<Pair<Int, Int>, Bitmap>(CACHED_PAGES + 1, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<Int, Int>, Bitmap>) = size > CACHED_PAGES
+    }
+
+    /** Renders page [index] [widthPx] wide on white (smaller when the page would be over [MAX_PAGE_PIXELS]). */
     suspend fun render(index: Int, widthPx: Int): Bitmap? = withContext(Dispatchers.IO) {
         lock.withLock {
             if (closed) return@withLock null
+            rendered[index to widthPx]?.let { return@withLock it }
             renderer.openPage(index).use { page ->
-                val width = widthPx.coerceIn(1, MAX_WIDTH_PX)
-                val height = (width * page.height.toFloat() / page.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+                val (width, height) = pdfRenderSize(page.width, page.height, widthPx)
                 Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
                     bitmap.eraseColor(Color.WHITE)
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    rendered[index to widthPx] = bitmap
                 }
             }
         }
@@ -59,6 +68,7 @@ class PdfDocument(file: File) : Closeable {
         lock.withLock {
             if (closed) return@withLock
             closed = true
+            rendered.clear()
             runCatching { renderer.close() }
             runCatching { descriptor.close() }
         }
@@ -73,8 +83,25 @@ class PdfDocument(file: File) : Closeable {
     }
 
     private companion object {
-        const val MAX_WIDTH_PX = 2_400
+        const val CACHED_PAGES = 3
     }
+}
+
+/** The widest a PDF page is rendered. */
+private const val MAX_PAGE_WIDTH_PX = 2_400
+
+/** The most pixels of one rendered PDF page: 16 MB as ARGB_8888 (a 2400 px wide A4 page would be 32 MB). */
+internal const val MAX_PAGE_PIXELS = 4_000_000
+
+/**
+ * The bitmap size of a [pageWidth] by [pageHeight] page (points) drawn [widthPx] wide: the page's
+ * shape, at most [MAX_PAGE_WIDTH_PX] wide and at most [MAX_PAGE_PIXELS] in all.
+ */
+internal fun pdfRenderSize(pageWidth: Int, pageHeight: Int, widthPx: Int): Pair<Int, Int> {
+    val aspect = pageHeight.coerceAtLeast(1).toDouble() / pageWidth.coerceAtLeast(1)
+    val widest = Math.sqrt(MAX_PAGE_PIXELS / aspect).toInt()
+    val width = widthPx.coerceAtMost(MAX_PAGE_WIDTH_PX).coerceAtMost(widest).coerceAtLeast(1)
+    return width to (width * aspect).toInt().coerceAtLeast(1)
 }
 
 /** A book ready to read in the PDF reader. */

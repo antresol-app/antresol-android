@@ -54,6 +54,7 @@ import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PrimaryPillButton
+import app.antresol.mobile.ui.components.RefreshBox
 import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.Shelf
 import app.antresol.mobile.ui.components.TrackRow
@@ -95,7 +96,7 @@ fun MediaDetailScreen(
     NoticeSnackbar(viewModel.notice, snackbar, viewModel::consumeNotice)
     PlaylistPickerHost(viewModel.playlistPicker, snackbar)
     var dialog by rememberSaveable { mutableStateOf<PlaylistDialog?>(null) }
-    Box(Modifier.fillMaxSize().background(AntresolColors.Background)) {
+    RefreshBox(viewModel.refreshing, onRefresh = viewModel::pullToRefresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
         when (val state = viewModel.state) {
             LoadState.Loading -> DetailStateBox(onBack) { LoadingView() }
             is LoadState.Failed -> DetailStateBox(onBack) { ErrorView(state.error, onRetry = viewModel::reload) }

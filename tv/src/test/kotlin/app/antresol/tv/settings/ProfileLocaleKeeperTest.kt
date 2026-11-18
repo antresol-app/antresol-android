@@ -53,6 +53,43 @@ class ProfileLocaleKeeperTest {
         assertSame(russian, ProfileLocaleKeeper().apply { language = "ru" }.resources(context, russian))
     }
 
+    private fun resourcesIn(language: String) = context.createConfigurationContext(
+        Configuration(context.resources.configuration).apply { setLocales(LocaleList(Locale.forLanguageTag(language))) },
+    ).resources
+
+    @Test
+    fun aContextWrappedInAnotherLanguageFollowsTheDeviceWhenTheProfileHasNone() {
+        // the process started under a "ru" profile; the next profile follows the device (English here)
+        val russian = resourcesIn("ru")
+        val keeper = ProfileLocaleKeeper()
+        val served = keeper.resources(context, russian)
+        assertEquals("All Channels", served.getString(R.string.tv_all_channels))
+        assertSame("made once per configuration", served, keeper.resources(context, russian))
+        // and back to a profile language: the base is already in it
+        keeper.language = "ru"
+        assertSame(russian, keeper.resources(context, russian))
+        assertEquals("Все каналы", keeper.resources(context, context.resources).getString(R.string.tv_all_channels))
+        // a device that is not English serves its own language
+        val russianDevice = ProfileLocaleKeeper(deviceLocales = { LocaleList(Locale.forLanguageTag("ru")) })
+        assertEquals("Все каналы", russianDevice.resources(context, context.resources).getString(R.string.tv_all_channels))
+        assertSame(russian, russianDevice.resources(context, russian))
+    }
+
+    @Test
+    fun theResourcesFollowEveryChangeOfTheLanguage() {
+        val keeper = ProfileLocaleKeeper()
+        val english = context.resources
+        keeper.language = "ru"
+        assertEquals("Все каналы", keeper.resources(context, english).getString(R.string.tv_all_channels))
+        // a new language replaces the kept resources, it is not served from them
+        keeper.language = "en"
+        assertSame(english, keeper.resources(context, english))
+        keeper.language = ""
+        assertSame(english, keeper.resources(context, english))
+        keeper.language = "ru"
+        assertEquals("Все каналы", keeper.resources(context, english).getString(R.string.tv_all_channels))
+    }
+
     @Test
     fun theDefaultLocaleIsPutBack() {
         Locale.setDefault(Locale.ENGLISH)

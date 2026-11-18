@@ -1,6 +1,7 @@
 package app.antresol.tv.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,9 +13,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -53,8 +56,18 @@ internal class SkipOverlay(
         null -> false
     }
 
-    /** What takes focus with the controls hidden (OK presses it): changes when another pill shows. */
-    fun focusKey(controlsVisible: Boolean): String? = when {
+    /**
+     * What takes focus with the controls hidden (OK presses it): a skip pill within its first 8 s,
+     * changes when another one shows. «Следующая серия» and the note of an automatic skip never take it,
+     * so OK still pauses while they are up; they are reached with the controls (Up from the seek bar).
+     */
+    fun focusKey(controlsVisible: Boolean): String? = when (pill) {
+        is SkipPill.Skip -> if (pillShown(controlsVisible)) "skip:${pill.kind}" else null
+        else -> null
+    }
+
+    /** What is on screen now (a pill or the note), for when it goes: changes when another one shows. */
+    fun shownKey(controlsVisible: Boolean): String? = when {
         pillShown(controlsVisible) -> when (pill) {
             is SkipPill.Skip -> "skip:${pill.kind}"
             else -> "next"
@@ -75,8 +88,9 @@ internal object SkipTags {
 /**
  * The skip pills over the video, bottom right: «Пропустить пересказ / вступление / титры»,
  * «Смотреть титры» + «Следующая серия» (filling while it counts down), and the note of an automatic
- * skip with «Вернуть». [focus] goes on the pill OK should press ([SkipOverlay.focusKey]).
+ * skip with «Вернуть». [focus] goes on the skip pill OK should press ([SkipOverlay.focusKey]).
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun SkipPills(skip: SkipOverlay, controlsVisible: Boolean, focus: FocusRequester, modifier: Modifier = Modifier) {
     val pillShown = skip.pillShown(controlsVisible)
@@ -96,9 +110,7 @@ internal fun SkipPills(skip: SkipOverlay, controlsVisible: Boolean, focus: Focus
                 PillButton(
                     text = stringResource(R.string.player_skip_undo),
                     onClick = skip.onUndo,
-                    modifier = Modifier
-                        .then(if (!pillShown) Modifier.focusRequester(focus) else Modifier)
-                        .testTag(SkipTags.UNDO),
+                    modifier = Modifier.testTag(SkipTags.UNDO),
                 )
             }
         }
@@ -116,7 +128,11 @@ internal fun SkipPills(skip: SkipOverlay, controlsVisible: Boolean, focus: Focus
                 icon = AntresolIcons.SkipAhead,
                 modifier = Modifier.focusRequester(focus).testTag(SkipTags.SKIP),
             )
-            is SkipPill.Next -> Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            // Focus entering the pair (Up from the seek bar) lands on «Следующая серия», not on its neighbour.
+            is SkipPill.Next -> Row(
+                modifier = Modifier.focusProperties { enter = { focus } }.focusGroup(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 PillButton(
                     text = stringResource(R.string.player_watch_credits),
                     onClick = skip.onWatchCredits,

@@ -55,9 +55,9 @@ class SkipSegmentsTest {
         assertTrue(SkipSegments.creditsToEnd(credits, 2590.5))
         assertFalse(SkipSegments.creditsToEnd(credits, 2600.0))
         assertTrue(SkipSegments.creditsToEnd(credits, 0.0))
-        assertEquals(0.5, SkipSegments.countdown(2500.0, 2505.0), 1e-9)
-        assertEquals(1.0, SkipSegments.countdown(2500.0, 2600.0), 1e-9)
-        assertEquals(0.0, SkipSegments.countdown(2500.0, 2490.0), 1e-9)
+        assertEquals(0.5, SkipSegments.countdown(5_000), 1e-9)
+        assertEquals(1.0, SkipSegments.countdown(100_000), 1e-9)
+        assertEquals(0.0, SkipSegments.countdown(-3_000), 1e-9)
     }
 
     private fun SkipTracker.at(
@@ -105,14 +105,55 @@ class SkipSegmentsTest {
     @Test
     fun creditsOfAnEpisodeOfferNextAndCountDown() {
         val t = SkipTracker(episode)
+        // a tick every second, playing: ten seconds of it fill the pill
         val start = t.at(2500.0, nowMs = 0).pill as SkipPill.Next
         assertTrue(start.countdown)
         assertEquals(0f, start.fill)
-        assertEquals(0.5f, (t.at(2505.0).pill as SkipPill.Next).fill)
-        assertNull(t.at(2509.0).auto)
-        assertEquals(SkipTracker.Auto.Next, t.at(2510.0).auto)
+        for (s in 1..4) t.at(2500.0 + s, nowMs = s * 1_000L)
+        assertEquals(0.5f, (t.at(2505.0, nowMs = 5_000).pill as SkipPill.Next).fill)
+        for (s in 6..9) assertNull(t.at(2500.0 + s, nowMs = s * 1_000L).auto)
+        assertEquals(SkipTracker.Auto.Next, t.at(2510.0, nowMs = 10_000).auto)
         // only once
-        assertNull(t.at(2511.0).auto)
+        assertNull(t.at(2511.0, nowMs = 11_000).auto)
+        assertFalse(t.takeNext())
+    }
+
+    @Test
+    fun seekingForwardInTheCreditsDoesNotSkipTheCountdown() {
+        val t = SkipTracker(episode)
+        t.at(2500.0, nowMs = 0)
+        t.at(2501.0, nowMs = 1_000)
+        // +30 s, then the position moves on: the fill follows the playing time, not the file's
+        val after = t.at(2580.0, nowMs = 1_500)
+        assertEquals(0.15f, (after.pill as SkipPill.Next).fill)
+        assertNull(after.auto)
+        assertEquals(0.2f, (t.at(2581.0, nowMs = 2_000).pill as SkipPill.Next).fill)
+        // a jump back into the credits keeps counting too
+        assertEquals(0.25f, (t.at(2510.0, nowMs = 2_500).pill as SkipPill.Next).fill)
+    }
+
+    @Test
+    fun countdownCountsOnlyPlayingTime() {
+        val t = SkipTracker(episode)
+        t.at(2500.0, nowMs = 0)
+        // paused for half a minute: nothing fills, and resuming does not add the pause
+        assertEquals(0f, (t.at(2500.0, nowMs = 5_000, playing = false).pill as SkipPill.Next).fill)
+        assertEquals(0f, (t.at(2500.0, nowMs = 30_000, playing = false).pill as SkipPill.Next).fill)
+        assertEquals(0f, (t.at(2500.25, nowMs = 30_250).pill as SkipPill.Next).fill)
+        assertEquals(0.05f, (t.at(2500.75, nowMs = 30_750).pill as SkipPill.Next).fill)
+        // a stall (no tick for 30 s while "playing") counts for the gap limit at most
+        assertEquals(0.2f, (t.at(2501.0, nowMs = 60_750).pill as SkipPill.Next).fill)
+    }
+
+    @Test
+    fun leavingAndEnteringTheCreditsFillsAfresh() {
+        val t = SkipTracker(episode)
+        t.at(2500.0, nowMs = 0)
+        t.at(2504.0, nowMs = 1_000)
+        t.at(2505.0, nowMs = 2_000)
+        assertNull(t.at(2400.0, nowMs = 3_000).pill)
+        assertEquals(0f, (t.at(2500.0, nowMs = 4_000).pill as SkipPill.Next).fill)
+        assertEquals(0.1f, (t.at(2501.0, nowMs = 5_000).pill as SkipPill.Next).fill)
     }
 
     @Test
@@ -120,8 +161,8 @@ class SkipSegmentsTest {
         val scene = SkipTracker(episode).at(2500.0, duration = 2700.0).pill as SkipPill.Next
         assertFalse(scene.countdown)
         val tracker = SkipTracker(episode)
-        tracker.at(2500.0, autoplay = false)
-        val later = tracker.at(2550.0, autoplay = false)
+        tracker.at(2500.0, nowMs = 0, autoplay = false)
+        val later = tracker.at(2550.0, nowMs = 50_000, autoplay = false)
         assertEquals(SkipPill.Next(0f, countdown = false), later.pill)
         assertNull(later.auto)
     }

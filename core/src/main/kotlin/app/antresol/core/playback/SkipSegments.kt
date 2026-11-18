@@ -6,7 +6,7 @@ import app.antresol.core.model.PlaySegment
 /**
  * Skip segments of a file (`/api/play` `segments`): the recap, the intro and the credits, in seconds
  * on the file timeline. The player offers «Пропустить пересказ / вступление» while playback is inside
- * one, and «Следующая серия» (filling over 10 s, then playing it) at the credits. The rules are the
+ * one, and «Следующая серия» (filling over 10 s of playing, then playing it) at the credits. The rules are the
  * web player's (`skipSegments.ts`, `SkipControls.tsx`).
  */
 object SkipSegments {
@@ -21,8 +21,11 @@ object SkipSegments {
     /** The pill shows this long after playback enters a segment, even with the controls hidden. */
     const val PILL_ALONE_MS = 8_000L
 
-    /** «Следующая серия» fills over this long, then plays it. */
+    /** «Следующая серия» fills over this long of playing, then plays it. */
     const val NEXT_COUNTDOWN_SEC = 10.0
+
+    /** A gap between two position ticks longer than this is a stall, not playback: it counts for no more than this. */
+    const val MAX_TICK_GAP_MS = 1_500L
 
     /** Credits ending this long before the file does leave a scene after them: no autoplay. */
     const val POST_CREDITS_SEC = 20.0
@@ -47,9 +50,11 @@ object SkipSegments {
     fun creditsToEnd(credits: PlaySegment, durationSec: Double): Boolean =
         durationSec <= 0 || durationSec - credits.endSec < 1
 
-    /** How far «Следующая серия» has filled (0…1), from where playback entered the credits. */
-    fun countdown(enteredAtSec: Double, timeSec: Double): Double =
-        ((timeSec - enteredAtSec) / NEXT_COUNTDOWN_SEC).coerceIn(0.0, 1.0)
+    /**
+     * How far «Следующая серия» has filled (0…1) after [playedMs] of playback in the credits. Playing time,
+     * not file position: a seek forward inside the credits does not fill it.
+     */
+    fun countdown(playedMs: Long): Double = (playedMs / 1000.0 / NEXT_COUNTDOWN_SEC).coerceIn(0.0, 1.0)
 }
 
 /** What a skip pill (or the player by itself) does. */
@@ -100,7 +105,11 @@ class SkipTracker(segments: List<PlaySegment>) {
     private var entered: Entered? = null
     private var nexted = false
 
-    private data class Entered(val key: String, val ms: Long, val atSec: Double)
+    /** Playing time spent in the segment entered (what fills «Следующая серия»), and the clock of the last playing tick. */
+    private var playedMs = 0L
+    private var lastPlayingMs: Long? = null
+
+    private data class Entered(val key: String, val ms: Long)
 
     /** What shows ([pill]) and what the player does by itself now ([auto], at most once). */
     data class Step(val pill: SkipPill?, val auto: Auto?)
@@ -115,9 +124,10 @@ class SkipTracker(segments: List<PlaySegment>) {
     }
 
     /**
-     * The state at [timeSec] of the file ([nowMs]: a monotonic clock for the pill's 8 s). [durationSec]
-     * is the file's (0: unknown), [hasNext]: an episode follows, [autoplayNext]: the device plays it
-     * after a countdown, [autoSkip]: the profile's «Пропускать сам».
+     * The state at [timeSec] of the file ([nowMs]: a monotonic clock for the pill's 8 s and for the
+     * countdown's playing time, which counts only ticks with [playing]). [durationSec] is the file's
+     * (0: unknown), [hasNext]: an episode follows, [autoplayNext]: the device plays it after a
+     * countdown, [autoSkip]: the profile's «Пропускать сам».
      */
     fun step(
         timeSec: Double,
@@ -132,10 +142,21 @@ class SkipTracker(segments: List<PlaySegment>) {
         val key = active?.let { "${it.kind}:${it.startSec}" }
         if (key == null) {
             entered = null
+            lastPlayingMs = null
         } else if (entered?.key != key) {
-            entered = Entered(key, nowMs, timeSec)
+            entered = Entered(key, nowMs)
+            playedMs = 0
+            lastPlayingMs = null
         }
         if (active == null || key == null) return Step(null, null)
+
+        // Real playback time since entry: a seek inside the segment moves the position, not this.
+        if (playing) {
+            lastPlayingMs?.let { playedMs += (nowMs - it).coerceIn(0, SkipSegments.MAX_TICK_GAP_MS) }
+            lastPlayingMs = nowMs
+        } else {
+            lastPlayingMs = null
+        }
 
         var auto: Auto? = null
         if (playing && key !in autoDone) {
@@ -155,7 +176,7 @@ class SkipTracker(segments: List<PlaySegment>) {
         val pill: SkipPill = when (active.kind) {
             SkipSegments.CREDITS -> if (hasNext && !creditsDismissed) {
                 val countdown = autoplayNext && !SkipSegments.postCreditsScene(active, durationSec)
-                val fill = if (countdown) SkipSegments.countdown(enteredAt.atSec, timeSec) else 0.0
+                val fill = if (countdown) SkipSegments.countdown(playedMs) else 0.0
                 if (countdown && fill >= 1.0 && auto == null) auto = next()
                 SkipPill.Next(fill.toFloat(), countdown)
             } else if (!hasNext) {

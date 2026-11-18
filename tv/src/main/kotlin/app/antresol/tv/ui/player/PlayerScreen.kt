@@ -313,7 +313,8 @@ internal fun PlayingOverlayContent(
     // Whether a skip pill held focus; kept when the pill goes (its removal may report the loss first).
     var skipFocused by remember { mutableStateOf(false) }
     val skipKey = skip?.focusKey(controlsVisible)
-    val currentSkipKey by rememberUpdatedState(skipKey)
+    val skipShownKey = skip?.shownKey(controlsVisible)
+    val currentSkipShownKey by rememberUpdatedState(skipShownKey)
     val nextPillShown = skip?.pill is SkipPill.Next
 
     LaunchedEffect(controlsVisible, menu) {
@@ -331,16 +332,17 @@ internal fun PlayingOverlayContent(
             }
         }
     }
-    // A skip pill with the controls hidden takes focus, so OK presses it (the web's Enter); when it
-    // goes, focus returns to the overlay (or, with the controls up, to the seek bar).
-    LaunchedEffect(skipKey, controlsVisible, menu) {
+    // A skip pill (not «Следующая серия», nor the note of an automatic skip: OK pauses while those are
+    // up) with the controls hidden takes focus, so OK presses it (the web's Enter); when it goes, focus
+    // returns to the overlay (or, with the controls up, to the seek bar).
+    LaunchedEffect(skipKey, skipShownKey, controlsVisible, menu) {
         if (menu != null) return@LaunchedEffect
         when {
             !controlsVisible && skipKey != null -> if (!skipFocus.tryRequestFocus()) rootFocus.tryRequestFocus()
             !controlsVisible -> rootFocus.tryRequestFocus()
-            skipKey == null && skipFocused -> seekFocus.tryRequestFocus()
+            skipShownKey == null && skipFocused -> seekFocus.tryRequestFocus()
         }
-        if (skipKey == null) skipFocused = false
+        if (skipShownKey == null) skipFocused = false
     }
     LaunchedEffect(controlsVisible, interactions, isPlaying, menu) {
         if (controlsVisible && isPlaying && menu == null) {
@@ -400,7 +402,7 @@ internal fun PlayingOverlayContent(
                     // Above the seek bar and the control row while they show.
                     .padding(end = ScreenPaddingH, bottom = if (controlsVisible) 172.dp else 56.dp)
                     .onFocusChanged { state ->
-                        if (state.hasFocus) skipFocused = true else if (currentSkipKey != null) skipFocused = false
+                        if (state.hasFocus) skipFocused = true else if (currentSkipShownKey != null) skipFocused = false
                     },
             )
         }

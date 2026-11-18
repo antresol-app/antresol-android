@@ -67,6 +67,8 @@ data class PlayResponse(
     val quality: QualityInfo = QualityInfo(),
     val hlsComplete: Boolean = false,
     val burnedSubtitle: Int? = null,
+    /** The recap, intro and credits of the file (file time, seconds); empty on older servers. */
+    val segments: List<PlaySegment> = emptyList(),
 ) {
     val isHls: Boolean get() = mode != PlayMode.DIRECT
 
@@ -79,6 +81,14 @@ data class PlayResponse(
         fun hlsSessionFromUrl(url: String): String? = HLS_URL.find(url)?.groupValues?.get(1)
     }
 }
+
+/** One skip segment of [PlayResponse.segments]: [kind] is `recap`, `intro` or `credits`. */
+@Serializable
+data class PlaySegment(
+    val kind: String = "",
+    val startSec: Double = 0.0,
+    val endSec: Double = 0.0,
+)
 
 @Serializable
 data class QualityInfo(

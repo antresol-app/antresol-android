@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -55,6 +56,7 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Text
 import app.antresol.core.model.ItemDetail
+import app.antresol.core.playback.SkipPill
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.GlassNotice
 import app.antresol.tv.ui.components.PillButton
@@ -235,12 +237,20 @@ private fun PlayingOverlay(viewModel: PlayerViewModel, onExit: () -> Unit) {
             audioChoice = audioChoice,
             subtitleChoice = subtitleChoice,
             nextEpisode = viewModel.nextEpisode != null,
+            autoSkipChoice = viewModel.hasSkipSegments,
         ),
         isPlaying = viewModel.isPlaying,
         busy = viewModel.isBuffering || viewModel.isSwitching,
         title = { TitleBlock(viewModel.item) },
         actions = actions,
         menuContent = { menu, onDismiss -> TrackMenu(menu = menu, viewModel = viewModel, onDismiss = onDismiss) },
+        skip = SkipOverlay(
+            pill = viewModel.skipPill,
+            note = viewModel.skipNote,
+            onPress = viewModel::pressSkip,
+            onWatchCredits = viewModel::watchCredits,
+            onUndo = viewModel::undoSkip,
+        ),
     )
 }
 
@@ -258,6 +268,8 @@ internal data class TransportState(
     val nextEpisode: Boolean,
     /** The quality menu (not for trailers, which come in one quality). */
     val qualityChoice: Boolean = true,
+    /** «Пропускать сам» (the file has skip segments). */
+    val autoSkipChoice: Boolean = false,
 )
 
 /** What the controls do; the key handlers return true when they used the key. */
@@ -285,6 +297,8 @@ internal fun PlayingOverlayContent(
     menuContent: @Composable (PlayerMenu, onDismiss: () -> Unit) -> Unit,
     /** Back leaves at once, controls up or not (the trailer player); null: Back first hides the controls. */
     onBack: (() -> Unit)? = null,
+    /** The skip pills (recap, intro, credits); null: none (trailers). */
+    skip: SkipOverlay? = null,
 ) {
     var controlsVisible by remember { mutableStateOf(true) }
     var menu by remember { mutableStateOf<PlayerMenu?>(null) }
@@ -295,6 +309,12 @@ internal fun PlayingOverlayContent(
     // A closed menu gives focus back to its button, not to the seek bar (where OK would pause).
     val menuFocus = remember { PlayerMenu.entries.associateWith { FocusRequester() } }
     var lastMenu by remember { mutableStateOf<PlayerMenu?>(null) }
+    val skipFocus = remember { FocusRequester() }
+    // Whether a skip pill held focus; kept when the pill goes (its removal may report the loss first).
+    var skipFocused by remember { mutableStateOf(false) }
+    val skipKey = skip?.focusKey(controlsVisible)
+    val currentSkipKey by rememberUpdatedState(skipKey)
+    val nextPillShown = skip?.pill is SkipPill.Next
 
     LaunchedEffect(controlsVisible, menu) {
         val opener = lastMenu
@@ -310,6 +330,17 @@ internal fun PlayingOverlayContent(
                 rootFocus.tryRequestFocus()
             }
         }
+    }
+    // A skip pill with the controls hidden takes focus, so OK presses it (the web's Enter); when it
+    // goes, focus returns to the overlay (or, with the controls up, to the seek bar).
+    LaunchedEffect(skipKey, controlsVisible, menu) {
+        if (menu != null) return@LaunchedEffect
+        when {
+            !controlsVisible && skipKey != null -> if (!skipFocus.tryRequestFocus()) rootFocus.tryRequestFocus()
+            !controlsVisible -> rootFocus.tryRequestFocus()
+            skipKey == null && skipFocused -> seekFocus.tryRequestFocus()
+        }
+        if (skipKey == null) skipFocused = false
     }
     LaunchedEffect(controlsVisible, interactions, isPlaying, menu) {
         if (controlsVisible && isPlaying && menu == null) {
@@ -339,6 +370,10 @@ internal fun PlayingOverlayContent(
             .focusRequester(rootFocus)
             .onKeyEvent { event ->
                 if (controlsVisible) return@onKeyEvent false
+                // Left/Right between «Смотреть титры» and «Следующая серия», not a scrub.
+                if (skipFocused && nextPillShown && (event.key == Key.DirectionLeft || event.key == Key.DirectionRight)) {
+                    return@onKeyEvent false
+                }
                 actions.onHiddenKey(event) { controlsVisible = true }
             }
             .focusable(),
@@ -353,6 +388,20 @@ internal fun PlayingOverlayContent(
                 playFocus = playFocus,
                 menuFocus = menuFocus,
                 onOpenMenu = { menu = it },
+            )
+        }
+        skip?.let {
+            SkipPills(
+                skip = it,
+                controlsVisible = controlsVisible,
+                focus = skipFocus,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    // Above the seek bar and the control row while they show.
+                    .padding(end = ScreenPaddingH, bottom = if (controlsVisible) 172.dp else 56.dp)
+                    .onFocusChanged { state ->
+                        if (state.hasFocus) skipFocused = true else if (currentSkipKey != null) skipFocused = false
+                    },
             )
         }
         menu?.let { open -> menuContent(open) { menu = null } }
@@ -506,6 +555,14 @@ private fun TransportControls(
                         label = stringResource(R.string.detail_quality),
                         onClick = { onOpenMenu(PlayerMenu.Quality) },
                         modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Quality)),
+                    )
+                }
+                if (transport.autoSkipChoice) {
+                    PlayerIconButton(
+                        icon = AntresolIcons.SkipAhead,
+                        label = stringResource(R.string.player_auto_skip),
+                        onClick = { onOpenMenu(PlayerMenu.AutoSkip) },
+                        modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.AutoSkip)),
                     )
                 }
                 Spacer(Modifier.weight(1f))

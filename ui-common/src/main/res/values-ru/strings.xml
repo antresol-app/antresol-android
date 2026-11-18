@@ -142,6 +142,17 @@
     <string name="player_next_in">Начнётся через %1$d с</string>
     <string name="player_play_now">Смотреть сейчас</string>
     <string name="player_next_episode">Следующая серия</string>
+    <string name="player_skip_recap">Пропустить пересказ</string>
+    <string name="player_skip_intro">Пропустить вступление</string>
+    <string name="player_skip_credits">Пропустить титры</string>
+    <string name="player_watch_credits">Смотреть титры</string>
+    <string name="player_recap_skipped">Пересказ пропущен</string>
+    <string name="player_intro_skipped">Вступление пропущено</string>
+    <string name="player_skip_undo">Вернуть</string>
+    <string name="player_auto_skip">Пропускать сам</string>
+    <string name="player_auto_recap">Пересказ</string>
+    <string name="player_auto_intro">Вступление</string>
+    <string name="player_auto_credits">Титры</string>
     <string name="player_subtitles_failed">Не удалось загрузить субтитры.</string>
     <string name="player_mode_direct">Прямое воспроизведение</string>
     <string name="player_mode_remux">Перепаковка потока</string>

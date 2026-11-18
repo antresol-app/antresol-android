@@ -3,6 +3,7 @@ package app.antresol.ui.playback
 import android.app.ActivityManager
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +31,8 @@ import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.ApiException
 import app.antresol.core.api.attempt
 import app.antresol.core.model.AudioTrack
+import app.antresol.core.model.AutoSkip
+import app.antresol.core.model.AutoSkipRequest
 import app.antresol.core.playback.AudioMenu
 import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.FileInfo
@@ -44,6 +47,11 @@ import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.playback.PlaybackReporter
 import app.antresol.core.playback.Resume
+import app.antresol.core.playback.SkipAction
+import app.antresol.core.playback.SkipNote
+import app.antresol.core.playback.SkipPill
+import app.antresol.core.playback.SkipSegments
+import app.antresol.core.playback.SkipTracker
 import app.antresol.core.playback.SubtitleLanguages
 import app.antresol.core.playback.VideoSession
 import app.antresol.core.playback.VideoSource
@@ -185,6 +193,25 @@ open class VideoPlayerViewModel(
     var notice: Int? by mutableStateOf(null)
 
     /**
+     * The skip pill of the segment playing (recap, intro, credits; see [SkipTracker]), or null. A
+     * [SkipPill.Skip] that is not [SkipPill.Skip.alone] shows only with the controls.
+     */
+    var skipPill: SkipPill? by mutableStateOf(null)
+        private set
+
+    /** A recap or intro skipped by itself («Вступление пропущено · Вернуть»), for a few seconds. */
+    var skipNote: SkipNote? by mutableStateOf(null)
+        private set
+
+    /** The profile's «Пропускать сам» (`/api/me/playback-prefs`; all off on older servers). */
+    var autoSkip: AutoSkip by mutableStateOf(AutoSkip())
+        private set
+
+    /** The file has skip segments: the «Пропускать сам» menu is offered. */
+    var hasSkipSegments: Boolean by mutableStateOf(false)
+        private set
+
+    /**
      * The audio menu: the file's tracks, the voice-over files beside it and the cleaned ones
      * («Очищено», each under its source), as the server lists them (see [AudioMenu.order]).
      */
@@ -201,6 +228,8 @@ open class VideoPlayerViewModel(
     private var session: VideoSession? = null
     private var reporter: PlaybackReporter? = null
     private val rawSubtitles = HashMap<String, String>()
+    private var skip: SkipTracker? = null
+    private var skipNoteJob: Job? = null
 
     // Per player, so a closing player never deletes the files of the next one.
     private val subtitleDir = File(context.cacheDir, "subtitles/${UUID.randomUUID()}")
@@ -268,6 +297,7 @@ open class VideoPlayerViewModel(
     init {
         player.addListener(listener)
         start(itemId, resume)
+        loadAutoSkip()
         viewModelScope.launch {
             while (isActive) {
                 tick()
@@ -400,6 +430,7 @@ open class VideoPlayerViewModel(
             onSessionLost = ::onSessionLost,
         ).also { it.start(opened.session) }
         preselectSubtitle(opened)
+        resetSkip(SkipTracker(opened.play.segments))
         load(opened, opened.timeline.initialPlayerSeekMs, playWhenReady = !backgrounded)
         phase = PlayerPhase.Playing
         // Opened while in the background: give the HLS slot back until the app returns.
@@ -413,6 +444,7 @@ open class VideoPlayerViewModel(
         reporter = null
         session = null
         source = null
+        resetSkip(null)
         val orphan = oldSession?.detachSession()?.takeIf { it != oldReporter?.hlsSession }
         if (oldReporter == null && orphan == null) return
         stopInBackground {
@@ -636,10 +668,122 @@ open class VideoPlayerViewModel(
         reporter = null
         session = null
         source = null
+        resetSkip(null)
         pendingReopen = null
         player.stop()
         player.clearMediaItems()
         if (ending != null) stopInBackground { ending.stop() }
+    }
+
+    // endregion
+
+    // region Skip segments
+
+    /** Runs the action of the pill on screen, [skipPill] (a tap, or OK on the TV). */
+    fun pressSkip() {
+        when (val pill = skipPill ?: return) {
+            is SkipPill.Next -> if (skip?.takeNext() == true) playNext()
+            is SkipPill.Skip -> runSkip(pill.action)
+        }
+    }
+
+    /** «Смотреть титры»: no «Следующая серия» and no automatic next for this file. */
+    fun watchCredits() {
+        skip?.creditsDismissed = true
+        skipPill = null
+    }
+
+    /** «Вернуть» on the note of an automatic skip: back to where the segment started. */
+    fun undoSkip() {
+        val note = skipNote ?: return
+        skipNote = null
+        skipNoteJob?.cancel()
+        seekTo(note.backMs)
+    }
+
+    /** «Пропускать сам»: [value] for this player at once, and the profile's on the server (only what changed). */
+    fun changeAutoSkip(value: AutoSkip) {
+        val old = autoSkip
+        if (value == old) return
+        autoSkip = value
+        val request = AutoSkipRequest(
+            recap = value.recap.takeIf { it != old.recap },
+            intro = value.intro.takeIf { it != old.intro },
+            credits = value.credits.takeIf { it != old.credits },
+        )
+        appScope.launch {
+            try {
+                client.setAutoSkip(request)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // An older server or a locked kid profile: the choice holds for this player only.
+            }
+        }
+    }
+
+    private fun loadAutoSkip() {
+        viewModelScope.launch {
+            try {
+                autoSkip = client.playbackPrefs().autoSkip
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // No prefs: nothing is skipped by itself.
+            }
+        }
+    }
+
+    private fun resetSkip(tracker: SkipTracker?) {
+        skip = tracker
+        hasSkipSegments = tracker?.hasSegments == true
+        skipPill = null
+        skipNote = null
+        skipNoteJob?.cancel()
+    }
+
+    /** On a position tick: the pill of the segment playing, and what «Пропускать сам» does by itself. */
+    private fun updateSkip(fileMs: Long) {
+        val tracker = skip ?: return
+        if (phase != PlayerPhase.Playing || isSwitching || pendingSeekMs != null || previewMs != null) return
+        val step = tracker.step(
+            timeSec = fileMs / 1000.0,
+            nowMs = SystemClock.uptimeMillis(),
+            playing = player.isPlaying,
+            durationSec = knownDurationMs() / 1000.0,
+            hasNext = nextEpisode != null,
+            autoplayNext = options.autoplayNext(),
+            autoSkip = autoSkip,
+        )
+        skipPill = step.pill
+        when (val auto = step.auto) {
+            is SkipTracker.Auto.Skipped -> {
+                showSkipNote(auto.note)
+                seekTo(auto.toMs)
+            }
+            SkipTracker.Auto.Next -> playNext()
+            SkipTracker.Auto.End -> runSkip(SkipAction.End)
+            null -> Unit
+        }
+    }
+
+    private fun runSkip(action: SkipAction) {
+        when (action) {
+            is SkipAction.Seek -> seekTo(action.toMs)
+            // Played on to the end (its last second): the end of the file, Up Next or the end of the film.
+            SkipAction.End -> seekTo(knownDurationMs().takeIf { it > 0 } ?: Long.MAX_VALUE)
+            SkipAction.Next -> playNext()
+        }
+        skipPill = null
+    }
+
+    private fun showSkipNote(note: SkipNote) {
+        skipNote = note
+        skipNoteJob?.cancel()
+        skipNoteJob = viewModelScope.launch {
+            delay(SkipSegments.SKIPPED_NOTE_MS)
+            skipNote = null
+        }
     }
 
     // endregion
@@ -967,6 +1111,7 @@ open class VideoPlayerViewModel(
         lastFileMs = position
         if (pendingSeekMs == null && previewMs == null) positionMs = position
         bufferedMs = source?.timeline?.fileMs(player.bufferedPosition) ?: 0L
+        updateSkip(position)
     }
 
     private fun buildPlayer(): ExoPlayer = buildVideoPlayer(context, client)

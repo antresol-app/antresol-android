@@ -12,7 +12,7 @@ import app.antresol.ui.format.TrackLabels
 data class MenuOption(val label: String, val selected: Boolean, val badge: String? = null, val onSelect: () -> Unit)
 
 /** The menus of the video player. */
-enum class PlayerMenu { Audio, Subtitles, Quality }
+enum class PlayerMenu { Audio, Subtitles, Quality, AutoSkip }
 
 /** What a [PlayerMenu] shows: its title, the choices and, for the quality, how the stream is delivered. */
 class PlayerMenuContent(val title: String, val options: List<MenuOption>, val note: String?)
@@ -26,6 +26,7 @@ fun playerMenu(menu: PlayerMenu, viewModel: VideoPlayerViewModel): PlayerMenuCon
             PlayerMenu.Audio -> R.string.detail_audio
             PlayerMenu.Subtitles -> R.string.detail_subtitles
             PlayerMenu.Quality -> R.string.detail_quality
+            PlayerMenu.AutoSkip -> R.string.player_auto_skip
         },
     )
     val options = when (menu) {
@@ -50,6 +51,14 @@ fun playerMenu(menu: PlayerMenu, viewModel: VideoPlayerViewModel): PlayerMenuCon
         }
         PlayerMenu.Quality -> Quality.ALL.map { value ->
             MenuOption(qualityLabel(value), value == viewModel.quality) { viewModel.selectQuality(value) }
+        }
+        // «Пропускать сам»: each row turns its kind on or off (the profile's, on every device)
+        PlayerMenu.AutoSkip -> viewModel.autoSkip.let { a ->
+            listOf(
+                MenuOption(stringResource(R.string.player_auto_recap), a.recap) { viewModel.changeAutoSkip(a.copy(recap = !a.recap)) },
+                MenuOption(stringResource(R.string.player_auto_intro), a.intro) { viewModel.changeAutoSkip(a.copy(intro = !a.intro)) },
+                MenuOption(stringResource(R.string.player_auto_credits), a.credits) { viewModel.changeAutoSkip(a.copy(credits = !a.credits)) },
+            )
         }
     }
     return PlayerMenuContent(title, options, note = if (menu == PlayerMenu.Quality) streamNote(viewModel) else null)

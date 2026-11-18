@@ -1,6 +1,9 @@
 package app.antresol.mobile.player
 
 import android.content.Context
+import app.antresol.ui.language.ProfileLocaleKeeper
+import android.content.res.Resources
+import android.content.res.Configuration
 import android.content.Intent
 import android.graphics.Color
 import android.os.Build
@@ -33,8 +36,20 @@ class TrailerPlayerActivity : ComponentActivity() {
     internal var viewModel: TrailerPlayerViewModel? = null
         private set
 
+    // The profile's language survives configuration changes the activity handles (see the keeper).
+    private val locale = ProfileLocaleKeeper()
+
     override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(AppSettings(newBase).wrap(newBase))
+        val settings = AppSettings(newBase)
+        locale.language = settings.profileLanguage
+        super.attachBaseContext(settings.wrap(newBase))
+    }
+
+    override fun getResources(): Resources = locale.resources(this, super.getResources())
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        locale.onConfigurationChanged()
+        super.onConfigurationChanged(newConfig)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

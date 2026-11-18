@@ -281,6 +281,16 @@ object AntresolIcons {
         lineTo(18f, 18f)
     }
 
+    /** Two chevrons: skip ahead (the recap, intro or credits; «Пропускать сам»). */
+    val SkipAhead: ImageVector = lineIcon("SkipAhead") {
+        moveTo(5f, 6f)
+        lineTo(11f, 12f)
+        lineTo(5f, 18f)
+        moveTo(12f, 6f)
+        lineTo(18f, 12f)
+        lineTo(12f, 18f)
+    }
+
     /** Circular arrow: play from the beginning. */
     val Restart: ImageVector = lineIcon("Restart") {
         moveTo(5.6f, 9f)

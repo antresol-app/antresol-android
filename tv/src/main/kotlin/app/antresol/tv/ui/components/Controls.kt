@@ -81,6 +81,7 @@ fun OptionsPanel(
     width: Dp = 340.dp,
     focusIndex: Int = options.indexOfFirst { it.selected }.coerceAtLeast(0),
     noteLines: Int = 3,
+    fromStart: Boolean = false,
 ) {
     val focus = remember(title) { FocusRequester() }
     val panelFocus = remember(title) { FocusRequester() }
@@ -107,7 +108,9 @@ fun OptionsPanel(
                 true
             }
             .background(Color.Black.copy(alpha = 0.5f)),
-        contentAlignment = Alignment.CenterEnd,
+        // On the right, where the settings and the player open their choices; [fromStart] on the left
+        // (a list to pick from next to the channel list it filters).
+        contentAlignment = if (fromStart) Alignment.CenterStart else Alignment.CenterEnd,
     ) {
         Column(
             modifier = Modifier

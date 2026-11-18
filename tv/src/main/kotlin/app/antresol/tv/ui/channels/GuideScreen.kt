@@ -114,7 +114,16 @@ private data class Picked(val row: ChannelEpgRow, val program: ChannelProgram)
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun GuideScreen(viewModel: ChannelsViewModel, nowMs: Long, canTakeFocus: () -> Boolean, header: @Composable () -> Unit, onPanel: (Boolean) -> Unit, onWatch: (Channel) -> Unit) {
+fun GuideScreen(
+    viewModel: ChannelsViewModel,
+    nowMs: Long,
+    canTakeFocus: () -> Boolean,
+    header: @Composable () -> Unit,
+    onPanel: (Boolean) -> Unit,
+    onWatch: (Channel) -> Unit,
+    onCategories: () -> Unit,
+    refocus: Int,
+) {
     val rows = viewModel.guideRows
     val error = viewModel.guideError
     var picked by remember { mutableStateOf<Picked?>(null) }
@@ -157,12 +166,15 @@ fun GuideScreen(viewModel: ChannelsViewModel, nowMs: Long, canTakeFocus: () -> B
                 toMs = viewModel.guideToMs,
                 nowMs = nowMs,
                 lastChannelId = viewModel.lastChannel?.id,
+                filterKey = viewModel.filter.key,
                 canTakeFocus = { canTakeFocus() && picked == null },
                 onPick = { row, program ->
                     selected = 0
                     picked = Picked(row, program)
                 },
                 onNearEnd = viewModel::loadMoreGuide,
+                onCategories = onCategories,
+                refocus = refocus,
             )
         }
         if (pick != null) {
@@ -187,9 +199,12 @@ private fun GuideGrid(
     toMs: Long,
     nowMs: Long,
     lastChannelId: Long?,
+    filterKey: String,
     canTakeFocus: () -> Boolean,
     onPick: (ChannelEpgRow, ChannelProgram) -> Unit,
     onNearEnd: (explicit: Boolean) -> Unit,
+    onCategories: () -> Unit,
+    refocus: Int,
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -229,7 +244,8 @@ private fun GuideGrid(
     val reserveLogo = remember(rows) { reserveLogoSlot(rows.map { it.logoUrl }) }
     val numberWidth = channelNumberWidth(remember(rows) { rows.map { it.number } }, GuideNumberStyle)
 
-    LaunchedEffect(fromMs, rows.isNotEmpty()) {
+    // Another category is another list of channels: the guide opens on it as on a new one.
+    LaunchedEffect(fromMs, rows.isNotEmpty(), filterKey) {
         if (rows.isEmpty()) return@LaunchedEffect
         // Open on now (half an hour of the past in view), focus on the last channel's programme on air.
         scroll.scrollTo(with(density) { (nowMs - 2 * tick - fromMs).coerceAtLeast(0).minutesToDp(minute).roundToPx() })
@@ -246,6 +262,13 @@ private fun GuideGrid(
 
     var focusedProgram by remember { mutableStateOf<ChannelProgram?>(null) }
 
+    // The category list was closed without a choice: back to the programme that had focus.
+    LaunchedEffect(refocus) {
+        val row = rows.getOrNull(focusedRow)
+        val program = focusedProgram
+        if (refocus > 0 && row != null && program != null) requesters.tryRequestFocus(requesterKey(row, program), 8)
+    }
+
     /** Left/Right: the previous/next programme of the channel, revealed first; stays at the ends. */
     fun moveHorizontally(step: Int): Boolean {
         if (!inGrid) return false
@@ -256,6 +279,8 @@ private fun GuideGrid(
         if (index < 0 || target == null) {
             // Right at the loaded end: the viewer asks for more (also while a failed page waits to be asked for again).
             if (step > 0) onNearEnd(true)
+            // Left at the first programme: nothing is further left, so the categories open (as from the channel list).
+            if (step < 0 && index == 0) onCategories()
             return true
         }
         scope.launch {

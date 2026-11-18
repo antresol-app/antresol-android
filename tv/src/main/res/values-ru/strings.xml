@@ -101,4 +101,8 @@
     <string name="settings_overlay_close">Закрыть</string>
     <string name="autostart_notification_channel">Автозапуск</string>
     <string name="autostart_notification_text">Открывает Antresol при включении телевизора</string>
+
+    <!-- ТВ: категории каналов -->
+    <string name="tv_categories">Категории</string>
+    <string name="tv_category_none">Без категории</string>
 </resources>

@@ -1,5 +1,6 @@
 package app.antresol.core.api
 
+import app.antresol.core.model.AutoSkipRequest
 import app.antresol.core.model.DeviceInfo
 import app.antresol.core.model.PlayRequest
 import app.antresol.core.model.PlaybackCaps
@@ -410,5 +411,25 @@ class AntresolClientTest {
         assertEquals("24", epg.queryParameter("hours"))
         assertEquals("foreign", prefs.subMode)
         assertTrue(prefs.preferCleaned)
+    }
+
+    @Test
+    fun autoSkipIsReadAndSavedPartially() = runTest {
+        enqueue("""{"audioLangs":["ru"],"subMode":"off","subLangs":["ru"]}""")
+        enqueue("""{"audioLangs":["ru"],"subMode":"off","subLangs":["ru"],"autoSkip":{"recap":false,"intro":true,"credits":false}}""")
+        // an older server has no autoSkip: all off
+        val old = client.playbackPrefs()
+        assertFalse(old.autoSkip.recap || old.autoSkip.intro || old.autoSkip.credits)
+
+        val saved = client.setAutoSkip(AutoSkipRequest(intro = true))
+
+        server.takeRequest()
+        val put = server.takeRequest()
+        assertEquals("PUT", put.method)
+        assertEquals("/api/me/playback-prefs/auto-skip", put.path)
+        // only the kind that changed: the others stay on the server
+        assertEquals("""{"intro":true}""", put.body.readUtf8())
+        assertTrue(saved.autoSkip.intro)
+        assertFalse(saved.autoSkip.recap)
     }
 }

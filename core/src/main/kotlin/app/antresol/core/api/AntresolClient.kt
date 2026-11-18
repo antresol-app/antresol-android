@@ -2,6 +2,7 @@ package app.antresol.core.api
 
 import app.antresol.core.model.AlbumDetail
 import app.antresol.core.model.ArtistDetail
+import app.antresol.core.model.AutoSkipRequest
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
 import app.antresol.core.model.ChannelEpg
@@ -415,6 +416,10 @@ class AntresolClient(
 
     /** `GET /api/me/playback-prefs`: the profile's audio and subtitle languages. */
     suspend fun playbackPrefs(): PlaybackPrefs = get("api/me/playback-prefs")
+
+    /** `PUT /api/me/playback-prefs/auto-skip`: changes only the kinds given; returns the profile's prefs. */
+    suspend fun setAutoSkip(request: AutoSkipRequest): PlaybackPrefs =
+        send("PUT", url("api/me/playback-prefs/auto-skip"), jsonBody(request))
 
     /**
      * Opens a channel's live stream and returns its playlist URL signed with a media key for the

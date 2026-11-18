@@ -167,6 +167,8 @@ data class PlaybackPrefs(
     val subMode: String = "off",
     val subLangs: List<String> = emptyList(),
     val preferCleaned: Boolean = false,
+    /** «Пропускать сам»: the profile's, on every device; absent on older servers (all off). */
+    val autoSkip: AutoSkip = AutoSkip(),
 ) {
     companion object {
         const val SUB_OFF = "off"
@@ -174,6 +176,22 @@ data class PlaybackPrefs(
         const val SUB_FOREIGN = "foreign"
     }
 }
+
+/** [PlaybackPrefs.autoSkip]: skip the recap or intro by itself, go on to the next episode at the credits. */
+@Serializable
+data class AutoSkip(
+    val recap: Boolean = false,
+    val intro: Boolean = false,
+    val credits: Boolean = false,
+)
+
+/** Body of `PUT /api/me/playback-prefs/auto-skip`: only the given kinds change (nulls are omitted). */
+@Serializable
+data class AutoSkipRequest(
+    val recap: Boolean? = null,
+    val intro: Boolean? = null,
+    val credits: Boolean? = null,
+)
 
 /**
  * `GET/PUT /api/me/ui-language`: the profile's interface language. [language] is the profile's own

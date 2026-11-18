@@ -9,8 +9,7 @@ One Play app, one listing, as on the App Store (iPhone + Apple TV): package `app
 | Android TV | `:tv` | 1 000 000 + n | the same main tracks, beside the phone bundle (the app's form factors are one group «Phones, Tablets, Android TV, …»; there are no `tv:` tracks) |
 
 The TV manifest requires `android.software.leanback`, the phone manifest requires a touchscreen (implicitly), so
-each device can only get its own bundle. The older separate app `app.antresol.tv` (closed test only, never in
-production) is no longer updated.
+each device can only get its own bundle.
 
 Each locale folder has `title.txt` (≤ 30 characters), `short_description.txt` (≤ 80), `full_description.txt`
 (≤ 4000) and `changelogs/<versionCode>.txt` (≤ 500). The folders follow fastlane `supply`'s layout, so they can be

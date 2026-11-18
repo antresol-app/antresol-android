@@ -56,7 +56,7 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   Continue Watching and every server shelf.
 - **Browse**: Movies and TV Shows grids with sort pills (they scroll below the nav, never under it);
   Music (All Albums, Artists, Songs, Playlists, Shuffle All, genre chips, shelves); album and artist
-  grids; debounced Search. Watched movies, episodes and series are dimmed with an eye.
+  grids; debounced Search. Watched movies, episodes and series (and finished books, audiobooks and comic volumes) are dimmed with an eye and show no progress bar.
 - **Video**: detail pages with Play/Resume, watchlist and watched toggles, «Trailer» (played inside the app: in its own
   player when the server fetches it, else in the embedded YouTube player; a chooser when there
   are several), the cast with photos, seasons and episodes, each

@@ -56,6 +56,26 @@ class EpisodeGuideTest {
         }
     }
 
+    /** "New" is the server's flag on an aired episode the profile has not watched, as on the web. */
+    @Test
+    fun newIsAnAiredEpisodeNotWatchedYet() {
+        fun news(no: Int, airDate: String, vararg sources: GuideSource, watched: Boolean = false, new: Boolean = true) =
+            GuideEntry(season = 1, number = no, airDate = airDate, watched = watched, new = new, sources = sources.toList())
+        val guide = EpisodeGuideResponse(
+            episodes = listOf(
+                news(1, "2026-01-05", library(11)), // the library's card says watched
+                news(2, "2026-01-12", library(12)),
+                news(3, "2026-11-10"),
+                news(4, "2026-11-10", watched = true),
+                news(5, "2026-11-20"), // not aired yet
+                news(6, "2026-11-10", new = false),
+            ),
+        )
+        val s1 = EpisodeGuide.build(series, guide, today).seasons[0].episodes
+        assertEquals(listOf(false, true, true, false, false, false), s1.map { it.isNew })
+        assertTrue(EpisodeGuide.build(series, null, today).seasons.flatMap { it.episodes }.none { it.isNew })
+    }
+
     @Test
     fun downloadedMissingAndUpcoming() {
         val guide = EpisodeGuideResponse(

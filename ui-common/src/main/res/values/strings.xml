@@ -126,6 +126,7 @@
     <string name="detail_specials">Specials</string>
     <string name="episode_downloaded">Downloaded</string>
     <string name="episode_not_downloaded">Not downloaded</string>
+    <string name="episode_new">New</string>
     <string name="episode_airs">Airs %1$s</string>
     <string name="episode_not_aired">Not aired yet</string>
     <string name="episode_not_in_library">Not in the library</string>

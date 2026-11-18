@@ -2,8 +2,10 @@ package app.antresol.tv.ui.player
 
 import app.antresol.core.channels.liveAudioEntries
 import app.antresol.ui.channels.ChannelLogo
+import app.antresol.ui.channels.channelNumberWidth
 import app.antresol.ui.channels.reserveLogoSlot
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.testTag
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -75,6 +77,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -584,6 +587,12 @@ private fun GoLivePill() {
 private val PanelRowHeight = 66.dp
 private val PanelRowGap = 2.dp
 
+/** The strip under the panel list that holds the «more below» chevron. */
+private val PanelMoreHeight = 24.dp
+
+/** The opacity of the edge row the list continues behind. */
+private const val PanelEdgeAlpha = 0.4f
+
 /** The height of the logo box beside the banner's channel number. */
 private val BannerLogoHeight = 36.dp
 
@@ -611,6 +620,8 @@ internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, 
     val reserveLogo = reserveLogoSlot(guide.channels.map { it.logoUrl })
     val nowMs = rememberNowMs()
     val context = LocalContext.current
+    val numberStyle = Antresol.typography.title.copy(fontFeatureSettings = "tnum")
+    val numberWidth = channelNumberWidth(remember(guide.channels) { guide.channels.map { it.number } }, numberStyle)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (selected - 3).coerceAtLeast(0))
     LaunchedEffect(selected) {
         val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
@@ -626,9 +637,11 @@ internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, 
     ) {
         Text(title, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(start = 12.dp))
         // Rows have one height and the list shows a whole number of them, so every scroll position
-        // (the end included) starts on a row: no sliver of the previous row under the title.
-        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).padding(bottom = 16.dp)) {
-        val rows = ((maxHeight + PanelRowGap) / (PanelRowHeight + PanelRowGap)).toInt().coerceAtLeast(1)
+        // (the end included) starts on a row: no sliver of the previous row under the title. A strip
+        // under the list is kept for the «more below» chevron.
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).padding(bottom = 4.dp)) {
+        val rows = ((maxHeight - PanelMoreHeight + PanelRowGap) / (PanelRowHeight + PanelRowGap)).toInt().coerceAtLeast(1)
+        val listHeight = PanelRowHeight * rows + PanelRowGap * (rows - 1)
         LazyColumn(
             state = listState,
             userScrollEnabled = false,
@@ -636,7 +649,7 @@ internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, 
             verticalArrangement = Arrangement.spacedBy(PanelRowGap),
             modifier = Modifier
                 .width(GuidePanelWidth)
-                .height(PanelRowHeight * rows + PanelRowGap * (rows - 1))
+                .height(listHeight)
                 .testTag("mini-guide-list"),
         ) {
             itemsIndexed(guide.channels, key = { _, channel -> channel.id }) { index, channel ->
@@ -647,6 +660,15 @@ internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, 
                     Modifier
                         .fillMaxWidth()
                         .height(PanelRowHeight)
+                        // More rows than fit: the row at the edge they continue behind is dimmed (the
+                        // selected row is never an edge row while the list can scroll past it, see the
+                        // LaunchedEffect above). Read while drawing: scrolling does not recompose rows.
+                        .graphicsLayer {
+                            val shown = listState.layoutInfo.visibleItemsInfo
+                            val edge = (listState.canScrollForward && index == shown.lastOrNull()?.index) ||
+                                (listState.canScrollBackward && index == shown.firstOrNull()?.index)
+                            alpha = if (edge && !isSelected) PanelEdgeAlpha else 1f
+                        }
                         .background(if (isSelected) AntresolColors.Label else Color.Transparent, AntresolShapes.control)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -654,10 +676,13 @@ internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, 
                 ) {
                     Text(
                         channel.number.toString(),
-                        style = Antresol.typography.title.copy(fontFeatureSettings = "tnum"),
+                        style = numberStyle,
                         color = if (isSelected) content else AntresolColors.LabelSecondary,
                         textAlign = TextAlign.End,
-                        modifier = Modifier.width(28.dp),
+                        maxLines = 1,
+                        softWrap = false,
+                        // As wide as the list's widest number (four digits fit).
+                        modifier = Modifier.width(numberWidth),
                     )
                     // A logo column, as in the list, only when some channel of the panel has a logo.
                     if (reserveLogo) ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp, reserve = true)
@@ -679,11 +704,32 @@ internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, 
                         if (program != null) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 2.dp)) {
                                 LiveProgressBar(Channels.progress(program, nowMs), content, Modifier.weight(1f))
-                                Text(stringResource(R.string.tv_until, programClock(context, program.end)), style = Antresol.typography.badge, color = content.copy(alpha = 0.75f))
+                                // No «until» without a time to follow it.
+                                val end = programClock(context, program.end)
+                                if (end.isNotEmpty()) {
+                                    Text(stringResource(R.string.tv_until, end), style = Antresol.typography.badge, color = content.copy(alpha = 0.75f))
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+        // A chevron under the list: there are more channels below.
+        Box(
+            Modifier
+                .width(GuidePanelWidth)
+                .height(PanelMoreHeight)
+                .offset(y = listHeight),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (listState.canScrollForward) {
+                Icon(
+                    AntresolIcons.ChevronDown,
+                    contentDescription = null,
+                    tint = AntresolColors.LabelSecondary,
+                    modifier = Modifier.size(20.dp).testTag("mini-guide-more-below"),
+                )
             }
         }
         }

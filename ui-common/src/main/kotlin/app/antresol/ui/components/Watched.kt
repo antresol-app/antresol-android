@@ -15,13 +15,17 @@ import androidx.compose.ui.unit.dp
 import app.antresol.ui.R
 import app.antresol.ui.theme.AntresolColors
 
-/** How a watched card looks: its artwork dimmed (less so while focused), with [WatchedMark] on top. */
+/**
+ * How a watched card looks: its artwork dimmed (less so while focused), with [WatchedMark] on top,
+ * and no progress bar, not even a full one. The same on the web and in the other apps: the artwork
+ * at half strength, 0.85 while chosen.
+ */
 object WatchedStyle {
     /** Alpha of a watched card's artwork. */
-    const val ARTWORK_ALPHA = 0.45f
+    const val ARTWORK_ALPHA = 0.5f
 
     /** Alpha of a watched card's artwork while it has focus (TV), so the picture still reads. */
-    const val FOCUSED_ARTWORK_ALPHA = 0.8f
+    const val FOCUSED_ARTWORK_ALPHA = 0.85f
 
     fun artworkAlpha(watched: Boolean, focused: Boolean = false): Float = when {
         !watched -> 1f

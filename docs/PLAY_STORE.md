@@ -6,7 +6,7 @@ One Play app, one listing, as on the App Store (iPhone + Apple TV): package `app
 | Build | Gradle module | Version code | Play tracks |
 |---|---|---|---|
 | Phone & tablet | `:mobile` | n | main tracks (internal, closed «Alpha», production) |
-| Android TV | `:tv` | 1 000 000 + n | Android TV form-factor tracks (Release → Android TV) |
+| Android TV | `:tv` | 1 000 000 + n | the same main tracks, beside the phone bundle (the app's form factors are one group «Phones, Tablets, Android TV, …»; there are no `tv:` tracks) |
 
 The TV manifest requires `android.software.leanback`, the phone manifest requires a touchscreen (implicitly), so
 each device can only get its own bundle. The older separate app `app.antresol.tv` (closed test only, never in

@@ -12,6 +12,7 @@ import app.antresol.core.channels.ChannelFilterOption
 import app.antresol.core.channels.Channels
 import app.antresol.core.channels.Epg
 import app.antresol.core.model.Channel
+import app.antresol.core.model.ChannelCategory
 import app.antresol.core.model.ChannelEpg
 import app.antresol.core.model.ChannelEpgRow
 import app.antresol.core.model.ChannelList
@@ -107,14 +108,18 @@ class ChannelsViewModel(
     // The lists below are derived state: worked out once per change of what they read, not on every
     // read from a composition (each key press and clock tick), and the same instances until then.
 
-    /** The filter while it still means something (a theme that is gone falls back to «All»). */
+    /** The filter while it still means something (a category that is gone falls back to «All»). */
     val filter: ChannelFilter by derivedStateOf { Channels.validFilter(channels.orEmpty(), requestedFilter) }
 
-    /** The themes for the filter row. */
-    val themes: List<String> by derivedStateOf { Channels.themes(channels.orEmpty()) }
+    /** The server's categories of the list (topics, sources, groups), null on a server without them. */
+    var serverCategories: List<ChannelCategory>? by mutableStateOf(null)
+        private set
 
-    /** The category list (all, favourites, each theme) with its channel counts. */
-    val filterOptions: List<ChannelFilterOption> by derivedStateOf { Channels.filterOptions(channels.orEmpty()) }
+    /**
+     * The filter list: all, favourites, then every category with its channel count (the server's, in
+     * its order and language; older servers: the channels' own category texts).
+     */
+    val filterOptions: List<ChannelFilterOption> by derivedStateOf { Channels.filterOptions(channels.orEmpty(), serverCategories) }
 
     /** The channels of the [filter], by number. */
     val shown: List<Channel> by derivedStateOf { Channels.filter(channels.orEmpty(), filter) }
@@ -331,6 +336,7 @@ class ChannelsViewModel(
             val known = channels.orEmpty().associateBy { it.id }
             channels = Channels.sortedByNumber(list.channels).map { channel -> known[channel.id]?.takeIf { it == channel } ?: channel }
             lastChannelId = list.lastChannel ?: lastChannelId
+            serverCategories = list.categories
             error = null
         } catch (e: CancellationException) {
             throw e

@@ -2,15 +2,16 @@ package app.antresol.core.channels
 
 import app.antresol.core.api.ApiException
 import app.antresol.core.model.Channel
+import app.antresol.core.model.ChannelCategory
 import app.antresol.core.model.ChannelProgram
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
 
 /**
- * Which channels a list shows: all of them, the profile's favourites, or one theme (category). The
- * list keeps the number order whatever the filter (a TV's list never reorders). [key] survives
- * process death and intents.
+ * Which channels a list shows: all of them, the profile's favourites, or one category. The list
+ * keeps the number order whatever the filter (a TV's list never reorders). [key] survives process
+ * death and intents.
  */
 sealed interface ChannelFilter {
     val key: String
@@ -23,26 +24,30 @@ sealed interface ChannelFilter {
         override val key = "favorites"
     }
 
-    data class Theme(val category: String) : ChannelFilter {
-        override val key = "theme:$category"
+    /** One category: [id] as [app.antresol.core.model.ChannelCategory.id] (`ai:news`, `source:3`, `group:<name>`). */
+    data class Category(val id: String) : ChannelFilter {
+        override val key = "cat:$id"
     }
 
     companion object {
         fun fromKey(key: String?): ChannelFilter = when {
             key == null || key == All.key -> All
             key == Favorites.key -> Favorites
-            key.startsWith("theme:") -> Theme(key.removePrefix("theme:"))
+            key.startsWith("cat:") -> Category(key.removePrefix("cat:"))
+            // What this filter was called while a category was only the channel's `category` text.
+            key.startsWith("theme:") -> Category(Channels.groupId(key.removePrefix("theme:")))
             else -> All
         }
     }
 }
 
 /**
- * One entry of the category list of a TV's channel list: a [filter] and how many channels it lets
- * through. A [ChannelFilter.Theme] with an empty category is «no category» (channels of a source
- * that did not group them).
+ * One entry of the category list of a TV's channel list: a [filter], how many channels it lets
+ * through, and for a [ChannelFilter.Category] its [label] (the viewer's language; empty: channels
+ * without a category) and [kind] ([app.antresol.core.model.ChannelCategory.KIND_AI] and so on).
+ * «All» and «Favourites» have neither: the apps name them.
  */
-data class ChannelFilterOption(val filter: ChannelFilter, val count: Int)
+data class ChannelFilterOption(val filter: ChannelFilter, val count: Int, val label: String? = null, val kind: String? = null)
 
 /**
  * The player's mini-guide: the channels of the list the player was opened from, by number, and the
@@ -78,43 +83,77 @@ object Channels {
 
     fun sortedByNumber(channels: List<Channel>): List<Channel> = channels.sortedWith(compareBy({ it.number }, { it.id }))
 
-    /** A channel's theme: its category without the spaces a playlist's group may carry; empty when it has none. */
-    private fun themeOf(channel: Channel): String = channel.category.trim()
+    /** The id of a playlist group or an own channel's category [name] (empty: no category). */
+    fun groupId(name: String): String = "group:$name"
 
-    /** The themes (categories) for the filter, in the order of their lowest channel number. */
-    fun themes(channels: List<Channel>): List<String> =
-        sortedByNumber(channels).map(::themeOf).filter { it.isNotEmpty() }.distinct()
+    /** The category id that means «no category»: channels that are in none (a source did not group them). */
+    val NO_CATEGORY: String = groupId("")
+
+    /**
+     * A channel's category ids: the server's [Channel.categories], and for a server that sends none
+     * (older, or the channel is in none) its own `category` as a group, as the web does.
+     */
+    fun categoriesOf(channel: Channel): List<String> =
+        channel.categories ?: channel.category.trim().takeIf { it.isNotEmpty() }?.let { listOf(groupId(it)) }.orEmpty()
+
+    private fun inCategory(channel: Channel, id: String): Boolean =
+        if (id == NO_CATEGORY) categoriesOf(channel).isEmpty() else id in categoriesOf(channel)
+
+    /**
+     * The category list of a channel list, with the channels each really has: the server's list
+     * ([server], for the language, the kinds and the order: AI topics, sources, groups) when it sent
+     * one, else the channels' own categories in the order of their lowest channel number (older
+     * servers; a trailing «no category» entry when some channels have none and others are grouped).
+     * A category nobody is in is left out.
+     */
+    fun categoryList(channels: List<Channel>, server: List<ChannelCategory>?): List<ChannelCategory> {
+        val counts = HashMap<String, Int>()
+        val firstSeen = ArrayList<String>()
+        var ungrouped = 0
+        for (channel in sortedByNumber(channels)) {
+            val ids = categoriesOf(channel)
+            if (ids.isEmpty()) ungrouped++
+            for (id in ids) if (counts.merge(id, 1, Int::plus) == 1) firstSeen += id
+        }
+        if (server != null) {
+            return server.mapNotNull { category -> counts[category.id]?.let { category.copy(count = it) } }
+        }
+        // Without the server's list only a group can be named (its own text); a topic or source id has no name here.
+        val groups = firstSeen.filter { it.startsWith("group:") }
+            .map { id -> ChannelCategory(id, id.removePrefix("group:"), ChannelCategory.KIND_GROUP, counts.getValue(id)) }
+        return if (ungrouped > 0 && groups.isNotEmpty()) groups + ChannelCategory(NO_CATEGORY, "", ChannelCategory.KIND_GROUP, ungrouped) else groups
+    }
 
     /**
      * The category list of a big channel list (an external playlist has dozens of groups): «All» and
-     * «Favourites» first, then each theme in the order of its lowest channel number, each with its
-     * channel count; channels without a category are the last entry, «no category», but only when
-     * some channel has one and the others are grouped (a list nobody grouped has just «All»).
+     * «Favourites» first, then [categoryList], each with its channel count.
      */
-    fun filterOptions(channels: List<Channel>): List<ChannelFilterOption> {
-        val byTheme = LinkedHashMap<String, Int>()
-        for (channel in sortedByNumber(channels)) byTheme.merge(themeOf(channel), 1, Int::plus)
-        val ungrouped = byTheme.remove("") ?: 0
-        return buildList {
-            add(ChannelFilterOption(ChannelFilter.All, channels.size))
-            add(ChannelFilterOption(ChannelFilter.Favorites, channels.count { it.favorite }))
-            byTheme.forEach { (theme, count) -> add(ChannelFilterOption(ChannelFilter.Theme(theme), count)) }
-            if (ungrouped > 0 && byTheme.isNotEmpty()) add(ChannelFilterOption(ChannelFilter.Theme(""), ungrouped))
-        }
+    fun filterOptions(channels: List<Channel>, server: List<ChannelCategory>? = null): List<ChannelFilterOption> = buildList {
+        add(ChannelFilterOption(ChannelFilter.All, channels.size))
+        add(ChannelFilterOption(ChannelFilter.Favorites, channels.count { it.favorite }))
+        categoryList(channels, server).forEach { add(ChannelFilterOption(ChannelFilter.Category(it.id), it.count, it.name, it.kind)) }
     }
+
+    /**
+     * What the category filter [filter] is called: its name in [categories] (the server's list), else
+     * a group's own name; null when it has none to show (no category, or an id nobody named).
+     */
+    fun categoryName(filter: ChannelFilter.Category, categories: List<ChannelCategory>): String? =
+        categories.firstOrNull { it.id == filter.id }?.name?.takeIf { it.isNotBlank() }
+            ?: filter.id.takeIf { it.startsWith("group:") }?.removePrefix("group:")?.takeIf { it.isNotBlank() }
 
     /** The channels [filter] lets through, by number. */
     fun filter(channels: List<Channel>, filter: ChannelFilter): List<Channel> = sortedByNumber(
         when (filter) {
             ChannelFilter.All -> channels
             ChannelFilter.Favorites -> channels.filter { it.favorite }
-            is ChannelFilter.Theme -> channels.filter { themeOf(it) == filter.category }
+            is ChannelFilter.Category -> channels.filter { inCategory(it, filter.id) }
         },
     )
 
-    /** [filter] while it still means something (a theme that is gone falls back to «All»). */
+    /** [filter] while it still means something (a category that is gone falls back to «All»). */
     fun validFilter(channels: List<Channel>, filter: ChannelFilter): ChannelFilter = when (filter) {
-        is ChannelFilter.Theme -> if (channels.any { themeOf(it) == filter.category }) filter else ChannelFilter.All
+        is ChannelFilter.Category -> if (channels.any { inCategory(it, filter.id) }) filter else ChannelFilter.All
         else -> filter
     }
 

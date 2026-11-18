@@ -130,6 +130,14 @@ fun OptionsPanel(
             }
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 itemsIndexed(options) { index, option ->
+                    // A heading is not focusable: Up and Down walk the choices.
+                    option.section?.let { section ->
+                        Text(
+                            section.uppercase(),
+                            style = Antresol.typography.eyebrow,
+                            modifier = Modifier.padding(start = 12.dp, top = if (index == 0) 0.dp else 14.dp, bottom = 4.dp),
+                        )
+                    }
                     MenuRow(
                         option = option,
                         onClick = {

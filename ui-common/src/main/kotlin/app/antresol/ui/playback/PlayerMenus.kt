@@ -8,8 +8,11 @@ import app.antresol.core.model.Quality
 import app.antresol.ui.R
 import app.antresol.ui.format.TrackLabels
 
-/** One choice of a menu: its label, whether it is the current one, and a small badge after the label. */
-data class MenuOption(val label: String, val selected: Boolean, val badge: String? = null, val onSelect: () -> Unit)
+/**
+ * One choice of a menu: its label, whether it is the current one, and a small badge after the label.
+ * A [section] is a heading the menu draws above this choice (the first of a group).
+ */
+data class MenuOption(val label: String, val selected: Boolean, val badge: String? = null, val section: String? = null, val onSelect: () -> Unit)
 
 /** The menus of the video player. */
 enum class PlayerMenu { Audio, Subtitles, Quality, AutoSkip }

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import app.antresol.core.channels.ChannelFilter
+import app.antresol.ui.channels.channelFilterTitle
 import app.antresol.core.model.Channel
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.components.ErrorView
@@ -152,20 +153,19 @@ private fun TitleRow(viewModel: ChannelsViewModel) {
     }
 }
 
-/** «Все · Избранное · <themes>»: one row that scrolls when it does not fit. */
+/**
+ * «Все · Избранное · <categories>»: one row that scrolls when it does not fit. The categories are
+ * the server's, in its order: its AI topics first, then the sources, then the playlists' groups
+ * (an older server: the channels' own category texts).
+ */
 @Composable
 private fun FilterRow(viewModel: ChannelsViewModel) {
-    val options = listOf(ChannelFilter.All, ChannelFilter.Favorites) + viewModel.themes.map { ChannelFilter.Theme(it) }
+    val options = viewModel.filterOptions
+    val names = viewModel.serverCategories.orEmpty()
     SegmentedPills(
-        options = options,
+        options = options.map { it.filter },
         selected = viewModel.filter,
-        label = { option ->
-            when (option) {
-                ChannelFilter.All -> stringResource(R.string.tv_all_sections)
-                ChannelFilter.Favorites -> stringResource(R.string.tv_favorites)
-                is ChannelFilter.Theme -> option.category
-            }
-        },
+        label = { option -> if (option == ChannelFilter.All) stringResource(R.string.tv_all_sections) else channelFilterTitle(option, names) },
         onSelect = viewModel::select,
         modifier = Modifier.padding(top = 4.dp, bottom = 10.dp).testTag("tv-filters"),
     )

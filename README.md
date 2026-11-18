@@ -68,9 +68,11 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
 - **TV (live channels)**: one numbered list of the server's channels (own and external, in channel
   number order) with a preview of the focused channel's programme, or the programme guide («Channels |
   Guide»); focus starts on the channel this profile watched last. The category button («All Channels ·
-  842 ⌄»; a playlist can have dozens of groups) opens a list on the left (All, Favourites, each
-  category with its channel count), as does Left from the first column of the list or the guide, and
-  narrows both to the category. OK opens the full-screen live player (live edge, no seeking): Up/Down, Channel +/− and Page
+  842 ⌄»; a playlist can have dozens of groups) opens a list on the left (All, Favourites, then the
+  server's categories with their channel counts: its AI topics first, the sources, the playlists'
+  groups, under headings when there is more than one kind; an older server's `category` texts
+  without it), as does Left from the first column of the list or the guide, and narrows both to the
+  category. The phone's filter pills show the same categories in the same order. OK opens the full-screen live player (live edge, no seeking): Up/Down, Channel +/− and Page
   Up/Down switch to the next/previous channel by number (wrapping), holding the last frame until the
   new channel draws; the channel banner slides in on every switch and on OK. OK with the banner up
   opens the mini-guide, a row of the category's channels starting at the one on; Back hides the

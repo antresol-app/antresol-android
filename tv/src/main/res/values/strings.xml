@@ -110,5 +110,4 @@
 
     <!-- TV channels: categories -->
     <string name="tv_categories">Categories</string>
-    <string name="tv_category_none">No category</string>
 </resources>

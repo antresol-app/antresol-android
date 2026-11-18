@@ -21,6 +21,7 @@ import app.antresol.mobile.R as MobileR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.core.model.ProgramTrack
 import app.antresol.core.channels.ChannelFilter
+import app.antresol.ui.channels.channelFilterTitle
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Icon
@@ -274,7 +275,7 @@ fun LivePlayerScreen(
         ) {
             ChannelStrip(
                 guide = viewModel.miniGuide,
-                title = filterTitle(state.filter),
+                title = channelFilterTitle(state.filter, state.categories),
                 currentId = state.channelId,
                 onScroll = { touches++ },
                 onTune = { channel ->
@@ -327,14 +328,6 @@ internal fun LiveEdgeMark(behindLive: Boolean, onGoLive: () -> Unit) {
     } else {
         LiveBadge()
     }
-}
-
-/** «Все каналы», «Избранное» or the theme: the list the player zaps through. */
-@Composable
-private fun filterTitle(filter: ChannelFilter): String = when (filter) {
-    ChannelFilter.All -> stringResource(R.string.tv_all_channels)
-    ChannelFilter.Favorites -> stringResource(R.string.tv_favorites)
-    is ChannelFilter.Theme -> filter.category
 }
 
 /** What the player's top bar offers; [favorite] null hides the star (no channel yet). */

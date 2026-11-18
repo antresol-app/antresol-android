@@ -74,6 +74,8 @@ import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.ui.R
 import app.antresol.ui.channels.ChannelsView
 import app.antresol.ui.channels.ChannelsViewModel
+import app.antresol.ui.channels.categoryKindTitle
+import app.antresol.ui.channels.channelFilterTitle
 import app.antresol.ui.channels.ProgrammeStill
 import app.antresol.ui.channels.programClock
 import app.antresol.ui.channels.programmeArt
@@ -275,7 +277,7 @@ private fun Header(
             Spacer(Modifier.width(16.dp))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                 CategoryButton(
-                    label = filterLabel(viewModel.filter),
+                    label = channelFilterTitle(viewModel.filter, viewModel.serverCategories.orEmpty()),
                     count = viewModel.shown.size,
                     onClick = onCategories,
                     modifier = Modifier.focusRequester(categoryFocus),
@@ -283,14 +285,6 @@ private fun Header(
             }
         }
     }
-}
-
-/** What a filter is called: «Все каналы», «Избранное», the category, or «Без категории» for channels that have none. */
-@Composable
-private fun filterLabel(filter: ChannelFilter): String = when (filter) {
-    ChannelFilter.All -> stringResource(R.string.tv_all_channels)
-    ChannelFilter.Favorites -> stringResource(R.string.tv_favorites)
-    is ChannelFilter.Theme -> filter.category.ifEmpty { stringResource(TvR.string.tv_category_none) }
 }
 
 /**
@@ -331,16 +325,26 @@ private fun CategoryButton(label: String, count: Int, onClick: () -> Unit, modif
 }
 
 /**
- * The category list on the left: «Все каналы», «Избранное», then every category in the order of its
- * lowest channel number, each with its count. The current one is checked and has focus.
+ * The category list on the left: «Все каналы», «Избранное», then the categories as the server
+ * orders them (its AI topics, the sources, the playlists' groups) each with its channel count; with
+ * more than one kind they have headings. The current one is checked and has focus.
  */
 @Composable
 private fun CategoriesPanel(viewModel: ChannelsViewModel, onDismiss: () -> Unit) {
     val current = viewModel.filter
+    val options = viewModel.filterOptions
+    val headings = options.mapNotNull { it.kind }.distinct().size > 1
+    var kindShown: String? = null
     OptionsPanel(
         title = stringResource(TvR.string.tv_categories),
-        options = viewModel.filterOptions.map { option ->
-            MenuOption(filterLabel(option.filter), option.filter == current, badge = option.count.toString()) { viewModel.select(option.filter) }
+        options = options.map { option ->
+            val section = option.kind?.takeIf { headings && it != kindShown }?.let { categoryKindTitle(it) }
+            if (option.kind != null) kindShown = option.kind
+            val label = when (val filter = option.filter) {
+                is ChannelFilter.Category -> option.label?.takeIf { it.isNotBlank() } ?: channelFilterTitle(filter)
+                else -> channelFilterTitle(filter)
+            }
+            MenuOption(label, option.filter == current, badge = option.count.toString(), section = section) { viewModel.select(option.filter) }
         },
         onDismiss = onDismiss,
         width = 420.dp,

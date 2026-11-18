@@ -104,5 +104,4 @@
 
     <!-- ТВ: категории каналов -->
     <string name="tv_categories">Категории</string>
-    <string name="tv_category_none">Без категории</string>
 </resources>

@@ -3,6 +3,7 @@ package app.antresol.ui.channels
 import app.antresol.core.channels.ChannelFilter
 import app.antresol.core.channels.Channels
 import app.antresol.core.model.Channel
+import app.antresol.core.model.ChannelCategory
 import app.antresol.core.model.ChannelEpg
 import app.antresol.core.model.ChannelEpgRow
 import app.antresol.core.model.ChannelList
@@ -27,6 +28,7 @@ import java.io.IOException
 class ChannelsViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private var calls = 0
+    private var serverCategories: List<ChannelCategory>? = null
     private var failing = false
     private var channels = listOf(
         Channel(id = 1, number = 1, name = "All movies", category = "Movies", now = ChannelProgram(title = "A")),
@@ -43,7 +45,7 @@ class ChannelsViewModelTest {
         override suspend fun channels(): ChannelList {
             calls++
             if (failing) throw IOException("offline")
-            return ChannelList(channels, lastChannel = 2)
+            return ChannelList(channels, lastChannel = 2, categories = serverCategories)
         }
 
         override suspend fun setFavorite(channelId: Long, favorite: Boolean) {
@@ -92,17 +94,51 @@ class ChannelsViewModelTest {
     }
 
     @Test
+    fun theServersCategoriesNameAndOrderTheFilters() = runTest(dispatcher) {
+        serverCategories = listOf(
+            ChannelCategory("ai:comedy", "Юмор", ChannelCategory.KIND_AI, 2),
+            ChannelCategory("group:Genres", "Genres", ChannelCategory.KIND_GROUP, 2),
+        )
+        channels = channels.map { it.copy(categories = if (it.category == "Genres") listOf("ai:comedy", "group:Genres") else listOf("group:Movies")) }
+        val vm = viewModel()
+        runCurrent()
+        assertEquals(
+            listOf(
+                ChannelFilter.All to 3,
+                ChannelFilter.Favorites to 0,
+                ChannelFilter.Category("ai:comedy") to 2,
+                ChannelFilter.Category("group:Genres") to 2,
+            ),
+            vm.filterOptions.map { it.filter to it.count },
+        )
+        assertEquals("Юмор", vm.filterOptions[2].label)
+        vm.select(ChannelFilter.Category("ai:comedy"))
+        assertEquals(listOf(2L, 3L), vm.shown.map { it.id })
+        // The server stops sending them (an older one answers the next refresh): the channels' own texts again.
+        serverCategories = null
+        channels = channels.map { it.copy(categories = null) }
+        vm.reload()
+        runCurrent()
+        assertEquals(ChannelFilter.All, vm.filter)
+        assertEquals(listOf("Movies", "Genres"), vm.filterOptions.drop(2).map { it.label })
+    }
+
+    @Test
     fun oneListFilteredByThemeOrFavourites() = runTest(dispatcher) {
         val vm = viewModel()
         runCurrent()
-        assertEquals(listOf("Movies", "Genres"), vm.themes)
         assertEquals(
-            listOf(ChannelFilter.All to 3, ChannelFilter.Favorites to 0, ChannelFilter.Theme("Movies") to 1, ChannelFilter.Theme("Genres") to 2),
+            listOf(
+                ChannelFilter.All to 3,
+                ChannelFilter.Favorites to 0,
+                ChannelFilter.Category("group:Movies") to 1,
+                ChannelFilter.Category("group:Genres") to 2,
+            ),
             vm.filterOptions.map { it.filter to it.count },
         )
         assertEquals(listOf(1L, 2L, 3L), vm.shown.map { it.id })
         assertEquals(2L, vm.lastChannel?.id)
-        vm.select(ChannelFilter.Theme("Genres"))
+        vm.select(ChannelFilter.Category("group:Genres"))
         assertEquals(listOf(2L, 3L), vm.shown.map { it.id })
         vm.select(ChannelFilter.Favorites)
         assertEquals(emptyList<Long>(), vm.shown.map { it.id })
@@ -116,7 +152,7 @@ class ChannelsViewModelTest {
         runCurrent()
         assertEquals(listOf(3L), vm.shown.map { it.id })
         // A theme that disappeared falls back to «All».
-        vm.select(ChannelFilter.Theme("Genres"))
+        vm.select(ChannelFilter.Category("group:Genres"))
         channels = channels.filter { it.category == "Movies" }
         vm.pullToRefresh()
         runCurrent()

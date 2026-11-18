@@ -1,6 +1,8 @@
 package app.antresol.mobile
 
 import android.app.Application
+import android.content.res.Resources
+import app.antresol.ui.language.ProfileLocaleKeeper
 import android.os.Build
 import app.antresol.core.api.ServerLanguage
 import app.antresol.core.discovery.ServerFinder
@@ -44,6 +46,17 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
     /** Music and audiobook playback (the Media3 service behind a controller). */
     lateinit var playback: PlaybackConnection
         private set
+
+    // Text resolved through the application context (the players' view models, the playback
+    // notification) follows the profile's language like the activities do.
+    private val locale = ProfileLocaleKeeper()
+
+    override fun getResources(): Resources {
+        val base = super.getResources()
+        if (!::settings.isInitialized) return base
+        locale.language = settings.profileLanguage
+        return locale.resources(this, base)
+    }
 
     override fun onCreate() {
         super.onCreate()

@@ -7,7 +7,7 @@ import android.os.LocaleList
 import java.util.Locale
 
 /**
- * Keeps an activity in the profile's interface language after configuration changes it handles
+ * Keeps an activity (or the application) in the profile's interface language after configuration changes it handles
  * itself (`configChanges`: a remote reconnecting, a keyboard, the screen size, the UI mode).
  *
  * The language is applied once, in `attachBaseContext`, as a configuration context. A change the
@@ -16,12 +16,19 @@ import java.util.Locale
  * locale: strings read after it come back in the device language («All Channels» on a Russian
  * profile). The activity routes `getResources()` through [resources] and calls
  * [onConfigurationChanged]; both do nothing while the language holds or the profile has none.
+ *
+ * The application context needs it too: it is wrapped once per process, in the language cached
+ * then, and a language that arrives later (the first sign-in, a profile switch) only restarts the
+ * activity. View models, players and the media session that resolve text through the application
+ * context would otherwise stay in the old language. The application sets [language] from its
+ * settings on every `getResources()`.
  */
 class ProfileLocaleKeeper {
     /** "ru", "en", or "" to follow the device; set in `attachBaseContext` (a new language restarts the activity). */
     var language: String = ""
 
     private var basedOn: Configuration? = null
+    private var keptLanguage = ""
     private var kept: Resources? = null
 
     /** [base] when it is in [language] (or there is none), else a copy of it in [language]. */
@@ -29,10 +36,11 @@ class ProfileLocaleKeeper {
         val wanted = language.ifEmpty { return base }
         val config = base.configuration
         if (config.locales[0].language == wanted) return base
-        kept?.let { if (basedOn == config) return it }
+        kept?.let { if (keptLanguage == wanted && basedOn == config) return it }
         val fixed = Configuration(config).apply { setLocales(LocaleList(Locale.forLanguageTag(wanted))) }
         return context.createConfigurationContext(fixed).resources.also {
             kept = it
+            keptLanguage = wanted
             basedOn = Configuration(config)
         }
     }

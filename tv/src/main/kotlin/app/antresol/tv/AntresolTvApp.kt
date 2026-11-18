@@ -2,6 +2,8 @@ package app.antresol.tv
 
 import android.app.Application
 import android.content.Context
+import android.content.res.Resources
+import app.antresol.ui.language.ProfileLocaleKeeper
 import android.os.Build
 import android.provider.Settings
 import app.antresol.core.api.ServerLanguage
@@ -64,6 +66,17 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(TvSettings.wrap(base))
+    }
+
+    // Text resolved through the application context (view models, players, the media session)
+    // follows the profile's current language, not the one cached when the process started.
+    private val locale = ProfileLocaleKeeper()
+
+    override fun getResources(): Resources {
+        val base = super.getResources()
+        if (!::settings.isInitialized) return base
+        locale.language = settings.profileLanguage
+        return locale.resources(this, base)
     }
 
     override fun onCreate() {

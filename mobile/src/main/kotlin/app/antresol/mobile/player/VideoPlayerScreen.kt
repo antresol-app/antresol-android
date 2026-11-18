@@ -59,6 +59,7 @@ import androidx.media3.ui.PlayerView
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
 import app.antresol.core.model.Quality
+import app.antresol.core.playback.SkipPill
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.GlassPillButton
@@ -243,6 +244,26 @@ private fun PlayingLayer(
                 },
             )
         }
+        SkipPills(
+            pill = viewModel.skipPill,
+            note = viewModel.skipNote,
+            controlsVisible = visible,
+            onPress = { touched(); viewModel.pressSkip() },
+            onWatchCredits = { touched(); viewModel.watchCredits() },
+            onUndo = { touched(); viewModel.undoSkip() },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                // Above the scrubber (and Next Episode) while the controls show.
+                .padding(
+                    end = 20.dp,
+                    bottom = when {
+                        !visible -> 24.dp
+                        viewModel.nextEpisode != null && viewModel.skipPill !is SkipPill.Next -> 132.dp
+                        else -> 72.dp
+                    },
+                ),
+        )
     }
     menu?.let { open -> MenuSheet(open, viewModel, onDismiss = { menu = null }) }
 }
@@ -279,6 +300,9 @@ private fun Controls(
                 RoundIconButton(AntresolIcons.Subtitles, stringResource(UiR.string.detail_subtitles), { onTouch(); onMenu(PlayerMenu.Subtitles) }, glass = true, size = 44.dp, iconSize = 22.dp)
             }
             RoundIconButton(AntresolIcons.Sliders, stringResource(UiR.string.detail_quality), { onTouch(); onMenu(PlayerMenu.Quality) }, glass = true, size = 44.dp, iconSize = 22.dp)
+            if (viewModel.hasSkipSegments) {
+                RoundIconButton(AntresolIcons.SkipAhead, stringResource(UiR.string.player_auto_skip), { onTouch(); onMenu(PlayerMenu.AutoSkip) }, glass = true, size = 44.dp, iconSize = 22.dp)
+            }
             if (canPictureInPicture) {
                 RoundIconButton(MobileIcons.Pip, stringResource(R.string.player_pip), onPictureInPicture, glass = true, size = 44.dp, iconSize = 22.dp)
             }
@@ -311,7 +335,8 @@ private fun Controls(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(horizontal = 20.dp, vertical = 8.dp),
         ) {
-            if (viewModel.nextEpisode != null) {
+            // At the credits the skip pills' «Следующая серия» takes its place.
+            if (viewModel.nextEpisode != null && viewModel.skipPill !is SkipPill.Next) {
                 GlassPillButton(
                     text = stringResource(UiR.string.player_next_episode),
                     icon = MobileIcons.SkipNext,

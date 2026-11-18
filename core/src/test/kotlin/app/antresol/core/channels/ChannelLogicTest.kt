@@ -130,6 +130,23 @@ class ChannelLogicTest {
     }
 
     @Test
+    fun serverTimesAreReadWithAnyZoneOffset() {
+        val utc = ms("2026-11-18T10:42:00Z")
+        assertEquals(utc, Channels.epochMs("2026-11-18T10:42:00Z"))
+        // Go's time.Time JSON in a server zone other than UTC
+        assertEquals(utc, Channels.epochMs("2026-11-18T13:42:00+03:00"))
+        assertEquals(utc, Channels.epochMs("2026-11-18T05:42:00-05:00"))
+        assertEquals(utc, Channels.epochMs("2026-11-18T10:42:00+00:00"))
+        // fractional seconds, as time.UnixMilli gives them
+        assertEquals(utc + 123, Channels.epochMs("2026-11-18T13:42:00.123+03:00"))
+        assertEquals(utc + 123, Channels.epochMs("2026-11-18T10:42:00.123456789Z"))
+        assertEquals(ms("2026-11-18T10:43:00Z"), Channels.displayMs("2026-11-18T13:42:40.5+03:00"))
+        assertNull(Channels.epochMs("2026-11-18 13:42"))
+        assertNull(Channels.epochMs("2026-11-18T13:42:00"))
+        assertNull(Channels.epochMs(""))
+    }
+
+    @Test
     fun displayedTimesRoundToTheNearestMinute() {
         assertEquals(ms("2026-11-11T23:51:00Z"), Channels.displayMs("2026-11-11T23:50:38.9Z"))
         assertEquals(ms("2026-11-11T23:50:00Z"), Channels.displayMs("2026-11-11T23:50:29.999Z"))

@@ -4,6 +4,7 @@ import app.antresol.core.api.ApiException
 import app.antresol.core.model.Channel
 import app.antresol.core.model.ChannelProgram
 import java.time.Instant
+import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
 
 /**
@@ -121,11 +122,20 @@ object Channels {
         return MiniGuide(sorted, sorted.indexOfFirst { it.id == currentId }.coerceAtLeast(0))
     }
 
-    /** Epoch milliseconds of an ISO 8601 time from the server, or null when it cannot be read. */
+    /**
+     * Epoch milliseconds of an ISO 8601 time from the server, or null when it cannot be read. The
+     * server writes Go's RFC 3339 in its own zone ("2026-11-18T13:42:00+03:00" off UTC, "…Z" on it,
+     * fractional seconds when it has them). `Instant.parse` takes only "Z" on older Android runtimes
+     * (java.time before JDK 12's ISO_INSTANT), so an offset is read as an offset date-time first.
+     */
     fun epochMs(iso: String): Long? = try {
-        Instant.parse(iso).toEpochMilli()
+        OffsetDateTime.parse(iso).toInstant().toEpochMilli()
     } catch (_: DateTimeParseException) {
-        null
+        try {
+            Instant.parse(iso).toEpochMilli()
+        } catch (_: DateTimeParseException) {
+            null
+        }
     }
 
     /** How far [program] is at [nowMs], 0…1 ((now − start)/(end − start)); 0 for unknown times. */

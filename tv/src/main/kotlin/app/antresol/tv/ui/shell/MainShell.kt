@@ -14,6 +14,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.activity.compose.BackHandler
 import android.content.Context
+import android.os.SystemClock
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.filterNotNull
 import android.content.ContextWrapper
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -108,6 +111,8 @@ import app.antresol.tv.ui.settings.SettingsScreen
 import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.core.channels.ChannelFilter
+import app.antresol.core.channels.Channels
+import app.antresol.tv.autostart.AutostartTarget
 import app.antresol.core.channels.LiveTvSession
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.channelsApi
@@ -311,6 +316,37 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         if (nowPlayingRequested) {
             app.nowPlayingRequested.value = false
             if (audio.content != null) nowPlaying()
+        }
+    }
+
+    // "Open Antresol at power on" started the app: show what the setting says, once, and only while
+    // the request is fresh (an old one belongs to a start the viewer has long since taken over).
+    // Collected, not keyed: clearing the request must not cancel the work it started.
+    LaunchedEffect(app) {
+        app.autostartRequested.filterNotNull().collect { request ->
+            app.autostartRequested.value = null
+            if (!request.fresh(SystemClock.elapsedRealtime())) return@collect
+            when (request.target) {
+                // The task was just brought forward as it was (or a cold start opened Home).
+                AutostartTarget.Last -> Unit
+                AutostartTarget.Tv -> selectTab(NavTab.Tv)
+                AutostartTarget.Channel -> {
+                    val list = try {
+                        client.channels()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                    val channel = list?.let { Channels.lastChannel(it.channels, it.lastChannel) ?: Channels.sortedByNumber(it.channels).firstOrNull() }
+                    // The TV tab stays under the player: Back from the channel lands on the list.
+                    selectTab(NavTab.Tv)
+                    if (channel != null) {
+                        audio.pause()
+                        navController.navigate(LiveRoute(channel.id, ChannelFilter.All.key))
+                    }
+                }
+            }
         }
     }
 

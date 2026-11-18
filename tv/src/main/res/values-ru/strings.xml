@@ -77,4 +77,28 @@
     <string name="setup_qr_description">QR-код для настройки телевизора с телефона</string>
     <string name="search_tv_hint">Фильмы, сериалы, музыка</string>
     <string name="search_tv_prompt">Ищите фильмы, сериалы и музыку в своей медиатеке.</string>
+
+    <!-- Автозапуск: открыть приложение, когда телевизор или приставка включаются -->
+    <string name="settings_on">Вкл.</string>
+    <string name="settings_autostart_section">Автозапуск</string>
+    <string name="settings_autostart">Открывать Antresol при включении</string>
+    <string name="settings_autostart_hint">Когда телевизор или приставка включаются.</string>
+    <string name="settings_autostart_wake">И после режима ожидания</string>
+    <string name="settings_autostart_wake_hint">Когда экран снова включается.</string>
+    <string name="settings_autostart_target">Что открывать</string>
+    <string name="settings_autostart_target_last">Где остановились</string>
+    <string name="settings_autostart_target_tv">ТВ</string>
+    <string name="settings_autostart_target_channel">Последний канал</string>
+    <string name="settings_autostart_permission">Поверх других приложений</string>
+    <string name="settings_autostart_permission_hint">Нужно, чтобы Antresol открывался сам. Нажмите OK, чтобы разрешить.</string>
+    <string name="settings_permission_allowed">Разрешено</string>
+    <string name="settings_permission_not_allowed">Не разрешено</string>
+    <string name="settings_overlay_title">Разрешите Antresol открываться самому</string>
+    <string name="settings_overlay_note">Android позволяет приложению открывать свой экран в фоне, только если ему разрешено отображаться поверх других приложений. Antresol ничего не рисует поверх других приложений. Откройте страницу настроек, включите Antresol и нажмите «Назад».</string>
+    <string name="settings_overlay_open">Открыть настройки</string>
+    <string name="settings_overlay_later">Не сейчас</string>
+    <string name="settings_overlay_manual">На этом телевизоре нет такой страницы настроек. На компьютере, подключённом к телевизору по adb, выполните:\n%1$s</string>
+    <string name="settings_overlay_close">Закрыть</string>
+    <string name="autostart_notification_channel">Автозапуск</string>
+    <string name="autostart_notification_text">Открывает Antresol при включении телевизора</string>
 </resources>

@@ -31,6 +31,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
@@ -40,6 +42,10 @@ import androidx.tv.material3.Text
 import app.antresol.core.model.Quality
 import app.antresol.core.session.AuthState
 import app.antresol.tv.BuildConfig
+import app.antresol.tv.autostart.AutostartController
+import app.antresol.tv.autostart.AutostartPolicy
+import app.antresol.tv.autostart.AutostartTarget
+import app.antresol.tv.autostart.OverlayPermission
 import app.antresol.tv.R as TvR
 import app.antresol.ui.language.UiLanguageModel
 import app.antresol.ui.language.UiLanguages
@@ -59,11 +65,13 @@ import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
 
-private enum class SettingsMenu { Quality, Subtitles, Language, ConfirmSignOut }
+private enum class SettingsMenu { Quality, Subtitles, Language, AutostartTarget, OverlayGuide, OverlayManual, ConfirmSignOut }
 
 /**
  * Settings, opened from the avatar: the profile (switch, sign out), playback defaults (video
- * quality, subtitle language), the app language and about the app. Server facts and signed-in
+ * quality, subtitle language), the autostart («Открывать Antresol при включении»: off by default; it
+ * guides the viewer to the «Display over other apps» permission it needs), the app language and
+ * about the app. Server facts and signed-in
  * devices are managed on the web, not on a TV (as on Apple TV). Choices open a side panel (the
  * shell hides its nav meanwhile, see [onMenuOpenChanged]); a new language restarts the app's
  * screens from Home, so text from the server reloads in that language too. Sign Out asks first,
@@ -83,6 +91,18 @@ fun SettingsScreen(
     LaunchedEffect(language) { language.refresh() }
     var menu by remember { mutableStateOf<SettingsMenu?>(null) }
     LaunchedEffect(menu != null) { onMenuOpenChanged(menu != null) }
+    // «Display over other apps» is granted on a system page: looked at again when it closes.
+    val context = LocalContext.current
+    var overlayGranted by remember { mutableStateOf(OverlayPermission.granted(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        overlayGranted = OverlayPermission.granted(context)
+        AutostartController.sync(context)
+    }
+    val setAutostart: (Boolean) -> Unit = { on ->
+        settings.update { it.copy(autostart = on) }
+        AutostartController.sync(context)
+        if (on && !overlayGranted) menu = SettingsMenu.OverlayGuide
+    }
     // The control that opened each panel gets focus back when the panel closes.
     val openers = remember { SettingsMenu.entries.associateWith { FocusRequester() } }
     var lastMenu by remember { mutableStateOf<SettingsMenu?>(null) }
@@ -139,6 +159,49 @@ fun SettingsScreen(
                         modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Subtitles)),
                     )
                 }
+                item { Section(stringResource(TvR.string.settings_autostart_section)) }
+                item {
+                    SettingRow(
+                        label = stringResource(TvR.string.settings_autostart),
+                        detail = stringResource(TvR.string.settings_autostart_hint),
+                        value = onOffLabel(preferences.autostart),
+                        chevron = false,
+                        onClick = { setAutostart(!preferences.autostart) },
+                    )
+                }
+                if (preferences.autostart) {
+                    if (AutostartPolicy.needsOverlayPermission()) {
+                        item {
+                            SettingRow(
+                                label = stringResource(TvR.string.settings_autostart_permission),
+                                detail = stringResource(TvR.string.settings_autostart_permission_hint).takeIf { !overlayGranted }.orEmpty(),
+                                value = stringResource(if (overlayGranted) TvR.string.settings_permission_allowed else TvR.string.settings_permission_not_allowed),
+                                onClick = { if (!overlayGranted) menu = SettingsMenu.OverlayGuide },
+                                modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.OverlayGuide)),
+                            )
+                        }
+                    }
+                    item {
+                        SettingRow(
+                            label = stringResource(TvR.string.settings_autostart_wake),
+                            detail = stringResource(TvR.string.settings_autostart_wake_hint),
+                            value = onOffLabel(preferences.autostartOnWake),
+                            chevron = false,
+                            onClick = {
+                                settings.update { it.copy(autostartOnWake = !it.autostartOnWake) }
+                                AutostartController.sync(context)
+                            },
+                        )
+                    }
+                    item {
+                        SettingRow(
+                            label = stringResource(TvR.string.settings_autostart_target),
+                            value = autostartTargetLabel(AutostartTarget.fromKey(preferences.autostartTarget)),
+                            onClick = { menu = SettingsMenu.AutostartTarget },
+                            modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.AutostartTarget)),
+                        )
+                    }
+                }
                 item { Section(stringResource(R.string.settings_language)) }
                 item {
                     SettingRow(
@@ -174,6 +237,39 @@ fun SettingsScreen(
                     MenuOption(languageLabel(choice), choice == (language.choice ?: UiLanguages.PROFILE)) { language.choose(choice) }
                 },
                 onDismiss = { menu = null },
+            )
+            SettingsMenu.AutostartTarget -> OptionsPanel(
+                title = stringResource(TvR.string.settings_autostart_target),
+                options = AutostartTarget.entries.map { target ->
+                    MenuOption(autostartTargetLabel(target), target.key == preferences.autostartTarget) {
+                        settings.update { it.copy(autostartTarget = target.key) }
+                    }
+                },
+                onDismiss = { menu = null },
+            )
+            SettingsMenu.OverlayGuide -> OptionsPanel(
+                title = stringResource(TvR.string.settings_overlay_title),
+                note = stringResource(TvR.string.settings_overlay_note),
+                noteLines = 8,
+                width = 520.dp,
+                options = listOf(
+                    MenuOption(stringResource(TvR.string.settings_overlay_open), selected = false) {
+                        // The page is on top of this screen next; the manual way replaces the panel when the TV has no page.
+                        if (!OverlayPermission.openSettings(context)) menu = SettingsMenu.OverlayManual
+                    },
+                    MenuOption(stringResource(TvR.string.settings_overlay_later), selected = false) {},
+                ),
+                onDismiss = { if (menu == SettingsMenu.OverlayGuide) menu = null },
+                focusIndex = 0,
+            )
+            SettingsMenu.OverlayManual -> OptionsPanel(
+                title = stringResource(TvR.string.settings_overlay_title),
+                note = stringResource(TvR.string.settings_overlay_manual, OverlayPermission.adbCommand(context)),
+                noteLines = 8,
+                width = 520.dp,
+                options = listOf(MenuOption(stringResource(TvR.string.settings_overlay_close), selected = false) {}),
+                onDismiss = { menu = null },
+                focusIndex = 0,
             )
             SettingsMenu.ConfirmSignOut -> ConfirmPanel(
                 title = stringResource(TvR.string.settings_sign_out_confirm, state.session.userName),
@@ -257,7 +353,7 @@ private fun Section(title: String) {
 
 /** A focusable setting with its current value; OK opens its choices. */
 @Composable
-private fun SettingRow(label: String, value: String, onClick: () -> Unit, modifier: Modifier = Modifier, detail: String = "") {
+private fun SettingRow(label: String, value: String, onClick: () -> Unit, modifier: Modifier = Modifier, detail: String = "", chevron: Boolean = true) {
     Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
@@ -277,7 +373,12 @@ private fun SettingRow(label: String, value: String, onClick: () -> Unit, modifi
                 }
             }
             Text(value, style = Antresol.typography.body, color = LocalContentColor.current.copy(alpha = 0.7f), maxLines = 1)
-            Icon(AntresolIcons.ChevronRight, contentDescription = null, tint = LocalContentColor.current.copy(alpha = 0.7f), modifier = Modifier.width(16.dp))
+            if (chevron) {
+                Icon(AntresolIcons.ChevronRight, contentDescription = null, tint = LocalContentColor.current.copy(alpha = 0.7f), modifier = Modifier.width(16.dp))
+            } else {
+                // The values of all rows stay in one column.
+                Spacer(Modifier.width(16.dp))
+            }
         }
     }
 }
@@ -285,6 +386,18 @@ private fun SettingRow(label: String, value: String, onClick: () -> Unit, modifi
 @Composable
 private fun subtitleLabel(code: String): String =
     if (code.isEmpty()) stringResource(TvR.string.settings_off) else TrackLabels.language(code) ?: code
+
+@Composable
+private fun onOffLabel(on: Boolean): String = stringResource(if (on) TvR.string.settings_on else TvR.string.settings_off)
+
+@Composable
+private fun autostartTargetLabel(target: AutostartTarget): String = stringResource(
+    when (target) {
+        AutostartTarget.Last -> TvR.string.settings_autostart_target_last
+        AutostartTarget.Tv -> TvR.string.settings_autostart_target_tv
+        AutostartTarget.Channel -> TvR.string.settings_autostart_target_channel
+    },
+)
 
 @Composable
 private fun languageLabel(language: String): String = when (language) {

@@ -6,11 +6,16 @@ import android.content.res.Resources
 import android.content.res.Configuration
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
+import app.antresol.tv.autostart.AutostartController
+import app.antresol.tv.autostart.AutostartLauncher
+import app.antresol.tv.autostart.AutostartRequest
+import app.antresol.tv.autostart.AutostartTarget
 import app.antresol.tv.settings.TvSettings
 import app.antresol.tv.ui.root.AntresolTvRoot
 import app.antresol.ui.theme.AntresolColors
@@ -49,8 +54,22 @@ class MainActivity : ComponentActivity() {
         handle(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Starts or stops the service that opens the app after a boot or a standby, to match the settings
+        // (it also comes back after the system or an update stopped it).
+        AutostartController.sync(this)
+    }
+
     private fun handle(intent: Intent?) {
-        if (intent?.action == ACTION_NOW_PLAYING) (application as AntresolTvApp).nowPlayingRequested.value = true
+        val app = application as AntresolTvApp
+        when (intent?.action) {
+            ACTION_NOW_PLAYING -> app.nowPlayingRequested.value = true
+            AutostartLauncher.ACTION_AUTOSTART -> app.autostartRequested.value = AutostartRequest(
+                AutostartTarget.fromKey(intent.getStringExtra(AutostartLauncher.EXTRA_TARGET)),
+                SystemClock.elapsedRealtime(),
+            )
+        }
     }
 
     companion object {

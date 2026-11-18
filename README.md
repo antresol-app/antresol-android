@@ -74,6 +74,11 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   opens the mini-guide, a row of the section's channels starting at the one on; Back hides the
   guide, then the banner, then leaves. The media session reports the live programme. A starting
   channel is retried automatically; other server refusals are shown with Try Again.
+- **Autostart** (Settings, off by default): «Open Antresol at power on» brings the app to the front when the TV or
+  box starts and (optionally) when the screen comes back on after standby, to where it was left, the TV tab or the
+  last channel playing. Android 10+ lets an app start its screen from the background only with «Display over other
+  apps», so the setting guides to it (the system page, or the adb command on a TV without one); a small foreground
+  service listens for the screen. Notes for Play: [docs/PLAY_STORE.md](docs/PLAY_STORE.md).
 - **Music**: album, artist and playlist pages with Play, Shuffle, Favorite and the track list. A
   Media3 `MediaSessionService` keeps music playing while you browse or leave the app and publishes
   it to the system's now-playing card and remote. Now Playing has an artwork-tinted background,

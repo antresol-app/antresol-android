@@ -13,6 +13,8 @@ import app.antresol.core.pairing.PairingTicket
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
+import app.antresol.tv.autostart.AppVisibility
+import app.antresol.tv.autostart.AutostartRequest
 import app.antresol.tv.playback.AudioEngine
 import app.antresol.tv.settings.TvSettings
 import app.antresol.ui.data.DataStoreSessionStore
@@ -64,6 +66,12 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
     /** Set when the system asks to show the now-playing screen (tap on the media session). */
     val nowPlayingRequested = MutableStateFlow(false)
 
+    /** Whether the app is in front for the viewer: the autostart does not open an app that already is. */
+    val visibility = AppVisibility()
+
+    /** Set when «Открывать Antresol при включении» started the app: what the shell opens (once). */
+    val autostartRequested = MutableStateFlow<AutostartRequest?>(null)
+
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(TvSettings.wrap(base))
     }
@@ -81,6 +89,7 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        registerActivityLifecycleCallbacks(visibility)
         settings = TvSettings(this)
         serverFinder = LanDiscovery(this, unicastHosts = ::lastServerHost)
         session = SessionManager(

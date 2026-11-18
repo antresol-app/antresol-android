@@ -6,6 +6,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
+    <!-- "Open Antresol at power on" (off by default, Settings): open the app after a boot, and
+         after a standby while the setting says so. RECEIVE_BOOT_COMPLETED hears the boot;
+         FOREGROUND_SERVICE_SPECIAL_USE is for the service that hears the screen come on (a manifest
+         receiver cannot); SYSTEM_ALERT_WINDOW ("Display over other apps", granted by the user in the
+         system settings, the app draws no overlay) is what lets an app in the background start an
+         activity on Android 10+. docs/PLAY_STORE.md has the Play Console declarations. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <uses-feature
         android:name="android.software.leanback"
         android:required="true" />
@@ -42,6 +52,24 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".autostart.AutostartReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".autostart.AutostartService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Opens the app when the TV or box starts or wakes from standby, only if the user switched on Open Antresol at power on in Settings" />
+        </service>
 
         <!-- Music and audiobooks keep playing in the background through this MediaSession service. -->
         <service

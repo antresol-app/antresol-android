@@ -97,3 +97,34 @@ The answers cover the phone and TV builds.
   playback controls), `WAKE_LOCK` (playback), `CHANGE_WIFI_MULTICAST_STATE` (a Wi-Fi multicast lock while
   looking for servers on the home network; no location permission), `CAMERA` (phone only, asked on the
   «Sign in a TV» screen to read the TV's QR code; the camera is not required, the code can be typed).
+
+## TV autostart: permissions and Play Console declarations
+
+The TV build has «Open Antresol at power on» in Settings (off by default; Russian «Открывать Antresol при включении»).
+It opens the app after the TV or box starts and, if asked, when the screen comes back on after standby. It needs three
+more permissions, all of them only in the TV manifest (the phone app is unchanged):
+
+- `RECEIVE_BOOT_COMPLETED`: normal permission, hears that the device has started.
+- `SYSTEM_ALERT_WINDOW` («Display over other apps»): the one exemption that lets an app in the background start an
+  activity on Android 10+ (a boot receiver or a service has none). The app draws no overlay. It is not on Play's
+  restricted-permission list (no declaration form) but the user must grant it in the system settings; Settings shows
+  its state, guides to the system page and, for a TV without the page, prints the adb command. Without it, nothing is
+  launched and no service runs. The setting says why in the UI text; say the same if asked.
+- `FOREGROUND_SERVICE_SPECIAL_USE` for the service that hears the screen come on (`ACTION_SCREEN_ON` cannot be declared
+  in a manifest, it needs a running process, and a cached TV app process is killed at will). The manifest carries the
+  `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` text. In the Console, App content → Foreground service permissions →
+  «Special use»:
+  - Description: «An optional setting the user switches on. While it is on, the app keeps a minimal foreground
+    service with a low-importance notification that listens for the screen turning on, and opens the app when the TV
+    or box wakes from standby. It does nothing else: no network, no media, no data collection.»
+  - If the task were interrupted: the app would not open by itself after standby; the user opens it by hand.
+  - Demo video: Settings → switch «Open Antresol at power on» on → allow «Display over other apps» → send the TV to
+    standby and wake it → Antresol opens (an emulator or a TV, ~30 s).
+  The service runs only while the setting is on and the permission is granted; with «Also after standby» off it
+  runs just for the launch after a boot and stops.
+
+Android 15+ restrictions that were checked against the docs: a `BOOT_COMPLETED` receiver may not start foreground
+services of the types data sync, camera, media playback, phone call, media projection or microphone (special use is
+fine), and an app that holds `SYSTEM_ALERT_WINDOW` needs a visible overlay to start a foreground service from the
+background but not to start an activity. The app starts the service from the background only in the boot and
+app-update broadcasts (both exempt) and otherwise from its own screens.

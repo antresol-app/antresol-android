@@ -18,9 +18,11 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.antresol.core.channels.ChannelFilter
 import app.antresol.core.channels.MiniGuide
 import app.antresol.core.model.Channel
 import app.antresol.core.model.ChannelProgram
+import app.antresol.tv.ui.channels.filterTitle
 import app.antresol.ui.theme.AntresolTheme
 import java.io.File
 import java.time.Instant
@@ -90,7 +92,7 @@ class MiniGuidePanelTest {
         compose.setContent {
             AntresolTheme {
                 Box(Modifier.fillMaxSize().background(Color(0xFF203040))) {
-                    ChannelListPanel(guide, "Все каналы", currentId = currentId, selected = selected)
+                    ChannelListPanel(guide, filterTitle(ChannelFilter.All), currentId = currentId, selected = selected)
                 }
             }
         }

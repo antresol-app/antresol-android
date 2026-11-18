@@ -3,6 +3,7 @@ package app.antresol.tv.ui.channels
 import app.antresol.ui.channels.ChannelLogo
 import app.antresol.ui.channels.LocalMinuteWidth
 import app.antresol.ui.channels.minutesToDp
+import app.antresol.ui.channels.channelNumberWidth
 import app.antresol.ui.channels.reserveLogoSlot
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -87,6 +88,10 @@ import app.antresol.ui.theme.AntresolShapes
 import kotlinx.coroutines.launch
 
 private val ChannelColumnWidth = 168.dp
+
+/** The channel column's number: the title size with tabular figures. */
+private val GuideNumberStyle: androidx.compose.ui.text.TextStyle
+    @Composable get() = Antresol.typography.title.copy(fontFeatureSettings = "tnum")
 private val RowHeight = 52.dp
 private val RulerHeight = 28.dp
 
@@ -222,6 +227,7 @@ private fun GuideGrid(
     fun isComposed(program: ChannelProgram): Boolean = Epg.overlapping(listOf(program), composed.first, composed.last).isNotEmpty()
     val clock = remember(context) { timeFormat(context) }
     val reserveLogo = remember(rows) { reserveLogoSlot(rows.map { it.logoUrl }) }
+    val numberWidth = channelNumberWidth(remember(rows) { rows.map { it.number } }, GuideNumberStyle)
 
     LaunchedEffect(fromMs, rows.isNotEmpty()) {
         if (rows.isEmpty()) return@LaunchedEffect
@@ -317,7 +323,7 @@ private fun GuideGrid(
             }
             itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
                 Row(Modifier.height(RowHeight).padding(start = ScreenPaddingH)) {
-                    ChannelCell(row, reserveLogo = reserveLogo, last = row.id == lastChannelId, focused = index == focusedRow)
+                    ChannelCell(row, reserveLogo = reserveLogo, numberWidth = numberWidth, last = row.id == lastChannelId, focused = index == focusedRow)
                     Box(
                         Modifier
                             .weight(1f)
@@ -378,7 +384,7 @@ private suspend fun reveal(program: ChannelProgram, fromMs: Long, scroll: Scroll
 }
 
 @Composable
-private fun ChannelCell(row: ChannelEpgRow, reserveLogo: Boolean, last: Boolean, focused: Boolean) {
+private fun ChannelCell(row: ChannelEpgRow, reserveLogo: Boolean, numberWidth: Dp, last: Boolean, focused: Boolean) {
     val urls = app.antresol.tv.ui.LocalMediaUrls.current
     Row(
         Modifier
@@ -390,7 +396,7 @@ private fun ChannelCell(row: ChannelEpgRow, reserveLogo: Boolean, last: Boolean,
     ) {
         Text(
             row.number.toString(),
-            style = Antresol.typography.title.copy(fontFeatureSettings = "tnum"),
+            style = GuideNumberStyle,
             color = when {
                 last -> AntresolColors.Accent
                 focused -> AntresolColors.Label
@@ -398,8 +404,8 @@ private fun ChannelCell(row: ChannelEpgRow, reserveLogo: Boolean, last: Boolean,
             },
             maxLines = 1,
             softWrap = false,
-            // Three digits: external channels are numbered from 100.
-            modifier = Modifier.width(34.dp),
+            // As wide as the guide's widest number (four digits fit).
+            modifier = Modifier.width(numberWidth),
         )
         ChannelLogo(urls?.image(row.logoUrl), height = 22.dp, reserve = reserveLogo)
         Text(

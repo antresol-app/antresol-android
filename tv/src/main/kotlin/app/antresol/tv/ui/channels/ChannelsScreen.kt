@@ -1,6 +1,7 @@
 package app.antresol.tv.ui.channels
 
 import app.antresol.ui.channels.ChannelLogo
+import app.antresol.ui.channels.channelNumberWidth
 import app.antresol.ui.channels.reserveLogoSlot
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +49,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -82,6 +85,10 @@ import kotlinx.coroutines.launch
 
 /** Width of the channel list; the preview of the focused channel takes the rest. */
 private val ListWidth = 430.dp
+
+/** A row's channel number: the section-title size with tabular figures. */
+private val ChannelNumberStyle: TextStyle
+    @Composable get() = Antresol.typography.sectionTitle.copy(fontFeatureSettings = "tnum")
 
 /**
  * The «ТВ» tab on the television, like Android TV Live Channels / TiviMate: the title with the view
@@ -256,6 +263,7 @@ private fun ChannelList(
 ) {
     val shown = viewModel.shown
     val reserveLogo = remember(shown) { reserveLogoSlot(shown.map { it.logoUrl }) }
+    val numberWidth = channelNumberWidth(remember(shown) { shown.map { it.number } }, ChannelNumberStyle)
     val last = viewModel.lastChannel
     var focusedId by rememberSaveable(viewModel.filter.key) { mutableStateOf(last?.id ?: shown.firstOrNull()?.id) }
     // Where focus starts: the last channel (a TV turns on where it was left), else the first.
@@ -313,6 +321,7 @@ private fun ChannelList(
                     TvChannelRow(
                         channel = channel,
                         reserveLogo = reserveLogo,
+                        numberWidth = numberWidth,
                         nowMs = nowMs,
                         last = channel.id == last?.id,
                         onClick = { onWatch(channel) },
@@ -361,7 +370,7 @@ private val PreviewWidth = 960.dp - ScreenPaddingH * 2 - ListWidth - 28.dp
 
 /** One row of the TV list: number, a small still, name with the star, the programme and its progress. */
 @Composable
-private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, nowMs: Long, last: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, numberWidth: Dp, nowMs: Long, last: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
     val urls = LocalMediaUrls.current
     val program = Channels.showing(channel, nowMs)
     val description = listOfNotNull(
@@ -390,7 +399,7 @@ private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, nowMs: Long, la
         ) {
             Text(
                 channel.number.toString(),
-                style = Antresol.typography.sectionTitle.copy(fontFeatureSettings = "tnum"),
+                style = ChannelNumberStyle,
                 color = when {
                     hasFocus -> content
                     last -> AntresolColors.Accent
@@ -399,8 +408,8 @@ private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, nowMs: Long, la
                 textAlign = TextAlign.End,
                 maxLines = 1,
                 softWrap = false,
-                // Three digits: external channels are numbered from 100.
-                modifier = Modifier.width(40.dp),
+                // As wide as the list's widest number (four digits fit).
+                modifier = Modifier.width(numberWidth),
             )
             ProgrammeStill(
                 url = urls?.image(programmeArt(program)),

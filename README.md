@@ -1,7 +1,15 @@
 # Antresol — Android & Android TV
 
 Native Android and Android TV apps for the self-hosted
-[Antresol](https://github.com/sidun-av/antresol) media server. See [PLAN.md](PLAN.md).
+[Antresol](https://github.com/antresol-app/antresol) media server. See [PLAN.md](PLAN.md).
+
+## Install
+
+One app for phones, tablets and Android TV, in closed testing on Google Play:
+
+1. Join the [antresol-test](https://groups.google.com/g/antresol-test) group.
+2. [Become a tester](https://play.google.com/apps/testing/app.antresol.mobile).
+3. Install Antresol from Google Play (on a TV: from its Play Store, signed in with the same account).
 
 ## Building
 

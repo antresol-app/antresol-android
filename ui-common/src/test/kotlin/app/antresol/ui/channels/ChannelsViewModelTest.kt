@@ -96,6 +96,10 @@ class ChannelsViewModelTest {
         val vm = viewModel()
         runCurrent()
         assertEquals(listOf("Movies", "Genres"), vm.themes)
+        assertEquals(
+            listOf(ChannelFilter.All to 3, ChannelFilter.Favorites to 0, ChannelFilter.Theme("Movies") to 1, ChannelFilter.Theme("Genres") to 2),
+            vm.filterOptions.map { it.filter to it.count },
+        )
         assertEquals(listOf(1L, 2L, 3L), vm.shown.map { it.id })
         assertEquals(2L, vm.lastChannel?.id)
         vm.select(ChannelFilter.Theme("Genres"))

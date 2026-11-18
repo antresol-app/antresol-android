@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.channels.ChannelFilter
+import app.antresol.core.channels.ChannelFilterOption
 import app.antresol.core.channels.Channels
 import app.antresol.core.channels.Epg
 import app.antresol.core.model.Channel
@@ -111,6 +112,9 @@ class ChannelsViewModel(
 
     /** The themes for the filter row. */
     val themes: List<String> by derivedStateOf { Channels.themes(channels.orEmpty()) }
+
+    /** The category list (all, favourites, each theme) with its channel counts. */
+    val filterOptions: List<ChannelFilterOption> by derivedStateOf { Channels.filterOptions(channels.orEmpty()) }
 
     /** The channels of the [filter], by number. */
     val shown: List<Channel> by derivedStateOf { Channels.filter(channels.orEmpty(), filter) }

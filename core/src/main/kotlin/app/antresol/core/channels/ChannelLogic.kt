@@ -38,6 +38,13 @@ sealed interface ChannelFilter {
 }
 
 /**
+ * One entry of the category list of a TV's channel list: a [filter] and how many channels it lets
+ * through. A [ChannelFilter.Theme] with an empty category is «no category» (channels of a source
+ * that did not group them).
+ */
+data class ChannelFilterOption(val filter: ChannelFilter, val count: Int)
+
+/**
  * The player's mini-guide: the channels of the list the player was opened from, by number, and the
  * one being watched ([currentIndex]). Empty while the channels are loading.
  */
@@ -71,22 +78,43 @@ object Channels {
 
     fun sortedByNumber(channels: List<Channel>): List<Channel> = channels.sortedWith(compareBy({ it.number }, { it.id }))
 
+    /** A channel's theme: its category without the spaces a playlist's group may carry; empty when it has none. */
+    private fun themeOf(channel: Channel): String = channel.category.trim()
+
     /** The themes (categories) for the filter, in the order of their lowest channel number. */
     fun themes(channels: List<Channel>): List<String> =
-        sortedByNumber(channels).map { it.category }.filter { it.isNotBlank() }.distinct()
+        sortedByNumber(channels).map(::themeOf).filter { it.isNotEmpty() }.distinct()
+
+    /**
+     * The category list of a big channel list (an external playlist has dozens of groups): «All» and
+     * «Favourites» first, then each theme in the order of its lowest channel number, each with its
+     * channel count; channels without a category are the last entry, «no category», but only when
+     * some channel has one and the others are grouped (a list nobody grouped has just «All»).
+     */
+    fun filterOptions(channels: List<Channel>): List<ChannelFilterOption> {
+        val byTheme = LinkedHashMap<String, Int>()
+        for (channel in sortedByNumber(channels)) byTheme.merge(themeOf(channel), 1, Int::plus)
+        val ungrouped = byTheme.remove("") ?: 0
+        return buildList {
+            add(ChannelFilterOption(ChannelFilter.All, channels.size))
+            add(ChannelFilterOption(ChannelFilter.Favorites, channels.count { it.favorite }))
+            byTheme.forEach { (theme, count) -> add(ChannelFilterOption(ChannelFilter.Theme(theme), count)) }
+            if (ungrouped > 0 && byTheme.isNotEmpty()) add(ChannelFilterOption(ChannelFilter.Theme(""), ungrouped))
+        }
+    }
 
     /** The channels [filter] lets through, by number. */
     fun filter(channels: List<Channel>, filter: ChannelFilter): List<Channel> = sortedByNumber(
         when (filter) {
             ChannelFilter.All -> channels
             ChannelFilter.Favorites -> channels.filter { it.favorite }
-            is ChannelFilter.Theme -> channels.filter { it.category == filter.category }
+            is ChannelFilter.Theme -> channels.filter { themeOf(it) == filter.category }
         },
     )
 
     /** [filter] while it still means something (a theme that is gone falls back to «All»). */
     fun validFilter(channels: List<Channel>, filter: ChannelFilter): ChannelFilter = when (filter) {
-        is ChannelFilter.Theme -> if (channels.any { it.category == filter.category }) filter else ChannelFilter.All
+        is ChannelFilter.Theme -> if (channels.any { themeOf(it) == filter.category }) filter else ChannelFilter.All
         else -> filter
     }
 

@@ -38,6 +38,46 @@ class ChannelLogicTest {
     }
 
     @Test
+    fun theCategoryListOfABigPlaylistHasCountsInPlaylistOrder() {
+        // Groups of a playlist: spaces around a name are not another category; some channels have no group.
+        val list = listOf(
+            channel(1, 1, "News"),
+            channel(2, 2, "News "),
+            channel(3, 3, ""),
+            channel(4, 4, "Sports").copy(favorite = true),
+            channel(5, 5, "News").copy(favorite = true),
+            channel(6, 6, " "),
+            channel(7, 7, "Kids"),
+        )
+        assertEquals(
+            listOf(
+                ChannelFilterOption(ChannelFilter.All, 7),
+                ChannelFilterOption(ChannelFilter.Favorites, 2),
+                ChannelFilterOption(ChannelFilter.Theme("News"), 3),
+                ChannelFilterOption(ChannelFilter.Theme("Sports"), 1),
+                ChannelFilterOption(ChannelFilter.Theme("Kids"), 1),
+                ChannelFilterOption(ChannelFilter.Theme(""), 2),
+            ),
+            Channels.filterOptions(list),
+        )
+        assertEquals(listOf(1L, 2L, 5L), Channels.filter(list, ChannelFilter.Theme("News")).map { it.id })
+        assertEquals(listOf(3L, 6L), Channels.filter(list, ChannelFilter.Theme("")).map { it.id })
+        assertEquals(ChannelFilter.Theme(""), Channels.validFilter(list, ChannelFilter.Theme("")))
+        assertEquals(ChannelFilter.fromKey(ChannelFilter.Theme("").key), ChannelFilter.Theme(""))
+    }
+
+    @Test
+    fun aListNobodyGroupedHasNoCategoryEntries() {
+        val ungrouped = listOf(channel(1, 1, ""), channel(2, 2, ""))
+        assertEquals(
+            listOf(ChannelFilterOption(ChannelFilter.All, 2), ChannelFilterOption(ChannelFilter.Favorites, 0)),
+            Channels.filterOptions(ungrouped),
+        )
+        assertEquals(ChannelFilter.All, Channels.validFilter(ungrouped, ChannelFilter.Theme("Gone")))
+        assertEquals(listOf(ChannelFilterOption(ChannelFilter.All, 0), ChannelFilterOption(ChannelFilter.Favorites, 0)), Channels.filterOptions(emptyList()))
+    }
+
+    @Test
     fun neighbourWrapsByNumber() {
         val list = listOf(channel(10, 50, "a"), channel(11, 1, "b"), channel(12, 10, "a"))
         assertEquals(12L, Channels.neighbour(list, 11, +1)?.id)

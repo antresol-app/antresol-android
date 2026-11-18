@@ -65,13 +65,15 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   ExoPlayer player sends the device's codec caps (direct play, or HLS remux/transcode), has audio,
   subtitle and quality menus, keeps the HLS session alive, saves progress every 10 s and counts
   down to the next episode.
-- **TV (live channels)**: «Continue» (the channel this profile last watched on this TV) leads the
-  page, then the server's channels by section («All» shows every section as a row, a section pill
-  shows only its channels); each card shows the programme on air with its live progress and what is
-  next. OK opens the full-screen live player (live edge, no seeking): Up/Down, Channel +/− and Page
+- **TV (live channels)**: one numbered list of the server's channels (own and external, in channel
+  number order) with a preview of the focused channel's programme, or the programme guide («Channels |
+  Guide»); focus starts on the channel this profile watched last. The category button («All Channels ·
+  842 ⌄»; a playlist can have dozens of groups) opens a list on the left (All, Favourites, each
+  category with its channel count), as does Left from the first column of the list or the guide, and
+  narrows both to the category. OK opens the full-screen live player (live edge, no seeking): Up/Down, Channel +/− and Page
   Up/Down switch to the next/previous channel by number (wrapping), holding the last frame until the
   new channel draws; the channel banner slides in on every switch and on OK. OK with the banner up
-  opens the mini-guide, a row of the section's channels starting at the one on; Back hides the
+  opens the mini-guide, a row of the category's channels starting at the one on; Back hides the
   guide, then the banner, then leaves. The media session reports the live programme. A starting
   channel is retried automatically; other server refusals are shown with Try Again.
 - **Autostart** (Settings, off by default): «Open Antresol at power on» brings the app to the front when the TV or

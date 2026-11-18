@@ -3,6 +3,7 @@ package app.antresol.core.channels
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.attempt
 import app.antresol.core.model.Channel
+import app.antresol.core.model.ChannelCategory
 import app.antresol.core.model.ChannelProgram
 import app.antresol.core.model.PlaybackPrefs
 import app.antresol.core.model.StreamSource
@@ -29,6 +30,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 interface LiveApi {
     suspend fun channels(): List<Channel>
 
+    /** The server's categories of the list [channels] last read (to name the category a player was opened from); null: none. */
+    suspend fun categories(): List<ChannelCategory>? = null
+
     suspend fun guide(channelId: Long): List<ChannelProgram>
 
     /** Starts the channel's stream and returns the URL for the player (see [AntresolClient.openLiveChannel]). */
@@ -53,7 +57,11 @@ interface LiveApi {
 fun AntresolClient.liveApi(): LiveApi {
     val client = this
     return object : LiveApi {
-        override suspend fun channels(): List<Channel> = client.channels().channels
+        private var categories: List<ChannelCategory>? = null
+
+        override suspend fun channels(): List<Channel> = client.channels().also { categories = it.categories }.channels
+
+        override suspend fun categories(): List<ChannelCategory>? = categories
 
         override suspend fun guide(channelId: Long): List<ChannelProgram> = client.channelGuide(channelId, Channels.GUIDE_HOURS).programs
 
@@ -86,6 +94,8 @@ sealed interface LiveStream {
         val userAgent: String? = null,
         val referrer: String? = null,
         val source: Int = 0,
+        /** An external stream's [app.antresol.core.model.StreamSource.format]: `hls`, `ts` or null (unknown). */
+        val format: String? = null,
     ) : LiveStream
 
     /**
@@ -108,6 +118,8 @@ data class LiveTvState(
     val filter: ChannelFilter = ChannelFilter.All,
     /** The profile's languages, null until loaded (or when they could not be read). */
     val prefs: PlaybackPrefs? = null,
+    /** The server's categories (names for a [filter] that is one), empty until loaded or without them. */
+    val categories: List<ChannelCategory> = emptyList(),
 ) {
     val channel: Channel? get() = channels.firstOrNull { it.id == channelId }
 
@@ -322,7 +334,7 @@ class LiveTvSession(
             if (url != null) {
                 _state.update {
                     if (it.channelId != channelId) it
-                    else it.copy(stream = LiveStream.Ready(url, ++generation, true, source.userAgent, source.referrer, externalIndex))
+                    else it.copy(stream = LiveStream.Ready(url, ++generation, true, source.userAgent, source.referrer, externalIndex, source.format))
                 }
                 markLast(channelId)
                 return
@@ -372,7 +384,8 @@ class LiveTvSession(
 
     private suspend fun loadChannels() {
         val channels = attempt { api.channels() } ?: return
-        _state.update { it.copy(channels = Channels.sortedByNumber(channels)) }
+        val categories = api.categories().orEmpty()
+        _state.update { it.copy(channels = Channels.sortedByNumber(channels), categories = categories) }
     }
 
     private suspend fun loadGuide(channelId: Long) {

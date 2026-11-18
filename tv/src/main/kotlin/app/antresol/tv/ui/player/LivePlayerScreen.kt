@@ -387,7 +387,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             exit = slideOutHorizontally(tween(AntresolMotion.MEDIUM_MS)) { -it } + fadeOut(tween(AntresolMotion.MEDIUM_MS)),
             modifier = Modifier.align(Alignment.CenterStart),
         ) {
-            ChannelListPanel(guide = guide, title = filterTitle(state.filter), currentId = state.channelId, selected = panelIndex)
+            ChannelListPanel(guide = guide, title = filterTitle(state.filter, state.categories), currentId = state.channelId, selected = panelIndex)
         }
         val ready = stream is LiveStream.Ready && !viewModel.awaitingPicture
         AnimatedVisibility(

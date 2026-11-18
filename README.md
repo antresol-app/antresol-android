@@ -65,15 +65,24 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   ExoPlayer player sends the device's codec caps (direct play, or HLS remux/transcode), has audio,
   subtitle and quality menus, keeps the HLS session alive, saves progress every 10 s and counts
   down to the next episode.
-- **TV (live channels)**: «Continue» (the channel this profile last watched on this TV) leads the
-  page, then the server's channels by section («All» shows every section as a row, a section pill
-  shows only its channels); each card shows the programme on air with its live progress and what is
-  next. OK opens the full-screen live player (live edge, no seeking): Up/Down, Channel +/− and Page
+- **TV (live channels)**: one numbered list of the server's channels (own and external, in channel
+  number order) with a preview of the focused channel's programme, or the programme guide («Channels |
+  Guide»); focus starts on the channel this profile watched last. The category button («All Channels ·
+  842 ⌄»; a playlist can have dozens of groups) opens a list on the left (All, Favourites, then the
+  server's categories with their channel counts: its AI topics first, the sources, the playlists'
+  groups, under headings when there is more than one kind; an older server's `category` texts
+  without it), as does Left from the first column of the list or the guide, and narrows both to the
+  category. The phone's filter pills show the same categories in the same order. OK opens the full-screen live player (live edge, no seeking): Up/Down, Channel +/− and Page
   Up/Down switch to the next/previous channel by number (wrapping), holding the last frame until the
   new channel draws; the channel banner slides in on every switch and on OK. OK with the banner up
-  opens the mini-guide, a row of the section's channels starting at the one on; Back hides the
+  opens the mini-guide, a row of the category's channels starting at the one on; Back hides the
   guide, then the banner, then leaves. The media session reports the live programme. A starting
   channel is retried automatically; other server refusals are shown with Try Again.
+- **Autostart** (Settings, off by default): «Open Antresol at power on» brings the app to the front when the TV or
+  box starts and (optionally) when the screen comes back on after standby, to where it was left, the TV tab or the
+  last channel playing. Android 10+ lets an app start its screen from the background only with «Display over other
+  apps», so the setting guides to it (the system page, or the adb command on a TV without one); a small foreground
+  service listens for the screen. Notes for Play: [docs/PLAY_STORE.md](docs/PLAY_STORE.md).
 - **Music**: album, artist and playlist pages with Play, Shuffle, Favorite and the track list. A
   Media3 `MediaSessionService` keeps music playing while you browse or leave the app and publishes
   it to the system's now-playing card and remote. Now Playing has an artwork-tinted background,

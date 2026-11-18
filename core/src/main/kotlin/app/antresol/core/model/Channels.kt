@@ -30,7 +30,34 @@ data class Channel(
     val external: Boolean = false,
     /** Where an [external] channel's video is, null for Antresol's own channels. */
     val stream: ChannelStream? = null,
+    /**
+     * The ids of its categories ([ChannelCategory.id]): the AI topics, the source and the playlist
+     * groups, or its own category as `group:<name>`. Null on a server that does not send them (the
+     * server omits it for a channel with none): see [app.antresol.core.channels.Channels.categoriesOf].
+     */
+    val categories: List<String>? = null,
 )
+
+/**
+ * One category of the viewer's list (`categories` of `GET /api/channels`): [id] is `ai:<code>` (a
+ * topic the server's AI helper made), `source:<id>` (an external source, when there are two or
+ * more) or `group:<name>` (a playlist's group-title, an own channel's category); [name] is in the
+ * viewer's language. The server sends them in the filter's order: topics, sources, groups. [count]
+ * is the server's count of channels; the apps count what they show themselves.
+ */
+@Serializable
+data class ChannelCategory(
+    val id: String,
+    val name: String = "",
+    val kind: String = KIND_GROUP,
+    val count: Int = 0,
+) {
+    companion object {
+        const val KIND_AI = "ai"
+        const val KIND_SOURCE = "source"
+        const val KIND_GROUP = "group"
+    }
+}
 
 /**
  * An external channel's stream: the provider's URL ([url]; or the server's hidden-address form
@@ -45,19 +72,22 @@ data class ChannelStream(
     val referrer: String? = null,
     val fallbacks: List<StreamSource> = emptyList(),
     val unsupported: List<String> = emptyList(),
+    /** What the stream is: `hls`, `ts` (a raw MPEG-TS stream) or ""/null (unknown). */
+    val format: String? = null,
 ) {
     /** The primary stream and its fallbacks, in the order they are tried. */
     val sources: List<StreamSource>
-        get() = listOf(StreamSource(url, userAgent, referrer, unsupported)) + fallbacks
+        get() = listOf(StreamSource(url, userAgent, referrer, unsupported, format)) + fallbacks
 }
 
-/** One URL of an external channel with its headers. */
+/** One URL of an external channel with its headers; [format] as [ChannelStream.format]. */
 @Serializable
 data class StreamSource(
     val url: String = "",
     val userAgent: String? = null,
     val referrer: String? = null,
     val unsupported: List<String> = emptyList(),
+    val format: String? = null,
 )
 
 /**
@@ -123,6 +153,8 @@ data class ChannelList(
     val lastChannel: Long? = null,
     val canManage: Boolean = false,
     val canCreate: Boolean = false,
+    /** Every category of the list once, in the filter's order; null on a server that does not have them. */
+    val categories: List<ChannelCategory>? = null,
 )
 
 /** `GET /api/channels/{id}/guide`: the programme on air and the ones after it. */
@@ -151,6 +183,8 @@ data class ChannelEpgRow(
     /** The uploaded logo when the server sends it with the guide; else taken from the channel list. */
     val logoUrl: String? = null,
     val external: Boolean = false,
+    /** As [Channel.categories]. */
+    val categories: List<String>? = null,
 )
 
 /** `PUT /api/channels/last`. */

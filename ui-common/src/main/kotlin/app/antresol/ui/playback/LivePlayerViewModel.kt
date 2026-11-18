@@ -212,7 +212,7 @@ class LivePlayerViewModel(
                 return
             }
             val current = loaded
-            if (current?.external == true && loadedMime == MimeTypes.APPLICATION_M3U8 && guessedHls(current.url) &&
+            if (current?.external == true && loadedMime == MimeTypes.APPLICATION_M3U8 && current.format.isNullOrBlank() && guessedHls(current.url) &&
                 error.errorCode in NOT_A_PLAYLIST
             ) {
                 // A URL without an extension that is not an HLS playlist: try it as a plain stream (MPEG-TS).
@@ -349,7 +349,7 @@ class LivePlayerViewModel(
         when (stream) {
             is LiveStream.Ready -> if (stream != loaded) {
                 if (stream.external) {
-                    loadExternal(stream, mimeFor(stream.url))
+                    loadExternal(stream, mimeFor(stream.url, stream.format))
                 } else {
                     loaded = stream
                     loadedMime = MimeTypes.APPLICATION_M3U8
@@ -515,7 +515,12 @@ class LivePlayerViewModel(
      * without one (most IPTV streams; the hidden-address form) — retried as a plain stream if it
      * turns out not to be a playlist.
      */
-    private fun mimeFor(url: String): String? = if (guessedHls(url)) MimeTypes.APPLICATION_M3U8 else null
+    private fun mimeFor(url: String, format: String? = null): String? = when (format) {
+        // The server knows what the stream is (it probed or was told): no guess, no retry as another type.
+        "hls" -> MimeTypes.APPLICATION_M3U8
+        "ts" -> MimeTypes.VIDEO_MP2T
+        else -> if (guessedHls(url)) MimeTypes.APPLICATION_M3U8 else null
+    }
 
     private fun guessedHls(url: String): Boolean =
         Util.inferContentType(android.net.Uri.parse(url)) == C.CONTENT_TYPE_OTHER && !hasMediaExtension(url) ||

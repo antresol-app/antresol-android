@@ -3,7 +3,6 @@ package app.antresol.tv.ui.channels
 import app.antresol.ui.channels.ChannelLogo
 import app.antresol.ui.channels.channelNumberWidth
 import app.antresol.ui.channels.reserveLogoSlot
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,12 +14,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -55,15 +54,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Icon
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.core.channels.ChannelFilter
 import app.antresol.core.channels.Channels
 import app.antresol.core.model.Channel
+import app.antresol.tv.R as TvR
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.ui.components.ErrorView
 import app.antresol.tv.ui.components.LoadingView
+import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.tv.ui.components.SegmentedPills
 import app.antresol.tv.ui.components.VerticalShelfScrolling
@@ -72,11 +74,14 @@ import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.ui.R
 import app.antresol.ui.channels.ChannelsView
 import app.antresol.ui.channels.ChannelsViewModel
+import app.antresol.ui.channels.categoryKindTitle
+import app.antresol.ui.channels.channelFilterTitle
 import app.antresol.ui.channels.ProgrammeStill
 import app.antresol.ui.channels.programClock
 import app.antresol.ui.channels.programmeArt
 import app.antresol.ui.channels.rememberNowMs
 import app.antresol.ui.components.AntresolIcons
+import app.antresol.ui.playback.MenuOption
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
@@ -92,10 +97,15 @@ private val ChannelNumberStyle: TextStyle
 
 /**
  * The «ТВ» tab on the television, like Android TV Live Channels / TiviMate: the title with the view
- * switch «Каналы | Телегид» and the filters «Все · Избранное · <themes>»; then ONE numbered channel
- * list with a preview of the focused channel's programme (its still, time and progress, overview,
- * what is next), or the programme guide grid. Focus starts on the profile's last channel; OK tunes
- * in; holding OK offers the favourite. The player zaps inside the list it was opened from.
+ * switch «Каналы | Телегид» and the category button; then ONE numbered channel list with a preview
+ * of the focused channel's programme (its still, time and progress, overview, what is next), or the
+ * programme guide grid. Focus starts on the profile's last channel; OK tunes in; holding OK offers
+ * the favourite. The player zaps inside the list it was opened from.
+ *
+ * Categories: a big list (an external playlist has dozens of groups) cannot be a row of pills, so
+ * the category button («Все каналы · 842 ⌄») opens a list on the left (All, Favourites, then each
+ * category with its channel count), which Left from the first column of the list or the guide opens
+ * too. Choosing one narrows the list and the guide to it and hands focus to the channels.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -112,6 +122,7 @@ fun ChannelsScreen(
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.stopRefreshing() }
     val nowMs = rememberNowMs()
+    val scope = rememberCoroutineScope()
     val loaded = viewModel.channels
     val error = viewModel.error
     val filter = viewModel.filter
@@ -119,9 +130,11 @@ fun ChannelsScreen(
     // Held OK opens the menu when it is released: a panel can't take focus while the key is down.
     var pendingMenu by remember { mutableStateOf<Channel?>(null) }
     var guidePanel by remember { mutableStateOf(false) }
+    var categoriesOpen by remember { mutableStateOf(false) }
     var menuSelected by remember { mutableStateOf(0) }
     // A panel covers the page: the shell hides its navigation meanwhile.
-    LaunchedEffect(menuFor != null || guidePanel) { onPanelOpenChanged(menuFor != null || guidePanel) }
+    LaunchedEffect(menuFor != null || guidePanel || categoriesOpen) { onPanelOpenChanged(menuFor != null || guidePanel || categoriesOpen) }
+
     val watch: (Channel) -> Unit = { onWatch(it, filter) }
 
     Box(
@@ -156,7 +169,32 @@ fun ChannelsScreen(
                 refocusView = false
             }
         }
-        val header: @Composable () -> Unit = { Header(viewModel, viewFocus, onViewPicked = { refocusView = true }) }
+        val categoryFocus = remember { FocusRequester() }
+        // Back from the category list with nothing chosen returns to the button when it was opened from it;
+        // a choice hands focus to the channels instead (the list takes it when its category changes).
+        var categoriesFromButton by remember { mutableStateOf(false) }
+        var filterWhenOpened by remember { mutableStateOf<ChannelFilter>(ChannelFilter.All) }
+        // Counts the closings of the category list that leave the filter as it was: the list or the guide takes focus back.
+        var refocus by remember { mutableIntStateOf(0) }
+        // Left from the list or the guide.
+        val openCategories = {
+            categoriesFromButton = false
+            filterWhenOpened = viewModel.filter
+            categoriesOpen = true
+        }
+        val header: @Composable () -> Unit = {
+            Header(
+                viewModel,
+                viewFocus,
+                categoryFocus,
+                onViewPicked = { refocusView = true },
+                onCategories = {
+                    categoriesFromButton = true
+                    filterWhenOpened = viewModel.filter
+                    categoriesOpen = true
+                },
+            )
+        }
         when {
             error != null || loaded == null || loaded.isEmpty() ||
                 (viewModel.shown.isEmpty() && filter == ChannelFilter.Favorites) -> Column(Modifier.fillMaxSize().padding(top = 84.dp)) {
@@ -172,9 +210,18 @@ fun ChannelsScreen(
             viewModel.view == ChannelsView.Guide -> {
                 // The guide keeps its header and ruler under the navigation: never "scrolled".
                 LaunchedEffect(Unit) { onScrolledToTop(true) }
-                GuideScreen(viewModel, nowMs, takeFocus, header, onPanel = { guidePanel = it }, onWatch = watch)
+                GuideScreen(viewModel, nowMs, takeFocus, header, onPanel = { guidePanel = it }, onWatch = watch, onCategories = openCategories, refocus = refocus)
             }
-            else -> ChannelList(viewModel, nowMs, takeFocus, header, onScrolledToTop, onWatch = watch, onMenu = { pendingMenu = it })
+            else -> ChannelList(viewModel, nowMs, takeFocus, header, onScrolledToTop, onWatch = watch, onMenu = { pendingMenu = it }, onCategories = openCategories, refocus = refocus)
+        }
+        if (categoriesOpen) {
+            CategoriesPanel(viewModel, onDismiss = {
+                categoriesOpen = false
+                if (viewModel.filter == filterWhenOpened) {
+                    if (categoriesFromButton) scope.launch { categoryFocus.tryRequestFocus() } else refocus++
+                }
+                categoriesFromButton = false
+            })
         }
         menuFor?.let { channel ->
             val favorite = viewModel.channels?.firstOrNull { it.id == channel.id }?.favorite ?: channel.favorite
@@ -194,11 +241,15 @@ fun ChannelsScreen(
     }
 }
 
-/** «ТВ», «Каналы | Телегид» and the filters on one line. */
+/** «ТВ», «Каналы | Телегид» and the category button on one line. */
 @Composable
-private fun Header(viewModel: ChannelsViewModel, viewFocus: FocusRequester, onViewPicked: () -> Unit) {
-    val themes = viewModel.themes
-    val filters = listOf(ChannelFilter.All, ChannelFilter.Favorites) + themes.map { ChannelFilter.Theme(it) }
+private fun Header(
+    viewModel: ChannelsViewModel,
+    viewFocus: FocusRequester,
+    categoryFocus: FocusRequester,
+    onViewPicked: () -> Unit,
+    onCategories: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -224,26 +275,81 @@ private fun Header(viewModel: ChannelsViewModel, viewFocus: FocusRequester, onVi
                     .focusRequester(viewFocus),
             )
             Spacer(Modifier.width(16.dp))
-            val filterLabel = stringResource(R.string.tv_filter)
-            val labels = filters.map { option ->
-                when (option) {
-                    ChannelFilter.All -> stringResource(R.string.tv_all_sections)
-                    ChannelFilter.Favorites -> stringResource(R.string.tv_favorites)
-                    is ChannelFilter.Theme -> option.category
-                }
-            }
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                SegmentedPills(
-                    options = labels,
-                    selectedIndex = filters.indexOf(viewModel.filter).coerceAtLeast(0),
-                    onSelect = { viewModel.select(filters[it]) },
-                    modifier = Modifier
-                        .semantics { contentDescription = filterLabel }
-                        .horizontalScroll(rememberScrollState()),
+                CategoryButton(
+                    label = channelFilterTitle(viewModel.filter, viewModel.serverCategories.orEmpty()),
+                    count = viewModel.shown.size,
+                    onClick = onCategories,
+                    modifier = Modifier.focusRequester(categoryFocus),
                 )
             }
         }
     }
+}
+
+/**
+ * The current category and how many channels it has, with a chevron: OK opens the category list.
+ * A button, not a row of pills, because there can be any number of categories.
+ */
+@Composable
+private fun CategoryButton(label: String, count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.tv_filter) + ": " + label + ", " + count
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .height(40.dp)
+            .widthIn(max = 460.dp)
+            .semantics { contentDescription = description },
+        shape = ClickableSurfaceDefaults.shape(AntresolShapes.pill),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = AntresolColors.Glass,
+            contentColor = AntresolColors.Label,
+            focusedContainerColor = AntresolColors.Label,
+            focusedContentColor = AntresolColors.LabelInverse,
+            pressedContainerColor = AntresolColors.LabelSecondary,
+            pressedContentColor = AntresolColors.LabelInverse,
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = AntresolMotion.FOCUS_SCALE),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 18.dp, end = 14.dp).height(40.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(AntresolIcons.List, contentDescription = null, tint = LocalContentColor.current, modifier = Modifier.size(18.dp))
+            Text(label, style = Antresol.typography.button, color = LocalContentColor.current, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Text(count.toString(), style = Antresol.typography.caption.copy(fontFeatureSettings = "tnum"), color = LocalContentColor.current.copy(alpha = 0.6f), maxLines = 1)
+            Icon(AntresolIcons.ChevronDown, contentDescription = null, tint = LocalContentColor.current, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+/**
+ * The category list on the left: «Все каналы», «Избранное», then the categories as the server
+ * orders them (its AI topics, the sources, the playlists' groups) each with its channel count; with
+ * more than one kind they have headings. The current one is checked and has focus.
+ */
+@Composable
+private fun CategoriesPanel(viewModel: ChannelsViewModel, onDismiss: () -> Unit) {
+    val current = viewModel.filter
+    val options = viewModel.filterOptions
+    val headings = options.mapNotNull { it.kind }.distinct().size > 1
+    var kindShown: String? = null
+    OptionsPanel(
+        title = stringResource(TvR.string.tv_categories),
+        options = options.map { option ->
+            val section = option.kind?.takeIf { headings && it != kindShown }?.let { categoryKindTitle(it) }
+            if (option.kind != null) kindShown = option.kind
+            val label = when (val filter = option.filter) {
+                is ChannelFilter.Category -> option.label?.takeIf { it.isNotBlank() } ?: channelFilterTitle(filter)
+                else -> channelFilterTitle(filter)
+            }
+            MenuOption(label, option.filter == current, badge = option.count.toString(), section = section) { viewModel.select(option.filter) }
+        },
+        onDismiss = onDismiss,
+        width = 420.dp,
+        fromStart = true,
+    )
 }
 
 /**
@@ -260,6 +366,8 @@ private fun ChannelList(
     onScrolledToTop: (Boolean) -> Unit,
     onWatch: (Channel) -> Unit,
     onMenu: (Channel) -> Unit,
+    onCategories: () -> Unit,
+    refocus: Int,
 ) {
     val shown = viewModel.shown
     val reserveLogo = remember(shown) { reserveLogoSlot(shown.map { it.logoUrl }) }
@@ -282,6 +390,10 @@ private fun ChannelList(
     // Up/Down walk the list one channel at a time (scrolled first, so the row is there to focus).
     val rowFocus = remember { mutableMapOf<Long, FocusRequester>() }
     fun rowRequester(id: Long) = rowFocus.getOrPut(id) { FocusRequester() }
+    // The category list was closed without a choice: back to the channel that had focus.
+    LaunchedEffect(refocus) {
+        if (refocus > 0) focused?.let { rowRequester(it.id).tryRequestFocus(8) }
+    }
     var focusedIndex by remember { mutableStateOf(-1) }
     fun step(delta: Int): Boolean {
         if (focusedIndex < 0) return false
@@ -312,6 +424,8 @@ private fun ChannelList(
                         when (event.key) {
                             Key.DirectionDown -> step(1)
                             Key.DirectionUp -> step(-1)
+                            // The list is one column: Left from a channel opens the categories (as in TiviMate).
+                            Key.DirectionLeft -> (focusedIndex >= 0).also { if (it) onCategories() }
                             else -> false
                         }
                     },

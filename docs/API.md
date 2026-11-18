@@ -1167,6 +1167,14 @@ Kid profiles get only the channels allowed for their age (the server filters).
 
 - **Sections** of the TV tab are the distinct `category` values, ordered by their lowest channel
   `number`; channels inside a section are ordered by `number`.
+- **Categories** (newer servers; the apps fall back to `category` without them): each channel may
+  carry `"categories": ["ai:news", "source:3", "group:RU | Новости"]` (left out when it has none) and
+  the answer a top-level `"categories": [{"id": "ai:news", "name": "Новости", "kind": "ai", "count": 41}, …]`
+  listing each category once, named in the request's language, in the filter's order: AI topics
+  (`ai:<code>`), sources (`source:<id>`, only with two or more) and the playlists' groups
+  (`group:<name>`, an own channel's `category` too). `GET /api/channels/epg` rows carry the same ids.
+  An external channel's `stream` and each of its `fallbacks` may have `"format": "hls" | "ts"` (empty:
+  unknown, the player guesses).
 - `logo` (0…6) is the index of the avatar gradient (`grad-1` … `grad-7`, 145°) the channel's logo tile
   is drawn in, with the channel's name centred in bold white. `GET /api/channels/{id}/logo.png` (Bearer)
   is the same tile as a 480×270 PNG.

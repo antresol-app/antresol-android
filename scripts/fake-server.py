@@ -40,10 +40,17 @@ CAST = [{"name": n, "character": c, "photo": "/api/images/cast/" + n.replace(" "
         for n, c in [("Ada Lovelace", "The Countess"), ("Alan Turing", "The Mathematician"), ("Grace Hopper", "The Admiral")]]
 CLIP = Path(__file__).resolve().parent.parent / "test-fixtures/resources/trailer-sample.mp4"
 MIN = 60_000
+# Names of the categories --categories makes (a playlist's group titles).
+GROUPS = ["Movies", "Series", "News", "Sports", "Kids", "Music", "Documentary", "Entertainment", "Comedy", "Science", "Travel", "Cooking"]
 # Programme lengths (minutes) a channel cycles through; channel 1 is films in two parts.
 LENGTHS = [[50, 50], [45, 25, 120, 30], [50, 95, 10, 45], [70, 145, 25], [15, 30, 15, 60], [120, 90], [105, 45, 30], [25, 25, 50, 20]]
 favorites = {2}
 last_channel = [3]
+# --channels / --categories: a big playlist. The channel count (the 8 programme patterns repeat) and the
+# category names, in blocks of consecutive channel numbers like a playlist's groups (None: Films/Series by parity).
+big = {"channels": len(LENGTHS), "categories": None, "legacy": False}
+# The AI topics (code, name) a big playlist's channels get, as the server's categories (ids ai:<code>).
+AI_TOPICS = [("news", "News"), ("sport", "Sport"), ("movies", "Movies"), ("kids", "Kids"), ("music", "Music"), ("documentary", "Documentary")]
 # The schedule's day: fixed for the run.
 DAY = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 # --rebuild-after: guide pages still to answer before the rebuild (None: never), and when it happened (ms).
@@ -116,7 +123,7 @@ def png(path, sized=False):
 def entries(channel):
     """The channel's schedule entries (seq, item, file, start, end in ms) from the day before the run's to three days after."""
     at, end = int((DAY - timedelta(days=1)).timestamp() * 1000), int((DAY + timedelta(days=3)).timestamp() * 1000)
-    lengths, out, seq = LENGTHS[channel - 1], [], 0
+    lengths, out, seq = LENGTHS[(channel - 1) % len(LENGTHS)], [], 0
     # After a rebuild: the entries from `cut` on are other titles (and, but for channel 1, other lengths).
     cut, rebuilt = (rebuild["at"] + 60 * MIN if rebuild["at"] is not None else None), False
     while at < end:
@@ -150,18 +157,55 @@ def programs(channel, from_ms, to_ms):
     return out
 
 
+def category_ids(number, category):
+    """The ids of a channel's categories as the server sends them (`categories`): AI topics, a source, its group."""
+    ids = []
+    if big["categories"]:
+        # A big playlist: one or two AI topics, and one of two sources (first and second half of the numbers).
+        ids.append("ai:" + AI_TOPICS[number % len(AI_TOPICS)][0])
+        if number % 4 == 0:
+            ids.append("ai:" + AI_TOPICS[(number + 1) % len(AI_TOPICS)][0])
+        ids.append("source:1" if number <= big["channels"] // 2 else "source:2")
+    if category:
+        ids.append("group:" + category)
+    return ids
+
+
 def channel(number):
     # Channels 2 and 5 have an uploaded logo (transparent), as the server names it.
     logo = {"logoUrl": f"/api/channels/{number}/logo.png?v=1"} if number in (2, 5) else {}
-    return {"id": number, "number": number, "name": f"Channel {number}", "category": "Films" if number % 2 else "Series", "favorite": number in favorites, **logo}
+    names = big["categories"]
+    if names:
+        # A tenth of the channels has no group, as in playlists that do not set one.
+        category = "" if number % 10 == 0 else names[(number - 1) * len(names) // big["channels"]]
+    else:
+        category = "Films" if number % 2 else "Series"
+    # Without --old-categories the server's `categories` (left out for a channel in none, as the server does).
+    ids = [] if big["legacy"] else category_ids(number, category)
+    return {"id": number, "number": number, "name": f"Channel {number}", "category": category, "favorite": number in favorites,
+            **({"categories": ids} if ids else {}), **logo}
+
+
+def category_list():
+    """The top-level `categories` of `GET /api/channels`: every category once, topics by count, sources, groups by count then name."""
+    counts, names, kinds = {}, {}, {}
+    for number in range(1, big["channels"] + 1):
+        for cid in channel(number).get("categories", []):
+            counts[cid] = counts.get(cid, 0) + 1
+            kind, _, key = cid.partition(":")
+            kinds[cid] = kind
+            names[cid] = dict(AI_TOPICS)[key] if kind == "ai" else "Playlist " + "AB"[int(key) - 1] if kind == "source" else key
+    rank = {"ai": 0, "source": 1, "group": 2}
+    ids = sorted(counts, key=lambda c: (rank[kinds[c]], (-counts[c], names[c]) if kinds[c] != "source" else (0, c)))
+    return [{"id": c, "name": names[c], "kind": kinds[c], "count": counts[c]} for c in ids]
 
 
 def channels(now_ms):
     out = []
-    for number in range(1, len(LENGTHS) + 1):
+    for number in range(1, big["channels"] + 1):
         on_air = programs(number, now_ms, now_ms + 6 * 60 * MIN)
         out.append({**channel(number), "personal": False, "auto": True, "enabled": True, "now": on_air[0], "next": on_air[1]})
-    return {"channels": out, "lastChannel": last_channel[0]}
+    return {"channels": out, "lastChannel": last_channel[0], **({} if big["legacy"] else {"categories": category_list()})}
 
 
 def epg(query, now_ms):
@@ -172,7 +216,7 @@ def epg(query, now_ms):
     from_ms = min(max(from_ms, now_ms - 12 * 60 * MIN), now_ms + 47 * 60 * MIN)
     hours = min(int(query.get("hours", ["0"])[0] or 0) or 6, 24)
     to_ms = from_ms + hours * 60 * MIN
-    rows = [{**channel(n), "programs": programs(n, from_ms, to_ms)} for n in range(1, len(LENGTHS) + 1)]
+    rows = [{**channel(n), "programs": programs(n, from_ms, to_ms)} for n in range(1, big["channels"] + 1)]
     if rebuild["pages_left"]:
         rebuild["pages_left"] -= 1
         if not rebuild["pages_left"]:
@@ -250,7 +294,15 @@ if __name__ == "__main__":
     args.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to let a device on the network in")
     args.add_argument("--trailer", default=Handler.embed_key, help="the YouTube video the embedded trailer plays")
     args.add_argument("--rebuild-after", type=int, metavar="PAGES", help="rebuild the schedule once, after this many guide pages were answered")
+    args.add_argument("--channels", type=int, metavar="N", help="serve N channels (default 8), to try a big playlist")
+    args.add_argument("--categories", type=int, metavar="M", help="spread the channels over M categories (named like a playlist's groups)")
+    args.add_argument("--old-categories", action="store_true", help="answer as a server without `categories` (the apps use each channel's `category` text)")
     options = args.parse_args()
+    big["legacy"] = options.old_categories
+    if options.channels:
+        big["channels"] = options.channels
+    if options.categories:
+        big["categories"] = [f"{GROUPS[i % len(GROUPS)]}" + (f" {i // len(GROUPS) + 1}" if i >= len(GROUPS) else "") for i in range(options.categories)]
     Handler.embed_key = options.trailer
     rebuild["pages_left"] = options.rebuild_after
     print(f"http://127.0.0.1:{options.port} (in an emulator: http://10.0.2.2:{options.port})", flush=True)

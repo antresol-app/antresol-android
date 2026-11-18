@@ -83,4 +83,31 @@
     <string name="setup_qr_description">QR code to set up this TV with your phone</string>
     <string name="search_tv_hint">Movies, shows, music</string>
     <string name="search_tv_prompt">Find movies, shows and music in your library.</string>
+
+    <!-- Autostart: open the app when the TV or box starts or wakes -->
+    <string name="settings_on">On</string>
+    <string name="settings_autostart_section">Autostart</string>
+    <string name="settings_autostart">Open Antresol at power on</string>
+    <string name="settings_autostart_hint">When the TV or box starts.</string>
+    <string name="settings_autostart_wake">Also after standby</string>
+    <string name="settings_autostart_wake_hint">When the screen comes back on.</string>
+    <string name="settings_autostart_target">What to open</string>
+    <string name="settings_autostart_target_last">Where I left off</string>
+    <string name="settings_autostart_target_tv">TV</string>
+    <string name="settings_autostart_target_channel">Last channel</string>
+    <string name="settings_autostart_permission">Display over other apps</string>
+    <string name="settings_autostart_permission_hint">Needed to open Antresol by itself. Press OK to allow it.</string>
+    <string name="settings_permission_allowed">Allowed</string>
+    <string name="settings_permission_not_allowed">Not allowed</string>
+    <string name="settings_overlay_title">Allow Antresol to open itself</string>
+    <string name="settings_overlay_note">Android lets an app open its own screen from the background only if it may display over other apps. Antresol draws nothing over other apps. Open the settings page, switch Antresol on, then press Back.</string>
+    <string name="settings_overlay_open">Open settings</string>
+    <string name="settings_overlay_later">Not now</string>
+    <string name="settings_overlay_manual">This TV has no settings page for it. On a computer connected to the TV with adb, run:\n%1$s</string>
+    <string name="settings_overlay_close">Close</string>
+    <string name="autostart_notification_channel">Autostart</string>
+    <string name="autostart_notification_text">Opens Antresol when the TV turns on</string>
+
+    <!-- TV channels: categories -->
+    <string name="tv_categories">Categories</string>
 </resources>

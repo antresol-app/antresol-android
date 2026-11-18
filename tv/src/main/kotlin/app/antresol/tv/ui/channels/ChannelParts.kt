@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import app.antresol.core.channels.ChannelFilter
+import app.antresol.core.model.ChannelCategory
+import app.antresol.ui.channels.channelFilterTitle
 import app.antresol.core.channels.Channels
 import app.antresol.core.model.ChannelProgram
 import app.antresol.ui.R
@@ -99,10 +101,6 @@ fun programFacts(program: ChannelProgram): String = listOfNotNull(
     program.rating.ifBlank { null },
 ).joinToString(" · ")
 
-/** The list a filter shows, by name: «ТВ», «Избранное» or the theme. */
+/** The list a filter shows, by name: «ТВ», «Избранное» or the category ([categories]: the server's names). */
 @Composable
-fun filterTitle(filter: ChannelFilter): String = when (filter) {
-    ChannelFilter.All -> stringResource(R.string.tv_all_channels)
-    ChannelFilter.Favorites -> stringResource(R.string.tv_favorites)
-    is ChannelFilter.Theme -> filter.category
-}
+fun filterTitle(filter: ChannelFilter, categories: List<ChannelCategory> = emptyList()): String = channelFilterTitle(filter, categories)

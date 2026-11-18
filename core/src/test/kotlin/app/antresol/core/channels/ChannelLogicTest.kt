@@ -2,6 +2,7 @@ package app.antresol.core.channels
 
 import app.antresol.core.api.ApiException
 import app.antresol.core.model.Channel
+import app.antresol.core.model.ChannelCategory
 import app.antresol.core.model.ChannelProgram
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -16,8 +17,10 @@ class ChannelLogicTest {
 
     private fun ms(iso: String) = Instant.parse(iso).toEpochMilli()
 
+    private fun group(name: String) = ChannelFilter.Category(Channels.groupId(name))
+
     @Test
-    fun oneListByNumberWithThemesAndFavouritesAsFilters() {
+    fun oneListByNumberWithCategoriesAndFavouritesAsFilters() {
         val list = listOf(
             channel(1, 4, "Decades"),
             channel(2, 3, "Genres").copy(favorite = true),
@@ -25,16 +28,116 @@ class ChannelLogicTest {
             channel(4, 2, "Genres"),
             channel(5, 5, "Series").copy(favorite = true),
         )
-        assertEquals(listOf("All", "Genres", "Decades", "Series"), Channels.themes(list))
+        assertEquals(listOf("All", "Genres", "Decades", "Series"), Channels.categoryList(list, null).map { it.name })
         assertEquals(listOf(3L, 4L, 2L, 1L, 5L), Channels.filter(list, ChannelFilter.All).map { it.id })
         assertEquals(listOf(2L, 5L), Channels.filter(list, ChannelFilter.Favorites).map { it.id })
-        assertEquals(listOf(4L, 2L), Channels.filter(list, ChannelFilter.Theme("Genres")).map { it.id })
-        assertEquals(ChannelFilter.All, Channels.validFilter(list, ChannelFilter.Theme("Gone")))
+        assertEquals(listOf(4L, 2L), Channels.filter(list, group("Genres")).map { it.id })
+        assertEquals(ChannelFilter.All, Channels.validFilter(list, group("Gone")))
         assertEquals(ChannelFilter.Favorites, Channels.validFilter(list, ChannelFilter.Favorites))
-        for (filter in listOf(ChannelFilter.All, ChannelFilter.Favorites, ChannelFilter.Theme("Кино: 90-е"))) {
+        for (filter in listOf(ChannelFilter.All, ChannelFilter.Favorites, group("Кино: 90-е"), ChannelFilter.Category("ai:news"))) {
             assertEquals(filter, ChannelFilter.fromKey(filter.key))
         }
         assertEquals(ChannelFilter.All, ChannelFilter.fromKey(null))
+        // A saved key from before categories had ids.
+        assertEquals(group("Genres"), ChannelFilter.fromKey("theme:Genres"))
+    }
+
+    @Test
+    fun theCategoryListOfAnOlderServerHasCountsInPlaylistOrder() {
+        // Groups of a playlist: spaces around a name are not another category; some channels have no group.
+        val list = listOf(
+            channel(1, 1, "News"),
+            channel(2, 2, "News "),
+            channel(3, 3, ""),
+            channel(4, 4, "Sports").copy(favorite = true),
+            channel(5, 5, "News").copy(favorite = true),
+            channel(6, 6, " "),
+            channel(7, 7, "Kids"),
+        )
+        assertEquals(
+            listOf(
+                ChannelFilterOption(ChannelFilter.All, 7),
+                ChannelFilterOption(ChannelFilter.Favorites, 2),
+                ChannelFilterOption(group("News"), 3, "News", ChannelCategory.KIND_GROUP),
+                ChannelFilterOption(group("Sports"), 1, "Sports", ChannelCategory.KIND_GROUP),
+                ChannelFilterOption(group("Kids"), 1, "Kids", ChannelCategory.KIND_GROUP),
+                ChannelFilterOption(ChannelFilter.Category(Channels.NO_CATEGORY), 2, "", ChannelCategory.KIND_GROUP),
+            ),
+            Channels.filterOptions(list),
+        )
+        assertEquals(listOf(1L, 2L, 5L), Channels.filter(list, group("News")).map { it.id })
+        assertEquals(listOf(3L, 6L), Channels.filter(list, ChannelFilter.Category(Channels.NO_CATEGORY)).map { it.id })
+        val none = ChannelFilter.Category(Channels.NO_CATEGORY)
+        assertEquals(none, Channels.validFilter(list, none))
+        assertEquals(none, ChannelFilter.fromKey(none.key))
+    }
+
+    @Test
+    fun aListNobodyGroupedHasNoCategoryEntries() {
+        val ungrouped = listOf(channel(1, 1, ""), channel(2, 2, ""))
+        assertEquals(
+            listOf(ChannelFilterOption(ChannelFilter.All, 2), ChannelFilterOption(ChannelFilter.Favorites, 0)),
+            Channels.filterOptions(ungrouped),
+        )
+        assertEquals(ChannelFilter.All, Channels.validFilter(ungrouped, group("Gone")))
+        assertEquals(listOf(ChannelFilterOption(ChannelFilter.All, 0), ChannelFilterOption(ChannelFilter.Favorites, 0)), Channels.filterOptions(emptyList()))
+    }
+
+    @Test
+    fun theServersCategoriesLeadInItsOrderWithTheCountsOfTheChannelsShown() {
+        // The server's list: AI topics, then sources, then groups; each channel carries its ids.
+        val server = listOf(
+            ChannelCategory("ai:news", "Новости", ChannelCategory.KIND_AI, 40),
+            ChannelCategory("ai:sport", "Спорт", ChannelCategory.KIND_AI, 9),
+            ChannelCategory("source:3", "Playlist A", ChannelCategory.KIND_SOURCE, 5),
+            ChannelCategory("group:RU | Новости", "RU | Новости", ChannelCategory.KIND_GROUP, 2),
+            ChannelCategory("group:Gone", "Gone", ChannelCategory.KIND_GROUP, 7),
+        )
+        val list = listOf(
+            channel(1, 1, "RU | Новости").copy(categories = listOf("ai:news", "source:3", "group:RU | Новости")),
+            channel(2, 2, "RU | Новости").copy(categories = listOf("ai:news", "ai:sport", "group:RU | Новости")),
+            channel(3, 3, "Own", ).copy(categories = listOf("group:Own"), favorite = true),
+            // The server sends nothing for a channel that is in no category.
+            channel(4, 4, ""),
+        )
+        val options = Channels.filterOptions(list, server)
+        assertEquals(
+            listOf(
+                ChannelFilterOption(ChannelFilter.All, 4),
+                ChannelFilterOption(ChannelFilter.Favorites, 1),
+                ChannelFilterOption(ChannelFilter.Category("ai:news"), 2, "Новости", "ai"),
+                ChannelFilterOption(ChannelFilter.Category("ai:sport"), 1, "Спорт", "ai"),
+                ChannelFilterOption(ChannelFilter.Category("source:3"), 1, "Playlist A", "source"),
+                ChannelFilterOption(ChannelFilter.Category("group:RU | Новости"), 2, "RU | Новости", "group"),
+            ),
+            options,
+        )
+        assertEquals(listOf(1L, 2L), Channels.filter(list, ChannelFilter.Category("ai:news")).map { it.id })
+        assertEquals(listOf(2L), Channels.filter(list, ChannelFilter.Category("ai:sport")).map { it.id })
+        assertEquals(listOf(1L, 2L), Channels.filter(list, ChannelFilter.Category("group:RU | Новости")).map { it.id })
+        assertEquals(ChannelFilter.All, Channels.validFilter(list, ChannelFilter.Category("ai:kids")))
+        // A channel's categories: the server's, else its own text as a group.
+        assertEquals(listOf("group:Own"), Channels.categoriesOf(list[2]))
+        assertEquals(emptyList<String>(), Channels.categoriesOf(list[3]))
+        assertEquals(listOf("group:Genres"), Channels.categoriesOf(channel(9, 9, " Genres ")))
+    }
+
+    @Test
+    fun withoutTheServersListOnlyGroupsAreNamed() {
+        val list = listOf(
+            channel(1, 1, "News").copy(categories = listOf("ai:news", "group:News")),
+            channel(2, 2, "News").copy(categories = listOf("ai:news", "source:3", "group:News")),
+        )
+        assertEquals(listOf(group("News")), Channels.filterOptions(list).drop(2).map { it.filter })
+    }
+
+    @Test
+    fun aCategoryIsNamedByTheServersListThenByItsGroup() {
+        val names = listOf(ChannelCategory("ai:news", "Новости", ChannelCategory.KIND_AI, 3))
+        assertEquals("Новости", Channels.categoryName(ChannelFilter.Category("ai:news"), names))
+        assertEquals("RU | Спорт", Channels.categoryName(ChannelFilter.Category("group:RU | Спорт"), names))
+        assertNull(Channels.categoryName(ChannelFilter.Category("ai:kids"), names))
+        assertNull(Channels.categoryName(ChannelFilter.Category(Channels.NO_CATEGORY), names))
     }
 
     @Test

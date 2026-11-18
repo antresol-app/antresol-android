@@ -209,6 +209,10 @@
     <string name="tv_view_guide">Телегид</string>
     <string name="tv_view">Вид</string>
     <string name="tv_filter">Какие каналы показывать</string>
+    <string name="tv_category_none">Без категории</string>
+    <string name="tv_category_kind_ai">Темы</string>
+    <string name="tv_category_kind_source">Источники</string>
+    <string name="tv_category_kind_group">Группы</string>
     <string name="tv_until">до %1$s</string>
     <string name="tv_next_short">Далее %1$s %2$s</string>
     <string name="tv_favorite_add">Добавить в избранное</string>

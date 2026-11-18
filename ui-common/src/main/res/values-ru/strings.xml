@@ -126,6 +126,7 @@
     <string name="detail_specials">Спецвыпуски</string>
     <string name="episode_downloaded">Скачана</string>
     <string name="episode_not_downloaded">Не скачана</string>
+    <string name="episode_new">Новое</string>
     <string name="episode_airs">Выйдет %1$s</string>
     <string name="episode_not_aired">Ещё не вышла</string>
     <string name="episode_not_in_library">Серии нет в медиатеке</string>

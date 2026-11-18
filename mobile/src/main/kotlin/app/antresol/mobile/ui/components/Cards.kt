@@ -28,7 +28,7 @@ import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.components.BadgeRow
 import app.antresol.ui.components.ProgressBar
-import app.antresol.ui.components.WatchedMark
+import app.antresol.ui.components.WatchedMarkOverlay
 import app.antresol.ui.components.WatchedStyle
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolMotion
@@ -111,7 +111,7 @@ fun MediaCard(
                 .fillMaxWidth()
                 .aspectRatio(aspect),
         ) {
-            // A watched card: dimmed artwork, the eye at full strength on top.
+            // A watched card: dimmed artwork, the eye at full strength in the middle.
             ArtworkImage(
                 url = urls?.image(image),
                 fallbackUrl = if (style == CardStyle.Wide) urls?.image(card.wideFallback) else null,
@@ -123,11 +123,7 @@ fun MediaCard(
                     .alpha(WatchedStyle.artworkAlpha(card.watched)),
             )
             if (card.watched) {
-                WatchedMark(
-                    Modifier
-                        .align(if (circle) Alignment.TopCenter else Alignment.TopEnd)
-                        .padding(8.dp),
-                )
+                WatchedMarkOverlay()
             } else if (card.progress > 0.0) {
                 ProgressBar(
                     fraction = card.progress.toFloat(),

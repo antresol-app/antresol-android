@@ -77,9 +77,9 @@ import app.antresol.ui.components.kindLabel
 import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
-import app.antresol.ui.components.Badge
 import app.antresol.ui.components.BadgeRow
 import app.antresol.ui.components.CastPhoto
+import app.antresol.ui.components.EpisodeMarks
 import app.antresol.ui.components.WatchedStyle
 import app.antresol.ui.trailers.Trailers
 import app.antresol.ui.trailers.trailerLabel
@@ -301,6 +301,7 @@ private fun VideoDetailContent(
                         onToggleWatched = { viewModel.toggleEpisodeWatched(card) },
                         code = episode.season to episode.number,
                         mark = mark,
+                        isNew = episode.isNew,
                     )
                 } else {
                     UnavailableEpisodeRow(
@@ -388,6 +389,7 @@ private fun EpisodeRow(
     onToggleWatched: () -> Unit,
     code: Pair<Int, Int> = episode.seasonNo to episode.episodeNo,
     mark: String? = null,
+    isNew: Boolean = false,
 ) {
     val urls = LocalMediaUrls.current
     val wide = LocalConfiguration.current.screenWidthDp >= 600
@@ -434,7 +436,7 @@ private fun EpisodeRow(
             )
             Text(episode.title, style = Antresol.typography.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
             episode.durationMs?.takeIf { it > 0 }?.let { Text(spokenDuration(it), style = Antresol.typography.caption) }
-            mark?.let { Badge(it, Modifier.padding(top = 2.dp)) }
+            EpisodeMarks(isNew = isNew, state = mark, modifier = Modifier.padding(top = 2.dp))
             episode.overview?.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = Antresol.typography.caption, maxLines = if (wide) 3 else 2, overflow = TextOverflow.Ellipsis)
             }
@@ -494,7 +496,7 @@ private fun UnavailableEpisodeRow(episode: GuideEpisode, mark: String?, onClick:
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            mark?.let { Badge(it, Modifier.padding(top = 2.dp)) }
+            EpisodeMarks(isNew = episode.isNew, state = mark, modifier = Modifier.padding(top = 2.dp))
         }
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
             if (episode.watched) {

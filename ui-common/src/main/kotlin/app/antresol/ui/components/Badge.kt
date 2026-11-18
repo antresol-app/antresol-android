@@ -27,11 +27,13 @@ import app.antresol.ui.theme.AntresolShapes
  * A small dark outlined chip with grey text, such as "1080p" or "Audio EN RU" (server-provided card
  * badges). Every kind looks the same, as in the design: nothing under a card competes with the focus ring.
  * Audio and subtitle languages show an icon in place of the word ("Audio RU EN" → 🔈 RU EN), as on the
- * web and iPhone; TalkBack still reads the word.
+ * web and iPhone; TalkBack still reads the word. [accent] is the web's accent badge: "New" on an
+ * episode of the guide.
  */
 @Composable
-fun Badge(text: String, modifier: Modifier = Modifier) {
-    val style = Antresol.typography.badge.copy(color = AntresolColors.LabelSecondary)
+fun Badge(text: String, modifier: Modifier = Modifier, accent: Boolean = false) {
+    val ink = if (accent) AntresolColors.Accent else AntresolColors.LabelSecondary
+    val style = Antresol.typography.badge.copy(color = ink)
     val label = BadgeLabel.of(text)
     // the icon at the text's cap height: the font size in dp, a little smaller
     val iconSize = with(LocalDensity.current) { (style.fontSize.toDp() * 1.1f) }
@@ -39,12 +41,12 @@ fun Badge(text: String, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
-            .background(AntresolColors.FillTertiary, AntresolShapes.badge)
-            .border(1.dp, AntresolColors.Hairline, AntresolShapes.badge)
+            .background(if (accent) AntresolColors.Accent.copy(alpha = 0.16f) else AntresolColors.FillTertiary, AntresolShapes.badge)
+            .border(1.dp, if (accent) AntresolColors.Accent.copy(alpha = 0.4f) else AntresolColors.Hairline, AntresolShapes.badge)
             .padding(horizontal = 6.dp, vertical = 2.dp)
             .clearAndSetSemantics { contentDescription = text },
     ) {
-        label.icon?.let { Icon(it, contentDescription = null, tint = AntresolColors.LabelSecondary, modifier = Modifier.size(iconSize)) }
+        label.icon?.let { Icon(it, contentDescription = null, tint = ink, modifier = Modifier.size(iconSize)) }
         if (label.rest.isNotEmpty()) Text(text = label.rest, style = style, maxLines = 1)
     }
 }

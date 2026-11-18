@@ -38,7 +38,7 @@ import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.components.BadgeRow
 import app.antresol.ui.components.ProgressBar
-import app.antresol.ui.components.WatchedMark
+import app.antresol.ui.components.WatchedMarkOverlay
 import app.antresol.ui.components.WatchedStyle
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
@@ -120,7 +120,7 @@ fun MediaCard(
             )
             // Over the dimmed artwork, at full strength.
             if (card.watched) {
-                WatchedMark(Modifier.align(if (shape == CardShape.Round) Alignment.TopCenter else Alignment.TopEnd).padding(8.dp))
+                WatchedMarkOverlay()
             } else if (card.progress > 0.0) {
                 ProgressBar(
                     fraction = card.progress.toFloat(),

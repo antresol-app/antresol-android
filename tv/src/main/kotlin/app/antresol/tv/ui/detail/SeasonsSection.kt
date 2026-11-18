@@ -47,9 +47,9 @@ import app.antresol.tv.ui.components.trapHorizontalFocus
 import app.antresol.tv.R as TvR
 import app.antresol.ui.R
 import app.antresol.ui.components.ArtworkImage
-import app.antresol.ui.components.Badge
+import app.antresol.ui.components.EpisodeMarks
 import app.antresol.ui.components.ProgressBar
-import app.antresol.ui.components.WatchedMark
+import app.antresol.ui.components.WatchedMarkOverlay
 import app.antresol.ui.components.WatchedStyle
 import app.antresol.ui.format.EpisodeLabels
 import app.antresol.ui.format.episodeStateLabel
@@ -191,11 +191,7 @@ private fun EpisodeTile(episode: GuideEpisode, mark: String?, onClick: () -> Uni
                     .alpha(WatchedStyle.artworkAlpha(episode.watched, focused)),
             )
             if (episode.watched) {
-                WatchedMark(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp),
-                )
+                WatchedMarkOverlay()
             } else if (episode.progress > 0.0) {
                 ProgressBar(
                     fraction = episode.progress.toFloat(),
@@ -211,7 +207,7 @@ private fun EpisodeTile(episode: GuideEpisode, mark: String?, onClick: () -> Uni
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        mark?.let { Badge(it) }
+        EpisodeMarks(isNew = episode.isNew, state = mark)
         card?.durationMs?.takeIf { it > 0 }?.let {
             Text(spokenDuration(it), style = Antresol.typography.caption, maxLines = 1)
         }

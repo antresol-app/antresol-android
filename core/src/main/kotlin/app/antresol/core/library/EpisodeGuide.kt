@@ -38,6 +38,11 @@ data class GuideEpisode(
     val watched: Boolean,
     /** 0…1, 0 when unknown. */
     val progress: Double,
+    /**
+     * News the profile has not watched: an aired episode the server flagged `new` (it has a source
+     * other than the library's). The page marks it "New", as the web does.
+     */
+    val isNew: Boolean = false,
 ) {
     val isPlayable: Boolean get() = state == EpisodeState.Downloaded && card != null
 
@@ -135,7 +140,9 @@ data class EpisodeGuide(val seasons: List<GuideSeason>, val fromServer: Boolean)
                 val airDate = parseDate(entry.airDate)
                 rows += if (card != null) {
                     // A file holding two episodes is the same card on both rows.
-                    downloaded(card, entry.season).copy(number = entry.number, title = card.title.ifBlank { entry.name }, airDate = airDate)
+                    downloaded(card, entry.season).let {
+                        it.copy(number = entry.number, title = card.title.ifBlank { entry.name }, airDate = airDate, isNew = entry.new && !it.watched)
+                    }
                 } else {
                     GuideEpisode(
                         season = entry.season,
@@ -146,6 +153,7 @@ data class EpisodeGuide(val seasons: List<GuideSeason>, val fromServer: Boolean)
                         card = null,
                         watched = entry.watched,
                         progress = 0.0,
+                        isNew = entry.new && !entry.watched && airDate != null && !airDate.isAfter(today),
                     )
                 }
             }

@@ -7,8 +7,14 @@ It answers what test-fixtures' FakeServer answers (one passwordless profile, hom
 a series page, trailers) with the same JSON, plus live channels and the programme guide. In an
 emulator the address is http://10.0.2.2:8421 (type it: the server screen also finds the real
 servers of the home network). The port is not 8420, the one the live tests (ANTRESOL_TEST_SERVER=1)
-look for a real server on. Nothing plays except the server-played trailer of «Movie 1»; its
-«Teaser» has no `play`, so it opens the embedded YouTube player with --trailer's video.
+look for a real server on. Nothing plays except the server-played trailer of «Movie 1» (its
+«Teaser» has no `play`, so it opens the embedded YouTube player with --trailer's video) and the music.
+
+Music is one album («Golden Hours» by «Northern Static», three tracks) under Music in the top menu.
+The tracks are 60 s WAV melodies made here from sine waves (Python's standard library only, rendered on
+the first request of each track), served from `/api/tracks/<id>/stream` with Range support, so they
+play with sound, seek, and keep playing in the background. Stars are kept for the run; plays are
+accepted and forgotten; no track has lyrics.
 
 The guide is one fixed schedule per channel (it depends on the channel and the UTC day the script
 was started on: it stays as it is when midnight passes during a run), cut
@@ -25,9 +31,13 @@ kept. So the pages asked for later have other titles and times under ids the ear
 """
 import argparse
 import json
+import math
 import re
 import struct
+import sys
+import threading
 import zlib
+from array import array
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -105,7 +115,7 @@ def trailers(i, embed_key):
 def png(path, sized=False):
     """A flat PNG in a colour of its own (posters upright). A logo is a white ring on nothing; asked
     for with `?w=` ([sized]) it comes on black, as the server's smaller copies (JPEG) do."""
-    w, h = (20, 30) if path.endswith("/poster") or "/cast/" in path else (48, 27)
+    w, h = (20, 30) if path.endswith("/poster") or "/cast/" in path else (40, 40) if path.endswith("/cover") else (48, 27)
     seed = zlib.crc32(path.encode())
     pixel = bytes(60 + (seed >> shift) % 120 for shift in (0, 8, 16)) + b"\xff"
     rows = [[pixel] * w for _ in range(h)]
@@ -118,6 +128,123 @@ def png(path, sized=False):
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+
+
+# --- Music: one album of three generated tracks ---
+ARTIST, ALBUM, TRACKS = 910, 900, [901, 902, 903]
+ARTIST_NAME, ALBUM_TITLE, ALBUM_YEAR = "Northern Static", "Golden Hours", 2024
+RATE, TRACK_SECONDS = 22050, 60
+# Per track: title, step between arpeggio notes (s), arpeggio order, and four 4-second chords (MIDI notes).
+SONGS = {
+    901: ("Morning Light", 0.5, [0, 1, 2, 3, 2, 1, 3, 2],
+          [[48, 55, 59, 64], [45, 52, 55, 60], [41, 48, 52, 57], [43, 50, 55, 59]]),
+    902: ("Slow Tide", 0.4, [0, 2, 1, 3, 0, 2, 3, 1],
+          [[45, 52, 55, 60], [41, 48, 52, 57], [48, 55, 59, 64], [40, 47, 50, 55]]),
+    903: ("Paper Lanterns", 0.5, [0, 1, 2, 1, 3, 2, 1, 2],
+          [[50, 57, 62, 66], [47, 54, 57, 62], [43, 50, 55, 59], [45, 52, 57, 61]]),
+}
+starred = set()
+wavs, wav_lock = {}, threading.Lock()
+
+
+def cover(i):
+    return f"/api/images/album/{i}/cover"
+
+
+def album_card():
+    return {"id": ALBUM, "kind": "album", "title": ALBUM_TITLE, "subtitle": ARTIST_NAME, "year": ALBUM_YEAR, "poster": cover(ALBUM)}
+
+
+def artist_card():
+    return {"id": ARTIST, "kind": "artist", "title": ARTIST_NAME, "poster": f"/api/images/artist/{ARTIST}/cover"}
+
+
+def track(i):
+    return {"id": i, "title": SONGS[i][0], "artist": ARTIST_NAME, "artistId": ARTIST, "albumId": ALBUM, "album": ALBUM_TITLE,
+            "discNo": 1, "trackNo": TRACKS.index(i) + 1, "durationMs": TRACK_SECONDS * 1000, "fileId": i + 8100,
+            "lossless": True, "hasLyrics": False, "cover": cover(ALBUM), "starred": i in starred, "cue": False}
+
+
+def music_home():
+    return {"shelves": [{"id": "recent-albums", "title": "Recently Added", "cards": [album_card()]},
+                        {"id": "artists", "title": "Artists", "cards": [artist_card()]}]}
+
+
+def music_page(items, query):
+    """A `Page` of the server: the window [offset, offset+limit) of items and their total."""
+    offset, limit = int(query.get("offset", ["0"])[0] or 0), int(query.get("limit", ["100"])[0] or 100)
+    return {"items": items[offset:offset + limit], "total": len(items)}
+
+
+def render_chord(notes, step, order, length=4.0, tail=0.8):
+    """A chord's pad (two slightly detuned sines a note) with a plucked arpeggio over it, [length]+[tail] seconds long."""
+    n, hz = int((length + tail) * RATE), lambda note: 440.0 * 2 ** ((note - 69) / 12) * 2 * math.pi / RATE
+    buf = [0.0] * n
+    for note in notes:
+        w = hz(note)
+        for detune in (1.0, 1.004):
+            buf = [b + 0.06 * math.sin(w * detune * i) for i, b in enumerate(buf)]
+    for k in range(int(length / step)):
+        start, w = int(k * step * RATE), hz(notes[order[k % len(order)]] + 12)
+        m = min(int(1.8 * RATE), n - start)
+        tone = [(math.sin(w * i) + 0.25 * math.sin(2 * w * i)) * math.exp(-3.2 * i / RATE) * min(1.0, i / 80) * 0.22 for i in range(m)]
+        buf[start:start + m] = [b + t for b, t in zip(buf[start:start + m], tone)]
+    # Swell in over half a second; fade out over the tail, which the next chord's start overlaps.
+    return [b * min(1.0, i / (0.5 * RATE)) * min(1.0, (n - i) / (tail * RATE)) for i, b in enumerate(buf)]
+
+
+def wav(i):
+    """The track's WAV (22050 Hz, mono, 16 bit, 60 s), rendered once."""
+    with wav_lock:
+        if i not in wavs:
+            _, step, order, chords = SONGS[i]
+            parts, total, length = [render_chord(c, step, order) for c in chords], TRACK_SECONDS * RATE, 4 * RATE
+            mix = [0.0] * (total + 2 * length)
+            for k in range(TRACK_SECONDS // 4):
+                part, at = parts[k % len(parts)], k * length
+                mix[at:at + len(part)] = [a + b for a, b in zip(mix[at:at + len(part)], part)]
+            mix = mix[:total]
+            peak = max(max(mix), -min(mix)) or 1.0
+            # Peak at 85 %, a 20 ms fade-in and a 2 s fade-out.
+            pcm = array("h", [int(v / peak * 0.85 * 32767 * min(1.0, n / (0.02 * RATE), (total - n) / (2 * RATE))) for n, v in enumerate(mix)])
+            if sys.byteorder == "big":
+                pcm.byteswap()
+            data = pcm.tobytes()
+            header = struct.pack("<4sI4s4sIHHIIHH4sI", b"RIFF", 36 + len(data), b"WAVE", b"fmt ", 16, 1, 1, RATE, RATE * 2, 2, 16, b"data", len(data))
+            wavs[i] = header + data
+        return wavs[i]
+
+
+def music(path, query):
+    """The answer (status, body) of a music route, or None when the path is not one."""
+    missing = (404, {"error": "not found"})
+    if path == "/api/music/albums":
+        return 200, music_page([album_card()], query)
+    if path == "/api/music/artists":
+        return 200, music_page([artist_card()], query)
+    if path == "/api/music/songs":
+        return 200, music_page([track(i) for i in TRACKS], query)
+    if path == "/api/music/shuffle":
+        return 200, {"tracks": [track(i) for i in TRACKS]}
+    if path == "/api/music/playlists":
+        return 200, {"items": []}
+    if path == "/api/music/plays":
+        return 204, b""
+    if match := re.fullmatch(r"/api/music/albums/(\d+)", path):
+        if int(match[1]) != ALBUM:
+            return missing
+        return 200, {"card": album_card(), "artist": {"id": ARTIST, "name": ARTIST_NAME}, "year": ALBUM_YEAR, "genres": ["Ambient"],
+                     "durationMs": TRACK_SECONDS * 1000 * len(TRACKS), "trackCount": len(TRACKS), "quality": "WAV 16-bit",
+                     "tracks": [track(i) for i in TRACKS], "starred": ALBUM in starred}
+    if match := re.fullmatch(r"/api/music/artists/(\d+)", path):
+        if int(match[1]) != ARTIST:
+            return missing
+        return 200, {"card": artist_card(), "albums": [album_card()], "topTracks": [track(i) for i in TRACKS], "appearsOn": []}
+    if match := re.fullmatch(r"/api/music/tracks/(\d+)(/lyrics)?", path):
+        if int(match[1]) not in TRACKS:
+            return missing
+        return 200, ({"lyrics": "", "synced": False, "source": "", "lines": []} if match[2] else track(int(match[1])))
+    return None
 
 
 def entries(channel):
@@ -229,14 +356,36 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     embed_key = "aqz-KE-bpKQ"
 
-    def send(self, status, body, content_type="application/json"):
+    def send(self, status, body, content_type="application/json", headers=()):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        for name, value in headers:
+            self.send_header(name, value)
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(data)
+
+    def send_track(self, track_id):
+        """The track's WAV with Range support (`bytes=a-b`, `a-`, `-n`), as the player seeks."""
+        data = wav(track_id)
+        size, headers, status, start, end = len(data), [("Accept-Ranges", "bytes")], 200, 0, len(data) - 1
+        asked = re.fullmatch(r"bytes=(\d*)-(\d*)", (self.headers.get("Range") or "").strip())
+        if asked and (asked[1] or asked[2]):
+            start = int(asked[1]) if asked[1] else max(size - int(asked[2]), 0)
+            end = min(int(asked[2]), size - 1) if asked[1] and asked[2] else size - 1
+            if start >= size:
+                return self.send(416, b"", "audio/wav", [("Content-Range", f"bytes */{size}")])
+            if start <= end:
+                status = 206
+                headers.append(("Content-Range", f"bytes {start}-{end}/{size}"))
+            else:
+                start, end = 0, size - 1
+        try:
+            self.send(status, data[start:end + 1], "audio/wav", headers)
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
 
     def answer(self):
         url = urlparse(self.path)
@@ -249,6 +398,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, CLIP.read_bytes(), "video/mp4")
         if re.fullmatch(r"/api/trailers/movieTrailer1/play", path):
             return self.send(200, {"url": "/api/trailers/movieTrailer1.mp4?mk=test-mk", "durationMs": 30000})
+        if match := re.fullmatch(r"/api/tracks/(\d+)/stream", path):
+            return self.send_track(int(match[1])) if int(match[1]) in TRACKS else self.send(404, {"error": "not found"})
+        if match := re.fullmatch(r"/api/music/star/(\d+)", path):
+            (starred.add if self.command == "POST" else starred.discard)(int(match[1]))
+            return self.send(204, b"")
+        if (reply := music(path, query)) is not None:
+            return self.send(*reply)
         if match := re.fullmatch(r"/api/channels/(\d+)/favorite", path):
             (favorites.add if self.command == "PUT" else favorites.discard)(int(match[1]))
             return self.send(204, b"")
@@ -271,7 +427,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/me/ui-language": {"language": "", "effective": "en"},
             "/api/me/playback-prefs": {"audioLangs": [], "subMode": "off", "subLangs": []},
             "/api/home": home(),
-            "/api/music/home": {"shelves": []},
+            "/api/music/home": music_home(),
             "/api/books/home": {"shelves": []},
             "/api/music/genres": {"genres": []},
         }

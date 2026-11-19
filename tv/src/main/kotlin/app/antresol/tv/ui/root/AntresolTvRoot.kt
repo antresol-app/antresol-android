@@ -1,5 +1,6 @@
 package app.antresol.tv.ui.root
 
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.core.api.MediaUrls
 import androidx.compose.runtime.CompositionLocalProvider
@@ -50,6 +51,15 @@ fun AntresolTvRoot(
     LaunchedEffect(Unit) {
         if (session.state.value == AuthState.Starting) session.restore()
     }
+    // The signed-in shell's saved state (tab, back stack, scroll) outlives the picker «Switch
+    // Profile» opens over it, so Back there returns to where the user was. Any other shell's goes.
+    val shells = rememberSaveableStateHolder()
+    val shellKeys = remember { mutableSetOf<Any>() }
+    val keep = (state as? AuthState.SignedIn ?: (state as? AuthState.ChooseProfile)?.switchingFrom)?.screenKey()
+    LaunchedEffect(keep) {
+        shellKeys.filter { it != keep }.forEach(shells::removeState)
+        shellKeys.retainAll { it == keep }
+    }
     updateTransition(targetState = state, label = "root").Crossfade(
         animationSpec = tween(AntresolMotion.MEDIUM_MS),
         contentKey = { it.screenKey() },
@@ -70,7 +80,11 @@ fun AntresolTvRoot(
                 }
             }
             // A new profile gets a fresh navigation stack.
-            is AuthState.SignedIn -> key(current.session.serverId, current.session.userId) { MainShell(session, current) }
+            is AuthState.SignedIn -> key(current.session.serverId, current.session.userId) {
+                val shellKey = current.screenKey()
+                shellKeys += shellKey
+                shells.SaveableStateProvider(shellKey) { MainShell(session, current) }
+            }
         }
     }
 }

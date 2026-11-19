@@ -91,10 +91,12 @@ fun ProfilesScreen(
     var reload by remember { mutableIntStateOf(0) }
     var profiles by remember { mutableStateOf<LoadState<List<Profile>>>(LoadState.Loading) }
     var passwordFor by rememberSaveable { mutableStateOf<Long?>(null) }
-    var lastFocused by rememberSaveable { mutableStateOf<Long?>(null) }
+    // «Switch Profile» opened over a live session: the picker starts on the current profile.
+    var lastFocused by rememberSaveable { mutableStateOf(state.switchingFrom?.session?.userId) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var phoneSignIn by rememberSaveable { mutableStateOf(true) }
+    // Signed out the QR comes first; switching from a live session goes straight to the profiles.
+    var phoneSignIn by rememberSaveable { mutableStateOf(state.switchingFrom == null) }
     val initial = remember(state.serverId) { ticket?.take(state.serverId) }
 
     if (phoneSignIn) {
@@ -110,8 +112,11 @@ fun ProfilesScreen(
         )
         return
     }
-    // Back in the picker returns to the QR (the password step closes first).
-    BackHandler(enabled = passwordFor == null) { phoneSignIn = true }
+    // Back in the picker returns to the QR (the password step closes first); when «Switch Profile»
+    // opened it over a live session, Back returns to that session, still signed in.
+    BackHandler(enabled = passwordFor == null) {
+        if (state.switchingFrom != null) scope.launch { session.cancelSwitch() } else phoneSignIn = true
+    }
 
     LaunchedEffect(state.serverUrl, reload) {
         profiles = LoadState.Loading

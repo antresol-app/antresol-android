@@ -26,11 +26,18 @@ sealed interface AuthState {
     /** No server configured yet: show the server address screen. */
     data object NoServer : AuthState
 
-    /** Connected to a server, no profile signed in: show the profile picker. */
+    /**
+     * Connected to a server, no profile signed in: show the profile picker.
+     *
+     * [switchingFrom] is set when «Switch Profile» opened the picker over a live session: that
+     * session stays signed in (stored, its token on the client) until another profile signs in, and
+     * [SessionManager.cancelSwitch] (Back, or picking it again) returns to it.
+     */
     data class ChooseProfile(
         val serverUrl: String,
         val serverId: String,
         val notice: AuthNotice? = null,
+        val switchingFrom: SignedIn? = null,
     ) : AuthState
 
     /** Signed in. [user] is null until `/api/me` answered (offline launch keeps the stored session). */
@@ -55,7 +62,8 @@ class NotAntresolServerException(cause: Throwable? = null) : IOException("Not an
  * - [restore] on launch: re-uses the stored token (validated with `/api/me`), else the profile picker.
  * - [connect] validates a server address with `/api/health` (and `/api/setup`).
  * - [signIn] / [resume] exchange a profile for a device token, persisted through [store].
- * - Any 401 on an authenticated call drops the token and returns to [AuthState.ChooseProfile].
+ * - A 401 on an authenticated call only asks `/api/me` with that token; the session ends (token
+ *   dropped, back to [AuthState.ChooseProfile]) only when `/api/me` answers 401 too.
  *
  * [deviceInfo] builds the `device` block for a device id (name such as "Android TV (Model)").
  */
@@ -147,6 +155,12 @@ class SessionManager(
     /** The last server address used, to pre-fill the address field after "Change Server". */
     suspend fun lastServerUrl(): String? = store.load().let { it.serverUrl ?: it.saved.lastOrNull()?.serverUrl }
 
+    /** Checks of a token that got a 401 now running (one per token). */
+    private val checking = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    /** A `/api/me` check of a 401 is running (tests wait for it). */
+    internal fun checkingSession(): Boolean = checking.isNotEmpty()
+
     /** The profile picker of the current server (no auth). */
     suspend fun profiles(): List<Profile> = requireClient().profiles()
 
@@ -156,14 +170,16 @@ class SessionManager(
      * Saved tokens of password profiles are never re-used, so switching into them always asks.
      */
     suspend fun resume(profile: Profile): Boolean {
-        if (profile.hasPassword) return false
         val chooser = _state.value as? AuthState.ChooseProfile ?: return false
+        // The profile «Switch Profile» was opened from: back to it, no password asked.
+        if (chooser.switchingFrom?.session?.userId == profile.id) return cancelSwitch()
+        if (profile.hasPassword) return false
         val saved = store.load().tokenFor(chooser.serverId, profile.id)
         if (saved != null && saved.serverUrl == chooser.serverUrl) {
-            val client = requireClient()
-            client.token = saved.token
+            // Its own client: the session being switched from keeps its token on the shared one.
+            val probe = AntresolClient(saved.serverUrl, httpClient, language, token = saved.token)
             val user = try {
-                client.me()
+                probe.me()
             } catch (e: ApiException) {
                 if (!e.isUnauthorized) throw e
                 store.update { it.forgotten(saved.serverId, saved.userId) }
@@ -171,6 +187,7 @@ class SessionManager(
             }
             if (user != null) {
                 activate(saved.copy(userName = user.name, avatar = user.avatar, photo = user.photo), user)
+                retire(chooser)
                 return true
             }
         }
@@ -182,6 +199,7 @@ class SessionManager(
     suspend fun signIn(profile: Profile, password: String?) {
         val chooser = _state.value as? AuthState.ChooseProfile ?: error("Not choosing a profile")
         val client = requireClient()
+        // A failed sign-in (wrong password) leaves the token of the session being switched from on the client.
         val response = client.signIn(profile.id, password, deviceInfo(store.deviceId()))
         val session = StoredSession(
             serverUrl = chooser.serverUrl,
@@ -193,6 +211,7 @@ class SessionManager(
             photo = response.user.photo,
         )
         activate(session, response.user)
+        retire(chooser)
     }
 
     /** The `device` block this install sends with a sign-in (also the TV's QR sign-in request). */
@@ -218,14 +237,42 @@ class SessionManager(
             ),
             user,
         )
+        retire(chooser)
     }
 
-    /** Returns to the profile picker, keeping the token for a quick switch back. */
+    /**
+     * Opens the profile picker over the live session: nothing is revoked or forgotten (the stored
+     * session, the client's token), so [cancelSwitch] returns to it and a restart is still signed in.
+     */
     suspend fun switchProfile() = mutex.withLock {
         val signedIn = _state.value as? AuthState.SignedIn ?: return@withLock
-        store.update { it.switchedOut() }
-        client?.token = null
-        _state.value = AuthState.ChooseProfile(signedIn.session.serverUrl, signedIn.session.serverId)
+        _state.value = AuthState.ChooseProfile(signedIn.session.serverUrl, signedIn.session.serverId, switchingFrom = signedIn)
+    }
+
+    /** Back on the picker [switchProfile] opened: the session it was opened over again. False when there is none. */
+    suspend fun cancelSwitch(): Boolean = mutex.withLock {
+        val from = (_state.value as? AuthState.ChooseProfile)?.switchingFrom ?: return@withLock false
+        client?.token = from.session.token
+        _state.value = from
+        true
+    }
+
+    /**
+     * After another profile signed in from [chooser]: the token of a password profile it switched
+     * from is revoked with its own Bearer (it is never re-used without the password); a
+     * passwordless one stays saved for a quick switch back.
+     */
+    private suspend fun retire(chooser: AuthState.ChooseProfile) {
+        val from = chooser.switchingFrom ?: return
+        val old = from.session
+        if (old.userId == (_state.value as? AuthState.SignedIn)?.session?.userId) return
+        if (from.user?.hasPassword != true) return
+        try {
+            AntresolClient(old.serverUrl, httpClient, language, token = old.token).logout()
+        } catch (_: IOException) {
+            // Offline or already revoked: forgetting it here is what matters.
+        }
+        store.update { it.forgotten(old.serverId, old.userId) }
     }
 
     /** Revokes the token on the server (best effort) and returns to the profile picker. */
@@ -298,20 +345,47 @@ class SessionManager(
         return created
     }
 
-    /** A 401 for the active token: forget it and show the profile picker with a notice. */
+    /**
+     * A 401 for [failedToken] from some endpoint: ask `/api/me` with it (a client that reports
+     * nothing), and only its 401 ends the session — the token is forgotten and the profile picker
+     * shows a notice. Any other answer (or no network) keeps the session.
+     */
     private fun onUnauthorized(failedToken: String) {
+        if (!checking.add(failedToken)) return
         scope.launch {
-            mutex.withLock {
-                val signedIn = _state.value as? AuthState.SignedIn ?: return@withLock
-                if (signedIn.session.token != failedToken) return@withLock
-                store.update { it.forgotten(signedIn.session.serverId, signedIn.session.userId) }
-                client?.token = null
-                _state.value = AuthState.ChooseProfile(
-                    signedIn.session.serverUrl,
-                    signedIn.session.serverId,
-                    AuthNotice.SessionExpired,
-                )
+            try {
+                val session = sessionOf(_state.value)?.takeIf { it.token == failedToken } ?: return@launch
+                val expired = try {
+                    AntresolClient(session.serverUrl, httpClient, language, token = failedToken).me()
+                    false
+                } catch (e: ApiException) {
+                    e.isUnauthorized
+                } catch (_: IOException) {
+                    false
+                }
+                if (expired) expire(failedToken)
+            } finally {
+                checking.remove(failedToken)
             }
+        }
+    }
+
+    /** The session signed in now, or the one the picker was opened over. */
+    private fun sessionOf(state: AuthState): StoredSession? = when (state) {
+        is AuthState.SignedIn -> state.session
+        is AuthState.ChooseProfile -> state.switchingFrom?.session
+        else -> null
+    }
+
+    private suspend fun expire(token: String) = mutex.withLock {
+        val current = _state.value
+        val session = sessionOf(current)?.takeIf { it.token == token } ?: return@withLock
+        store.update { it.forgotten(session.serverId, session.userId) }
+        if (client?.token == token) client?.token = null
+        _state.value = when (current) {
+            // Already on the picker: it just can no longer go back.
+            is AuthState.ChooseProfile -> current.copy(switchingFrom = null, notice = AuthNotice.SessionExpired)
+            else -> AuthState.ChooseProfile(session.serverUrl, session.serverId, AuthNotice.SessionExpired)
         }
     }
 }

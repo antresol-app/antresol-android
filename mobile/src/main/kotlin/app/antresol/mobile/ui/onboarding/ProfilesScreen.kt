@@ -136,6 +136,17 @@ fun ProfilesScreen(session: SessionManager, state: AuthState.ChooseProfile) {
                 }
             }
         }
+        // «Switch Profile» opened this over a live session: Back returns to it, still signed in.
+        if (state.switchingFrom != null && passwordFor == null) {
+            BackHandler { scope.launch { session.cancelSwitch() } }
+            Spacer(Modifier.height(8.dp))
+            GlassPillButton(
+                text = stringResource(R.string.action_cancel),
+                onClick = { scope.launch { session.cancelSwitch() } },
+                enabled = !busy,
+                modifier = Modifier.testTag("switch-cancel"),
+            )
+        }
         if (passwordFor == null) {
             Spacer(Modifier.height(12.dp))
             val host = MediaUrls.hostPort(state.serverUrl)

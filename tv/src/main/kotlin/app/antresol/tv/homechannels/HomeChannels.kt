@@ -40,7 +40,8 @@ import java.util.concurrent.TimeUnit
  * - every [HomeChannelsWork.INTERVAL_MIN] minutes by WorkManager, while someone is signed in and the network is there.
  *
  * Nothing is asked of the server and no work is scheduled while nobody is signed in: the one run that notices it
- * removes the tiles and cancels the periodic work.
+ * removes the tiles and cancels the periodic work. A device with no TV provider is noticed before anything else
+ * ([HomeStore.available]): no request, no pictures, no periodic job.
  */
 @OptIn(FlowPreview::class)
 class HomeChannels(private val app: AntresolTvApp) {
@@ -62,8 +63,12 @@ class HomeChannels(private val app: AntresolTvApp) {
                 channelName = { app.getString(R.string.home_channel_name) },
                 channelDescription = { app.getString(R.string.home_channel_description) },
             ),
+            linkNonce = prefs.linkNonce,
         )
     }
+
+    /** The link in a tile's address, or null when it is not one of ours (wrong or missing nonce, see [HomeLinks]). */
+    fun parseLink(uri: String?): HomeLink? = HomeLinks.parse(uri, prefs.linkNonce)
 
     private val requests = Channel<Unit>(Channel.CONFLATED)
 
@@ -132,7 +137,7 @@ class HomeChannels(private val app: AntresolTvApp) {
                     }
                 }
             }
-            is HomeSyncResult.SignedOut -> HomeChannelsWork.cancel(app)
+            is HomeSyncResult.SignedOut, HomeSyncResult.Unsupported -> HomeChannelsWork.cancel(app)
             is HomeSyncResult.Failed -> Log.w(TAG, "Home screen sync failed", result.cause)
         }
         return result

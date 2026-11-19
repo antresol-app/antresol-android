@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 
 /**
@@ -23,7 +24,11 @@ object HomeArtworkFiles {
 
     fun authority(context: Context): String = "${context.packageName}.homeart"
 
-    fun dir(context: Context): File = File(context.cacheDir, "tv-home")
+    /**
+     * Not `cacheDir`: the system may empty that while the launcher still holds these addresses. The folder stays small
+     * ([HomeArtworkStore.retain] keeps only what a program shows) and is not backed up.
+     */
+    fun dir(context: Context): File = File(context.filesDir, "tv-home")
 
     fun isName(name: String?): Boolean = name != null && NAME.matches(name)
 
@@ -113,13 +118,19 @@ class HomeArtworkStore(
     private suspend fun download(path: String, target: File): Boolean {
         val bytes = fetch(path) ?: return false
         val encoded = encode(bytes) ?: return false
-        dir.mkdirs()
         // Written beside the target and renamed over it: the launcher never reads half a picture.
         val temp = File(dir, "${target.name}.tmp")
-        temp.writeBytes(encoded)
-        // Its age is measured by the store's own clock.
-        temp.setLastModified(clock())
-        return temp.renameTo(target).also { if (!it) temp.delete() }
+        return try {
+            dir.mkdirs()
+            temp.writeBytes(encoded)
+            // Its age is measured by the store's own clock.
+            temp.setLastModified(clock())
+            temp.renameTo(target).also { if (!it) temp.delete() }
+        } catch (_: IOException) {
+            // A full or unwritable disk costs this one picture, not the whole run.
+            temp.delete()
+            false
+        }
     }
 
     override fun retain(uris: Set<String>) {

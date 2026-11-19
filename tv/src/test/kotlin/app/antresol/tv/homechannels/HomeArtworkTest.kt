@@ -118,6 +118,39 @@ class HomeArtworkTest {
     }
 
     @Test
+    fun aPictureThatCannotBeWrittenIsSkippedAndTheOthersStillCome() = runTest {
+        bytes["/p/1"] = byteArrayOf(1)
+        bytes["/p/2"] = byteArrayOf(2)
+        // The folder cannot be made: a plain file sits where it should be (the same IOException as a full disk).
+        dir.parentFile!!.mkdirs()
+        dir.writeText("not a folder")
+        val store = store()
+
+        assertNull(store.uriFor(ArtworkRef("/p/1")))
+        // The fallback is tried too, and nothing is thrown.
+        assertNull(store.uriFor(ArtworkRef("/p/1", "/p/2")))
+        assertEquals(listOf("/p/1", "/p/1", "/p/2"), fetched)
+
+        // The disk is fine again: the same store carries on.
+        dir.delete()
+        assertTrue(store.uriFor(ArtworkRef("/p/2"))!!.startsWith("content://pkg.homeart/"))
+    }
+
+    @Test
+    fun aFailedWriteLeavesNoTemporaryFileAndKeepsTheOldPicture() = runTest {
+        bytes["/p/1"] = byteArrayOf(1)
+        val store = store()
+        val uri = store.uriFor(ArtworkRef("/p/1"))!!
+
+        now += HomeArtworkStore.TTL_MS + 1
+        bytes["/p/1"] = byteArrayOf(9)
+        // A folder in the place of the temporary file: writing to it fails.
+        File(dir, "${uri.substringAfterLast('/')}.tmp").mkdirs()
+        assertEquals(uri, store.uriFor(ArtworkRef("/p/1")))
+        assertArrayEquals(byteArrayOf(1), fileOf(uri).readBytes())
+    }
+
+    @Test
     fun noPathMeansNoPictureAndNoFetch() = runTest {
         assertNull(store().uriFor(ArtworkRef("")))
         assertTrue(fetched.isEmpty())

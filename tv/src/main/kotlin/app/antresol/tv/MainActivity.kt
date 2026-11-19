@@ -23,7 +23,6 @@ import app.antresol.tv.autostart.AutostartLauncher
 import app.antresol.tv.autostart.AutostartRequest
 import app.antresol.tv.autostart.AutostartTarget
 import app.antresol.tv.homechannels.DeepLinkRequest
-import app.antresol.tv.homechannels.HomeLinks
 import app.antresol.tv.settings.TvSettings
 import app.antresol.tv.ui.root.AntresolTvRoot
 import app.antresol.ui.theme.AntresolColors
@@ -88,8 +87,9 @@ class MainActivity : ComponentActivity() {
         val app = application as AntresolTvApp
         when (intent?.action) {
             ACTION_NOW_PLAYING -> app.nowPlayingRequested.value = true
-            // A tile of the TV home screen (Watch Next, the «Antresol» channel), or `antresol://play/{id}?u={profile}`.
-            Intent.ACTION_VIEW -> HomeLinks.parse(intent.dataString)?.let {
+            // A tile of the TV home screen (Watch Next, the «Antresol» channel): `antresol://play/{id}?u={profile}&n={nonce}`.
+            // A link without this install's nonce is not ours and is ignored (another app can start this activity).
+            Intent.ACTION_VIEW -> app.homeChannels.parseLink(intent.dataString)?.let {
                 app.deepLinkRequested.value = DeepLinkRequest(it, SystemClock.elapsedRealtime())
             }
             AutostartLauncher.ACTION_AUTOSTART -> app.autostartRequested.value = AutostartRequest(

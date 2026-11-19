@@ -52,6 +52,8 @@ data class ProgramSpec(
     val positionMs: Long = 0,
     val durationMs: Long = 0,
     val posterUri: String? = null,
+    /** The install's link nonce ([HomeLinks]): part of the tile's address, so a new one rewrites the tile. */
+    val linkNonce: String = "",
 ) {
     /**
      * A 64-bit digest of everything that is shown or acted on, kept in the program's first internal flag. A
@@ -61,7 +63,7 @@ data class ProgramSpec(
     fun fingerprint(): Long {
         val parts = listOf(
             key, slot, kind, watchNext, title, description, episodeTitle, season, episode, year,
-            positionMs, durationMs, aspect, posterUri, HomeLinks.uri(link), rank,
+            positionMs, durationMs, aspect, posterUri, HomeLinks.uri(link, linkNonce), rank,
         )
         var hash = FNV_OFFSET
         for (byte in parts.joinToString("\u0001") { it?.toString() ?: "\u0000" }.toByteArray(Charsets.UTF_8)) {

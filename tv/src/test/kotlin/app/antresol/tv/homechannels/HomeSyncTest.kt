@@ -26,9 +26,12 @@ class HomeSyncTest {
     private class FakeArtwork : HomeArtwork {
         val missing = mutableSetOf<String>()
         var retained: Set<String>? = null
+        val asked = mutableListOf<ArtworkRef>()
         override val placeholderUri = "android.resource://pkg/drawable/tv_banner"
-        override suspend fun uriFor(ref: ArtworkRef): String? =
-            listOf(ref.path, ref.fallbackPath).firstOrNull { it.isNotEmpty() && it !in missing }?.let { "content://pkg.homeart/${it.hashCode()}" }
+        override suspend fun uriFor(ref: ArtworkRef): String? {
+            asked += ref
+            return listOf(ref.path, ref.fallbackPath).firstOrNull { it.isNotEmpty() && it !in missing }?.let { "content://pkg.homeart/${it.hashCode()}" }
+        }
 
         override fun retain(uris: Set<String>) {
             retained = uris
@@ -41,7 +44,10 @@ class HomeSyncTest {
         val channelRows = linkedMapOf<Long, ProgramSpec>()
         var channel: ChannelState? = null
         var nextId = 100L
+        var available = true
         val writes = mutableListOf<String>()
+
+        override fun available() = available
 
         override fun storedWatchNext() = watchNext.map { (id, spec) -> StoredProgram(id, spec.key, spec.fingerprint()) }
 
@@ -173,6 +179,37 @@ class HomeSyncTest {
         assertEquals(setOf<String>(), artwork.retained)
         // Only the clearing was done: no channel was created or touched.
         assertEquals(listOf("cleared 5"), store.writes)
+    }
+
+    @Test
+    fun aDeviceWithoutATvProviderIsLeftAloneBeforeAnythingIsAsked() = runTest {
+        store.available = false
+        source.snapshot = full()
+
+        assertEquals(HomeSyncResult.Unsupported, sync.run())
+        assertEquals(0, source.loads)
+        assertTrue(artwork.asked.isEmpty())
+        assertTrue(store.writes.isEmpty())
+        assertNull(store.channel)
+        assertNull(artwork.retained)
+    }
+
+    @Test
+    fun everyProgramCarriesTheInstallsLinkNonce() = runTest {
+        val nonced = HomeSync(source, artwork, store, clock = { 1_000_000L }, linkNonce = "n0nce")
+        source.snapshot = full()
+        nonced.run()
+
+        val specs = store.watchNext.values + store.channelRows.values
+        assertTrue(specs.isNotEmpty())
+        assertTrue(specs.all { it.linkNonce == "n0nce" })
+        assertTrue(specs.all { HomeLinks.uri(it.link, it.linkNonce).endsWith("&n=n0nce") })
+        // A nonce that changed (the app's data was cleared) rewrites the tiles, so none keeps a dead address.
+        val second = HomeSync(source, artwork, store, clock = { 1_000_000L }, linkNonce = "other")
+        store.writes.clear()
+        second.run()
+        assertTrue(store.writes.any { it.startsWith("wn-update") } && store.writes.any { it.startsWith("ch-update") })
+        assertTrue((store.watchNext.values + store.channelRows.values).all { it.linkNonce == "other" })
     }
 
     @Test

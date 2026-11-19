@@ -54,9 +54,11 @@ class HomeScreenAndroidTest {
         thumb = "/frame/601", progress = 0.4, season = 1, episode = 2,
     )
 
+    private val nonce = "feedfacefeedfacefeedfacefeedface"
+
     private fun continueSpec(rank: Int = 0, positionMs: Long = 1_080_000, durationMs: Long = 2_700_000) =
         HomeMapper.watchNext(snapshot(listOf(started(episode, positionMs, durationMs)))).single()
-            .copy(rank = rank, posterUri = "content://$authority/${"a".repeat(64)}")
+            .copy(rank = rank, posterUri = "content://$authority/${"a".repeat(64)}", linkNonce = nonce)
 
     @Test
     fun aContinueTileCarriesItsPositionLengthPictureAndLink() {
@@ -111,15 +113,26 @@ class HomeScreenAndroidTest {
     fun aTilesIntentOpensThisAppsActivityAtTheLink() {
         val intent = ProgramBuilders.watchNext(context, continueSpec(), nowMs = 1).intent
         assertEquals(Intent.ACTION_VIEW, intent.action)
-        assertEquals("antresol://play/601?u=7", intent.data.toString())
+        assertEquals("antresol://play/601?u=7&n=$nonce", intent.data.toString())
         assertEquals(context.packageName, intent.`package`)
 
         val handlers = context.packageManager.queryIntentActivities(intent, 0)
         assertEquals(listOf(MainActivity::class.java.name), handlers.map { it.activityInfo.name })
 
-        val open = ProgramBuilders.preview(context, HomeMapper.channel(snapshot(series = listOf(card(10, Kind.SERIES)))).single(), 1).intent
-        assertEquals("antresol://title/series/10?u=7", open.data.toString())
+        val open = ProgramBuilders.preview(
+            context, HomeMapper.channel(snapshot(series = listOf(card(10, Kind.SERIES)))).single().copy(linkNonce = nonce), 1,
+        ).intent
+        assertEquals("antresol://title/series/10?u=7&n=$nonce", open.data.toString())
         assertEquals(1, context.packageManager.queryIntentActivities(open, 0).size)
+    }
+
+    @Test
+    fun theLibrarysEpgPermissionsAreNotRemovedFromTheManifest() {
+        @Suppress("DEPRECATION")
+        val requested = context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_PERMISSIONS)
+            .requestedPermissions.orEmpty().toList()
+        assertTrue(requested.toString(), "com.android.providers.tv.permission.WRITE_EPG_DATA" in requested)
+        assertTrue(requested.toString(), "com.android.providers.tv.permission.READ_EPG_DATA" in requested)
     }
 
     @Test
@@ -168,7 +181,7 @@ class HomeScreenAndroidTest {
         val provider = provider()
         val name = HomeArtworkFiles.name("s", "/p/1")
         val uri = cached(name, byteArrayOf(1))
-        File(context.cacheDir, "secret.txt").writeText("no")
+        File(context.filesDir, "secret.txt").writeText("no")
 
         fun denied(candidate: Uri) = try {
             context.contentResolver.openInputStream(candidate)!!.close()
@@ -202,6 +215,31 @@ class HomeScreenAndroidTest {
         val first = HomeChannelPrefs(context).artworkSecret
         assertEquals(32, first.length)
         assertEquals(first, HomeChannelPrefs(context).artworkSecret)
+    }
+
+    @Test
+    fun theLinkNonceIsRandomCreatedOnceAndKept() {
+        val first = HomeChannelPrefs(context).linkNonce
+        assertEquals(32, first.length)
+        assertTrue(first.all { it in "0123456789abcdef" })
+        assertEquals(first, HomeChannelPrefs(context).linkNonce)
+        // It is not the picture secret.
+        assertTrue(first != HomeChannelPrefs(context).artworkSecret)
+    }
+
+    @Test
+    fun aTilesAddressIsAcceptedWithTheNonceItWasBuiltWithAndNotWithout() {
+        val nonce = HomeChannelPrefs(context).linkNonce
+        val intent = HomeLink.Play(5, 7).intent(context, nonce)
+        assertEquals(HomeLink.Play(5, 7), HomeLinks.parse(intent.dataString, nonce))
+        assertNull(HomeLinks.parse("antresol://play/5?u=7", nonce))
+    }
+
+    @Test
+    fun thePictureFolderIsInTheAppsFilesNotInItsCache() {
+        val dir = HomeArtworkFiles.dir(context)
+        assertEquals(File(context.filesDir, "tv-home"), dir)
+        assertFalse(dir.path.startsWith(context.cacheDir.path))
     }
 
     @Test

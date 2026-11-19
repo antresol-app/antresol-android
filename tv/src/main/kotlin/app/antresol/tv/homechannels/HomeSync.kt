@@ -19,6 +19,9 @@ interface HomeSource {
 
 /** The system's TV provider, as [HomeSync] needs it. Every call may block on the provider (run it off the main thread). */
 interface HomeStore {
+    /** Whether the device has the TV provider at all; when not, nothing else of the store may be called. */
+    fun available(): Boolean = true
+
     fun storedWatchNext(): List<StoredProgram>
 
     /** The programs of the app channel [channelId]. */
@@ -59,6 +62,9 @@ sealed interface HomeSyncResult {
 
     data class Synced(val watchNext: Plan, val channel: Plan, val channelState: ChannelState?) : HomeSyncResult
 
+    /** The device has no TV provider: nothing was asked of the server or changed, and nothing is worth scheduling. */
+    data object Unsupported : HomeSyncResult
+
     /** Nothing was changed. */
     data class Failed(val cause: Throwable) : HomeSyncResult
 }
@@ -72,11 +78,14 @@ class HomeSync(
     private val artwork: HomeArtwork,
     private val store: HomeStore,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** The install's link nonce, given to every program ([ProgramSpec.linkNonce]). */
+    private val linkNonce: String = "",
 ) {
     private val mutex = Mutex()
 
     suspend fun run(): HomeSyncResult = mutex.withLock {
         try {
+            if (!store.available()) return@withLock HomeSyncResult.Unsupported
             val snapshot = try {
                 source.load()
             } catch (e: ApiException) {
@@ -123,8 +132,8 @@ class HomeSync(
         specs.mapNotNull { spec ->
             val uri = artwork.uriFor(spec.artwork)
             when {
-                uri != null -> spec.copy(posterUri = uri)
-                placeholder -> spec.copy(posterUri = artwork.placeholderUri, aspect = Aspect.Wide)
+                uri != null -> spec.copy(posterUri = uri, linkNonce = linkNonce)
+                placeholder -> spec.copy(posterUri = artwork.placeholderUri, aspect = Aspect.Wide, linkNonce = linkNonce)
                 else -> null
             }
         }

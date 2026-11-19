@@ -15,9 +15,9 @@ import androidx.tvprovider.media.tv.WatchNextProgram
 import app.antresol.tv.MainActivity
 import app.antresol.tv.R
 
-/** What the tile is when launched: a plain `VIEW` of the deep link, addressed to this app only. */
-internal fun HomeLink.intent(context: Context): Intent =
-    Intent(Intent.ACTION_VIEW, Uri.parse(HomeLinks.uri(this))).setPackage(context.packageName)
+/** What the tile is when launched: a plain `VIEW` of the deep link with the install's [nonce], addressed to this app only. */
+internal fun HomeLink.intent(context: Context, nonce: String): Intent =
+    Intent(Intent.ACTION_VIEW, Uri.parse(HomeLinks.uri(this, nonce))).setPackage(context.packageName)
 
 /** [ProgramSpec] → the TV provider's program objects. Kept apart from the store so they can be checked without a provider. */
 object ProgramBuilders {
@@ -60,7 +60,7 @@ object ProgramBuilders {
                 TvContractCompat.PreviewProgramColumns.ASPECT_RATIO_2_3
             },
         )
-        setIntent(spec.link.intent(context))
+        setIntent(spec.link.intent(context, spec.linkNonce))
         setInternalProviderId(spec.key)
         setInternalProviderFlag1(spec.fingerprint())
         spec.episodeTitle?.let { setEpisodeTitle(it) }
@@ -98,7 +98,21 @@ class HomeChannelPrefs(context: Context) {
         @Synchronized get() = prefs.getString(KEY_SECRET, null) ?: java.util.UUID.randomUUID().toString().replace("-", "")
             .also { prefs.edit().putString(KEY_SECRET, it).apply() }
 
+    /**
+     * A random string of this install that every tile's address carries ([HomeLinks]): the activity that opens the
+     * tiles is exported, and only the TV provider has seen this string. Not in backups (none are taken).
+     */
+    val linkNonce: String
+        @Synchronized get() = prefs.getString(KEY_NONCE, null)?.takeIf { it.isNotEmpty() } ?: newNonce()
+            .also { prefs.edit().putString(KEY_NONCE, it).apply() }
+
+    private fun newNonce(): String {
+        val bytes = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
     private companion object {
+        const val KEY_NONCE = "link_nonce"
         const val FILE = "tv_home_channels"
         const val KEY_CHANNEL = "channel_id"
         const val KEY_BROWSABLE_REQUESTED = "browsable_requested"
@@ -119,6 +133,13 @@ class TvProviderStore(
 ) : HomeStore {
     private val resolver get() = context.contentResolver
     private val helper = PreviewChannelHelper(context)
+
+    // Whether the device has a TV provider at all, asked once (some TV boxes, e.g. certain Fire OS builds, have none).
+    private val providerThere: Boolean by lazy {
+        runCatching { resolver.acquireContentProviderClient(TvContractCompat.AUTHORITY)?.use { true } ?: false }.getOrDefault(false)
+    }
+
+    override fun available(): Boolean = providerThere
 
     override fun storedWatchNext(): List<StoredProgram> =
         rows(TvContractCompat.WatchNextPrograms.CONTENT_URI, WatchNextProgram.PROJECTION) { cursor ->

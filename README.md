@@ -89,7 +89,9 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   own Home shows, so a kid profile gets what the server gives it and «Отдельная история» is already resolved), the
   length for the progress bar from `GET /api/progress/{id}`. A tile opens `antresol://play/{id}?u={profile}` (plays
   from where the profile stopped) or `antresol://title/{kind}/{id}?u={profile}` (the title's page); the same
-  addresses work from `adb shell am start -a android.intent.action.VIEW -d "antresol://play/19?u=1"`. They are
+  addresses work from `adb shell am start -a android.intent.action.VIEW -d "antresol://play/19?u=1&n=<nonce>"`, where
+  `<nonce>` is this install's random link string (the activity ignores links without it; on a debuggable build:
+  `adb shell run-as app.antresol.mobile cat shared_prefs/tv_home_channels.xml`, the `link_nonce` entry). They are
   refreshed when the app opens, after a player closes, when the profile changes or signs out, and every 30 minutes
   by WorkManager; nothing is asked or scheduled while nobody is signed in, and the tiles of the profile that left
   are removed. The launcher cannot send the server's login, so the pictures are fetched by the app, shrunk, and

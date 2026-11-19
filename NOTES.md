@@ -1592,7 +1592,7 @@ Nothing of Antresol showed on the Google TV / Android TV home screen (tvOS has T
   they come (kid limits, «Отдельная история» are resolved by it).
 - Why the pictures go through our own provider: the launcher has no login and the server's images need the Bearer
   header (`?mk=` is refused for images). The app fetches each picture, shrinks it (≤ 960 px, JPEG), keeps it in
-  `cacheDir/tv-home` for 7 days and `HomeArtworkProvider` (`{package}.homeart`, read only) serves exactly those
+  `filesDir/tv-home` for 7 days (not `cacheDir`: the system may empty that while the launcher still holds the addresses; `retain` keeps only what a program shows) and `HomeArtworkProvider` (`{package}.homeart`, read only) serves exactly those
   files; a file's name is SHA-256(install secret + server path), so only someone who read it from the TV provider
   can ask for it. A Watch Next tile whose picture cannot be had shows `tv_banner`; a channel tile is skipped.
 - Diff: each program's internal provider id is `{wn|ch}:{serverId}:{userId}:{kind}:{id}` and its first internal flag a
@@ -1606,10 +1606,20 @@ Nothing of Antresol showed on the Google TV / Android TV home screen (tvOS has T
 - Deep links (`MainActivity`, exported VIEW filter, not BROWSABLE): `antresol://play/{id}?u={userId}` →
   `PlayerRoute(id, Resume)` (the player continues from the server's saved position), `antresol://title/{kind}/{id}?u=`
   → the detail page. `u` is the profile that published the tile; a link of another profile is ignored, and so is a
-  link older than 60 s. An open player/trailer/channel/reader is closed first.
+  link older than 60 s. An open player/trailer/channel/reader is closed first. Every program's address also carries
+  `&n={nonce}`, a random 128-bit string of the install (`HomeChannelPrefs.linkNonce`, in the app's prefs, part of the
+  program fingerprint); `HomeLinks.parse` ignores a link without it (constant-time compare), because the activity is
+  exported and any app could start `antresol://play/{id}?u=1` (`u` is a guessable small number). The 60 s check stays,
+  but only for staleness (a link that arrived while nobody was signed in must not fire at the next sign-in): its time
+  is taken when the activity receives the link, so it is not a defence against forged links; the nonce is.
+- No TV provider (some boxes, e.g. certain Fire OS builds): `HomeSync` asks `TvProviderStore.available()` (the
+  `android.media` TV authority, resolved once) first and returns `Unsupported`: no request to the server, no pictures,
+  no periodic job (an existing one is cancelled). A picture that cannot be written (full disk) is skipped like one that
+  cannot be fetched (Watch Next shows `tv_banner`, the channel leaves it out); it does not fail the run.
 - Permissions: nothing declared by us. The library's manifest merges in `WRITE_EPG_DATA` (normal, install time, no Play
   Console declaration; the provider enforces it on writes, so it is needed despite the brief) and WorkManager's
-  `ACCESS_NETWORK_STATE`; the deprecated `READ_EPG_DATA` is removed. No new foreground-service permission.
+  `ACCESS_NETWORK_STATE`; `READ_EPG_DATA` (also the library's) is kept: the app queries its own rows, and removing it
+  gained nothing and could break the syncs. No new foreground-service permission.
 - Not verified on a device (no TV or emulator was available to this run): the provider writes (`PreviewChannelHelper`
   against the real TvProvider), the launcher drawing the content:// pictures, the one-time browsable dialog, a tile
   opening the app. Unit tests cover the mapping, the diff and the whole run against an in-memory provider, the

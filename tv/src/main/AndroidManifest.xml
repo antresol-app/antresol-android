@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -19,9 +18,8 @@
 
     <!-- Watch Next and the «Antresol» preview channel on the TV home screen (androidx.tvprovider). The library
          declares WRITE_EPG_DATA itself (a normal permission, granted at install, no Play Console declaration; the
-         provider enforces it on writes). READ_EPG_DATA, which it also declares, has not been enforced since
-         Android 6 and the app never reads other apps' listings, so it is dropped. -->
-    <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" tools:node="remove" />
+         provider enforces it on writes) and READ_EPG_DATA (kept as the library has it: the app reads its own rows
+         back, and dropping it gains nothing). -->
 
     <uses-feature
         android:name="android.software.leanback"
@@ -58,7 +56,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Tiles of the TV home screen and `adb shell am start -d antresol://play/19?u=1`: antresol://play/{id}
+            <!-- Tiles of the TV home screen and `adb shell am start -d antresol://play/19?u=1&n=<nonce>`: antresol://play/{id}
                  plays from where the profile stopped, antresol://title/{kind}/{id} opens a title's page. Not
                  BROWSABLE: a web page cannot start them. -->
             <intent-filter>

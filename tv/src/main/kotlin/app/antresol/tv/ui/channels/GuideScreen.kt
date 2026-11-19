@@ -241,7 +241,7 @@ private fun GuideGrid(
     // A programme outside it has no block to focus yet: it is scrolled to first (as focusing it would do).
     fun isComposed(program: ChannelProgram): Boolean = Epg.overlapping(listOf(program), composed.first, composed.last).isNotEmpty()
     val clock = remember(context) { timeFormat(context) }
-    val reserveLogo = remember(rows) { reserveLogoSlot(rows.map { it.logoUrl }) }
+    val reserveLogo = remember(rows) { reserveLogoSlot(rows.map { it.logoUrl ?: it.logoAlt }) }
     val numberWidth = channelNumberWidth(remember(rows) { rows.map { it.number } }, GuideNumberStyle)
 
     // Another category is another list of channels: the guide opens on it as on a new one.
@@ -432,7 +432,7 @@ private fun ChannelCell(row: ChannelEpgRow, reserveLogo: Boolean, numberWidth: D
             // As wide as the guide's widest number (four digits fit).
             modifier = Modifier.width(numberWidth),
         )
-        ChannelLogo(urls?.image(row.logoUrl), height = 22.dp, reserve = reserveLogo)
+        ChannelLogo(urls?.image(row.logoUrl), height = 22.dp, reserve = reserveLogo, altUrl = urls?.image(row.logoAlt), name = row.name)
         Text(
             row.name,
             style = Antresol.typography.caption.copy(hyphens = androidx.compose.ui.text.style.Hyphens.None),

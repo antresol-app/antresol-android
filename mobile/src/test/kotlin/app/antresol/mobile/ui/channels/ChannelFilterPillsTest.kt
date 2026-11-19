@@ -71,7 +71,7 @@ class ChannelFilterPillsTest {
             ChannelCategory("group:RU | Sport", "RU | Sport", ChannelCategory.KIND_GROUP, 1),
         )
         val viewModel = show()
-        assertEquals(listOf("All", "Favourites", "Новости", "Спорт", "Playlist A", "RU | News", "RU | Sport"), pills())
+        assertEquals(listOf("Favourites", "All", "Новости", "Спорт", "Playlist A", "RU | News", "RU | Sport"), pills())
         compose.onNodeWithText("Новости").performClick()
         compose.waitForIdle()
         assertEquals(ChannelFilter.Category("ai:news"), viewModel.filter)
@@ -83,7 +83,7 @@ class ChannelFilterPillsTest {
         // It sends neither the list nor the channels' ids, only each channel's `category` text.
         channels = channels.map { it.copy(categories = null) }
         val viewModel = show()
-        assertEquals(listOf("All", "Favourites", "RU | Sport", "RU | News"), pills())
+        assertEquals(listOf("Favourites", "All", "RU | Sport", "RU | News"), pills())
         assertEquals(ChannelFilter.All, viewModel.filter)
     }
 }

@@ -112,10 +112,6 @@ fun ChannelsScreen(
                             Empty(stringResource(R.string.tv_favorites_empty), stringResource(R.string.tv_favorites_empty_hint))
                         }
                         else -> items(shown, key = { it.id }) { channel ->
-                            // Names line up when some channel of the list has a logo.
-                            androidx.compose.runtime.CompositionLocalProvider(
-                                app.antresol.ui.channels.LocalReserveChannelLogo provides app.antresol.ui.channels.reserveLogoSlot(shown.map { it.logoUrl }),
-                            ) {
                             ChannelRow(
                                 channel = channel,
                                 nowMs = nowMs,
@@ -124,7 +120,6 @@ fun ChannelsScreen(
                                 last = channel.id == last?.id,
                                 modifier = Modifier.padding(vertical = 2.dp).testTag("channel-${channel.number}"),
                             )
-                            }
                         }
                     }
                 }

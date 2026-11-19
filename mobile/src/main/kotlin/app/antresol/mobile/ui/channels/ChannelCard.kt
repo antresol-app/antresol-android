@@ -93,7 +93,7 @@ fun ChannelCard(
                         .background(AntresolColors.Red, CircleShape),
                 )
             }
-            ChannelLogo(urls?.image(channel.logoUrl), height = 18.dp)
+            ChannelLogo(urls?.image(channel.logoUrl), height = 18.dp, altUrl = urls?.image(channel.logoAlt), name = channel.name)
             Text(text = label, style = Antresol.typography.title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
             if (channel.favorite) FavoriteMark()
         }

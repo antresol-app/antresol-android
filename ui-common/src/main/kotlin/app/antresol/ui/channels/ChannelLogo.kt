@@ -2,6 +2,15 @@ package app.antresol.ui.channels
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import app.antresol.ui.theme.AntresolColors
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -36,9 +44,11 @@ val ChannelLogoBox = Color(0xFF2C2C2E)
 const val CHANNEL_LOGO_ASPECT = 3f / 2f
 
 /**
- * True inside a list where some channel has a logo (rows, the guide's column, the mini-guide): a
- * channel without one then keeps an empty slot of the logo's size, so the names line up down the
- * list, as the web does. Single-channel places (banner, preview) leave it false.
+ * True inside a list that keeps a logo column (the guide's column, the mini-guide: where some
+ * channel has a logo; the channel lists' rows always do): a channel
+ * without one then shows its initials (or, without a name, keeps an empty slot of the logo's size),
+ * so the names line up down the list, as the web does. Single-channel places (banner, preview)
+ * leave it false.
  */
 val LocalReserveChannelLogo = compositionLocalOf { false }
 
@@ -46,39 +56,92 @@ val LocalReserveChannelLogo = compositionLocalOf { false }
 fun reserveLogoSlot(logoUrls: List<String?>): Boolean = logoUrls.any { !it.isNullOrEmpty() }
 
 /**
- * A channel's uploaded logo ([url], resolved by the caller from `logoUrl`), small, fitted inside a
- * neutral rounded box of [height] (3:2). Without a logo, or when it cannot be loaded, nothing is
- * drawn (the channel shows its number and name only, never a generated tile), or just an empty slot
- * of the same size where the list reserves one ([LocalReserveChannelLogo]).
+ * The pictures a channel's logo box tries, in order: its own logo ([url]: uploaded, found by the
+ * server, or a playlist's), then [alt] (an external channel's guide icon, `logoAlt`). Blank and
+ * repeated ones are left out.
+ */
+fun logoSources(url: String?, alt: String?): List<String> = listOfNotNull(url, alt).filter { it.isNotBlank() }.distinct()
+
+/** Words a playlist adds to a channel's name that say nothing of it (as the web's `channelInitials`). */
+private val InitialsNoise = Regex("^(hd|fhd|uhd|sd|hq|4k|8k|orig|original|\\+\\d+|\\d+p|50fps|h\\.?26[45]|hevc)$", RegexOption.IGNORE_CASE)
+private val InitialsSplit = Regex("[\\s\\-–—_|/\\\\:.,·•()\\[\\]{}«»\"'#&!?*]+")
+
+/**
+ * A channel's initials for a box without a logo: the first letters of its first two words (one word:
+ * its first letter), quality marks («HD», «+2», «1080p») left out; mirrors the web's `channelInitials`.
+ */
+fun channelInitials(name: String): String {
+    val words = name.split(InitialsSplit).filter { it.isNotEmpty() && !InitialsNoise.matches(it) }
+    val out = words.take(2).mapNotNull { word -> word.firstOrNull { it.isLetterOrDigit() } }.joinToString("")
+    return out.ifEmpty { name.trim().take(1).ifEmpty { "?" } }.uppercase()
+}
+
+/**
+ * A channel's logo ([url], resolved by the caller from `logoUrl`), small, fitted inside a neutral
+ * rounded box of [height] (3:2). When it is empty or cannot be loaded the box tries [altUrl] (the
+ * guide icon, `logoAlt`). Without either, nothing is drawn, except where the list keeps the slot
+ * ([reserve]): there [name] shows its initials in the same box (as the web's list rows; without a
+ * name an empty slot of the same size). Never a coloured tile and never an empty grey box.
  */
 @Composable
-fun ChannelLogo(url: String?, height: Dp, modifier: Modifier = Modifier, reserve: Boolean = LocalReserveChannelLogo.current) {
-    var failed by remember(url) { mutableStateOf(false) }
-    if (url == null || failed) {
-        if (reserve) Spacer(modifier.size(width = height * CHANNEL_LOGO_ASPECT, height = height).testTag("channel-logo-slot"))
+fun ChannelLogo(
+    url: String?,
+    height: Dp,
+    modifier: Modifier = Modifier,
+    reserve: Boolean = LocalReserveChannelLogo.current,
+    altUrl: String? = null,
+    name: String? = null,
+) {
+    val sources = remember(url, altUrl) { logoSources(url, altUrl) }
+    var failed by remember(sources) { mutableIntStateOf(0) }
+    val current = sources.getOrNull(failed)
+    if (current == null) {
+        when {
+            !reserve -> Unit
+            !name.isNullOrBlank() -> LogoBox(height, modifier.testTag("channel-initials")) {
+                BasicText(
+                    channelInitials(name),
+                    maxLines = 1,
+                    style = TextStyle(
+                        color = AntresolColors.LabelSecondary,
+                        fontSize = with(LocalDensity.current) { (height * 0.42f).toSp() },
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                    ),
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
+            else -> Spacer(modifier.size(width = height * CHANNEL_LOGO_ASPECT, height = height).testTag("channel-logo-slot"))
+        }
         return
     }
-    Box(
-        modifier
-            .size(width = height * CHANNEL_LOGO_ASPECT, height = height)
-            .clip(if (height >= 32.dp) AntresolShapes.badge else LogoShapeSmall)
-            .background(ChannelLogoBox)
-            .padding(horizontal = height * 0.14f, vertical = height * 0.12f)
-            .testTag("channel-logo"),
-    ) {
+    LogoBox(height, modifier.testTag("channel-logo")) {
         val context = LocalContext.current
         // A logo is drawn on the box above: it is asked for as it is, never as the server's smaller JPEG copy.
-        val request = remember(url, context) {
-            ImageRequest.Builder(context).data(url).setParameter(AntresolImageLoader.TRANSPARENT, true, memoryCacheKey = null).build()
+        val request = remember(current, context) {
+            ImageRequest.Builder(context).data(current).setParameter(AntresolImageLoader.TRANSPARENT, true, memoryCacheKey = null).build()
         }
         AsyncImage(
             model = request,
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            onError = { failed = true },
-            modifier = Modifier.fillMaxSize(),
+            onError = { failed++ },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = height * 0.14f, vertical = height * 0.12f),
         )
     }
+}
+
+@Composable
+private fun LogoBox(height: Dp, modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
+    Box(
+        modifier
+            .size(width = height * CHANNEL_LOGO_ASPECT, height = height)
+            .clip(if (height >= 32.dp) AntresolShapes.badge else LogoShapeSmall)
+            .background(ChannelLogoBox),
+        content = content,
+    )
 }
 
 private val LogoShapeSmall = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)

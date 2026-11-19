@@ -8,6 +8,7 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.ChannelEpg
 import app.antresol.core.model.ChannelGuide
 import app.antresol.core.model.ChannelList
+import app.antresol.core.model.ChannelPrefs
 import app.antresol.core.model.ComicPages
 import app.antresol.core.model.DeviceInfo
 import app.antresol.core.model.DeviceSessions
@@ -415,6 +416,12 @@ class AntresolClient(
             addOptional("from", fromIso)
             addQueryParameter("hours", hours.coerceIn(1, 24).toString())
         }
+
+    /** `GET /api/channels/prefs`: the profile's choices for its channel list (404 on an older server). */
+    suspend fun channelPrefs(): ChannelPrefs = get("api/channels/prefs")
+
+    /** `PUT /api/channels/prefs`: stores them; the answer is what was stored. */
+    suspend fun setChannelPrefs(prefs: ChannelPrefs): ChannelPrefs = send("PUT", url("api/channels/prefs"), jsonBody(prefs))
 
     /** Marks a channel as a favourite of this profile (`PUT`), or not (`DELETE`); both idempotent. */
     suspend fun setChannelFavorite(id: Long, favorite: Boolean) =

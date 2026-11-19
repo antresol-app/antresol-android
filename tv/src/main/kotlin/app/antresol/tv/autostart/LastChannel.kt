@@ -1,7 +1,6 @@
 package app.antresol.tv.autostart
 
 import android.content.Context
-import app.antresol.core.channels.Channels
 import app.antresol.core.model.Channel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -103,7 +102,7 @@ object ChannelAutostart {
     suspend fun lastChannel(record: LastChannel?, channels: suspend () -> Pair<List<Channel>, Long?>?): ChannelStart {
         val (list, serverLast) = channels() ?: return ChannelStart.OpenTv
         val id = listOfNotNull(record?.channelId, serverLast).firstOrNull { id -> list.any { it.id == id } }
-            ?: Channels.sortedByNumber(list).firstOrNull()?.id
+            ?: list.firstOrNull()?.id
         return id?.let { ChannelStart.Play(it) } ?: ChannelStart.OpenTv
     }
 

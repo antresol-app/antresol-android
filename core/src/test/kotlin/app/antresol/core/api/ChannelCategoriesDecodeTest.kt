@@ -63,4 +63,23 @@ class ChannelCategoriesDecodeTest {
         assertEquals(listOf("ai:news"), epg.channels[0].categories)
         assertNull(epg.channels[1].categories)
     }
+
+    @Test
+    fun favouritesFirstAndTheGuideIconAreRead() {
+        val list = json.decodeFromString<ChannelList>(
+            """
+            {"channels": [
+              {"id": 7, "number": 7, "name": "Sport", "favorite": true, "external": true,
+               "logoUrl": "https://example.invalid/pl.png", "logoAlt": "https://example.invalid/epg.png", "logoAuto": true}
+            ], "lastChannel": null, "favoritesFirst": true}
+            """.trimIndent(),
+        )
+        assertEquals(true, list.favoritesFirst)
+        assertEquals("https://example.invalid/epg.png", list.channels.single().logoAlt)
+        // An older server: neither field, the list is by number.
+        val old = json.decodeFromString<ChannelList>("""{"channels": [{"id": 1, "number": 1, "name": "A"}]}""")
+        assertEquals(false, old.favoritesFirst)
+        assertNull(old.channels.single().logoAlt)
+        assertEquals(true, json.decodeFromString<app.antresol.core.model.ChannelPrefs>("""{"favoritesFirst": true}""").favoritesFirst)
+    }
 }

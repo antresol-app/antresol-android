@@ -14,7 +14,8 @@ import java.io.IOException
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChannelAutostartTest {
     private val record = LastChannel(serverId = "srv", userId = 1, historyId = 20, channelId = 3)
-    private val channels = listOf(Channel(id = 2, number = 2), Channel(id = 3, number = 3), Channel(id = 7, number = 1))
+    // In the server's order (by number; the first one is the fallback).
+    private val channels = listOf(Channel(id = 7, number = 1), Channel(id = 2, number = 2), Channel(id = 3, number = 3))
 
     @Test
     fun theRecordIsOnlyForTheProfileThatMadeIt() {

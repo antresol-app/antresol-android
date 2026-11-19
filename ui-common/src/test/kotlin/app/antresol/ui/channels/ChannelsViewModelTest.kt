@@ -30,6 +30,7 @@ class ChannelsViewModelTest {
     private var calls = 0
     private var serverCategories: List<ChannelCategory>? = null
     private var failing = false
+    private var favoritesFirst = false
     private var channels = listOf(
         Channel(id = 1, number = 1, name = "All movies", category = "Movies", now = ChannelProgram(title = "A")),
         Channel(id = 2, number = 10, name = "Comedy", category = "Genres", now = ChannelProgram(title = "B"), logoUrl = "/api/channels/2/logo.png?v=1"),
@@ -45,7 +46,7 @@ class ChannelsViewModelTest {
         override suspend fun channels(): ChannelList {
             calls++
             if (failing) throw IOException("offline")
-            return ChannelList(channels, lastChannel = 2, categories = serverCategories)
+            return ChannelList(channels, lastChannel = 2, categories = serverCategories, favoritesFirst = favoritesFirst)
         }
 
         override suspend fun setFavorite(channelId: Long, favorite: Boolean) {
@@ -104,8 +105,8 @@ class ChannelsViewModelTest {
         runCurrent()
         assertEquals(
             listOf(
-                ChannelFilter.All to 3,
                 ChannelFilter.Favorites to 0,
+                ChannelFilter.All to 3,
                 ChannelFilter.Category("ai:comedy") to 2,
                 ChannelFilter.Category("group:Genres") to 2,
             ),
@@ -129,8 +130,8 @@ class ChannelsViewModelTest {
         runCurrent()
         assertEquals(
             listOf(
-                ChannelFilter.All to 3,
                 ChannelFilter.Favorites to 0,
+                ChannelFilter.All to 3,
                 ChannelFilter.Category("group:Movies") to 1,
                 ChannelFilter.Category("group:Genres") to 2,
             ),
@@ -397,5 +398,37 @@ class ChannelsViewModelTest {
         assertEquals("Family", vm.lastChannel?.name)
         vm.tunedIn(42)
         assertNull(vm.lastChannel)
+    }
+
+    @Test
+    fun theServersOrderIsKeptAndAStarMovesTheChannelWhenFavouritesComeFirst() = runTest(dispatcher) {
+        // The server's order (favourites first): not sorted again by number here.
+        favoritesFirst = true
+        channels = listOf(channels[2].copy(favorite = true), channels[0], channels[1])
+        val vm = viewModel()
+        runCurrent()
+        assertEquals(listOf(3L, 1L, 2L), vm.shown.map { it.id })
+        vm.showView(ChannelsView.Guide)
+        runCurrent()
+        assertEquals(listOf(3L, 1L, 2L), vm.shownGuide.map { it.id })
+        // A star given here: the channel joins the favourites at the top, by number among them.
+        vm.toggleFavorite(channels[2])
+        runCurrent()
+        assertEquals(listOf(2L, 3L, 1L), vm.shown.map { it.id })
+        assertEquals(listOf(2L, 3L, 1L), vm.shownGuide.map { it.id })
+        // Taken away: back among the rest by number.
+        vm.toggleFavorite(vm.shown.first { it.id == 3L })
+        runCurrent()
+        assertEquals(listOf(2L, 1L, 3L), vm.shown.map { it.id })
+    }
+
+    @Test
+    fun withoutFavouritesFirstAStarMovesNothing() = runTest(dispatcher) {
+        val vm = viewModel()
+        runCurrent()
+        vm.toggleFavorite(channels[2])
+        runCurrent()
+        assertEquals(listOf(1L, 2L, 3L), vm.shown.map { it.id })
+        assertEquals(true, vm.shown.last().favorite)
     }
 }

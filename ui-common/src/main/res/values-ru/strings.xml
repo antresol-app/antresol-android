@@ -251,6 +251,8 @@
     <string name="now_playing_next">Следующий</string>
     <string name="sleep_off">Выкл.</string>
     <string name="settings_playback">Воспроизведение</string>
+    <string name="settings_favorites_first">Избранные каналы первыми</string>
+    <string name="settings_favorites_first_detail">Каналы со звездой — в начале списка «ТВ», на всех устройствах профиля</string>
     <string name="settings_language">Язык</string>
     <string name="search_browse">Обзор</string>
     <!-- «Отдельная история на этом устройстве»: как на вебе (comp.devices.*, comp.managed.*) -->

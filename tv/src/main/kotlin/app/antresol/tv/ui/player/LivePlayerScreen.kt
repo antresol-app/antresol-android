@@ -446,8 +446,9 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(22.dp)) {
             val logo = urls?.image(channel.logoUrl)
+            val logoAlt = urls?.image(channel.logoAlt)
             // With a logo the column widens by the logo's box, so the name keeps its two lines.
-            Column(Modifier.width(if (logo != null) 132.dp + BannerLogoHeight * 1.5f + 12.dp else 132.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(Modifier.width(if (logo != null || logoAlt != null) 132.dp + BannerLogoHeight * 1.5f + 12.dp else 132.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         channel.number.toString(),
@@ -455,7 +456,7 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                         color = AntresolColors.Label,
                         maxLines = 1,
                     )
-                    ChannelLogo(logo, height = BannerLogoHeight)
+                    ChannelLogo(logo, height = BannerLogoHeight, altUrl = logoAlt)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(channel.name, style = Antresol.typography.title, color = AntresolColors.LabelSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -617,7 +618,7 @@ private fun ActionButton(icon: ImageVector, selected: Boolean) {
 @Composable
 internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, selected: Int) {
     val urls = LocalMediaUrls.current
-    val reserveLogo = reserveLogoSlot(guide.channels.map { it.logoUrl })
+    val reserveLogo = reserveLogoSlot(guide.channels.map { it.logoUrl ?: it.logoAlt })
     val nowMs = rememberNowMs()
     val context = LocalContext.current
     val numberStyle = Antresol.typography.title.copy(fontFeatureSettings = "tnum")
@@ -685,7 +686,7 @@ internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, 
                         modifier = Modifier.width(numberWidth),
                     )
                     // A logo column, as in the list, only when some channel of the panel has a logo.
-                    if (reserveLogo) ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp, reserve = true)
+                    if (reserveLogo) ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp, reserve = true, altUrl = urls?.image(channel.logoAlt), name = channel.name)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (channel.id == currentId) {

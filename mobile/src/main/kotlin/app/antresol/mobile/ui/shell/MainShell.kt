@@ -119,7 +119,9 @@ import app.antresol.mobile.ui.settings.SettingsScreen
 import app.antresol.mobile.ui.settings.SettingsViewModel
 import app.antresol.ui.R
 import app.antresol.core.channels.ChannelFilter
+import app.antresol.ui.channels.ChannelPrefsModel
 import app.antresol.ui.channels.ChannelsViewModel
+import app.antresol.ui.channels.channelPrefsApi
 import app.antresol.ui.channels.channelsApi
 import app.antresol.ui.language.UiLanguageModel
 import app.antresol.ui.language.uiLanguageApi
@@ -433,6 +435,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onChangeServer = { confirm = SessionAction.ChangeServer },
                         onPairTv = { navController.navigate(PairTvRoute) },
                         language = uiLanguage,
+                        // A new order: the shell's channel list (Home's shelf, the «ТВ» tab) is read again.
+                        channelPrefs = viewModel { ChannelPrefsModel(client.channelPrefsApi(), onChanged = channels::reload) },
                     )
                 }
                 padded<PairTvRoute> {

@@ -50,7 +50,8 @@ fun AntresolClient.channelsApi(): ChannelsApi = object : ChannelsApi {
 enum class ChannelsView { Channels, Guide }
 
 /**
- * The «ТВ» page: ONE list of channels by number (like a television), narrowed by a [filter] («All»,
+ * The «ТВ» page: ONE list of channels in the server's order (by number, favourites first when the
+ * profile wants them so), narrowed by a [filter] («All»,
  * «Favourites», a theme), and the programme guide of the same list. While a page shows it
  * ([startRefreshing]) the list is reloaded every [Channels.REFRESH_MS]; a failed refresh keeps what
  * is shown. Favourites are written to the server at once (and undone when it refuses).
@@ -60,8 +61,15 @@ class ChannelsViewModel(
     private val api: ChannelsApi,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
-    /** Every channel by number, or null until the first load succeeded. */
+    /**
+     * Every channel in the server's order (by number, the favourites first when [favoritesFirst]), or
+     * null until the first load succeeded.
+     */
     var channels: List<Channel>? by mutableStateOf(null)
+        private set
+
+    /** The list has the profile's favourites first (`favoritesFirst` of `GET /api/channels`). */
+    var favoritesFirst: Boolean by mutableStateOf(false)
         private set
 
     /** Why the last load failed while nothing is shown (the page offers Try Again), else null. */
@@ -121,24 +129,26 @@ class ChannelsViewModel(
      */
     val filterOptions: List<ChannelFilterOption> by derivedStateOf { Channels.filterOptions(channels.orEmpty(), serverCategories) }
 
-    /** The channels of the [filter], by number. */
+    /** The channels of the [filter], in the list's order. */
     val shown: List<Channel> by derivedStateOf { Channels.filter(channels.orEmpty(), filter) }
 
     /** The last channel while the profile can still see it. */
     val lastChannel: Channel? by derivedStateOf { Channels.lastChannel(channels.orEmpty(), lastChannelId) }
 
-    /** The channels with something on air, by number (the phone's home shelf). */
-    val onAir: List<Channel> by derivedStateOf { Channels.sortedByNumber(channels.orEmpty().filter { it.now != null }) }
+    /** The channels with something on air, in the list's order (the phone's home shelf). */
+    val onAir: List<Channel> by derivedStateOf { channels.orEmpty().filter { it.now != null } }
 
     /** The guide rows of the [filter], in list order. */
     val shownGuide: List<ChannelEpgRow> by derivedStateOf {
-        val ids = shown.map { it.id }.toSet()
+        // In the channel list's order, so a star changed here moves the guide's row too.
+        val position = HashMap<Long, Int>(shown.size * 2).apply { shown.forEachIndexed { i, c -> put(c.id, i) } }
         val byId = channels.orEmpty().associateBy { it.id }
-        guideRows.orEmpty().filter { it.id in ids }.map { row ->
+        guideRows.orEmpty().filter { it.id in position }.sortedBy { position.getValue(it.id) }.map { row ->
             val channel = byId[row.id]
             val favorite = channel?.favorite ?: row.favorite
             val logoUrl = row.logoUrl ?: channel?.logoUrl
-            if (favorite == row.favorite && logoUrl == row.logoUrl) row else row.copy(favorite = favorite, logoUrl = logoUrl)
+            val logoAlt = row.logoAlt ?: channel?.logoAlt
+            if (favorite == row.favorite && logoUrl == row.logoUrl && logoAlt == row.logoAlt) row else row.copy(favorite = favorite, logoUrl = logoUrl, logoAlt = logoAlt)
         }
     }
 
@@ -179,7 +189,9 @@ class ChannelsViewModel(
     }
 
     private fun setFavoriteLocally(channelId: Long, favorite: Boolean) {
-        channels = channels?.map { if (it.id == channelId) it.copy(favorite = favorite) else it }
+        val next = channels?.map { if (it.id == channelId) it.copy(favorite = favorite) else it } ?: return
+        // With «favourites first» the star moves the channel where the server will put it next time.
+        channels = if (favoritesFirst) Channels.ordered(next, true) else next
     }
 
     /** Loads from scratch (the spinner shows when nothing is loaded yet). */
@@ -334,7 +346,9 @@ class ChannelsViewModel(
             // A channel that did not change stays the same instance, so its row or card is not
             // recomposed by a refresh (an unchanged list is not written at all: the state compares it).
             val known = channels.orEmpty().associateBy { it.id }
-            channels = Channels.sortedByNumber(list.channels).map { channel -> known[channel.id]?.takeIf { it == channel } ?: channel }
+            // The server's order as it is: by number, the favourites first when the profile wants them so.
+            favoritesFirst = list.favoritesFirst
+            channels = list.channels.map { channel -> known[channel.id]?.takeIf { it == channel } ?: channel }
             lastChannelId = list.lastChannel ?: lastChannelId
             serverCategories = list.categories
             error = null

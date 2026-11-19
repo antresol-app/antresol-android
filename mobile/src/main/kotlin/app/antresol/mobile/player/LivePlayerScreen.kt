@@ -474,7 +474,7 @@ internal fun InfoBar(state: LiveTvState, behindLive: Boolean = false, onGoLive: 
     ) {
         if (channel != null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp)
+                ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp, altUrl = urls?.image(channel.logoAlt))
                 Text(
                     stringResource(R.string.tv_channel_number, channel.number, channel.name),
                     style = Antresol.typography.title.copy(color = AntresolColors.LabelSecondary, fontFeatureSettings = "tnum"),
@@ -549,7 +549,7 @@ private fun ChannelStrip(guide: MiniGuide, title: String, currentId: Long, onScr
         ) {
             items(guide.channels, key = { it.id }) { channel ->
                 androidx.compose.runtime.CompositionLocalProvider(
-                    app.antresol.ui.channels.LocalReserveChannelLogo provides app.antresol.ui.channels.reserveLogoSlot(guide.channels.map { it.logoUrl }),
+                    app.antresol.ui.channels.LocalReserveChannelLogo provides app.antresol.ui.channels.reserveLogoSlot(guide.channels.map { it.logoUrl ?: it.logoAlt }),
                 ) {
                 ChannelCard(
                     channel = channel,

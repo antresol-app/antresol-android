@@ -26,6 +26,11 @@ data class Channel(
      * channel's provider logo (absolute); null when there is none.
      */
     val logoUrl: String? = null,
+    /**
+     * An external channel's guide (XMLTV) icon when [logoUrl] is another picture (its playlist logo):
+     * shown when [logoUrl] is empty or does not load; null when there is none.
+     */
+    val logoAlt: String? = null,
     /** A channel of an external IPTV source: the app plays [stream] itself (the own live route 404s). */
     val external: Boolean = false,
     /** Where an [external] channel's video is, null for Antresol's own channels. */
@@ -155,6 +160,18 @@ data class ChannelList(
     val canCreate: Boolean = false,
     /** Every category of the list once, in the filter's order; null on a server that does not have them. */
     val categories: List<ChannelCategory>? = null,
+    /**
+     * The server already put the profile's favourites first (each part by number): the apps keep its
+     * order ([app.antresol.core.channels.Channels.ordered]). False on an older server: by number.
+     */
+    val favoritesFirst: Boolean = false,
+)
+
+/** `GET|PUT /api/channels/prefs`: the profile's own choices for its channel list (on every device). */
+@Serializable
+data class ChannelPrefs(
+    /** «Избранные каналы первыми»: the starred channels stand at the top of the list (default on). */
+    val favoritesFirst: Boolean = true,
 )
 
 /** `GET /api/channels/{id}/guide`: the programme on air and the ones after it. */
@@ -182,6 +199,8 @@ data class ChannelEpgRow(
     val programs: List<ChannelProgram> = emptyList(),
     /** The uploaded logo when the server sends it with the guide; else taken from the channel list. */
     val logoUrl: String? = null,
+    /** As [Channel.logoAlt]. */
+    val logoAlt: String? = null,
     val external: Boolean = false,
     /** As [Channel.categories]. */
     val categories: List<String>? = null,

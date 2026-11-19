@@ -33,6 +33,9 @@ interface LiveApi {
     /** The server's categories of the list [channels] last read (to name the category a player was opened from); null: none. */
     suspend fun categories(): List<ChannelCategory>? = null
 
+    /** Whether the list [channels] last read has the favourites first ([app.antresol.core.model.ChannelList.favoritesFirst]). */
+    suspend fun favoritesFirst(): Boolean = false
+
     suspend fun guide(channelId: Long): List<ChannelProgram>
 
     /** Starts the channel's stream and returns the URL for the player (see [AntresolClient.openLiveChannel]). */
@@ -58,10 +61,16 @@ fun AntresolClient.liveApi(): LiveApi {
     val client = this
     return object : LiveApi {
         private var categories: List<ChannelCategory>? = null
+        private var favoritesFirst = false
 
-        override suspend fun channels(): List<Channel> = client.channels().also { categories = it.categories }.channels
+        override suspend fun channels(): List<Channel> = client.channels().also {
+            categories = it.categories
+            favoritesFirst = it.favoritesFirst
+        }.channels
 
         override suspend fun categories(): List<ChannelCategory>? = categories
+
+        override suspend fun favoritesFirst(): Boolean = favoritesFirst
 
         override suspend fun guide(channelId: Long): List<ChannelProgram> = client.channelGuide(channelId, Channels.GUIDE_HOURS).programs
 
@@ -108,7 +117,7 @@ sealed interface LiveStream {
 
 /** What the live player shows: the channels to switch between, the current one and its guide. */
 data class LiveTvState(
-    /** Every channel, by number (empty until loaded). */
+    /** Every channel in the list's order ([Channels.ordered]; empty until loaded). */
     val channels: List<Channel>,
     val channelId: Long,
     /** The guide of [channelId] from the programme on air on (empty until loaded). */
@@ -120,10 +129,12 @@ data class LiveTvState(
     val prefs: PlaybackPrefs? = null,
     /** The server's categories (names for a [filter] that is one), empty until loaded or without them. */
     val categories: List<ChannelCategory> = emptyList(),
+    /** The list has the favourites first (the server's order; a star changed here moves its channel). */
+    val favoritesFirst: Boolean = false,
 ) {
     val channel: Channel? get() = channels.firstOrNull { it.id == channelId }
 
-    /** The channels of [filter], by number. */
+    /** The channels of [filter], in the list's order. */
     val listed: List<Channel> get() = Channels.filter(channels, filter)
 
     /**
@@ -235,7 +246,10 @@ class LiveTvSession(
     }
 
     private fun setFavoriteLocally(channelId: Long, favorite: Boolean) {
-        _state.update { state -> state.copy(channels = state.channels.map { if (it.id == channelId) it.copy(favorite = favorite) else it }) }
+        _state.update { state ->
+            val channels = state.channels.map { if (it.id == channelId) it.copy(favorite = favorite) else it }
+            state.copy(channels = if (state.favoritesFirst) Channels.ordered(channels, true) else channels)
+        }
     }
 
     /** Switches to [channelId] (the mini-guide). False when it is already on. */
@@ -385,7 +399,9 @@ class LiveTvSession(
     private suspend fun loadChannels() {
         val channels = attempt { api.channels() } ?: return
         val categories = api.categories().orEmpty()
-        _state.update { it.copy(channels = Channels.sortedByNumber(channels), categories = categories) }
+        val favoritesFirst = api.favoritesFirst()
+        // The server's order as it is (by number, the favourites first when the profile wants them so).
+        _state.update { it.copy(channels = channels, categories = categories, favoritesFirst = favoritesFirst) }
     }
 
     private suspend fun loadGuide(channelId: Long) {

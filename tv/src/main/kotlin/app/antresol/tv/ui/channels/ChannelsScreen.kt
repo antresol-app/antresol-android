@@ -2,7 +2,6 @@ package app.antresol.tv.ui.channels
 
 import app.antresol.ui.channels.ChannelLogo
 import app.antresol.ui.channels.channelNumberWidth
-import app.antresol.ui.channels.reserveLogoSlot
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -370,7 +369,6 @@ private fun ChannelList(
     refocus: Int,
 ) {
     val shown = viewModel.shown
-    val reserveLogo = remember(shown) { reserveLogoSlot(shown.map { it.logoUrl }) }
     val numberWidth = channelNumberWidth(remember(shown) { shown.map { it.number } }, ChannelNumberStyle)
     val last = viewModel.lastChannel
     var focusedId by rememberSaveable(viewModel.filter.key) { mutableStateOf(last?.id ?: shown.firstOrNull()?.id) }
@@ -434,7 +432,6 @@ private fun ChannelList(
                 itemsIndexed(shown, key = { _, channel -> channel.id }) { index, channel ->
                     TvChannelRow(
                         channel = channel,
-                        reserveLogo = reserveLogo,
                         numberWidth = numberWidth,
                         nowMs = nowMs,
                         last = channel.id == last?.id,
@@ -482,9 +479,9 @@ private val HeaderHeight = 64.dp
 /** The preview's width: what is right of the list. */
 private val PreviewWidth = 960.dp - ScreenPaddingH * 2 - ListWidth - 28.dp
 
-/** One row of the TV list: number, a small still, name with the star, the programme and its progress. */
+/** One row of the TV list: number, logo (or initials), name with the star, the programme and its progress, its still when it has one. */
 @Composable
-private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, numberWidth: Dp, nowMs: Long, last: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun TvChannelRow(channel: Channel, numberWidth: Dp, nowMs: Long, last: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
     val urls = LocalMediaUrls.current
     val program = Channels.showing(channel, nowMs)
     val description = listOfNotNull(
@@ -525,13 +522,8 @@ private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, numberWidth: Dp
                 // As wide as the list's widest number (four digits fit).
                 modifier = Modifier.width(numberWidth),
             )
-            ProgrammeStill(
-                url = urls?.image(programmeArt(program)),
-                shape = AntresolShapes.badge,
-                modifier = Modifier.width(80.dp).aspectRatio(AntresolMotion.BACKDROP_ASPECT),
-            )
-            // The logo column (as on the web) exists only in a list where some channel has a logo.
-            if (reserveLogo) ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp, reserve = true)
+            // As the web's /tv rows: the logo, else the guide icon, else the channel's initials.
+            ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp, reserve = true, altUrl = urls?.image(channel.logoAlt), name = channel.name)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(channel.name, style = Antresol.typography.title, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -548,6 +540,14 @@ private fun TvChannelRow(channel: Channel, reserveLogo: Boolean, numberWidth: Dp
                     // Times and «Далее» are in the preview on the right; the row stays a TV list row.
                     LiveProgressBar(Channels.progress(program, nowMs), content.copy(alpha = 0.8f), Modifier.padding(top = 4.dp))
                 }
+            }
+            // The programme's picture only when it has one: no empty grey box.
+            programmeArt(program)?.let { art ->
+                ProgrammeStill(
+                    url = urls?.image(art),
+                    shape = AntresolShapes.badge,
+                    modifier = Modifier.width(80.dp).aspectRatio(AntresolMotion.BACKDROP_ASPECT),
+                )
             }
         }
     }
@@ -571,7 +571,7 @@ private fun ChannelPreview(channel: Channel, nowMs: Long, modifier: Modifier = M
                 modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(AntresolMotion.BACKDROP_ASPECT),
             )
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                ChannelLogo(urls?.image(channel.logoUrl), height = 24.dp)
+                ChannelLogo(urls?.image(channel.logoUrl), height = 24.dp, altUrl = urls?.image(channel.logoAlt))
                 Text(
                     stringResource(R.string.tv_channel_number, channel.number, channel.name),
                     style = Antresol.typography.caption.copy(fontFeatureSettings = "tnum"),

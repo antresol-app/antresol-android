@@ -125,7 +125,9 @@ import app.antresol.tv.autostart.LastChannel
 import app.antresol.core.channels.LiveApi
 import app.antresol.core.channels.liveApi
 import app.antresol.core.channels.LiveTvSession
+import app.antresol.ui.channels.ChannelPrefsModel
 import app.antresol.ui.channels.ChannelsViewModel
+import app.antresol.ui.channels.channelPrefsApi
 import app.antresol.ui.channels.channelsApi
 import app.antresol.ui.language.UiLanguageModel
 import app.antresol.ui.history.DeviceHistoryModel
@@ -523,6 +525,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onScrolledToTop = onScrolledToTop,
                         onMenuOpenChanged = { panelOpen = it },
                         language = uiLanguage,
+                        // The «ТВ» tab reads its list again when it is shown (the server orders it by the new choice).
+                        channelPrefs = viewModel(key = "channel-prefs") { ChannelPrefsModel(client.channelPrefsApi()) },
                         // A kid's device history is an administrator's to change (the server refuses it too).
                         deviceHistory = if (state.user?.isKid == false) {
                             viewModel(key = "device-history") { DeviceHistoryModel(client.deviceHistoryApi(), session::deviceHistoryChanged) }

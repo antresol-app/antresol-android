@@ -201,35 +201,27 @@ class LiveLayoutTest {
     @Config(sdk = [35], qualifiers = "w360dp-h640dp-port")
     fun aListRowWithALogoStillFits360dp() {
         val withLogo = channel.copy(logoUrl = "/api/channels/3/logo.png?v=1")
-        show {
-            androidx.compose.runtime.CompositionLocalProvider(app.antresol.ui.channels.LocalReserveChannelLogo provides true) {
-                Column { ChannelRow(withLogo, now, onClick = {}, onToggleFavorite = {}) }
-            }
-        }
+        show { Column { ChannelRow(withLogo, now, onClick = {}, onToggleFavorite = {}) } }
         compose.onAllNodesWithText(channel.name).assertCountEquals(1)
         assertNothingOverflows()
     }
 
     @Test
     @Config(sdk = [35], qualifiers = "w360dp-h640dp-port")
-    fun namesLineUpWhenSomeChannelOfTheListHasALogo() {
+    fun namesLineUpWithTheInitialsOfAChannelWithoutALogo() {
         val withLogo = channel.copy(id = 5, number = 5, name = "Кино", logoUrl = "/api/channels/5/logo.png?v=1")
         val plain = channel.copy(id = 6, number = 6, name = "Драмы", logoUrl = null)
         show {
-            androidx.compose.runtime.CompositionLocalProvider(
-                app.antresol.ui.channels.LocalReserveChannelLogo provides app.antresol.ui.channels.reserveLogoSlot(listOf(withLogo.logoUrl, plain.logoUrl)),
-            ) {
-                Column {
-                    ChannelRow(withLogo, now, onClick = {}, onToggleFavorite = {})
-                    ChannelRow(plain, now, onClick = {}, onToggleFavorite = {})
-                }
+            Column {
+                ChannelRow(withLogo, now, onClick = {}, onToggleFavorite = {})
+                ChannelRow(plain, now, onClick = {}, onToggleFavorite = {})
             }
         }
         compose.waitForIdle()
-        // The row without a logo keeps an empty logo column, so names and programmes start at the same x.
-        compose.onAllNodes(androidx.compose.ui.test.hasTestTag("channel-logo-slot"), useUnmergedTree = true).fetchSemanticsNodes().let {
-            assertTrue("no reserved slot", it.isNotEmpty())
-        }
+        // The row without a logo shows the channel's initials in the logo's box (as the web), never an empty one
+        // (a logo that cannot load, as here without a server, gives way to them too).
+        assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasTestTag("channel-initials"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        compose.onAllNodes(androidx.compose.ui.test.hasTestTag("channel-logo-slot"), useUnmergedTree = true).assertCountEquals(0)
         val a = compose.onNodeWithText("Кино", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val b = compose.onNodeWithText("Драмы", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(a.left, b.left, 0.5f)
@@ -238,9 +230,13 @@ class LiveLayoutTest {
 
     @Test
     @Config(sdk = [35], qualifiers = "w360dp-h640dp-port")
-    fun aListWithoutLogosReservesNothing() {
-        show { Column { ChannelRow(channel, now, onClick = {}, onToggleFavorite = {}) } }
+    fun aRowWithoutALogoOrAPictureHasNoEmptyBox() {
+        val bare = channel.copy(logoUrl = null, logoAlt = null, now = null, next = null)
+        show { Column { ChannelRow(bare, now, onClick = {}, onToggleFavorite = {}) } }
         assertEquals(0, compose.onAllNodes(androidx.compose.ui.test.hasTestTag("channel-logo-slot"), useUnmergedTree = true).fetchSemanticsNodes().size)
+        compose.onAllNodes(androidx.compose.ui.test.hasTestTag("channel-initials"), useUnmergedTree = true).assertCountEquals(1)
+        // No programme picture: no still (its placeholder box) in the row.
+        compose.onAllNodes(androidx.compose.ui.test.hasTestTag("programme-still"), useUnmergedTree = true).assertCountEquals(0)
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountEquals(n: Int) =

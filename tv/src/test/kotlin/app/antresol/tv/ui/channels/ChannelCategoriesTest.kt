@@ -142,12 +142,12 @@ class ChannelCategoriesTest {
         button().assertContentDescriptionContains("All Channels, 40")
         button().press()
         waitFor(::panelShown)
-        // Headings (only with more than one kind), the first entries are All and Favourites without one.
+        // Headings (only with more than one kind), the first entries are Favourites and All without one (as the web).
         compose.onNodeWithText("TOPICS").assertExists()
         compose.onNodeWithText("Новости").assertExists()
         compose.onNodeWithText("Favourites").assertExists()
         assertEquals(
-            listOf("All", "Favorites", "ai:news", "ai:sport", "source:7", "group:Group 1"),
+            listOf("Favorites", "All", "ai:news", "ai:sport", "source:7", "group:Group 1"),
             viewModel.filterOptions.map { (it.filter as? ChannelFilter.Category)?.id ?: it.filter.key.replaceFirstChar(Char::titlecase) },
         )
         compose.onNode(hasText("Новости")).press()

@@ -29,9 +29,11 @@ class ChannelLogicTest {
             channel(5, 5, "Series").copy(favorite = true),
         )
         assertEquals(listOf("All", "Genres", "Decades", "Series"), Channels.categoryList(list, null).map { it.name })
-        assertEquals(listOf(3L, 4L, 2L, 1L, 5L), Channels.filter(list, ChannelFilter.All).map { it.id })
-        assertEquals(listOf(2L, 5L), Channels.filter(list, ChannelFilter.Favorites).map { it.id })
-        assertEquals(listOf(4L, 2L), Channels.filter(list, group("Genres")).map { it.id })
+        // A filter keeps the list's order (the server's: here by number).
+        val ordered = Channels.ordered(list, favoritesFirst = false)
+        assertEquals(listOf(3L, 4L, 2L, 1L, 5L), Channels.filter(ordered, ChannelFilter.All).map { it.id })
+        assertEquals(listOf(2L, 5L), Channels.filter(ordered, ChannelFilter.Favorites).map { it.id })
+        assertEquals(listOf(4L, 2L), Channels.filter(ordered, group("Genres")).map { it.id })
         assertEquals(ChannelFilter.All, Channels.validFilter(list, group("Gone")))
         assertEquals(ChannelFilter.Favorites, Channels.validFilter(list, ChannelFilter.Favorites))
         for (filter in listOf(ChannelFilter.All, ChannelFilter.Favorites, group("Кино: 90-е"), ChannelFilter.Category("ai:news"))) {
@@ -56,8 +58,8 @@ class ChannelLogicTest {
         )
         assertEquals(
             listOf(
-                ChannelFilterOption(ChannelFilter.All, 7),
                 ChannelFilterOption(ChannelFilter.Favorites, 2),
+                ChannelFilterOption(ChannelFilter.All, 7),
                 ChannelFilterOption(group("News"), 3, "News", ChannelCategory.KIND_GROUP),
                 ChannelFilterOption(group("Sports"), 1, "Sports", ChannelCategory.KIND_GROUP),
                 ChannelFilterOption(group("Kids"), 1, "Kids", ChannelCategory.KIND_GROUP),
@@ -76,11 +78,11 @@ class ChannelLogicTest {
     fun aListNobodyGroupedHasNoCategoryEntries() {
         val ungrouped = listOf(channel(1, 1, ""), channel(2, 2, ""))
         assertEquals(
-            listOf(ChannelFilterOption(ChannelFilter.All, 2), ChannelFilterOption(ChannelFilter.Favorites, 0)),
+            listOf(ChannelFilterOption(ChannelFilter.Favorites, 0), ChannelFilterOption(ChannelFilter.All, 2)),
             Channels.filterOptions(ungrouped),
         )
         assertEquals(ChannelFilter.All, Channels.validFilter(ungrouped, group("Gone")))
-        assertEquals(listOf(ChannelFilterOption(ChannelFilter.All, 0), ChannelFilterOption(ChannelFilter.Favorites, 0)), Channels.filterOptions(emptyList()))
+        assertEquals(listOf(ChannelFilterOption(ChannelFilter.Favorites, 0), ChannelFilterOption(ChannelFilter.All, 0)), Channels.filterOptions(emptyList()))
     }
 
     @Test
@@ -103,8 +105,8 @@ class ChannelLogicTest {
         val options = Channels.filterOptions(list, server)
         assertEquals(
             listOf(
-                ChannelFilterOption(ChannelFilter.All, 4),
                 ChannelFilterOption(ChannelFilter.Favorites, 1),
+                ChannelFilterOption(ChannelFilter.All, 4),
                 ChannelFilterOption(ChannelFilter.Category("ai:news"), 2, "Новости", "ai"),
                 ChannelFilterOption(ChannelFilter.Category("ai:sport"), 1, "Спорт", "ai"),
                 ChannelFilterOption(ChannelFilter.Category("source:3"), 1, "Playlist A", "source"),
@@ -141,8 +143,8 @@ class ChannelLogicTest {
     }
 
     @Test
-    fun neighbourWrapsByNumber() {
-        val list = listOf(channel(10, 50, "a"), channel(11, 1, "b"), channel(12, 10, "a"))
+    fun neighbourWrapsInTheListsOrder() {
+        val list = Channels.ordered(listOf(channel(10, 50, "a"), channel(11, 1, "b"), channel(12, 10, "a")), favoritesFirst = false)
         assertEquals(12L, Channels.neighbour(list, 11, +1)?.id)
         assertEquals(10L, Channels.neighbour(list, 12, +1)?.id)
         assertEquals(11L, Channels.neighbour(list, 10, +1)?.id)
@@ -153,7 +155,7 @@ class ChannelLogicTest {
         assertEquals(10L, Channels.neighbour(list, 99, +1, currentNumber = 20)?.id)
         assertEquals(12L, Channels.neighbour(list, 99, -1, currentNumber = 20)?.id)
         assertEquals(10L, Channels.neighbour(list, 99, -1, currentNumber = 1)?.id)
-        assertNull(Channels.neighbour(list.take(1), 10, +1))
+        assertNull(Channels.neighbour(list.filter { it.id == 10L }, 10, +1))
         assertNull(Channels.neighbour(emptyList(), 10, -1))
     }
 
@@ -223,8 +225,8 @@ class ChannelLogicTest {
     }
 
     @Test
-    fun miniGuideIsTheOpenedListByNumber() {
-        val films = listOf(channel(1, 30, "Films"), channel(3, 10, "Films"), channel(4, 20, "Films"))
+    fun miniGuideIsTheOpenedListInItsOrder() {
+        val films = listOf(channel(3, 10, "Films"), channel(4, 20, "Films"), channel(1, 30, "Films"))
         val guide = Channels.miniGuide(films, 4)
         assertEquals(listOf(3L, 4L, 1L), guide.channels.map { it.id })
         assertEquals(1, guide.currentIndex)
@@ -269,5 +271,24 @@ class ChannelLogicTest {
         val empty = Channels.rowContent(channel(2, 8, "x"), 0)
         assertEquals(ChannelRowContent(8, "C2", false, null, null, null), empty)
         assertEquals("/p", Channels.rowContent(channel(1, 7, "x").copy(now = now.copy(backdrop = "")), 0).art)
+    }
+
+    @Test
+    fun theServersOrderHasTheFavouritesFirstWhenTheProfileWantsIt() {
+        val list = listOf(
+            channel(1, 1, "a"),
+            channel(2, 2, "a").copy(favorite = true),
+            channel(3, 3, "b"),
+            channel(4, 4, "b").copy(favorite = true),
+        )
+        assertEquals(listOf(2L, 4L, 1L, 3L), Channels.ordered(list.shuffled(java.util.Random(7)), favoritesFirst = true).map { it.id })
+        assertEquals(listOf(1L, 2L, 3L, 4L), Channels.ordered(list.reversed(), favoritesFirst = false).map { it.id })
+        // Filters, zapping and the mini-guide follow the list as given (favourites first), not the numbers.
+        val ordered = Channels.ordered(list, favoritesFirst = true)
+        assertEquals(listOf(4L, 3L), Channels.filter(ordered, group("b")).map { it.id })
+        assertEquals(1L, Channels.neighbour(ordered, 4, +1)?.id)
+        assertEquals(3L, Channels.neighbour(ordered, 2, -1)?.id)
+        assertEquals(listOf(2L, 4L, 1L, 3L), Channels.miniGuide(ordered, 1).channels.map { it.id })
+        assertEquals(2, Channels.miniGuide(ordered, 1).currentIndex)
     }
 }

@@ -61,6 +61,7 @@ import app.antresol.mobile.BuildConfig
 import app.antresol.mobile.R
 import app.antresol.ui.playback.qualityLabel
 import app.antresol.ui.language.UiLanguageModel
+import app.antresol.ui.channels.ChannelPrefsModel
 import app.antresol.ui.language.UiLanguages
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.LoadState
@@ -146,8 +147,10 @@ fun SettingsScreen(
     onChangeServer: () -> Unit,
     onPairTv: () -> Unit,
     language: UiLanguageModel,
+    channelPrefs: ChannelPrefsModel? = null,
 ) {
     LaunchedEffect(language) { language.refresh() }
+    LaunchedEffect(channelPrefs) { channelPrefs?.refresh() }
     var qualitySheet by remember { mutableStateOf(false) }
     var revoking by remember { mutableStateOf<DeviceSession?>(null) }
     val snackbar = remember { SnackbarHostState() }
@@ -209,6 +212,17 @@ fun SettingsScreen(
                 ValueRow(stringResource(R.string.settings_video_quality), qualityLabel(settings.videoQuality), onClick = { qualitySheet = true }, tag = "settings-quality")
                 Divider()
                 SwitchRow(stringResource(R.string.settings_autoplay), stringResource(R.string.settings_autoplay_detail), settings.autoplayNext, settings::updateAutoplayNext, "settings-autoplay")
+                // The profile's, on the server (absent on an older server that has no such choice).
+                channelPrefs?.favoritesFirst?.let { on ->
+                    Divider()
+                    SwitchRow(
+                        stringResource(UiR.string.settings_favorites_first),
+                        stringResource(UiR.string.settings_favorites_first_detail),
+                        on,
+                        channelPrefs::setFavoritesFirst,
+                        "settings-favorites-first",
+                    )
+                }
             }
 
             header(UiR.string.ui_language)

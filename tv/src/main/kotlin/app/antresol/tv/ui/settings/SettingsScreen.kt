@@ -47,6 +47,7 @@ import app.antresol.core.session.AuthState
 import app.antresol.tv.BuildConfig
 import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.autostart.AutostartController
+import app.antresol.ui.channels.ChannelPrefsModel
 import app.antresol.tv.autostart.AutostartPolicy
 import app.antresol.tv.autostart.AutostartTarget
 import app.antresol.tv.autostart.OverlayPermission
@@ -99,7 +100,9 @@ fun SettingsScreen(
     onMenuOpenChanged: (Boolean) -> Unit,
     language: UiLanguageModel,
     deviceHistory: DeviceHistoryModel? = null,
+    channelPrefs: ChannelPrefsModel? = null,
 ) {
+    LaunchedEffect(channelPrefs) { channelPrefs?.refresh() }
     val preferences by settings.preferences.collectAsStateWithLifecycle()
     LaunchedEffect(language) { language.refresh() }
     var menu by remember { mutableStateOf<SettingsMenu?>(null) }
@@ -173,6 +176,18 @@ fun SettingsScreen(
                         onClick = { menu = SettingsMenu.Subtitles },
                         modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Subtitles)),
                     )
+                }
+                // The profile's, on the server (absent on an older server that has no such choice).
+                channelPrefs?.favoritesFirst?.let { on ->
+                    item {
+                        SettingRow(
+                            label = stringResource(R.string.settings_favorites_first),
+                            detail = stringResource(R.string.settings_favorites_first_detail),
+                            value = onOffLabel(on),
+                            chevron = false,
+                            onClick = { channelPrefs.setFavoritesFirst(!on) },
+                        )
+                    }
                 }
                 item { Section(stringResource(TvR.string.settings_autostart_section)) }
                 item {

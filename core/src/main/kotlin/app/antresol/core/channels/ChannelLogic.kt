@@ -10,8 +10,8 @@ import java.time.format.DateTimeParseException
 
 /**
  * Which channels a list shows: all of them, the profile's favourites, or one category. The list
- * keeps the number order whatever the filter (a TV's list never reorders). [key] survives process
- * death and intents.
+ * keeps the server's order whatever the filter ([Channels.ordered]: by number, the favourites first
+ * when the profile wants them so). [key] survives process death and intents.
  */
 sealed interface ChannelFilter {
     val key: String
@@ -50,7 +50,7 @@ sealed interface ChannelFilter {
 data class ChannelFilterOption(val filter: ChannelFilter, val count: Int, val label: String? = null, val kind: String? = null)
 
 /**
- * The player's mini-guide: the channels of the list the player was opened from, by number, and the
+ * The player's mini-guide: the channels of the list the player was opened from, in its order, and the
  * one being watched ([currentIndex]). Empty while the channels are loading.
  */
 data class MiniGuide(val channels: List<Channel>, val currentIndex: Int) {
@@ -82,6 +82,16 @@ object Channels {
     const val GUIDE_HOURS = 6
 
     fun sortedByNumber(channels: List<Channel>): List<Channel> = channels.sortedWith(compareBy({ it.number }, { it.id }))
+
+    /**
+     * The list's order, the server's (`GET /api/channels`): by number, and with [favoritesFirst] the
+     * favourites before the rest (each part by number). The apps keep this order and work it out
+     * again only when a star changes here, so the list moves as the server will send it next time.
+     */
+    fun ordered(channels: List<Channel>, favoritesFirst: Boolean): List<Channel> {
+        val byNumber = sortedByNumber(channels)
+        return if (favoritesFirst) byNumber.sortedBy { !it.favorite } else byNumber
+    }
 
     /** The id of a playlist group or an own channel's category [name] (empty: no category). */
     fun groupId(name: String): String = "group:$name"
@@ -125,12 +135,12 @@ object Channels {
     }
 
     /**
-     * The category list of a big channel list (an external playlist has dozens of groups): «All» and
-     * «Favourites» first, then [categoryList], each with its channel count.
+     * The category list of a big channel list (an external playlist has dozens of groups): «Favourites»
+     * and «All» first (as the web's /tv), then [categoryList], each with its channel count.
      */
     fun filterOptions(channels: List<Channel>, server: List<ChannelCategory>? = null): List<ChannelFilterOption> = buildList {
-        add(ChannelFilterOption(ChannelFilter.All, channels.size))
         add(ChannelFilterOption(ChannelFilter.Favorites, channels.count { it.favorite }))
+        add(ChannelFilterOption(ChannelFilter.All, channels.size))
         categoryList(channels, server).forEach { add(ChannelFilterOption(ChannelFilter.Category(it.id), it.count, it.name, it.kind)) }
     }
 
@@ -142,14 +152,12 @@ object Channels {
         categories.firstOrNull { it.id == filter.id }?.name?.takeIf { it.isNotBlank() }
             ?: filter.id.takeIf { it.startsWith("group:") }?.removePrefix("group:")?.takeIf { it.isNotBlank() }
 
-    /** The channels [filter] lets through, by number. */
-    fun filter(channels: List<Channel>, filter: ChannelFilter): List<Channel> = sortedByNumber(
-        when (filter) {
-            ChannelFilter.All -> channels
-            ChannelFilter.Favorites -> channels.filter { it.favorite }
-            is ChannelFilter.Category -> channels.filter { inCategory(it, filter.id) }
-        },
-    )
+    /** The channels [filter] lets through, in the order of [channels] (already [ordered]). */
+    fun filter(channels: List<Channel>, filter: ChannelFilter): List<Channel> = when (filter) {
+        ChannelFilter.All -> channels
+        ChannelFilter.Favorites -> channels.filter { it.favorite }
+        is ChannelFilter.Category -> channels.filter { inCategory(it, filter.id) }
+    }
 
     /** [filter] while it still means something (a category that is gone falls back to «All»). */
     fun validFilter(channels: List<Channel>, filter: ChannelFilter): ChannelFilter = when (filter) {
@@ -158,14 +166,15 @@ object Channels {
     }
 
     /**
-     * The channel [step] places from [currentId] in number order, wrapping at both ends (+1 is
-     * "channel up", the next number). A channel not in [channels] (unfavourited while watching)
-     * goes to the nearest number in the [step] direction. Null when there is no other channel.
+     * The channel [step] places from [currentId] in the order of [channels] (the list's, already
+     * [ordered]), wrapping at both ends (+1 is "channel up", the next in the list). A channel not in
+     * [channels] (unfavourited while watching) goes to the nearest number in the [step] direction.
+     * Null when there is no other channel.
      */
     fun neighbour(channels: List<Channel>, currentId: Long, step: Int, currentNumber: Int? = null): Channel? {
-        val sorted = sortedByNumber(channels)
-        val index = sorted.indexOfFirst { it.id == currentId }
+        val index = channels.indexOfFirst { it.id == currentId }
         if (index < 0) {
+            val sorted = sortedByNumber(channels)
             if (sorted.isEmpty()) return null
             val number = currentNumber ?: return sorted.first()
             return if (step > 0) {
@@ -174,19 +183,18 @@ object Channels {
                 sorted.lastOrNull { it.number < number } ?: sorted.last()
             }
         }
-        if (sorted.size < 2) return null
-        return sorted[Math.floorMod(index + step, sorted.size)]
+        if (channels.size < 2) return null
+        return channels[Math.floorMod(index + step, channels.size)]
     }
 
     /** The profile's last channel while it can still see it (focus, highlight, «back to N»); else null. */
     fun lastChannel(channels: List<Channel>, lastId: Long?): Channel? =
         lastId?.let { id -> channels.firstOrNull { it.id == id } }
 
-    /** The mini-guide for [currentId]: the list it was opened from ([channels], already filtered). */
+    /** The mini-guide for [currentId]: the list it was opened from ([channels], already filtered, in its order). */
     fun miniGuide(channels: List<Channel>, currentId: Long): MiniGuide {
         if (channels.isEmpty()) return MiniGuide.Empty
-        val sorted = sortedByNumber(channels)
-        return MiniGuide(sorted, sorted.indexOfFirst { it.id == currentId }.coerceAtLeast(0))
+        return MiniGuide(channels, channels.indexOfFirst { it.id == currentId }.coerceAtLeast(0))
     }
 
     /**

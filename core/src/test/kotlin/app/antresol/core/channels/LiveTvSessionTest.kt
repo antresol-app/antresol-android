@@ -31,8 +31,13 @@ class LiveTvSessionTest {
 
         override suspend fun channels(): List<Channel> {
             channelLoads++
-            return channels.toList()
+            // As the server sends them: by number, the favourites first when [favoritesFirst].
+            return Channels.ordered(channels, favoritesFirst)
         }
+
+        var favoritesFirst = false
+
+        override suspend fun favoritesFirst() = favoritesFirst
 
         override suspend fun guide(channelId: Long): List<ChannelProgram> {
             guides += channelId
@@ -256,5 +261,20 @@ class LiveTvSessionTest {
         val guide = liveMiniGuide(LiveTvState(channels, 2, listOf(fresh), LiveStream.Starting(0)), at)
         assertEquals(listOf("Stale", "Fresh"), guide.channels.map { it.now?.title })
         assertEquals(1, guide.currentIndex)
+    }
+
+    @Test
+    fun withFavouritesFirstAStarInThePlayerMovesTheChannelInTheMiniGuide() = runTest {
+        api.favoritesFirst = true
+        api.channels[1] = api.channels[1].copy(favorite = true)
+        val session = session()
+        session.start()
+        runCurrent()
+        // The server's order is kept: the favourite (10) first, then 1 and 5.
+        assertEquals(listOf(2L, 1L, 3L), session.state.value.listed.map { it.id })
+        session.setFavorite(3, true)
+        assertEquals(listOf(3L, 2L, 1L), session.state.value.listed.map { it.id })
+        runCurrent()
+        assertEquals(listOf(3L to true), api.favorites)
     }
 }

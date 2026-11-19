@@ -112,7 +112,7 @@ fun GuideGrid(
     }
     val context = LocalContext.current
     val clock = remember(context) { timeFormat(context) }
-    val reserveLogo = remember(rows) { app.antresol.ui.channels.reserveLogoSlot(rows.map { it.logoUrl }) }
+    val reserveLogo = remember(rows) { app.antresol.ui.channels.reserveLogoSlot(rows.map { it.logoUrl ?: it.logoAlt }) }
     androidx.compose.runtime.CompositionLocalProvider(
         LocalMinuteWidth provides minute,
         app.antresol.ui.channels.LocalReserveChannelLogo provides reserveLogo,
@@ -166,7 +166,7 @@ private fun GuideChannelCell(row: ChannelEpgRow, last: Boolean, onClick: () -> U
                     fontFeatureSettings = "tnum",
                 ),
             )
-            ChannelLogo(urls?.image(row.logoUrl), height = 20.dp)
+            ChannelLogo(urls?.image(row.logoUrl), height = 20.dp, altUrl = urls?.image(row.logoAlt), name = row.name)
             if (row.favorite) FavoriteMark()
         }
         Text(

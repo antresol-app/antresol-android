@@ -1,7 +1,6 @@
 package app.antresol.mobile.ui.channels
 
 import app.antresol.ui.channels.ChannelLogo
-import app.antresol.ui.channels.LocalReserveChannelLogo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -57,9 +57,9 @@ private val NumberWidth = 40.dp
 
 /**
  * One channel of the list, like a television's channel list (Android TV Live Channels, TiviMate):
- * its number, the still of the programme on air, the channel's name (with a star when it is a
+ * its number, its logo (else the guide icon, else its initials), the channel's name (with a star when it is a
  * favourite), the programme on one line and a thin live progress bar ([Channels.rowContent]); the
- * times and «Далее» live in the details and the player's banner.
+ * times and «Далее» live in the details and the player's banner; the programme's still ends the row when it has one.
  * [last] marks the profile's last channel. A tap tunes in; a long press offers the favourite.
  */
 @Composable
@@ -99,14 +99,8 @@ fun ChannelRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             ChannelNumber(channel.number, Modifier.width(NumberWidth), highlighted = last)
-            ProgrammeStill(
-                url = urls?.image(row.art),
-                modifier = Modifier
-                    .width(RowStillWidth)
-                    .aspectRatio(AntresolMotion.BACKDROP_ASPECT),
-            )
-            // The logo column (as on the web) exists only in a list where some channel has a logo.
-            if (LocalReserveChannelLogo.current) ChannelLogo(urls?.image(channel.logoUrl), height = 24.dp, reserve = true)
+            // As the web's /tv rows: the logo, else the guide icon, else the channel's initials.
+            ChannelLogo(urls?.image(channel.logoUrl), height = 24.dp, reserve = true, altUrl = urls?.image(channel.logoAlt), name = channel.name)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(
@@ -125,6 +119,16 @@ fun ChannelRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 row.progress?.let { ThinProgress(it, Modifier.padding(top = 2.dp)) }
+            }
+            // The programme's picture only when it has one: no empty grey box.
+            row.art?.let { art ->
+                ProgrammeStill(
+                    url = urls?.image(art),
+                    modifier = Modifier
+                        .testTag("programme-still")
+                        .width(RowStillWidth)
+                        .aspectRatio(AntresolMotion.BACKDROP_ASPECT),
+                )
             }
         }
         DropdownMenu(

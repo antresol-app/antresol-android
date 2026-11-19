@@ -432,4 +432,38 @@ class AntresolClientTest {
         assertTrue(saved.autoSkip.intro)
         assertFalse(saved.autoSkip.recap)
     }
+
+    @Test
+    fun separateHistoryCallsHaveTheWebsShapes() = runTest {
+        enqueue("""{"items":[{"id":12,"name":"Гостиная","avatar":"grad-2","devices":[{"id":5,"kind":"native","name":"TV","model":"X"}]}]}""")
+        enqueue("""{"id":13,"name":"Кухня","avatar":"grad-3","devices":[]}""", code = 201)
+        enqueue("""{"id":5,"history":{"id":13,"name":"Кухня"}}""")
+        enqueue("""{"id":5,"history":null}""")
+        enqueue("""{"id":7,"name":"A","deviceHistory":{"id":13,"name":"Кухня"}}""")
+
+        val list = client.managedAccounts()
+        assertEquals(12L, list.items.single().id)
+        assertEquals("TV", list.items.single().devices.single().name)
+        val created = client.createManagedAccount("Кухня")
+        val on = client.setDeviceHistory(app.antresol.core.model.DeviceHistoryRequest(separate = true, accountId = created.id))
+        assertEquals("Кухня", on.history?.name)
+        val off = client.setDeviceHistory(app.antresol.core.model.DeviceHistoryRequest(separate = false, merge = true))
+        assertNull(off.history)
+        assertEquals(13L, client.me().deviceHistory?.id)
+
+        assertEquals("/api/me/managed", server.takeRequest().path)
+        val post = server.takeRequest()
+        assertEquals("POST", post.method)
+        assertEquals("/api/me/managed", post.path)
+        assertEquals("Кухня", takeJson(post)["name"]!!.jsonPrimitive.content)
+        val put = server.takeRequest()
+        assertEquals("PUT", put.method)
+        assertEquals("/api/me/devices/current/history", put.path)
+        val onBody = takeJson(put)
+        assertEquals("true", onBody["separate"]!!.jsonPrimitive.content)
+        assertEquals(13, onBody["accountId"]!!.jsonPrimitive.int)
+        val offBody = takeJson(server.takeRequest())
+        assertEquals("false", offBody["separate"]!!.jsonPrimitive.content)
+        assertEquals("true", offBody["merge"]!!.jsonPrimitive.content)
+    }
 }

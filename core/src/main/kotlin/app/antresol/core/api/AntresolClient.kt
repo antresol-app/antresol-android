@@ -11,6 +11,11 @@ import app.antresol.core.model.ChannelList
 import app.antresol.core.model.ComicPages
 import app.antresol.core.model.DeviceInfo
 import app.antresol.core.model.DeviceSessions
+import app.antresol.core.model.DeviceHistoryRequest
+import app.antresol.core.model.DeviceHistoryResult
+import app.antresol.core.model.ManagedAccount
+import app.antresol.core.model.ManagedAccounts
+import app.antresol.core.model.ManagedCreateRequest
 import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.ErrorBody
 import app.antresol.core.model.GenresResponse
@@ -154,6 +159,20 @@ class AntresolClient(
     suspend fun devices(): DeviceSessions = get("api/me/devices")
 
     suspend fun revokeDevice(sessionId: Long) = delete("api/me/devices/$sessionId")
+
+    // «Отдельная история на этом устройстве». A kid profile gets 403 on the writes (its switch is an
+    // administrator's); the list it may read.
+
+    /** `GET /api/me/managed`: the profile's separate histories. */
+    suspend fun managedAccounts(): ManagedAccounts = get("api/me/managed")
+
+    /** `POST /api/me/managed`: a new separate history; 400 for an empty name, 409 when there are too many. */
+    suspend fun createManagedAccount(name: String): ManagedAccount =
+        post("api/me/managed", jsonBody(ManagedCreateRequest(name)))
+
+    /** `PUT /api/me/devices/current/history`: switches this device's history (see [DeviceHistoryRequest]). */
+    suspend fun setDeviceHistory(request: DeviceHistoryRequest): DeviceHistoryResult =
+        send("PUT", url("api/me/devices/current/history"), jsonBody(request))
 
     // endregion
 

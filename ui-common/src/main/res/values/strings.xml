@@ -253,4 +253,18 @@
     <string name="settings_playback">Playback</string>
     <string name="settings_language">Language</string>
     <string name="search_browse">Browse</string>
+    <!-- «Отдельная история на этом устройстве»: the web's wording (comp.devices.*, comp.managed.*) -->
+    <string name="history_separate">Separate History on This Device</string>
+    <string name="history_separate_on">History: “%1$s”</string>
+    <string name="history_separate_failed">Couldn’t switch the history</string>
+    <string name="history_off_title">Return “%1$s” to your history?</string>
+    <string name="history_off_text">What was watched on this device can move into your profile, or stay apart — it comes back if you turn this on again.</string>
+    <string name="history_off_merge">Move to My Profile</string>
+    <string name="history_off_keep">Keep Apart</string>
+    <string name="history_managed_title">Separate Histories</string>
+    <string name="history_managed_footer">A history of its own for a shared device: its Continue, watched marks and Family Is Watching stay apart from yours. Access and limits are the profile’s; there is no separate sign-in.</string>
+    <string name="history_managed_new">New History…</string>
+    <string name="history_managed_name">Name</string>
+    <string name="history_managed_name_placeholder">For example, Living Room</string>
+    <string name="history_managed_create">Create</string>
 </resources>

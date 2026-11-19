@@ -6,6 +6,7 @@ import app.antresol.core.api.MediaUrls
 import app.antresol.core.model.DeviceInfo
 import app.antresol.core.model.Health
 import app.antresol.core.model.Me
+import app.antresol.core.model.HistoryRef
 import app.antresol.core.model.Profile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -266,6 +267,16 @@ class SessionManager(
             if (session != current) store.update { it.signedIn(session) }
             _state.value = AuthState.SignedIn(session, user)
         }
+    }
+
+    /**
+     * This device writes into [history] now (the answer to `PUT /api/me/devices/current/history`): the
+     * signed-in user gets it as `/api/me` would give it, so the screens that depend on it reload.
+     */
+    suspend fun deviceHistoryChanged(history: HistoryRef?) = mutex.withLock {
+        val signedIn = _state.value as? AuthState.SignedIn ?: return@withLock
+        val user = signedIn.user ?: return@withLock
+        if (user.deviceHistory != history) _state.value = signedIn.copy(user = user.copy(deviceHistory = history))
     }
 
     private suspend fun activate(session: StoredSession, user: Me) = mutex.withLock {

@@ -1,5 +1,8 @@
 package app.antresol.tv.ui.root
 
+import app.antresol.tv.ui.LocalMediaUrls
+import app.antresol.core.api.MediaUrls
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
@@ -61,7 +64,10 @@ fun AntresolTvRoot(
             is AuthState.ChooseProfile -> {
                 // The next «Change Server» starts on the phone screen again.
                 LaunchedEffect(Unit) { typing = false }
-                ProfilesScreen(session, current, ticket = ticket)
+                // Before sign-in too: the profiles' photos are on this server (they need no token).
+                CompositionLocalProvider(LocalMediaUrls provides remember(current.serverUrl) { MediaUrls(current.serverUrl) }) {
+                    ProfilesScreen(session, current, ticket = ticket)
+                }
             }
             // A new profile gets a fresh navigation stack.
             is AuthState.SignedIn -> key(current.session.serverId, current.session.userId) { MainShell(session, current) }

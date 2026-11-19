@@ -169,7 +169,7 @@ class SessionManager(
                 null
             }
             if (user != null) {
-                activate(saved.copy(userName = user.name, avatar = user.avatar), user)
+                activate(saved.copy(userName = user.name, avatar = user.avatar, photo = user.photo), user)
                 return true
             }
         }
@@ -189,6 +189,7 @@ class SessionManager(
             token = response.token,
             userName = response.user.name,
             avatar = response.user.avatar,
+            photo = response.user.photo,
         )
         activate(session, response.user)
     }
@@ -212,6 +213,7 @@ class SessionManager(
                 token = token,
                 userName = user.name,
                 avatar = user.avatar,
+                photo = user.photo,
             ),
             user,
         )
@@ -248,7 +250,7 @@ class SessionManager(
         _state.value = AuthState.NoServer
     }
 
-    /** Re-reads `/api/me` for the signed-in profile (name, avatar, kid flag). Network errors are ignored. */
+    /** Re-reads `/api/me` for the signed-in profile (name, avatar, photo, kid flag). Network errors are ignored. */
     suspend fun refreshUser() {
         val signedIn = _state.value as? AuthState.SignedIn ?: return
         val user = try {
@@ -256,11 +258,11 @@ class SessionManager(
         } catch (_: IOException) {
             return // 401 is handled by onUnauthorized; offline keeps the stored session.
         }
-        val session = signedIn.session.copy(userName = user.name, avatar = user.avatar)
+        val session = signedIn.session.copy(userName = user.name, avatar = user.avatar, photo = user.photo)
         mutex.withLock {
             val current = (_state.value as? AuthState.SignedIn)?.session
             if (current?.token != session.token) return
-            // Nothing to write when the name and avatar are the stored ones (every launch).
+            // Nothing to write when the name, avatar and photo are the stored ones (every launch).
             if (session != current) store.update { it.signedIn(session) }
             _state.value = AuthState.SignedIn(session, user)
         }

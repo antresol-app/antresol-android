@@ -11,6 +11,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.mobile.ui.root.AntresolMobileRoot
 import app.antresol.ui.theme.AntresolTheme
@@ -52,6 +54,13 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // The profile (its photo, name, kid flag) is read again on each return to the app, so a photo
+        // changed on the web shows without a restart.
+        lifecycleScope.launch { app.session.refreshUser() }
     }
 
     private fun handleIntent(intent: Intent?) {

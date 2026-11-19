@@ -1,5 +1,6 @@
 package app.antresol.mobile.ui.settings
 
+import app.antresol.mobile.ui.LocalMediaUrls
 import android.content.Context
 import android.text.format.DateFormat
 import androidx.compose.foundation.background
@@ -172,7 +173,7 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     val name = user?.name ?: session.userName
-                    ProfileAvatar(name = name, avatar = user?.avatar ?: session.avatar, size = 56.dp)
+                    ProfileAvatar(name = name, avatar = user?.avatar ?: session.avatar, size = 56.dp, photoUrl = LocalMediaUrls.current?.image(user?.photo ?: session.photo))
                     Column {
                         Text(name, style = Antresol.typography.sectionTitle)
                         val role = when {

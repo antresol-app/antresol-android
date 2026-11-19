@@ -1,5 +1,6 @@
 package app.antresol.mobile.ui.shell
 
+import app.antresol.mobile.ui.LocalMediaUrls
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -61,7 +62,7 @@ fun AccountSheet(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 val name = user?.name ?: session.userName
-                ProfileAvatar(name = name, avatar = user?.avatar ?: session.avatar, size = 56.dp)
+                ProfileAvatar(name = name, avatar = user?.avatar ?: session.avatar, size = 56.dp, photoUrl = LocalMediaUrls.current?.image(user?.photo ?: session.photo))
                 Column {
                     Text(name, style = Antresol.typography.sectionTitle)
                     val role = when {

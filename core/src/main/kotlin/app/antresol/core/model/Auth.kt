@@ -23,6 +23,8 @@ data class Profile(
     val id: Long,
     val name: String = "",
     val avatar: String = "",
+    /** The profile's photo, `/api/profiles/{id}/photo?v=…` (no auth; the version changes with each upload), or "" for the letter. */
+    val photo: String = "",
     val hasPassword: Boolean = false,
 )
 
@@ -32,6 +34,8 @@ data class Me(
     val id: Long,
     val name: String = "",
     val avatar: String = "",
+    /** As [Profile.photo]. */
+    val photo: String = "",
     val hasPassword: Boolean = false,
     val isAdmin: Boolean = false,
     val isKid: Boolean = false,

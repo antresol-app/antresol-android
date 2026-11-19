@@ -11,6 +11,8 @@ data class StoredSession(
     val token: String,
     val userName: String = "",
     val avatar: String = "",
+    /** [app.antresol.core.model.Me.photo], kept so the top bar draws the photo before `/api/me` answers. */
+    val photo: String = "",
 )
 
 /**

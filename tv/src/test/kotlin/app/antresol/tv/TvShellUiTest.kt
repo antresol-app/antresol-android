@@ -544,6 +544,34 @@ class TvShellUiTest {
         assertTrue("the New Releases shelf (its card in the library) was not shown", trackedShown)
     }
 
+    /**
+     * Focus selects in the top navigation: resting on a tab opens it (focus staying on the tab), passing over tabs
+     * opens none of the ones passed. Only the focused element is white: the current page's selected sort pill is grey
+     * while focus is in the navigation.
+     */
+    @Test
+    fun focusOnATabOpensItAndKeepsFocusInTheNav() {
+        compose.mainClock.autoAdvance = false
+        key(KeyEvent.KEYCODE_DPAD_UP)
+        runFor(400)
+        press(KeyEvent.KEYCODE_DPAD_RIGHT) // Movies, passed over
+        runFor(100)
+        press(KeyEvent.KEYCODE_DPAD_RIGHT) // Shows: rests there
+        runFor(100)
+        val grids = { fake.requests.filter { it.startsWith("GET /api/items?") } }
+        assertEquals("a tab opened before focus rested on it", emptyList<String>(), grids())
+        runFor(600)
+        waitFor(hasText("Show 2"))
+        // Shows' grid only: Movies, passed over, was never opened.
+        assertTrue(grids().toString(), grids().isNotEmpty() && grids().all { "kind=series" in it })
+        assertFocusedText("Shows")
+        compose.mainClock.autoAdvance = true
+        settleImages()
+        shot("shell-shows-nav-focused")
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        assertTrue("focus left the nav for the grid", compose.onAllNodes(isFocused() and hasText("Shows"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+    }
+
     /** Item 7: no Books tab, no book scope or tiles in search. */
     @Test
     fun noBooksOnTv() {

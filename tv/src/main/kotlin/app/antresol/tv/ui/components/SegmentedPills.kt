@@ -9,10 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -20,7 +17,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -32,7 +28,8 @@ import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
 
 /**
- * The segmented sort control of grid pages ("Recently Added | By Title | By Year"). With
+ * The segmented sort control of grid pages ("Recently Added | By Title | By Year"); the selected pill is grey, the
+ * focused one white ([choicePillColors]). With
  * [selectOnFocus] a pill is selected as soon as it gets focus (season pills), not only on OK.
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -44,7 +41,6 @@ fun SegmentedPills(
     modifier: Modifier = Modifier,
     selectOnFocus: Boolean = false,
 ) {
-    var rowFocused by remember { mutableStateOf(false) }
     val requesters = remember(options.size) { List(options.size) { FocusRequester() } }
     Row(
         modifier = modifier
@@ -53,8 +49,7 @@ fun SegmentedPills(
             .focusGroup()
             .background(AntresolColors.Glass, AntresolShapes.pill)
             .border(1.dp, AntresolColors.GlassBorder, AntresolShapes.pill)
-            .padding(4.dp)
-            .onFocusChanged { rowFocused = it.hasFocus },
+            .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -67,18 +62,7 @@ fun SegmentedPills(
                     .height(32.dp)
                     .onFocusChanged { if (selectOnFocus && it.isFocused && !selected) onSelect(index) },
                 shape = ClickableSurfaceDefaults.shape(AntresolShapes.pill),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = when {
-                        selected && !rowFocused -> AntresolColors.Label
-                        selected -> AntresolColors.FillPrimary
-                        else -> Color.Transparent
-                    },
-                    contentColor = if (selected && !rowFocused) AntresolColors.LabelInverse else AntresolColors.LabelSecondary,
-                    focusedContainerColor = AntresolColors.Label,
-                    focusedContentColor = AntresolColors.LabelInverse,
-                    pressedContainerColor = AntresolColors.LabelSecondary,
-                    pressedContentColor = AntresolColors.LabelInverse,
-                ),
+                colors = choicePillColors(selected),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
             ) {
                 Box(Modifier.align(Alignment.Center).padding(horizontal = 16.dp)) {

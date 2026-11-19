@@ -192,6 +192,22 @@ private fun MenuRow(option: MenuOption, onClick: () -> Unit, modifier: Modifier 
     }
 }
 
+/**
+ * Colours of a pill that is one choice of several (the top tabs, sort, filter and season pills). White means focus
+ * and nothing else: only the focused pill is white with black text. The [selected] one is a grey fill with white text
+ * wherever focus is (in its own row, in the top navigation, in the content), so a white tab over a white sort pill can
+ * never leave the user guessing which of them has focus.
+ */
+@Composable
+fun choicePillColors(selected: Boolean) = ClickableSurfaceDefaults.colors(
+    containerColor = if (selected) AntresolColors.FillPrimary else Color.Transparent,
+    contentColor = if (selected) AntresolColors.Label else AntresolColors.LabelSecondary,
+    focusedContainerColor = AntresolColors.Label,
+    focusedContentColor = AntresolColors.LabelInverse,
+    pressedContainerColor = AntresolColors.LabelSecondary,
+    pressedContentColor = AntresolColors.LabelInverse,
+)
+
 /** Colours of focusable list rows: transparent at rest, white with black text when focused. */
 @Composable
 fun listRowColors() = ClickableSurfaceDefaults.colors(

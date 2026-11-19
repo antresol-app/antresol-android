@@ -57,7 +57,7 @@ import app.antresol.ui.R
 import app.antresol.ui.theme.AntresolColors
 
 /**
- * A titled, adaptive grid of cards with sort pills (Movies, TV Shows, All Albums, a shelf's "See all").
+ * A titled, adaptive grid of cards with sort pills (Movies, Shows, All Albums, a shelf's "See all").
  * Tab roots pass [onBack] = null and get the tab header; pushed pages get a back button.
  */
 @Composable

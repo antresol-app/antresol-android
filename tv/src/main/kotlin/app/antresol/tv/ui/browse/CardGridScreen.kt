@@ -57,7 +57,7 @@ import app.antresol.ui.theme.Antresol
 private const val PREFETCH_DISTANCE = 18
 
 /**
- * A library grid (Movies, TV Shows, albums, artists, playlists): page title, segmented sort pills,
+ * A library grid (Movies, Shows, albums, artists, playlists): page title, segmented sort pills,
  * an optional Shuffle pill (genre albums), and the cards in the source's shape.
  *
  * The grid scrolls in the area below the top navigation and never under it, so the navigation

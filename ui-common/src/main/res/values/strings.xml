@@ -6,7 +6,7 @@
     <string name="nav_search">Search</string>
     <string name="nav_home">Home</string>
     <string name="nav_movies">Movies</string>
-    <string name="nav_tv_shows">TV Shows</string>
+    <string name="nav_tv_shows">Shows</string>
     <string name="nav_music">Music</string>
     <string name="nav_books">Books</string>
     <string name="nav_settings">Settings</string>
@@ -46,7 +46,7 @@
     <!-- Hero -->
     <string name="hero_new_in_library">New in Library</string>
     <string name="kind_movie">Movie</string>
-    <string name="kind_series">TV Show</string>
+    <string name="kind_series">Show</string>
     <string name="kind_episode">Episode</string>
     <string name="kind_album">Album</string>
     <string name="kind_artist">Artist</string>
@@ -108,7 +108,7 @@
     <string name="password_show_keyboard">Press OK to type</string>
     <string name="account_admin">Administrator</string>
     <string name="home_empty">Your library is empty. Add media on the server and it will show up here.</string>
-    <string name="search_section_library">Movies &amp; TV Shows</string>
+    <string name="search_section_library">Movies &amp; Shows</string>
     <string name="search_section_albums">Albums</string>
     <string name="search_section_artists">Artists</string>
     <string name="search_section_songs">Songs</string>

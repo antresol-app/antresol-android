@@ -15,6 +15,8 @@ import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
 import app.antresol.tv.autostart.AppVisibility
 import app.antresol.tv.autostart.AutostartRequest
+import app.antresol.tv.autostart.LastChannelStore
+import app.antresol.tv.autostart.PrefsLastChannelStore
 import app.antresol.tv.homechannels.DeepLinkRequest
 import app.antresol.tv.homechannels.HomeChannels
 import app.antresol.tv.playback.AudioEngine
@@ -73,6 +75,9 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
 
     /** Set when «Открывать Antresol при включении» started the app: what the shell opens (once). */
     val autostartRequested = MutableStateFlow<AutostartRequest?>(null)
+
+    /** The live channel the viewer was watching last, for «Где остановился» after a restart ([LastChannel]). */
+    val lastChannel: LastChannelStore by lazy { PrefsLastChannelStore(this) }
 
     /** Set when a tile of the TV home screen (Watch Next, the «Antresol» channel) or a deep link opened the app: what the shell opens (once). */
     val deepLinkRequested = MutableStateFlow<DeepLinkRequest?>(null)

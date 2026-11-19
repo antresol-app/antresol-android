@@ -518,6 +518,60 @@ class TvShellUiTest {
         assertTrue(fake.requests.none { it.contains("/api/me/managed") })
     }
 
+    /**
+     * The tester's crash: Down through Home with the shelves a real server sends. «Вышло новое» lists followed titles off
+     * the library as cards with id 0, several of one kind, and the shelf row keyed by kind and id threw «Key was
+     * already used» the moment it scrolled into view. Every shelf is reached, the off-library cards are not shown, and
+     * each shelf's row scrolls to its end.
+     */
+    @Test
+    fun scrollingDownThroughEveryHomeShelf() {
+        val seen = ArrayList<String>()
+        var trackedShown = false
+        repeat(8) {
+            key(KeyEvent.KEYCODE_DPAD_DOWN)
+            seen += focusedTitle()
+            trackedShown = trackedShown || compose.onAllNodes(hasText("New Releases"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            // Along the row to its end and back, so every card of it is composed.
+            key(KeyEvent.KEYCODE_DPAD_RIGHT, times = 7)
+            key(KeyEvent.KEYCODE_DPAD_LEFT, times = 7)
+        }
+        shot("shell-home-bottom")
+        assertTrue("Down did not reach the last shelf: $seen", seen.any { it.startsWith("Movie") })
+        for (off in listOf("Far Away Show", "Another Far Show", "Far Away Film")) {
+            assertTrue("$off is shown", compose.onAllNodes(hasText(off) or hasContentDescription(off), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        }
+        assertTrue("the New Releases shelf (its card in the library) was not shown", trackedShown)
+    }
+
+    /**
+     * Focus selects in the top navigation: resting on a tab opens it (focus staying on the tab), passing over tabs
+     * opens none of the ones passed. Only the focused element is white: the current page's selected sort pill is grey
+     * while focus is in the navigation.
+     */
+    @Test
+    fun focusOnATabOpensItAndKeepsFocusInTheNav() {
+        compose.mainClock.autoAdvance = false
+        key(KeyEvent.KEYCODE_DPAD_UP)
+        runFor(400)
+        press(KeyEvent.KEYCODE_DPAD_RIGHT) // Movies, passed over
+        runFor(100)
+        press(KeyEvent.KEYCODE_DPAD_RIGHT) // Shows: rests there
+        runFor(100)
+        val grids = { fake.requests.filter { it.startsWith("GET /api/items?") } }
+        assertEquals("a tab opened before focus rested on it", emptyList<String>(), grids())
+        runFor(600)
+        waitFor(hasText("Show 2"))
+        // Shows' grid only: Movies, passed over, was never opened.
+        assertTrue(grids().toString(), grids().isNotEmpty() && grids().all { "kind=series" in it })
+        assertFocusedText("Shows")
+        compose.mainClock.autoAdvance = true
+        settleImages()
+        shot("shell-shows-nav-focused")
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        assertTrue("focus left the nav for the grid", compose.onAllNodes(isFocused() and hasText("Shows"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+    }
+
     /** Item 7: no Books tab, no book scope or tiles in search. */
     @Test
     fun noBooksOnTv() {

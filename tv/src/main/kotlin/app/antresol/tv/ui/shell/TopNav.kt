@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +62,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.tv.R as TvR
 import app.antresol.tv.ui.components.ScreenPaddingH
+import app.antresol.tv.ui.components.choicePillColors
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.LogoTile
@@ -67,11 +70,12 @@ import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
+import kotlinx.coroutines.delay
 
 /**
- * The web app's top bar: brand on the left, the centred glass pill of tabs (white pill = current
- * tab), and on the right the now-playing chip (while music or an audiobook is loaded) and the
- * profile avatar, which opens Settings. Entering the pill from below lands on the current tab.
+ * The web app's top bar: brand on the left, the centred glass pill of tabs (white = the focused tab,
+ * grey = the current one; resting focus on a tab opens it), and on the right the now-playing chip
+ * (while music or an audiobook is loaded) and the profile avatar, which opens Settings. Entering the pill from below lands on the current tab.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -95,7 +99,18 @@ fun TopNav(
 ) {
     val focusManager = LocalFocusManager.current
     val requesters = remember { NavTab.entries.associateWith { FocusRequester() } }
-    var pillFocused by remember { mutableStateOf(false) }
+    // Focus selects (the Android TV and Google TV launchers): the tab focus rests on for NAV_SELECT_DELAY_MS opens,
+    // so passing over tabs loads none of them. The tab the page belongs to never re-opens: selecting it again would
+    // take a detail page back to the tab's root.
+    var focusedTab by remember { mutableStateOf<NavTab?>(null) }
+    val current = selected ?: contextTab
+    val select by rememberUpdatedState(onSelect)
+    LaunchedEffect(focusedTab, current) {
+        val tab = focusedTab ?: return@LaunchedEffect
+        if (tab == current) return@LaunchedEffect
+        delay(NAV_SELECT_DELAY_MS)
+        select(tab)
+    }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -123,7 +138,6 @@ fun TopNav(
                 .background(AntresolColors.Glass, AntresolShapes.pill)
                 .border(1.dp, AntresolColors.GlassBorder, AntresolShapes.pill)
                 .padding(4.dp)
-                .onFocusChanged { pillFocused = it.hasFocus }
                 // Coming from the content, land on the current tab (not the nearest pill).
                 .focusProperties { enter = { requesters.getValue(selected ?: contextTab ?: NavTab.Home) } }
                 .focusGroup(),
@@ -135,9 +149,12 @@ fun TopNav(
                     tab = tab,
                     selected = tab == selected,
                     context = selected == null && tab == contextTab,
-                    rowFocused = pillFocused,
                     onClick = { onSelect(tab) },
-                    modifier = Modifier.focusRequester(requesters.getValue(tab)),
+                    modifier = Modifier
+                        .focusRequester(requesters.getValue(tab))
+                        .onFocusChanged { state ->
+                            if (state.isFocused) focusedTab = tab else if (focusedTab == tab) focusedTab = null
+                        },
                 )
             }
         }
@@ -151,6 +168,9 @@ fun TopNav(
         }
     }
 }
+
+/** How long focus rests on a tab before it opens (focus selects). */
+internal const val NAV_SELECT_DELAY_MS = 300L
 
 /** The glass chip with the playing song or audiobook; opens Now Playing. */
 @Composable
@@ -253,35 +273,16 @@ private fun NavPill(
     tab: NavTab,
     selected: Boolean,
     context: Boolean,
-    rowFocused: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Outside the pill the current tab is white; while the pill has focus the focused tab is white
-    // and the current one keeps a grey fill so the user still sees where they are. On a page below a
-    // tab (detail, grid) that tab keeps the grey fill.
-    val restContainer = when {
-        selected && !rowFocused -> AntresolColors.Label
-        selected || context -> AntresolColors.FillPrimary
-        else -> Color.Transparent
-    }
-    val restContent = when {
-        selected && !rowFocused -> AntresolColors.LabelInverse
-        selected || context -> AntresolColors.Label
-        else -> AntresolColors.LabelSecondary
-    }
+    // Only the focused tab is white ([choicePillColors]); the current tab, and on a page below a tab (detail, grid)
+    // that tab, keep the grey fill, so the user sees where they are and never mistakes it for focus.
     Surface(
         onClick = onClick,
         modifier = modifier.height(32.dp),
         shape = ClickableSurfaceDefaults.shape(AntresolShapes.pill),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = restContainer,
-            contentColor = restContent,
-            focusedContainerColor = AntresolColors.Label,
-            focusedContentColor = AntresolColors.LabelInverse,
-            pressedContainerColor = AntresolColors.LabelSecondary,
-            pressedContentColor = AntresolColors.LabelInverse,
-        ),
+        colors = choicePillColors(selected || context),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
     ) {
         Box(

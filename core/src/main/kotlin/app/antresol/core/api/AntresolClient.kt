@@ -213,7 +213,8 @@ class AntresolClient(
 
     // region Library
 
-    suspend fun home(): HomeResponse = get("api/home")
+    /** Only the cards an app can open, each once ([HomeResponse.openable]): every screen built on Home relies on it. */
+    suspend fun home(): HomeResponse = get<HomeResponse>("api/home").openable()
 
     /** Movies and series. [kind] is `movie`, `series` or null for both; [sort] `recent`, `title` or `year`. */
     suspend fun items(kind: String? = null, sort: String? = null, limit: Int = PAGE_SIZE, offset: Int = 0): Page<Card> =
@@ -307,7 +308,7 @@ class AntresolClient(
 
     // region Music
 
-    suspend fun musicHome(): ShelvesResponse = get("api/music/home")
+    suspend fun musicHome(): ShelvesResponse = get<ShelvesResponse>("api/music/home").openable()
 
     suspend fun albums(
         sort: String? = null,
@@ -379,7 +380,7 @@ class AntresolClient(
 
     // region Books, audiobooks, comics
 
-    suspend fun booksHome(): ShelvesResponse = get("api/books/home")
+    suspend fun booksHome(): ShelvesResponse = get<ShelvesResponse>("api/books/home").openable()
 
     /** [kind] is required: `book`, `audiobook` or `comic`; [sort] `added`, `title` or `author`. */
     suspend fun books(kind: String, sort: String? = null, limit: Int = PAGE_SIZE, offset: Int = 0): Page<Card> =

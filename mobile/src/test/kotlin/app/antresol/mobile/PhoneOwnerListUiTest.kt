@@ -114,9 +114,10 @@ class PhoneOwnerListUiTest {
 
     @Test
     fun movieWithTwoTrailersOpensTheChooser() {
-        // Movie 1 in New Movies (in Continue Watching a tap would resume it).
-        list().performScrollToNode(hasText("New Movies"))
-        compose.onAllNodes(hasText("Movie 1"), useUnmergedTree = true).onLast().performClick()
+        // Movie 1 in New Movies (in Continue Watching a tap would resume it). The whole card is tapped, not its title:
+        // with New Releases above, the row ends at the bottom edge and the title sits under the tab bar.
+        list().performScrollToNode(hasText("Movie 2"))
+        compose.onAllNodes(hasText("Movie 1")).onLast().performClick()
         waitFor(hasTestTag("detail-trailer"))
         settle()
         shot("owner-phone-movie")

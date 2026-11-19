@@ -62,10 +62,13 @@ interface CardFields {
     )
 }
 
-/** The Card object (spec section 3.1). Image fields are server-relative paths or `""`. */
+/**
+ * The Card object (spec section 3.1). Image fields are server-relative paths or `""`. [id] 0 is a title off the
+ * library (a TMDB card of «Вышло новое»): [Shelf.openable] leaves those out; a card without an id reads as one.
+ */
 @Serializable
 data class Card(
-    override val id: Long,
+    override val id: Long = 0,
     override val kind: String = "",
     override val title: String = "",
     override val subtitle: String = "",
@@ -91,7 +94,21 @@ data class Shelf(
     val id: String,
     val title: String = "",
     val cards: List<Card> = emptyList(),
-)
+) {
+    /**
+     * The cards the apps can show: library items, each once. «Вышло новое» (`tracked-new`) also lists followed
+     * titles that are not in the library as TMDB cards with id 0, which no app page can open, and several of them
+     * share kind and id: a shelf row keyed by them would hold one key twice, which Compose's lazy lists reject
+     * with a crash the moment that row is composed.
+     */
+    fun openable(): Shelf {
+        val kept = cards.filter { it.id > 0 }.distinctBy { it.kind to it.id }
+        return if (kept.size == cards.size) this else copy(cards = kept)
+    }
+}
+
+/** [Shelf.openable] of every shelf, without the shelves that are left with no card. */
+fun List<Shelf>.openable(): List<Shelf> = mapNotNull { shelf -> shelf.openable().takeIf { it.cards.isNotEmpty() } }
 
 /** Shelf ids of `GET /api/home`, `GET /api/music/home` and `GET /api/books/home`. */
 object ShelfId {
@@ -116,6 +133,9 @@ data class HomeResponse(
     val hero: List<Card> = emptyList(),
     val shelves: List<Shelf> = emptyList(),
 ) {
+    /** What the apps show: [Shelf.openable] shelves and hero. */
+    fun openable(): HomeResponse = HomeResponse(hero = hero.filter { it.id > 0 }.distinctBy { it.kind to it.id }, shelves = shelves.openable())
+
     /** Home without book cards, and without shelves that held only books (the TV apps have no books). */
     fun withoutBooks(): HomeResponse = HomeResponse(
         hero = hero.filterNot { Kind.isBook(it.kind) },
@@ -127,7 +147,10 @@ data class HomeResponse(
 
 /** Response of shelf-only home screens (`/api/music/home`, `/api/books/home`). */
 @Serializable
-data class ShelvesResponse(val shelves: List<Shelf> = emptyList())
+data class ShelvesResponse(val shelves: List<Shelf> = emptyList()) {
+    /** What the apps show: [Shelf.openable] shelves. */
+    fun openable(): ShelvesResponse = ShelvesResponse(shelves.openable())
+}
 
 /** A page of a list with `total`, used for items, albums, artists, songs and books. */
 @Serializable

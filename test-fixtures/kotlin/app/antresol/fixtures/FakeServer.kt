@@ -202,10 +202,23 @@ class FakeServer {
             "${episodeCard(EPISODE_IDS[1], 1, 2, progress = 0.4)},${movieCard(MOVIE_ID, progress = 0.3)}"
         }
 
+    /**
+     * «Вышло новое» as the server sends it: a followed title in the library is its own card; one off the library is the
+     * TMDB title with id 0, so two of them share kind and id (the apps crashed on that repeated key).
+     */
+    private val trackedCards: String
+        get() = listOf(
+            seriesCard(),
+            """{"id":0,"kind":"series","title":"Far Away Show","subtitle":"S2 · E1","tmdbKind":"series","tmdbId":9001,"season":2,"episode":1}""",
+            """{"id":0,"kind":"series","title":"Another Far Show","subtitle":"S1 · E3","tmdbKind":"series","tmdbId":9002,"season":1,"episode":3}""",
+            """{"id":0,"kind":"movie","title":"Far Away Film","tmdbKind":"movie","tmdbId":9003}""",
+        ).joinToString(",")
+
     private fun home(): String = """
         {"hero":[${seriesCard()}],
          "shelves":[
            {"id":"continue","title":"Continue Watching","cards":[$continueCards]},
+           {"id":"tracked-new","title":"New Releases","cards":[$trackedCards]},
            {"id":"recent-series","title":"New Series","cards":[${seriesCard()}]},
            {"id":"recent-movies","title":"New Movies","cards":[${(0 until 6).joinToString(",") { movieCard(MOVIE_ID + it, watched = it % 3 == 1) }}]}
          ]}

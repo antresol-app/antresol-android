@@ -60,7 +60,7 @@ private val TabLabelStyle = TextStyle(fontFamily = FontFamily.SansSerif, fontSiz
 val BottomBarSpace = BottomBarHeight + 24.dp
 
 /**
- * The floating glass tab bar of the phone design: a pill with Home, Movies, TV Shows, ТВ (live
+ * The floating glass tab bar of the phone design: a pill with Home, Movies, Shows, ТВ (live
  * channels), Music, Books and a separate round Search button. Six tabs fit a 360 dp phone with the
  * 10 sp labels (as on the web and the iPhone app, where «ТВ» is a tab too). The selected tab gets a lighter disc and the accent colour.
  */

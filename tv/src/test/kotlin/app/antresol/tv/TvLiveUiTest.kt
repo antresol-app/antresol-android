@@ -222,7 +222,7 @@ class TvLiveUiTest {
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         waitFor(hasText("Find movies, shows, music and books in your library."))
         compose.onNode(hasSetTextAction()).performTextReplacement("Big Buck")
-        waitFor(hasText("Movies & TV Shows"))
+        waitFor(hasText("Movies & Shows"))
         shot("10-search")
 
         // Focus is still on the search pill: Down to the field, Down to the scope pills, Down to the

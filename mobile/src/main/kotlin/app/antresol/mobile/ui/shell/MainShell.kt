@@ -274,6 +274,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         LocalHeaderProfile provides HeaderProfile(
             name = user?.name ?: state.session.userName,
             avatar = user?.avatar ?: state.session.avatar,
+            photoUrl = client.urls.image(user?.photo ?: state.session.photo),
             onClick = { showAccount = true },
         ),
     ) {
@@ -447,6 +448,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         },
                         ownName = user?.name ?: state.session.userName,
                         ownAvatar = user?.avatar ?: state.session.avatar,
+                        ownPhoto = user?.photo ?: state.session.photo,
                         onBack = back,
                     )
                 }

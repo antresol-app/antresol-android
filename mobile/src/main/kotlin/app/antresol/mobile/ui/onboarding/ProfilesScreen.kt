@@ -1,5 +1,6 @@
 package app.antresol.mobile.ui.onboarding
 
+import app.antresol.mobile.ui.LocalMediaUrls
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -189,7 +190,7 @@ private fun ProfilePicker(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Box {
-                    ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 88.dp)
+                    ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 88.dp, photoUrl = LocalMediaUrls.current?.image(profile.photo))
                     if (profile.hasPassword) {
                         Box(
                             modifier = Modifier
@@ -232,7 +233,7 @@ private fun PasswordStep(
     val focus = remember { FocusRequester() }
     LaunchedEffect(profile.id) { focus.requestFocus() }
 
-    ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 96.dp)
+    ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 96.dp, photoUrl = LocalMediaUrls.current?.image(profile.photo))
     Text(
         stringResource(R.string.password_title, profile.name),
         style = Antresol.typography.sectionTitle,

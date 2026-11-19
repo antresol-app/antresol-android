@@ -1,5 +1,9 @@
 package app.antresol.mobile.ui.root
 
+import app.antresol.mobile.ui.LocalMediaUrls
+import app.antresol.core.api.MediaUrls
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
@@ -33,7 +37,10 @@ fun AntresolMobileRoot(session: SessionManager, finder: ServerFinder = ServerFin
         when (current) {
             AuthState.Starting -> BrandSplash()
             AuthState.NoServer -> ServerScreen(session, finder)
-            is AuthState.ChooseProfile -> ProfilesScreen(session, current)
+            // Before sign-in too: the profiles' photos are on this server (they need no token).
+            is AuthState.ChooseProfile -> CompositionLocalProvider(LocalMediaUrls provides remember(current.serverUrl) { MediaUrls(current.serverUrl) }) {
+                ProfilesScreen(session, current)
+            }
             // A new profile gets a fresh navigation stack.
             is AuthState.SignedIn -> key(current.session.serverId, current.session.userId) { MainShell(session, current) }
         }

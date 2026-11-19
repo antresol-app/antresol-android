@@ -1,5 +1,6 @@
 package app.antresol.tv.ui.onboarding
 
+import app.antresol.tv.ui.LocalMediaUrls
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -282,7 +283,7 @@ private fun ProfileTile(profile: Profile, onClick: () -> Unit, modifier: Modifie
                 focusedGlow = Glow(elevationColor = Color.White.copy(alpha = 0.3f), elevation = 18.dp),
             ),
         ) {
-            ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 112.dp)
+            ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 112.dp, photoUrl = LocalMediaUrls.current?.image(profile.photo))
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
@@ -324,7 +325,7 @@ private fun PasswordStep(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            WhileNotTyping(keyboardOpen) { ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 96.dp) }
+            WhileNotTyping(keyboardOpen) { ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 96.dp, photoUrl = LocalMediaUrls.current?.image(profile.photo)) }
             Text(stringResource(R.string.password_title, profile.name), style = Antresol.typography.sectionTitle)
             TvTextField(
                 value = password,

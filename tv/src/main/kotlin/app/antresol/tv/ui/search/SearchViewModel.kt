@@ -85,7 +85,7 @@ const val SONGS_ROW = "songs"
 enum class SearchScope {
     All, Movies, Shows, Music;
 
-    /** The rows (and, for Movies / TV Shows, the cards of the library row) this scope shows. */
+    /** The rows (and, for Movies / Shows, the cards of the library row) this scope shows. */
     fun filter(rows: List<DetailRow>): List<DetailRow> = when (this) {
         All -> rows
         Movies -> rows.filter { it.id == LIBRARY_ROW }.map { row -> row.copy(cards = row.cards.filter { it.kind == Kind.MOVIE }) }

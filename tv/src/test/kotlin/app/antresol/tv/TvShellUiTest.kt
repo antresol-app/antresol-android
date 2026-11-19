@@ -166,7 +166,7 @@ class TvShellUiTest {
         // Away and back within 5 s: the same place (the last element focused before the nav).
         val left = toNav()
         val leftAt = compose.mainClock.currentTime
-        key(KeyEvent.KEYCODE_DPAD_RIGHT) // TV Shows
+        key(KeyEvent.KEYCODE_DPAD_RIGHT) // Shows
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         key(KeyEvent.KEYCODE_DPAD_LEFT) // Movies
         key(KeyEvent.KEYCODE_DPAD_CENTER)
@@ -484,7 +484,7 @@ class TvShellUiTest {
     private fun toNav(): String? {
         var last: String? = null
         repeat(8) {
-            if (compose.onAllNodes(isFocused() and (hasText("Movies") or hasText("TV Shows") or hasText("Home"))).fetchSemanticsNodes().isNotEmpty()) return last
+            if (compose.onAllNodes(isFocused() and (hasText("Movies") or hasText("Shows") or hasText("Home"))).fetchSemanticsNodes().isNotEmpty()) return last
             last = runCatching { focusedTitle() }.getOrNull()
             key(KeyEvent.KEYCODE_DPAD_UP)
         }

@@ -24,7 +24,7 @@ Shape & motion
 
 Layout patterns (see tv_.png, tv_movies.png)
 - Top bar: logo mark + "Antresol" left; centred glass pill segmented nav
-  [search icon | Home | Movies | TV Shows | Music | Books], selected item = white pill with black text;
+  [search icon | Home | Movies | Shows | Music | Books], selected item = white pill with black text;
   profile avatar circle (gradient + initial) right.
 - Home hero: full-bleed backdrop (or artwork-colour tinted gradient when no backdrop) fading to black;
   eyebrow "NEW IN LIBRARY · MOVIE" (caps, small, semibold, label-2), huge bold title, year/meta line,

@@ -42,6 +42,7 @@ import androidx.tv.material3.Text
 import app.antresol.core.model.Quality
 import app.antresol.core.session.AuthState
 import app.antresol.tv.BuildConfig
+import app.antresol.tv.ui.LocalMediaUrls
 import app.antresol.tv.autostart.AutostartController
 import app.antresol.tv.autostart.AutostartPolicy
 import app.antresol.tv.autostart.AutostartTarget
@@ -301,7 +302,7 @@ private fun ProfileColumn(
     ) {
         Text(stringResource(R.string.nav_settings), style = Antresol.typography.pageTitle, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
-        ProfileAvatar(name = session.userName, avatar = session.avatar, size = 96.dp)
+        ProfileAvatar(name = session.userName, avatar = session.avatar, size = 96.dp, photoUrl = LocalMediaUrls.current?.image(session.photo))
         Text(session.userName, style = Antresol.typography.sectionTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
         val roles = listOfNotNull(
             stringResource(R.string.account_admin).takeIf { state.user?.isAdmin == true },

@@ -3,7 +3,7 @@
 
     scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>]
 
-It answers what test-fixtures' FakeServer answers (one passwordless profile, home, grids, a film and
+It answers what test-fixtures' FakeServer answers (passwordless profiles, one with a photo, home, grids, a film and
 a series page, trailers) with the same JSON, plus live channels and the programme guide. In an
 emulator the address is http://10.0.2.2:8421 (type it: the server screen also finds the real
 servers of the home network). The port is not 8420, the one the live tests (ANTRESOL_TEST_SERVER=1)
@@ -44,7 +44,11 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 SERVER_ID = "fedcba9876543210fedcba9876543210"
-ME = {"id": 1, "name": "Alex", "avatar": "grad-3", "hasPassword": False, "isAdmin": True, "isKid": False}
+ME = {"id": 1, "name": "Alex", "avatar": "grad-3", "photo": "/api/profiles/1/photo?v=1", "hasPassword": False,
+      "isAdmin": True, "isKid": False}
+# Alex has a photo (the server's address, versioned by the upload); Sam has none and keeps the letter.
+PROFILES = [{"id": 1, "name": "Alex", "avatar": "grad-3", "photo": ME["photo"], "hasPassword": False},
+            {"id": 2, "name": "Sam", "avatar": "grad-5", "hasPassword": False}]
 SERIES, MOVIE, EPISODES = 500, 100, list(range(601, 607))
 CAST = [{"name": n, "character": c, "photo": "/api/images/cast/" + n.replace(" ", "%20")}
         for n, c in [("Ada Lovelace", "The Countess"), ("Alan Turing", "The Mathematician"), ("Grace Hopper", "The Admiral")]]
@@ -128,6 +132,26 @@ def png(path, sized=False):
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+
+
+def profile_photo():
+    """Alex's photo: a smiling face on a sky gradient, nothing a letter avatar could be taken for."""
+    n = 96
+    rows = []
+    for y in range(n):
+        row = []
+        for x in range(n):
+            face = (x - 48) ** 2 + (y - 52) ** 2 <= 30 ** 2
+            eye = (x - 37) ** 2 + (y - 44) ** 2 <= 16 or (x - 59) ** 2 + (y - 44) ** 2 <= 16
+            mouth = 15 ** 2 <= (x - 48) ** 2 + (y - 52) ** 2 <= 18 ** 2 and y > 58
+            row.append(b"\x30\x20\x20\xff" if face and (eye or mouth) else b"\xf4\xc8\x9a\xff" if face
+                       else bytes((70 + y, 130 + y // 2, 220, 255)))
+        rows.append(row)
+    raw = b"".join(b"\0" + b"".join(row) for row in rows)
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", n, n, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 
 
 # --- Music: one album of three generated tracks ---
@@ -392,6 +416,8 @@ class Handler(BaseHTTPRequestHandler):
         path, query = url.path, parse_qs(url.query)
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        if path == "/api/profiles/1/photo":
+            return self.send(200, profile_photo(), "image/png")
         if path.startswith("/api/images/") or path.endswith("/logo.png"):
             return self.send(200, png(path, sized="w" in query), "image/png")
         if path.endswith(".mp4"):
@@ -421,7 +447,7 @@ class Handler(BaseHTTPRequestHandler):
         answers = {
             "/api/health": {"ok": True, "serverId": SERVER_ID, "version": "1.5.0"},
             "/api/setup": {"needsSetup": False},
-            "/api/profiles": [{"id": 1, "name": "Alex", "avatar": "grad-3", "hasPassword": False}],
+            "/api/profiles": PROFILES,
             "/api/auth/token": {"token": "test-device-token", "user": ME},
             "/api/me": ME,
             "/api/me/ui-language": {"language": "", "effective": "en"},

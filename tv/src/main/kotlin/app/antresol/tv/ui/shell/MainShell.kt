@@ -561,6 +561,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                     contextTab = contextTab,
                     userName = state.session.userName,
                     avatar = state.session.avatar,
+                    photoUrl = client.urls.image(state.session.photo),
                     nowPlaying = audio.currentTrack?.title ?: (audio.content as? AudioContent.Audiobook)?.book?.card?.title,
                     nowPlayingActive = audio.isPlaying,
                     onSelect = selectTab,

@@ -118,7 +118,7 @@ class MobileLiveUiTest {
         compose.onNode(hasContentDescription("Back")).performClick()
 
         // TV Shows → series detail with seasons and episodes.
-        tab("TV Shows")
+        tab("Shows")
         waitFor(hasText("Test Show"))
         compose.onAllNodes(hasText("Test Show"), useUnmergedTree = true).onFirst().performClick()
         waitFor(hasText("Season 2"))
@@ -146,7 +146,7 @@ class MobileLiveUiTest {
         waitFor(hasText("Browse"))
         shot("phone-11-search-browse")
         compose.onNode(hasTestTag("search-field")).performTextReplacement("test")
-        waitFor(hasText("Movies & TV Shows"))
+        waitFor(hasText("Movies & Shows"))
         Thread.sleep(1500)
         shot("phone-12-search-results")
 
@@ -188,7 +188,7 @@ class MobileLiveUiTest {
         shot("tablet-03-detail")
         compose.onNode(hasContentDescription("Back")).performClick()
 
-        tab("TV Shows")
+        tab("Shows")
         waitFor(hasText("Test Show"))
         compose.onAllNodes(hasText("Test Show"), useUnmergedTree = true).onFirst().performClick()
         waitFor(hasText("Season 2"))
@@ -214,7 +214,7 @@ class MobileLiveUiTest {
         compose.onNode(hasTestTag("tab-Search")).performClick()
         waitFor(hasText("Browse"))
         compose.onNode(hasTestTag("search-field")).performTextReplacement("test")
-        waitFor(hasText("Movies & TV Shows"))
+        waitFor(hasText("Movies & Shows"))
         Thread.sleep(1500)
         shot("tablet-08-search")
         runBlocking { session.switchProfile() }
@@ -307,7 +307,6 @@ class MobileLiveUiTest {
 
     private fun tab(label: String) {
         compose.onNode(hasTestTag("tab-" + when (label) {
-            "TV Shows" -> "Shows"
             else -> label
         })).performClick()
         compose.waitForIdle()

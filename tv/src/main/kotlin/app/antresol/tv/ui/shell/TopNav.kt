@@ -81,6 +81,8 @@ fun TopNav(
     contextTab: NavTab?,
     userName: String,
     avatar: String,
+    /** The profile's photo, resolved; null draws the letter. */
+    photoUrl: String?,
     nowPlaying: String?,
     nowPlayingActive: Boolean,
     onSelect: (NavTab) -> Unit,
@@ -145,7 +147,7 @@ fun TopNav(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (nowPlaying != null) NowPlayingChip(nowPlaying, nowPlayingActive, onNowPlaying)
-            AvatarButton(userName, avatar, onSettings)
+            AvatarButton(userName, avatar, photoUrl, onSettings)
         }
     }
 }
@@ -224,7 +226,7 @@ private fun EqualizerBars(active: Boolean, color: Color) {
 private val PausedBars = listOf(0.5f, 1f, 0.7f)
 
 @Composable
-private fun AvatarButton(userName: String, avatar: String, onClick: () -> Unit) {
+private fun AvatarButton(userName: String, avatar: String, photoUrl: String?, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         modifier = Modifier
@@ -242,7 +244,7 @@ private fun AvatarButton(userName: String, avatar: String, onClick: () -> Unit) 
         ),
         glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Color.White.copy(alpha = 0.3f), 10.dp)),
     ) {
-        ProfileAvatar(name = userName, avatar = avatar, size = 34.dp)
+        ProfileAvatar(name = userName, avatar = avatar, size = 34.dp, photoUrl = photoUrl)
     }
 }
 

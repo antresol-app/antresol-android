@@ -28,7 +28,7 @@ import app.antresol.ui.components.ProfileAvatar
 import app.antresol.ui.theme.Antresol
 
 /** Who is signed in, for the avatar in the tab header, and what tapping it does. */
-data class HeaderProfile(val name: String, val avatar: String?, val onClick: () -> Unit)
+data class HeaderProfile(val name: String, val avatar: String?, val photoUrl: String?, val onClick: () -> Unit)
 
 val LocalHeaderProfile = staticCompositionLocalOf<HeaderProfile?> { null }
 
@@ -56,6 +56,7 @@ fun TabHeader(modifier: Modifier = Modifier) {
                 name = profile.name,
                 avatar = profile.avatar,
                 size = 38.dp,
+                photoUrl = profile.photoUrl,
                 modifier = Modifier
                     .clip(CircleShape)
                     .focusClickable(CircleShape, onClick = profile.onClick)

@@ -81,6 +81,9 @@ class MainActivity : ComponentActivity() {
         AutostartController.sync(this)
         // Brings Watch Next and the «Antresol» channel up to date (not more often than every few minutes).
         (application as AntresolTvApp).homeChannels.onAppStart()
+        // A box stays on for days: the profile (its photo, name, kid flag) is read again on each return,
+        // so a photo changed on the web shows without a restart.
+        lifecycleScope.launch { (application as AntresolTvApp).session.refreshUser() }
     }
 
     private fun handle(intent: Intent?) {

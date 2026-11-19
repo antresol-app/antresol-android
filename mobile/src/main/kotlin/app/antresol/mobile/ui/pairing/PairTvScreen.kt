@@ -1,5 +1,6 @@
 package app.antresol.mobile.ui.pairing
 
+import app.antresol.mobile.ui.LocalMediaUrls
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -85,6 +86,7 @@ fun PairTvScreen(
     viewModel: PairTvViewModel,
     ownName: String,
     ownAvatar: String,
+    ownPhoto: String = "",
     onBack: () -> Unit,
     cameraAllowed: Boolean? = null,
     scanner: @Composable (onText: (String) -> Unit, modifier: Modifier) -> Unit = { onText, modifier -> QrScanner(onText, modifier) },
@@ -117,8 +119,8 @@ fun PairTvScreen(
                         style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary),
                         modifier = Modifier.padding(vertical = 24.dp),
                     )
-                    is PairStep.Confirm -> ConfirmStep(step, viewModel, ownName, ownAvatar)
-                    is PairStep.SetupConfirm -> SetupConfirmStep(step, viewModel, ownName, ownAvatar)
+                    is PairStep.Confirm -> ConfirmStep(step, viewModel, ownName, ownAvatar, ownPhoto)
+                    is PairStep.SetupConfirm -> SetupConfirmStep(step, viewModel, ownName, ownAvatar, ownPhoto)
                     is PairStep.Done -> DoneStep(step, onAgain = viewModel::again, onBack = onBack)
                 }
             }
@@ -247,7 +249,7 @@ private fun ScanStep(
 }
 
 @Composable
-private fun ConfirmStep(step: PairStep.Confirm, viewModel: PairTvViewModel, ownName: String, ownAvatar: String) {
+private fun ConfirmStep(step: PairStep.Confirm, viewModel: PairTvViewModel, ownName: String, ownAvatar: String, ownPhoto: String) {
     val device = step.lookup.device
     Column(
         Modifier
@@ -288,7 +290,7 @@ private fun ConfirmStep(step: PairStep.Confirm, viewModel: PairTvViewModel, ownN
             .clip(AntresolShapes.card)
             .background(AntresolColors.BackgroundElevated),
     ) {
-        val choices = step.profiles.ifEmpty { listOf(Profile(step.selectedUserId, ownName, ownAvatar)) }
+        val choices = step.profiles.ifEmpty { listOf(Profile(step.selectedUserId, ownName, ownAvatar, photo = ownPhoto)) }
         choices.forEachIndexed { index, profile ->
             if (index > 0) HorizontalDivider(color = AntresolColors.Hairline, modifier = Modifier.padding(start = 64.dp))
             ProfileChoice(
@@ -335,7 +337,7 @@ private fun ProfileChoice(profile: Profile, selected: Boolean, selectable: Boole
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 36.dp)
+        ProfileAvatar(name = profile.name, avatar = profile.avatar, size = 36.dp, photoUrl = LocalMediaUrls.current?.image(profile.photo))
         Text(profile.name, style = Antresol.typography.body, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         if (selected) Icon(AntresolIcons.Check, contentDescription = null, tint = AntresolColors.Accent, modifier = Modifier.size(22.dp))
     }
@@ -346,7 +348,7 @@ private fun ProfileChoice(profile: Profile, selected: Boolean, selectable: Boole
  * chosen profile (admins may pick another one). Cancel goes back to the scanner.
  */
 @Composable
-private fun SetupConfirmStep(step: PairStep.SetupConfirm, viewModel: PairTvViewModel, ownName: String, ownAvatar: String) {
+private fun SetupConfirmStep(step: PairStep.SetupConfirm, viewModel: PairTvViewModel, ownName: String, ownAvatar: String, ownPhoto: String) {
     val resources = LocalContext.current.resources
     Column(
         Modifier
@@ -399,7 +401,7 @@ private fun SetupConfirmStep(step: PairStep.SetupConfirm, viewModel: PairTvViewM
             .clip(AntresolShapes.card)
             .background(AntresolColors.BackgroundElevated),
     ) {
-        val choices = step.profiles.ifEmpty { listOf(Profile(step.selectedUserId, ownName, ownAvatar)) }
+        val choices = step.profiles.ifEmpty { listOf(Profile(step.selectedUserId, ownName, ownAvatar, photo = ownPhoto)) }
         choices.forEachIndexed { index, profile ->
             if (index > 0) HorizontalDivider(color = AntresolColors.Hairline, modifier = Modifier.padding(start = 64.dp))
             ProfileChoice(

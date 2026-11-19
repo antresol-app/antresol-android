@@ -46,7 +46,7 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   «Sign In with Your Phone» (a QR and a 6-character code a signed-in phone approves; the TV gets a
   normal device token; the code renews itself every 5 minutes), with «Sign In with the Remote» (profile
   picker, password step) as the fallback. The session is restored on launch.
-- **Shell**: a centred glass pill (Search, Home, Movies, TV Shows, TV, Music), the now-playing chip
+- **Shell**: a centred glass pill (Search, Home, Movies, Shows, TV, Music), the now-playing chip
   while music or an audiobook is loaded, and the avatar, which opens Settings. Down from the pills
   enters the page and returns to the element that was focused there. A tab left for another one is
   back at its root (top, first element) when the user returns after more than 5 s; within 5 s it is
@@ -54,7 +54,7 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   book results out.
 - **Home**: an artwork-tinted hero (eyebrow line, huge title, white Play and glass Details pills),
   Continue Watching and every server shelf.
-- **Browse**: Movies and TV Shows grids with sort pills (they scroll below the nav, never under it);
+- **Browse**: Movies and Shows grids with sort pills (they scroll below the nav, never under it);
   Music (All Albums, Artists, Songs, Playlists, Shuffle All, genre chips, shelves); album and artist
   grids; debounced Search. Watched movies, episodes and series (and finished books, audiobooks and comic volumes) are dimmed with an eye and show no progress bar.
 - **Video**: detail pages with Play/Resume, watchlist and watched toggles, «Trailer» (played inside the app: in its own
@@ -121,7 +121,7 @@ Live UI tests (`TvLiveUiTest`, Robolectric with D-pad key events) write screensh
 
 - **Onboarding**: servers found on the home network (UDP probe + mDNS) above the address field, then
   the profile picker. Profiles with a password ask for it.
-- **Browse**: Home hero and shelves, Movies, TV Shows, Music (albums, songs, artists, playlists,
+- **Browse**: Home hero and shelves, Movies, Shows, Music (albums, songs, artists, playlists,
   genres, Shuffle All) and Books (books, audiobooks, manga & comics). There are detail pages for
   every kind of item, plus Search.
 - **Video**: a landscape player with picture-in-picture, double-tap to skip, and audio, subtitle

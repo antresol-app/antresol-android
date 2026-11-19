@@ -108,6 +108,21 @@ class SessionManagerTest {
     }
 
     @Test
+    fun refreshUserKeepsANewPhoto() = runTest {
+        // A photo set on the web reaches the stored session on the next /api/me, so the top bar shows it
+        // at once on the next launch too; removing it brings the letter back.
+        store.update { it.connected(baseUrl, "srv1").signedIn(StoredSession(baseUrl, "srv1", 1, "tok", "Admin", "grad-1")) }
+        val manager = manager()
+        enqueue("""{"id":1,"name":"Admin","avatar":"grad-1","photo":"/api/profiles/1/photo?v=7"}""")
+        manager.restore()
+        assertEquals("/api/profiles/1/photo?v=7", store.load().active?.photo)
+        assertEquals("/api/profiles/1/photo?v=7", (manager.state.value as AuthState.SignedIn).user?.photo)
+        enqueue("""{"id":1,"name":"Admin","avatar":"grad-1"}""")
+        manager.refreshUser()
+        assertEquals("", store.load().active?.photo)
+    }
+
+    @Test
     fun restoreOfflineKeepsStoredSession() = runTest {
         val session = StoredSession(baseUrl, "srv1", 1, "tok", "Admin", "grad-1")
         store.update { it.connected(baseUrl, "srv1").signedIn(session) }

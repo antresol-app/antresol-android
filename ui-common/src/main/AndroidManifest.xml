@@ -4,4 +4,10 @@
     <!-- LAN server discovery (both apps): a Wi-Fi multicast lock while the server list is shown, so
          mDNS answers and UDP broadcast replies are not filtered by the Wi-Fi chip. Normal permission. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <!-- The multicast lock above makes Play infer a required Wi-Fi chip, which hides the apps from TV boxes on
+         Ethernet. Discovery works on any network; the address can always be typed. -->
+    <uses-feature
+        android:name="android.hardware.wifi"
+        android:required="false" />
 </manifest>

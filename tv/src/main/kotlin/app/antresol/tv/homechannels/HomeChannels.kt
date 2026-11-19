@@ -114,7 +114,7 @@ class HomeChannels(private val app: AntresolTvApp) {
             }
         }
         // A different profile, or none: the tiles of the one before must not stay. The first state is what the
-        // app started with ([onAppStart] runs for it).
+        // app started with ([onAppStart] runs for it). A switched «Отдельная история» is another Continue too.
         scope.launch {
             app.session.state.map(::identity).filterNotNull().distinctUntilChanged().drop(1).collect { request(force = true) }
         }
@@ -145,7 +145,8 @@ class HomeChannels(private val app: AntresolTvApp) {
 
     private fun identity(state: AuthState): String? = when (state) {
         AuthState.Starting -> null
-        is AuthState.SignedIn -> "${state.session.serverId}/${state.session.userId}"
+        // Until `/api/me` answered the device's history is not known: no identity yet (not a change).
+        is AuthState.SignedIn -> state.user?.let { "${state.session.serverId}/${state.session.userId}/${it.deviceHistory?.id ?: 0}" }
         else -> ""
     }
 

@@ -28,6 +28,13 @@ With --rebuild-after N the schedule is rebuilt once, after the Nth guide page wa
 the server does it (a file went missing, an external title failed): the entries that start an hour
 or more after that moment are dropped and made again from there, numbered on from the last one
 kept. So the pages asked for later have other titles and times under ids the earlier pages used.
+
+«Отдельная история на этом устройстве»: `GET /api/me/managed`, `POST /api/me/managed`,
+`PUT /api/me/devices/current/history` and the `history` of `GET /api/me/devices` / `deviceHistory` of
+`/api/me` answer as the server does, kept for the run (one history, «Living Room», to start with; a
+history switched off with merge=false comes back on the next switch on without an account). Home's
+Continue Watching is another one while the device writes a separate history, so a reload shows. With
+--kid the profile is a kid's: the writes answer 403.
 """
 import argparse
 import json
@@ -88,9 +95,53 @@ def episode_card(i, season, number, **extra):
             "season": season, "episode": number, "durationMs": 2700000, **extra}
 
 
+# The device's separate history: the person's managed accounts, the one this device writes into
+# (None: the profile's own), and the one it had before «Оставить» (switched on again without an account).
+history = {"accounts": [{"id": 20, "name": "Living Room", "avatar": "grad-2"}], "next": 21, "current": None, "kept": None}
+
+
+def history_ref():
+    found = next((a for a in history["accounts"] if a["id"] == history["current"]), None)
+    return {"id": found["id"], "name": found["name"]} if found else None
+
+
+def managed_list():
+    device = {"id": 1, "kind": "native", "name": "Android TV", "model": "Emulator"}
+    return {"items": [{**a, "devices": [device] if a["id"] == history["current"] else []} for a in history["accounts"]]}
+
+
+def switch_history(body):
+    """`PUT /api/me/devices/current/history` {separate, accountId} or {separate: false, merge}."""
+    if body.get("separate"):
+        wanted = body.get("accountId") or history["kept"]
+        if wanted and not any(a["id"] == wanted for a in history["accounts"]):
+            return 404, {"error": "No such history"}
+        if not wanted:
+            wanted = new_account("Android TV")["id"]
+        history["current"] = wanted
+    else:
+        was, history["current"] = history["current"], None
+        # merged: the account goes (no other device writes into it here); kept: it comes back when switched on
+        if body.get("merge") and was:
+            history["accounts"] = [a for a in history["accounts"] if a["id"] != was]
+            history["kept"] = None
+        else:
+            history["kept"] = was
+    return 200, {"id": 1, "history": history_ref()}
+
+
+def new_account(name):
+    account = {"id": history["next"], "name": name, "avatar": "grad-4"}
+    history["next"] += 1
+    history["accounts"].append(account)
+    return account
+
+
 def home():
+    # Another history has another Continue Watching: what this device watched on its own.
+    resume = [movie_card(MOVIE + 10, progress=0.6)] if history["current"] else [episode_card(EPISODES[1], 1, 2, progress=0.4), movie_card(MOVIE, progress=0.3)]
     return {"hero": [series_card()], "shelves": [
-        {"id": "continue", "title": "Continue Watching", "cards": [episode_card(EPISODES[1], 1, 2, progress=0.4), movie_card(MOVIE, progress=0.3)]},
+        {"id": "continue", "title": "Continue Watching", "cards": resume},
         {"id": "recent-series", "title": "New Series", "cards": [series_card()]},
         {"id": "recent-movies", "title": "New Movies", "cards": [movie_card(MOVIE + i) for i in range(6)]}]}
 
@@ -415,7 +466,24 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         path, query = url.path, parse_qs(url.query)
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        body = json.loads(raw) if raw.strip() else {}
+        kid = ME["isKid"]
+        if path == "/api/me/devices/current/history" and self.command == "PUT":
+            return self.send(403, {"error": "Only an administrator can change this"}) if kid else self.send(*switch_history(body))
+        if path == "/api/me/managed" and self.command == "POST":
+            if kid:
+                return self.send(403, {"error": "Only an administrator can change this"})
+            name = str(body.get("name", "")).strip()
+            if not name:
+                return self.send(400, {"error": "Enter a name"})
+            return self.send(201, {**new_account(name), "devices": []})
+        if path == "/api/me/managed":
+            return self.send(200, managed_list())
+        if path == "/api/me/devices":
+            return self.send(200, {"items": [{"id": 1, "kind": "native", "name": "Android TV", "model": "Emulator", "version": "1.0",
+                                              "createdAt": "2026-11-01T10:00:00Z", "lastSeen": "2026-11-19T10:00:00Z", "current": True,
+                                              "userId": ME["id"], "userName": ME["name"], "userAvatar": ME["avatar"], "history": history_ref()}]})
         if path == "/api/profiles/1/photo":
             return self.send(200, profile_photo(), "image/png")
         if path.startswith("/api/images/") or path.endswith("/logo.png"):
@@ -449,7 +517,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/setup": {"needsSetup": False},
             "/api/profiles": PROFILES,
             "/api/auth/token": {"token": "test-device-token", "user": ME},
-            "/api/me": ME,
+            "/api/me": {**ME, "deviceHistory": history_ref()},
             "/api/me/ui-language": {"language": "", "effective": "en"},
             "/api/me/playback-prefs": {"audioLangs": [], "subMode": "off", "subLangs": []},
             "/api/home": home(),
@@ -479,7 +547,9 @@ if __name__ == "__main__":
     args.add_argument("--channels", type=int, metavar="N", help="serve N channels (default 8), to try a big playlist")
     args.add_argument("--categories", type=int, metavar="M", help="spread the channels over M categories (named like a playlist's groups)")
     args.add_argument("--old-categories", action="store_true", help="answer as a server without `categories` (the apps use each channel's `category` text)")
+    args.add_argument("--kid", action="store_true", help="the profile is a kid's (no «Отдельная история»; its writes answer 403)")
     options = args.parse_args()
+    ME["isKid"] = options.kid
     big["legacy"] = options.old_categories
     if options.channels:
         big["channels"] = options.channels

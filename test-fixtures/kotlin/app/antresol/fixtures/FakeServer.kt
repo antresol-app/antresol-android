@@ -47,6 +47,16 @@ class FakeServer {
 
     private val images = ConcurrentHashMap<String, ByteArray>()
 
+    /** The profile is a kid's: the separate-history writes answer 403, as the server's `noKids`. */
+    @Volatile var kid: Boolean = false
+
+    /** «Отдельная история на этом устройстве»: the person's histories (id → name) and the one this device writes into. */
+    val histories: MutableMap<Long, String> = java.util.Collections.synchronizedMap(linkedMapOf(20L to "Living Room"))
+
+    @Volatile var deviceHistory: Long? = null
+
+    private val nextHistory = java.util.concurrent.atomic.AtomicLong(21)
+
     val baseUrl: String get() = server.url("/").toString().trimEnd('/')
 
     fun start() {
@@ -56,6 +66,9 @@ class FakeServer {
                 requests += "${request.method} $path"
                 // Keyed without the `?w=` the apps ask a sized image with.
                 if (path.startsWith("/api/images/")) imageAuth[path.substringBefore('?')] = request.getHeader("Authorization").orEmpty()
+                if (path.startsWith("/api/me/managed") || path.startsWith("/api/me/devices/")) {
+                    return history(request.method.orEmpty(), path, request.body.readUtf8())
+                }
                 return answer(request.method.orEmpty(), path)
             }
         }
@@ -76,8 +89,8 @@ class FakeServer {
             path == "/api/health" -> json("""{"ok":true,"serverId":"$SERVER_ID","version":"1.5.0"}""")
             path == "/api/setup" -> json("""{"needsSetup":false}""")
             path == "/api/profiles" -> json("""[{"id":1,"name":"Alex","avatar":"grad-3","hasPassword":false}]""")
-            path == "/api/auth/token" -> json("""{"token":"test-device-token","user":$ME}""")
-            path == "/api/me" -> json(ME)
+            path == "/api/auth/token" -> json("""{"token":"test-device-token","user":${me()}}""")
+            path == "/api/me" -> json(me())
             path == "/api/me/ui-language" -> json("""{"language":"","effective":"en"}""")
             path == "/api/me/playback-prefs" -> json("""{"audioLangs":[],"subMode":"off","subLangs":[]}""")
             path == "/api/home" -> json(home())
@@ -89,6 +102,40 @@ class FakeServer {
             path.startsWith("/api/music/home") || path.startsWith("/api/books/home") -> json("""{"shelves":[]}""")
             path == "/api/music/genres" -> json("""{"genres":[]}""")
             path == "/api/channels" -> json("""{"channels":[]}""")
+            else -> MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
+        }
+    }
+
+    private fun me(): String = ME.replace(""""isKid":false""", """"isKid":$kid,"deviceHistory":${historyRef()}""")
+
+    private fun historyRef(): String = deviceHistory?.let { id -> """{"id":$id,"name":"${histories[id]}"}""" } ?: "null"
+
+    /** The separate-history endpoints, as `managed_handlers.go` answers them (no merge bookkeeping: a merge drops the history). */
+    private fun history(method: String, path: String, body: String): MockResponse {
+        val refused = MockResponse().setResponseCode(403).setBody("""{"error":"Only an administrator can change this"}""")
+        return when {
+            path == "/api/me/managed" && method == "GET" -> json(
+                """{"items":[${histories.entries.joinToString(",") { (id, name) -> """{"id":$id,"name":"$name","avatar":"grad-2","devices":[]}""" }}]}""",
+            )
+            kid -> refused
+            path == "/api/me/managed" && method == "POST" -> {
+                val name = Regex(""""name"\s*:\s*"([^"]*)"""").find(body)?.groupValues?.get(1).orEmpty().trim()
+                if (name.isEmpty()) return MockResponse().setResponseCode(400).setBody("""{"error":"Enter a name"}""")
+                val id = nextHistory.getAndIncrement()
+                histories[id] = name
+                json("""{"id":$id,"name":"$name","avatar":"grad-4","devices":[]}""").setResponseCode(201)
+            }
+            path == "/api/me/devices/current/history" && method == "PUT" -> {
+                if (body.contains(""""separate":true""")) {
+                    deviceHistory = Regex(""""accountId"\s*:\s*(\d+)""").find(body)?.groupValues?.get(1)?.toLong()?.takeIf { it != 0L }
+                        ?: histories.keys.first()
+                } else {
+                    val was = deviceHistory
+                    deviceHistory = null
+                    if (was != null && body.contains(""""merge":true""")) histories.remove(was)
+                }
+                json("""{"id":1,"history":${historyRef()}}""")
+            }
             else -> MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
         }
     }
@@ -147,13 +194,18 @@ class FakeServer {
         }
     }
 
+    // A separate history has its own Continue Watching: what this device watched.
+    private val continueCards: String
+        get() = if (deviceHistory != null) {
+            movieCard(MOVIE_ID + 10, progress = 0.6)
+        } else {
+            "${episodeCard(EPISODE_IDS[1], 1, 2, progress = 0.4)},${movieCard(MOVIE_ID, progress = 0.3)}"
+        }
+
     private fun home(): String = """
         {"hero":[${seriesCard()}],
          "shelves":[
-           {"id":"continue","title":"Continue Watching","cards":[
-             ${episodeCard(EPISODE_IDS[1], 1, 2, progress = 0.4)},
-             ${movieCard(MOVIE_ID, progress = 0.3)}
-           ]},
+           {"id":"continue","title":"Continue Watching","cards":[$continueCards]},
            {"id":"recent-series","title":"New Series","cards":[${seriesCard()}]},
            {"id":"recent-movies","title":"New Movies","cards":[${(0 until 6).joinToString(",") { movieCard(MOVIE_ID + it, watched = it % 3 == 1) }}]}
          ]}

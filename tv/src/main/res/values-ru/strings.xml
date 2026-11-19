@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Главный экран ТВ: канал приложения -->
+    <string name="home_channel_description">Новое в медиатеке</string>
+
     <!-- Music -->
     <string name="music_top_songs">Популярные песни</string>
     <string name="music_favorite">В избранное</string>

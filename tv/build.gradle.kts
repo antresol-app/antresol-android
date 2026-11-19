@@ -66,6 +66,9 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.tv.material)
+    // Watch Next and the «Antresol» preview channel on the TV home screen (PreviewChannelHelper), refreshed by WorkManager.
+    implementation(libs.androidx.tvprovider)
+    implementation(libs.androidx.work.runtime.ktx)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)

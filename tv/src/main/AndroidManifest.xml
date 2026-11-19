@@ -16,6 +16,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- Watch Next and the «Antresol» preview channel on the TV home screen (androidx.tvprovider). The library
+         declares WRITE_EPG_DATA itself (a normal permission, granted at install, no Play Console declaration; the
+         provider enforces it on writes) and READ_EPG_DATA (kept as the library has it: the app reads its own rows
+         back, and dropping it gains nothing). -->
+
     <uses-feature
         android:name="android.software.leanback"
         android:required="true" />
@@ -51,7 +56,24 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Tiles of the TV home screen and `adb shell am start -d antresol://play/19?u=1&n=<nonce>`: antresol://play/{id}
+                 plays from where the profile stopped, antresol://title/{kind}/{id} opens a title's page. Not
+                 BROWSABLE: a web page cannot start them. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="antresol" android:host="play" />
+                <data android:scheme="antresol" android:host="title" />
+            </intent-filter>
         </activity>
+
+        <!-- The cached pictures of the home screen tiles for the launcher (it cannot send the server's login):
+             read only, and only files named by a digest that belongs to this install. -->
+        <provider
+            android:name=".homechannels.HomeArtworkProvider"
+            android:authorities="${applicationId}.homeart"
+            android:exported="true"
+            android:grantUriPermissions="false" />
 
         <receiver
             android:name=".autostart.AutostartReceiver"

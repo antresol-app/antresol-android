@@ -39,7 +39,10 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import app.antresol.core.api.ApiException
 import app.antresol.core.model.Quality
+import app.antresol.ui.history.DeviceHistoryModel
+import app.antresol.tv.ui.components.TextFieldPanel
 import app.antresol.core.session.AuthState
 import app.antresol.tv.BuildConfig
 import app.antresol.tv.ui.LocalMediaUrls
@@ -66,14 +69,22 @@ import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
 
-private enum class SettingsMenu { Quality, Subtitles, Language, AutostartTarget, OverlayGuide, OverlayManual, ConfirmSignOut }
+private enum class SettingsMenu {
+    Quality, Subtitles, Language, AutostartTarget, OverlayGuide, OverlayManual, ConfirmSignOut, History, HistoryNew, HistoryOff;
+
+    /** The control that gets focus back when this panel closes: a history panel opened from the picker returns to its row. */
+    val opener: SettingsMenu get() = if (this == HistoryNew || this == HistoryOff) History else this
+}
 
 /**
  * Settings, opened from the avatar: the profile (switch, sign out), playback defaults (video
  * quality, subtitle language), the autostart («Открывать Antresol при включении»: off by default; it
  * guides the viewer to the «Display over other apps» permission it needs), the app language and
- * about the app. Server facts and signed-in
- * devices are managed on the web, not on a TV (as on Apple TV). Choices open a side panel (the
+ * about the app, and «Отдельная история на этом устройстве» ([deviceHistory]; null for a kid, whose
+ * switch is an administrator's): a shared TV writes its own history, picked from the person's or
+ * made by name; switching back asks whether to move what was watched here into the profile, as the
+ * web does. A switch starts the screens again on Home (see `MainShell`). Server facts and the other
+ * signed-in devices are managed on the web, not on a TV (as on Apple TV). Choices open a side panel (the
  * shell hides its nav meanwhile, see [onMenuOpenChanged]); a new language restarts the app's
  * screens from Home, so text from the server reloads in that language too. Sign Out asks first,
  * with Cancel focused.
@@ -87,6 +98,7 @@ fun SettingsScreen(
     onScrolledToTop: (Boolean) -> Unit,
     onMenuOpenChanged: (Boolean) -> Unit,
     language: UiLanguageModel,
+    deviceHistory: DeviceHistoryModel? = null,
 ) {
     val preferences by settings.preferences.collectAsStateWithLifecycle()
     LaunchedEffect(language) { language.refresh() }
@@ -113,7 +125,7 @@ fun SettingsScreen(
         if (current != null) {
             lastMenu = current
         } else {
-            lastMenu?.let { if (!openers.getValue(it).tryRequestFocus()) first.tryRequestFocus() }
+            lastMenu?.let { if (!openers.getValue(it.opener).tryRequestFocus()) first.tryRequestFocus() }
         }
     }
     BackHandler(enabled = menu != null) { menu = null }
@@ -121,6 +133,8 @@ fun SettingsScreen(
         onScrolledToTop(true)
         first.tryRequestFocus()
     }
+    LaunchedEffect(deviceHistory) { deviceHistory?.load() }
+    val history = state.user?.deviceHistory
 
     Box(Modifier.fillMaxSize()) {
         Row(
@@ -203,6 +217,27 @@ fun SettingsScreen(
                         )
                     }
                 }
+                if (deviceHistory != null) {
+                    item { Section(stringResource(R.string.history_managed_title)) }
+                    item {
+                        val failed = deviceHistory.error
+                        SettingRow(
+                            label = stringResource(R.string.history_separate),
+                            detail = when {
+                                failed != null -> failed.historyMessage()
+                                history != null -> stringResource(R.string.history_separate_on, history.name)
+                                else -> ""
+                            },
+                            value = history?.name ?: stringResource(TvR.string.settings_off),
+                            onClick = {
+                                deviceHistory.clearError()
+                                deviceHistory.load()
+                                menu = SettingsMenu.History
+                            },
+                            modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.History)),
+                        )
+                    }
+                }
                 item { Section(stringResource(R.string.settings_language)) }
                 item {
                     SettingRow(
@@ -272,6 +307,64 @@ fun SettingsScreen(
                 onDismiss = { menu = null },
                 focusIndex = 0,
             )
+            SettingsMenu.History -> if (deviceHistory != null) {
+                val accounts = deviceHistory.accounts.orEmpty()
+                val section = stringResource(R.string.history_managed_title)
+                OptionsPanel(
+                    title = stringResource(R.string.history_separate),
+                    note = stringResource(R.string.history_managed_footer),
+                    noteLines = 5,
+                    width = 460.dp,
+                    options = buildList {
+                        // Off: back to the profile's own history, after the merge question.
+                        add(MenuOption(stringResource(TvR.string.settings_off), selected = history == null) {
+                            if (history != null) menu = SettingsMenu.HistoryOff
+                        })
+                        accounts.forEachIndexed { index, account ->
+                            add(
+                                MenuOption(account.name, selected = account.id == history?.id, section = section.takeIf { index == 0 }) {
+                                    if (account.id != history?.id) deviceHistory.use(account.id)
+                                },
+                            )
+                        }
+                        add(
+                            MenuOption(
+                                stringResource(R.string.history_managed_new),
+                                selected = false,
+                                section = section.takeIf { accounts.isEmpty() },
+                            ) { menu = SettingsMenu.HistoryNew },
+                        )
+                    },
+                    onDismiss = { if (menu == SettingsMenu.History) menu = null },
+                )
+            }
+            SettingsMenu.HistoryNew -> if (deviceHistory != null) {
+                TextFieldPanel(
+                    title = stringResource(R.string.history_managed_name),
+                    placeholder = stringResource(R.string.history_managed_name_placeholder),
+                    submitLabel = stringResource(R.string.history_managed_create),
+                    onSubmit = { name ->
+                        deviceHistory.create(name)
+                        menu = null
+                    },
+                    onDismiss = { menu = null },
+                )
+            }
+            SettingsMenu.HistoryOff -> if (deviceHistory != null && history != null) {
+                OptionsPanel(
+                    title = stringResource(R.string.history_off_title, history.name),
+                    note = stringResource(R.string.history_off_text),
+                    noteLines = 5,
+                    width = 460.dp,
+                    options = listOf(
+                        MenuOption(stringResource(R.string.action_cancel), selected = false) {},
+                        MenuOption(stringResource(R.string.history_off_keep), selected = false) { deviceHistory.turnOff(merge = false) },
+                        MenuOption(stringResource(R.string.history_off_merge), selected = false) { deviceHistory.turnOff(merge = true) },
+                    ),
+                    onDismiss = { menu = null },
+                    focusIndex = 0,
+                )
+            }
             SettingsMenu.ConfirmSignOut -> ConfirmPanel(
                 title = stringResource(TvR.string.settings_sign_out_confirm, state.session.userName),
                 confirmLabel = stringResource(R.string.profile_sign_out),
@@ -382,6 +475,13 @@ private fun SettingRow(label: String, value: String, onClick: () -> Unit, modifi
             }
         }
     }
+}
+
+/** The server's sentence for a refused switch (a kid, too many histories), else the web's «Не удалось переключить историю». */
+@Composable
+private fun Throwable.historyMessage(): String {
+    val server = (this as? ApiException)?.message?.takeUnless { it.isBlank() || it.startsWith("HTTP ") }
+    return server ?: stringResource(R.string.history_separate_failed)
 }
 
 @Composable

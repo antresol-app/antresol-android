@@ -11,6 +11,9 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
@@ -62,13 +65,16 @@ class TvShellUiTest {
             session.connect(fake.baseUrl)
             session.signIn(Profile(1, "Alex", "grad-3"), null)
         }
-        val state = session.state.value as AuthState.SignedIn
         // Coil's loader is a process-wide singleton: one built for an earlier test's application
         // would send that application's (absent) token. Use this application's loader, without
         // the crossfade: Robolectric draws no animation frames, so a first (not memory-cached) load
         // would stay at the crossfade's start, an empty frame, in the screenshots.
         coil.Coil.setImageLoader(app.newImageLoader().newBuilder().crossfade(false).build())
-        compose.setContent { AntresolTvTheme { MainShell(session, state) } }
+        // The session's state as the app's root follows it: a switched device history reaches the shell.
+        compose.setContent {
+            val state by session.state.collectAsState()
+            (state as? AuthState.SignedIn)?.let { AntresolTvTheme { MainShell(session, it) } }
+        }
         waitFor(hasText("The Test Show") and SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Text))
         waitFor(isFocused())
     }
@@ -430,6 +436,88 @@ class TvShellUiTest {
         assertTrue(fake.requests.none { it.contains("/api/me/devices") || it.contains("/api/library/status") })
     }
 
+    /**
+     * «Отдельная история на этом устройстве»: the row shows the state, the picker switches to an
+     * existing history, the shell starts again on Home with that history's Continue Watching, and
+     * switching back asks the web's merge question («Перенести в мой профиль» merges and drops it).
+     */
+    @Test
+    fun separateHistoryIsPickedAndTurnedOffWithTheMergeQuestion() {
+        openSettings()
+        historyRow()
+        assertFocusedText("Off")
+        shot("shell-history-row")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("Living Room"))
+        waitFor(isFocused() and hasAnyDescendant(hasText("Off")))
+        shot("shell-history-picker")
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        assertFocusedText("Living Room")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        // The shell starts again on Home, with this device's own Continue Watching.
+        waitFor((hasContentDescription("Movie 11") or hasText("Movie 11")))
+        assertEquals(20L, fake.deviceHistory)
+        assertTrue(fake.requests.contains("PUT /api/me/devices/current/history"))
+        settleImages()
+        shot("shell-history-home")
+
+        openSettings()
+        historyRow()
+        assertFocusedText("Living Room")
+        waitFor(hasText("History: “Living Room”"))
+        shot("shell-history-on")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(isFocused() and hasAnyDescendant(hasText("Living Room")))
+        key(KeyEvent.KEYCODE_DPAD_UP)
+        assertFocusedText("Off")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("Return “Living Room” to your history?"))
+        assertFocusedText("Cancel")
+        shot("shell-history-off")
+        key(KeyEvent.KEYCODE_DPAD_DOWN, times = 2)
+        assertFocusedText("Move to My Profile")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        compose.waitUntil(10_000) {
+            Thread.sleep(10)
+            ShadowLooper.idleMainLooper(50, TimeUnit.MILLISECONDS)
+            compose.onAllNodes((hasContentDescription("Movie 11") or hasText("Movie 11")), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
+        }
+        waitFor(hasText("Continue Watching"))
+        assertEquals(null, fake.deviceHistory)
+        assertTrue("merged history still listed", 20L !in fake.histories)
+    }
+
+    /** A new history by name (the TV keyboard's field), then this device writes into it. */
+    @Test
+    fun newSeparateHistoryIsCreatedByName() {
+        openSettings()
+        historyRow()
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("New History…"))
+        compose.onNode(hasText("New History…") and hasClickAction(), useUnmergedTree = false).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        waitFor(hasText("For example, Living Room"))
+        waitFor(isFocused() and androidx.compose.ui.test.hasSetTextAction())
+        compose.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("Kitchen")
+        compose.waitForIdle()
+        shot("shell-history-new")
+        compose.onNode(hasText("Create") and hasClickAction()).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        waitFor((hasContentDescription("Movie 11") or hasText("Movie 11")))
+        assertEquals("Kitchen", fake.histories[fake.deviceHistory])
+        assertTrue(fake.requests.contains("POST /api/me/managed"))
+    }
+
+    /** A kid's device history is an administrator's to change: no row. */
+    @Test
+    fun kidsHaveNoSeparateHistoryRow() {
+        fake.kid = true
+        runBlocking { app.session.refreshUser() }
+        openSettings()
+        waitFor(hasText("Playback", ignoreCase = true))
+        shot("shell-history-kid")
+        assertTrue(compose.onAllNodes(hasText("Separate History on This Device"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(fake.requests.none { it.contains("/api/me/managed") })
+    }
+
     /** Item 7: no Books tab, no book scope or tiles in search. */
     @Test
     fun noBooksOnTv() {
@@ -445,6 +533,25 @@ class TvShellUiTest {
     }
 
     // region helpers
+
+    private fun openSettings() {
+        toNav()
+        key(KeyEvent.KEYCODE_DPAD_RIGHT, times = 6) // past Music to the avatar
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("Switch Profile"))
+        waitFor(isFocused() and hasAnyDescendant(hasText("Switch Profile")))
+    }
+
+    /** From Switch Profile to the history row: into the list, past quality, subtitles and autostart. */
+    private fun historyRow() {
+        waitFor(hasText("Separate History on This Device"))
+        key(KeyEvent.KEYCODE_DPAD_RIGHT)
+        repeat(6) {
+            if (compose.onAllNodes(isFocused() and hasAnyDescendant(hasText("Separate History on This Device")), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) return
+            key(KeyEvent.KEYCODE_DPAD_DOWN)
+        }
+        assertFocusedText("Separate History on This Device")
+    }
 
     /** Runs the clock and the main looper for [ms] in 16 ms frames, letting network answers arrive. */
     private fun runFor(ms: Long) {

@@ -253,4 +253,18 @@
     <string name="settings_playback">Воспроизведение</string>
     <string name="settings_language">Язык</string>
     <string name="search_browse">Обзор</string>
+    <!-- «Отдельная история на этом устройстве»: как на вебе (comp.devices.*, comp.managed.*) -->
+    <string name="history_separate">Отдельная история на этом устройстве</string>
+    <string name="history_separate_on">История: «%1$s»</string>
+    <string name="history_separate_failed">Не удалось переключить историю</string>
+    <string name="history_off_title">Вернуть «%1$s» к вашей истории?</string>
+    <string name="history_off_text">Что смотрели на этом устройстве, можно перенести в ваш профиль или оставить отдельно — тогда история вернётся, если снова включить.</string>
+    <string name="history_off_merge">Перенести в мой профиль</string>
+    <string name="history_off_keep">Оставить</string>
+    <string name="history_managed_title">Отдельные истории</string>
+    <string name="history_managed_footer">Своя история для общего устройства: «Продолжить», просмотренное и «Семья смотрит» не смешиваются с вашими. Доступ и ограничения — как у профиля, отдельного входа нет.</string>
+    <string name="history_managed_new">Новая история…</string>
+    <string name="history_managed_name">Название</string>
+    <string name="history_managed_name_placeholder">Например, Гостиная</string>
+    <string name="history_managed_create">Создать</string>
 </resources>

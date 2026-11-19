@@ -3,6 +3,8 @@ package app.antresol.tv.ui.shell
 import android.app.Activity
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.key
+import androidx.compose.runtime.saveable.rememberSaveable
 import app.antresol.tv.ui.components.LocalFocusMemories
 import app.antresol.tv.ui.components.FocusMemory
 import androidx.compose.ui.platform.LocalFocusManager
@@ -118,6 +120,8 @@ import app.antresol.core.channels.LiveTvSession
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.channelsApi
 import app.antresol.ui.language.UiLanguageModel
+import app.antresol.ui.history.DeviceHistoryModel
+import app.antresol.ui.history.deviceHistoryApi
 import app.antresol.ui.language.uiLanguageApi
 import app.antresol.tv.ui.settings.restartInNewLanguage
 import app.antresol.ui.playback.LivePlayerViewModel
@@ -138,7 +142,18 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
     // Activity-retained holder, so a configuration change that recreates the Activity (a locale
     // change) keeps playback and page state. Taken first, so it is cleared after the NavHost left.
     val stores: ShellStores = viewModel()
-    val key = state.session.serverId to state.session.userId
+    val profile = state.session.serverId to state.session.userId
+    // «Отдельная история на этом устройстве» switched (here, or for this TV on the web): every page
+    // shows another history now (Home's Continue Watching, watched marks, progress), so the screens
+    // start again as after a profile switch. The first answer of `/api/me` is not a switch.
+    val history = state.user?.let { it.deviceHistory?.id ?: 0L }
+    var shownHistory by rememberSaveable(profile) { mutableStateOf(history) }
+    var generation by rememberSaveable(profile) { mutableIntStateOf(0) }
+    if (history != null && history != shownHistory) {
+        if (shownHistory != null) generation++
+        shownHistory = history
+    }
+    val key = ShellKey(profile.first, profile.second, generation)
     val viewModelStoreOwner = remember(key) {
         object : ViewModelStoreOwner {
             override val viewModelStore = stores.storeFor(key)
@@ -148,18 +163,23 @@ fun MainShell(session: SessionManager, state: AuthState.SignedIn) {
     DisposableEffect(viewModelStoreOwner) {
         onDispose { if (activity?.isChangingConfigurations != true) stores.release(key) }
     }
-    CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
-        ShellContent(session, state)
+    key(key) {
+        CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
+            ShellContent(session, state)
+        }
     }
 }
 
+/** Whose screens the shell shows: a profile on a server, and how often its device's history changed since. */
+data class ShellKey(val serverId: String, val userId: Long, val historyGeneration: Int)
+
 /** Per-profile ViewModel stores of the shell, retained across Activity recreation. */
 class ShellStores : ViewModel() {
-    private val stores = HashMap<Pair<String, Long>, ViewModelStore>()
+    private val stores = HashMap<ShellKey, ViewModelStore>()
 
-    fun storeFor(key: Pair<String, Long>): ViewModelStore = stores.getOrPut(key) { ViewModelStore() }
+    fun storeFor(key: ShellKey): ViewModelStore = stores.getOrPut(key) { ViewModelStore() }
 
-    fun release(key: Pair<String, Long>) {
+    fun release(key: ShellKey) {
         stores.remove(key)?.clear()
     }
 
@@ -466,6 +486,12 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         onScrolledToTop = onScrolledToTop,
                         onMenuOpenChanged = { panelOpen = it },
                         language = uiLanguage,
+                        // A kid's device history is an administrator's to change (the server refuses it too).
+                        deviceHistory = if (state.user?.isKid == false) {
+                            viewModel(key = "device-history") { DeviceHistoryModel(client.deviceHistoryApi(), session::deviceHistoryChanged) }
+                        } else {
+                            null
+                        },
                     )
                 }
                 page<GridRoute>(contentFocus) { entry ->

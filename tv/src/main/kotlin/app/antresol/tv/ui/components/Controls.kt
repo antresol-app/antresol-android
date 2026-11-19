@@ -285,3 +285,72 @@ fun LinkButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier)
         )
     }
 }
+
+/**
+ * An [OptionsPanel]-like panel with a [TvTextField] (focused first: OK opens the keyboard) and one
+ * button, for a name to type (a new «Отдельная история»). The keyboard's action key or the button
+ * call [onSubmit] with the text; Back closes the panel ([onDismiss]). The field sits at the top of
+ * the panel, so a TV keyboard over the middle and bottom of the screen leaves it visible.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun TextFieldPanel(
+    title: String,
+    placeholder: String,
+    submitLabel: String,
+    onSubmit: (String) -> Unit,
+    onDismiss: () -> Unit,
+    note: String? = null,
+    initial: String = "",
+    width: Dp = 420.dp,
+) {
+    var text by remember(title) { mutableStateOf(initial) }
+    val field = remember(title) { FocusRequester() }
+    var inPanel by remember(title) { mutableStateOf(false) }
+    LaunchedEffect(title) {
+        repeat(PANEL_FOCUS_FRAMES) {
+            if (inPanel) return@LaunchedEffect
+            field.tryRequestFocus(frames = 1)
+        }
+    }
+    val submit = { if (text.isNotBlank()) onSubmit(text.trim()) }
+    BackHandler(onBack = onDismiss)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.key != Key.Back) return@onPreviewKeyEvent false
+                if (event.type == KeyEventType.KeyUp) onDismiss()
+                true
+            }
+            .background(Color.Black.copy(alpha = 0.5f)),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(width)
+                .background(AntresolColors.BackgroundElevated)
+                .padding(horizontal = 20.dp, vertical = 36.dp)
+                .onFocusChanged { inPanel = it.hasFocus }
+                .focusProperties { exit = { FocusRequester.Cancel } }
+                .focusGroup(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(title, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(horizontal = 12.dp))
+            if (note != null) {
+                Text(note, style = Antresol.typography.caption, modifier = Modifier.padding(horizontal = 12.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)
+            }
+            TvTextField(
+                value = text,
+                onValueChange = { text = it },
+                placeholder = placeholder,
+                onSubmit = submit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(field),
+            )
+            PillButton(text = submitLabel, onClick = submit, style = PillStyle.Primary, enabled = text.isNotBlank())
+        }
+    }
+}

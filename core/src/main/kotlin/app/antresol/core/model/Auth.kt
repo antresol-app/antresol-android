@@ -42,7 +42,17 @@ data class Me(
     val maxRating: String? = null,
     val remote: Boolean = false,
     val libraryOnly: Boolean = true,
+    /**
+     * The separate history this device writes into («Отдельная история на этом устройстве»), null for
+     * the profile's own. The person stays the one signed in; only progress, watched marks, «Продолжить»
+     * and the family view go to the history (a managed account of the person's).
+     */
+    val deviceHistory: HistoryRef? = null,
 )
+
+/** A device's separate history: the managed account it writes into. */
+@Serializable
+data class HistoryRef(val id: Long, val name: String = "")
 
 /** The device block sent to `POST /api/auth/token`. `id` must match [app.antresol.core.session.DeviceIds.PATTERN]. */
 @Serializable
@@ -83,6 +93,8 @@ data class DeviceSession(
     val createdAt: String = "",
     val lastSeen: String = "",
     val current: Boolean = false,
+    /** Its separate history (null: the profile's own). */
+    val history: HistoryRef? = null,
 )
 
 @Serializable
@@ -99,3 +111,32 @@ data class UserAccount(
     val isKid: Boolean = false,
     val maxRating: String? = null,
 )
+
+/** One of the person's separate histories, `GET /api/me/managed`; [devices] are those writing into it now. */
+@Serializable
+data class ManagedAccount(
+    val id: Long,
+    val name: String = "",
+    val avatar: String = "",
+    val devices: List<ManagedDevice> = emptyList(),
+)
+
+@Serializable
+data class ManagedDevice(val id: Long, val kind: String = "", val name: String = "", val model: String = "")
+
+@Serializable
+data class ManagedAccounts(val items: List<ManagedAccount> = emptyList())
+
+@Serializable
+data class ManagedCreateRequest(val name: String)
+
+/**
+ * `PUT /api/me/devices/current/history`: on ([separate]) into [accountId] (0: the account the device had,
+ * else a new one named after it), or off, [merge] moving what it watched into the profile.
+ */
+@Serializable
+data class DeviceHistoryRequest(val separate: Boolean, val accountId: Long = 0, val merge: Boolean = false)
+
+/** The answer to [DeviceHistoryRequest]: the session and the history it writes into now. */
+@Serializable
+data class DeviceHistoryResult(val id: Long = 0, val history: HistoryRef? = null)

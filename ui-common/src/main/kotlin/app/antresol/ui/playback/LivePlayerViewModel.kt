@@ -59,8 +59,11 @@ import kotlinx.coroutines.launch
  * options are the stream's own tracks ([ExternalTracks]).
  *
  * The voice, on every channel: the viewer's choice on that channel (remembered per channel on the
- * device, [ExternalTrackMemory]), else the device's language (the system locale list), else the
- * profile's audio languages, else the original ([LiveTracks.select]).
+ * device, [ExternalTrackMemory]), else the profile's audio languages («Мои языки», as for films),
+ * else the device's language (the system locale list), else the original ([LiveTracks.select]).
+ * Subtitles: the viewer's choice, else the profile's subtitle mode and languages. The options are
+ * the programme's renditions from the guide; when the guide names none but the stream has text
+ * tracks (`EXT-X-MEDIA TYPE=SUBTITLES`), the stream's own tracks are offered instead.
  *
  * Live may be paused ([togglePause]; the media session's play/pause, picture-in-picture's and a
  * remote's key go through the same player). A resume picks up where it stopped while the stream
@@ -109,7 +112,7 @@ class LivePlayerViewModel(
     private var pausedAt = 0L
     private var behindAtPause = 0L
 
-    /** The external stream's own audio / subtitle tracks (empty for Antresol's channels). */
+    /** The stream's own audio / subtitle tracks (the options of an external channel; subtitles also for ours when the guide lists none). */
     private var streamAudio: List<ProgramTrack> by mutableStateOf(emptyList())
     private var streamSubtitles: List<ProgramTrack> by mutableStateOf(emptyList())
 
@@ -152,7 +155,15 @@ class LivePlayerViewModel(
         get() = if (isExternal) streamAudio else onAirProgram?.audio.orEmpty()
 
     val subtitleOptions: List<ProgramTrack>
-        get() = if (isExternal) streamSubtitles else onAirProgram?.subtitles.orEmpty()
+        get() = if (isExternal) streamSubtitles else ownSubtitles(onAirProgram)
+
+    /** Our channel's subtitles: the guide's renditions, else the text tracks the stream carries. */
+    private fun ownSubtitles(program: ChannelProgram?): List<ProgramTrack> =
+        program?.subtitles.orEmpty().ifEmpty { streamSubtitles }
+
+    /** [subtitleOptions] come from the stream's tracks (picked by group, not by the guide's name). */
+    private val subtitlesFromStream: Boolean
+        get() = isExternal || onAirProgram?.subtitles.isNullOrEmpty()
 
     /** The mini-guide: the list the player was opened from, by number, with the current channel. */
     val miniGuide: MiniGuide
@@ -298,6 +309,16 @@ class LivePlayerViewModel(
     /** Channel up (+1, the next number) or down (−1), wrapping. False when there is no other channel. */
     fun zap(step: Int): Boolean = session.zap(step)
 
+    /** Zapping and the mini-guide move to the list of [filter] (a category picked in the player). */
+    fun setFilter(filter: ChannelFilter) = session.setFilter(filter)
+
+    /** Tunes in the channel numbered [number] (the remote's digits); false when there is none. */
+    fun tuneNumber(number: Int): Boolean {
+        val channel = state.channels.firstOrNull { it.number == number } ?: return false
+        tune(channel.id)
+        return true
+    }
+
     /** Favourite on/off for the channel on (the player's star). */
     fun toggleFavorite() {
         val channel = state.channels.firstOrNull { it.id == state.channelId } ?: return
@@ -395,12 +416,9 @@ class LivePlayerViewModel(
 
     /** The external stream's audio and subtitle groups, as the picker's options. */
     private fun readStreamTracks(tracks: Tracks) {
-        if (loaded?.external != true) {
-            streamAudio = emptyList()
-            streamSubtitles = emptyList()
-            return
-        }
-        streamAudio = ExternalTracks.options(tracks.streamTracks(C.TRACK_TYPE_AUDIO), ::trackName)
+        val external = loaded?.external == true
+        streamAudio = if (external) ExternalTracks.options(tracks.streamTracks(C.TRACK_TYPE_AUDIO), ::trackName) else emptyList()
+        // Ours too: a stream whose subtitle renditions the guide does not list still offers them.
         streamSubtitles = ExternalTracks.options(tracks.streamTracks(C.TRACK_TYPE_TEXT), ::trackName)
     }
 
@@ -431,22 +449,35 @@ class LivePlayerViewModel(
     private fun applyTracks() {
         if (released) return
         val external = loaded?.external == true || (loaded == null && isExternal)
-        val program = if (external) ChannelProgram(audio = streamAudio, subtitles = streamSubtitles) else onAirProgram
+        val onAir = onAirProgram
+        val program = if (external) {
+            ChannelProgram(audio = streamAudio, subtitles = streamSubtitles)
+        } else {
+            onAir?.copy(subtitles = ownSubtitles(onAir)) ?: ChannelProgram(subtitles = streamSubtitles).takeIf { streamSubtitles.isNotEmpty() }
+        }
+        val subsByIndex = external || subtitlesFromStream
         val selection = LiveTracks.select(program, state.prefs, trackChoice, systemLanguages)
         trackSelection = selection
         val groups = player.currentTracks.groups
-        fun find(type: Int, track: ProgramTrack): Pair<Tracks.Group, Int>? =
-            if (external) groups.byIndex(type, track) else groups.rendition(type, track)?.let { it to 0 }
+        fun find(type: Int, track: ProgramTrack, byIndex: Boolean): Pair<Tracks.Group, Int>? =
+            if (byIndex) groups.byIndex(type, track) else groups.rendition(type, track)?.let { it to 0 }
         val builder = player.trackSelectionParameters.buildUpon()
-        selection.audio?.let { wanted -> find(C.TRACK_TYPE_AUDIO, wanted) }?.let { (group, track) ->
+        // The wanted languages also go to the track selector: it picks by them whenever the override
+        // finds no group (tracks not read yet, a rendition the guide names differently).
+        builder.setPreferredAudioLanguages(*listOfNotNull(selection.audio?.let(LiveTracks::langOf)?.ifEmpty { null }).toTypedArray())
+        selection.audio?.let { wanted -> find(C.TRACK_TYPE_AUDIO, wanted, external) }?.let { (group, track) ->
             builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, track))
         }
         val subtitles = selection.subtitles
         if (subtitles == null) {
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            builder.clearOverridesOfType(C.TRACK_TYPE_TEXT)
         } else {
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            find(C.TRACK_TYPE_TEXT, subtitles)?.let { (group, track) ->
+            builder.setPreferredTextLanguages(*listOfNotNull(LiveTracks.langOf(subtitles).ifEmpty { null }).toTypedArray())
+            // Our renditions are DEFAULT=NO: without a language or an override nothing would be selected.
+            builder.setSelectUndeterminedTextLanguage(true)
+            find(C.TRACK_TYPE_TEXT, subtitles, subsByIndex)?.let { (group, track) ->
                 builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, track))
             }
         }

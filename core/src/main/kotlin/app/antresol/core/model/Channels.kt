@@ -56,6 +56,8 @@ data class ChannelCategory(
     val name: String = "",
     val kind: String = KIND_GROUP,
     val count: Int = 0,
+    /** Its channels are shown only here, never in «All», «Favourites» or another category; listed last (the adult one). */
+    val exclusive: Boolean = false,
 ) {
     companion object {
         const val KIND_AI = "ai"

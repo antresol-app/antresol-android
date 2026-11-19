@@ -70,6 +70,8 @@ fun ChannelRow(
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
     last: Boolean = false,
+    /** The channel on in the player this list is under: highlighted, «Сейчас смотрите». */
+    watching: Boolean = false,
 ) {
     val urls = LocalMediaUrls.current
     val row = Channels.rowContent(channel, nowMs)
@@ -79,7 +81,8 @@ fun ChannelRow(
         stringResource(R.string.tv_channel_number, channel.number, channel.name),
         stringResource(R.string.tv_favorite).takeIf { channel.favorite },
         title,
-        stringResource(R.string.tv_last_channel).takeIf { last },
+        stringResource(R.string.tv_last_channel).takeIf { last && !watching },
+        stringResource(R.string.tv_watching).takeIf { watching },
     ).joinToString(". ")
     var menu by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -88,7 +91,7 @@ fun ChannelRow(
                 .fillMaxWidth()
                 .padding(horizontal = PageGutter - 8.dp)
                 .clip(AntresolShapes.control)
-                .background(if (last) AntresolColors.FillQuaternary else AntresolColors.Background)
+                .background(if (watching) AntresolColors.FillTertiary else if (last) AntresolColors.FillQuaternary else AntresolColors.Background)
                 .focusClickable(AntresolShapes.control, onLongClick = { menu = true }, onClick = onClick)
                 .semantics(mergeDescendants = true) {
                     contentDescription = description
@@ -98,7 +101,7 @@ fun ChannelRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ChannelNumber(channel.number, Modifier.width(NumberWidth), highlighted = last)
+            ChannelNumber(channel.number, Modifier.width(NumberWidth), highlighted = last || watching)
             // As the web's /tv rows: the logo, else the guide icon, else the channel's initials.
             ChannelLogo(urls?.image(channel.logoUrl), height = 24.dp, reserve = true, altUrl = urls?.image(channel.logoAlt), name = channel.name)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

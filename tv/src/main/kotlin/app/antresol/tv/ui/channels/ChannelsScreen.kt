@@ -571,7 +571,7 @@ private fun ChannelPreview(channel: Channel, nowMs: Long, modifier: Modifier = M
                 modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(AntresolMotion.BACKDROP_ASPECT),
             )
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                ChannelLogo(urls?.image(channel.logoUrl), height = 24.dp, altUrl = urls?.image(channel.logoAlt))
+                ChannelLogo(urls?.image(channel.logoUrl), height = 24.dp, altUrl = urls?.image(channel.logoAlt), name = channel.name)
                 Text(
                     stringResource(R.string.tv_channel_number, channel.number, channel.name),
                     style = Antresol.typography.caption.copy(fontFeatureSettings = "tnum"),

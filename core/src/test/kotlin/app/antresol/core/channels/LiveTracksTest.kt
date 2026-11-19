@@ -35,15 +35,18 @@ class LiveTracksTest {
     private val frenchFilm = ChannelProgram(id = "1-4", audio = listOf(audio(0, "Оригинал (Français)", "fr")), subtitles = listOf(subFr))
 
     @Test
-    fun audioIsTheDevicesLanguageThenTheProfilesThenTheOriginal() {
+    fun audioIsTheProfilesLanguageThenTheDevicesThenTheOriginal() {
         assertEquals(original, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("eng", "ru"))))
         assertEquals(dub, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("ru"))))
         assertEquals(french, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("fr-FR"))))
         assertEquals(dub, LiveTracks.defaultAudio(dubOnly, PlaybackPrefs(audioLangs = listOf("en"))))
-        // The device's language before the profile's; one the programme lacks falls through.
-        assertEquals(french, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("ru")), system = listOf("fr-FR", "en-US")))
-        assertEquals(original, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("ru")), system = listOf("en-GB")))
+        // The profile's languages («Мои языки») before the device's (owner 19.11: «как в профиле»).
+        assertEquals(dub, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("ru")), system = listOf("fr-FR", "en-US")))
+        assertEquals(dub, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("ru")), system = listOf("en-GB")))
         assertEquals(dub, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("ru")), system = listOf("ja-JP")))
+        // The device's language only where the profile has none the programme carries.
+        assertEquals(french, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("de")), system = listOf("fr-FR", "en-US")))
+        assertEquals(original, LiveTracks.defaultAudio(big, PlaybackPrefs(), system = listOf("en-GB")))
         // Neither: the original (named so), else the first track.
         assertEquals(original, LiveTracks.defaultAudio(big, null))
         assertEquals(original, LiveTracks.defaultAudio(big, PlaybackPrefs(audioLangs = listOf("de"))))
@@ -52,7 +55,7 @@ class LiveTracksTest {
         assertNull(LiveTracks.defaultAudio(ChannelProgram(), null))
         // The viewer's choice on the channel beats them all.
         assertEquals(lostfilm, LiveTracks.select(big, PlaybackPrefs(audioLangs = listOf("en")), LiveTrackChoice(audio = lostfilm), system = listOf("en")).audio)
-        assertEquals(original, LiveTracks.select(big, PlaybackPrefs(audioLangs = listOf("ru")), LiveTrackChoice(), system = listOf("en")).audio)
+        assertEquals(dub, LiveTracks.select(big, PlaybackPrefs(audioLangs = listOf("ru")), LiveTrackChoice(), system = listOf("en")).audio)
     }
 
     @Test
@@ -106,5 +109,18 @@ class LiveTracksTest {
     fun unknownTracksKeepThePick() {
         val unknown = ChannelProgram(id = "x")
         assertEquals(LiveTrackSelection(kurazh, subDe), LiveTracks.select(unknown, null, LiveTrackChoice(kurazh, SubtitleChoice.On(subDe))))
+    }
+
+    @Test
+    fun theProfilesPreferCleanedPicksTheVoicesCleanedTwin() {
+        val lf = audio(0, "LostFilm", "ru")
+        val lfClean = audio(1, "LostFilm (очищено)", "ru").copy(cleanedOf = "LostFilm")
+        val program = ChannelProgram(audio = listOf(lf, lfClean, original))
+        assertEquals(lf, LiveTracks.defaultAudio(program, PlaybackPrefs(audioLangs = listOf("ru"))))
+        assertEquals(lfClean, LiveTracks.defaultAudio(program, PlaybackPrefs(audioLangs = listOf("ru"), preferCleaned = true)))
+        // A voice without a twin stays itself.
+        assertEquals(original, LiveTracks.defaultAudio(program, PlaybackPrefs(audioLangs = listOf("en"), preferCleaned = true)))
+        // The twin is never picked for its language ahead of its voice.
+        assertEquals(lf, LiveTracks.defaultAudio(ChannelProgram(audio = listOf(lfClean, lf)), PlaybackPrefs(audioLangs = listOf("ru"))))
     }
 }

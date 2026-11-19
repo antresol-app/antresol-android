@@ -3,7 +3,6 @@ package app.antresol.tv.ui.player
 import app.antresol.core.channels.liveAudioEntries
 import app.antresol.ui.channels.ChannelLogo
 import app.antresol.ui.channels.channelNumberWidth
-import app.antresol.ui.channels.reserveLogoSlot
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.testTag
@@ -94,6 +93,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.tv.material3.Text
 import app.antresol.core.channels.Channels
+import app.antresol.core.channels.ChannelDigits
 import app.antresol.core.channels.LiveStream
 import app.antresol.core.channels.LiveTvState
 import app.antresol.core.channels.MiniGuide
@@ -130,7 +130,7 @@ private val GuidePanelWidth = 380.dp
 private enum class Banner { Hidden, Zap, Actions }
 
 /** What is open over the picture besides the banner. */
-private enum class Panel { None, Channels, Audio, Subtitles }
+private enum class Panel { None, Channels, Categories, Audio, Subtitles }
 
 /** A button of the banner. */
 private enum class LiveAction { PlayPause, GoLive, Favorite, Audio, Subtitles, Channels }
@@ -183,6 +183,11 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
     // a cleaned voice is not a row: «Очищенный перевод» last (core liveAudioEntries)
     val audioEntries = liveAudioEntries(viewModel.audioOptions, viewModel.trackSelection.audio?.name)
     val subtitles = viewModel.subtitleOptions
+    // TiviMate's group column: Favourites, All, then the categories (adult ones last, core Channels.categoryList).
+    val categories = Channels.filterOptions(state.channels, state.categories.ifEmpty { null })
+    // The remote's digits: «23_» and the switch 1.5 s after the last one, or at once on OK.
+    var typed by remember { mutableStateOf("") }
+    var noChannel by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(banner, interactions, viewModel.isPlaying, state.channelId, panel) {
         if (banner != Banner.Hidden && viewModel.isPlaying && panel == Panel.None) {
@@ -218,6 +223,30 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
     BackHandler(enabled = panel != Panel.None) { panel = Panel.None }
     BackHandler(enabled = panel == Panel.None && banner != Banner.Hidden && viewModel.isPlaying) { banner = Banner.Hidden }
 
+    fun commitDigits() {
+        val number = ChannelDigits.number(typed)
+        typed = ""
+        if (number == null) return
+        if (viewModel.tuneNumber(number)) {
+            if (panel == Panel.Channels || panel == Panel.Categories) panel = Panel.None
+            if (banner != Banner.Actions) banner = Banner.Zap
+        } else {
+            noChannel = number
+        }
+    }
+    LaunchedEffect(typed) {
+        if (typed.isNotEmpty()) {
+            delay(ChannelDigits.COMMIT_MS)
+            commitDigits()
+        }
+    }
+    LaunchedEffect(noChannel) {
+        if (noChannel != null) {
+            delay(NO_CHANNEL_MS)
+            noChannel = null
+        }
+    }
+
     fun zap(step: Int) {
         if (viewModel.zap(step)) {
             if (panel == Panel.Channels) panel = Panel.None
@@ -229,6 +258,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         panel = next
         panelIndex = when (next) {
             Panel.Channels -> guide.currentIndex
+            Panel.Categories -> categories.indexOfFirst { it.filter == state.filter }.coerceAtLeast(0)
             Panel.Audio -> audioEntries.indexOfFirst { it.checked && !it.isToggle }.coerceAtLeast(0)
             Panel.Subtitles -> subtitles.indexOfFirst { it.name == selection.subtitles?.name } + 1
             Panel.None -> 0
@@ -252,6 +282,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
 
     fun panelSize(): Int = when (panel) {
         Panel.Channels -> guide.channels.size
+        Panel.Categories -> categories.size
         Panel.Audio -> audioEntries.size
         Panel.Subtitles -> subtitles.size + 1
         Panel.None -> 0
@@ -262,6 +293,16 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             Panel.Channels -> guide.channels.getOrNull(panelIndex)?.let { channel ->
                 viewModel.tune(channel.id)
                 banner = Banner.Zap
+            }
+            Panel.Categories -> {
+                categories.getOrNull(panelIndex)?.let { option ->
+                    viewModel.setFilter(option.filter)
+                    val next = Channels.miniGuide(Channels.filter(state.channels, option.filter, state.categories), state.channelId)
+                    // Back to the channels of the category picked, on the channel on (or its first).
+                    panel = Panel.Channels
+                    panelIndex = next.currentIndex
+                }
+                return
             }
             Panel.Audio -> audioEntries.getOrNull(panelIndex)?.let { viewModel.selectAudio(it.plays) }
             Panel.Subtitles -> viewModel.selectSubtitles(subtitles.getOrNull(panelIndex - 1))
@@ -275,6 +316,17 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         val up = event.type == KeyEventType.KeyUp
         if (down) interactions++
         if (event.key == Key.Back) return@handler false
+        ChannelDigits.digitOf(event.nativeKeyEvent.keyCode)?.let { digit ->
+            if (down) {
+                typed = ChannelDigits.add(typed, digit)
+                noChannel = null
+            }
+            return@handler true
+        }
+        if (typed.isNotEmpty() && event.key in CenterKeys) {
+            if (up) commitDigits()
+            return@handler true
+        }
         val channelStep = when (event.key) {
             Key.ChannelUp, Key.PageUp, Key.MediaNext -> 1
             Key.ChannelDown, Key.PageDown, Key.MediaPrevious -> -1
@@ -295,8 +347,22 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             when (event.key) {
                 Key.DirectionUp -> if (down) panelIndex = (panelIndex - 1).coerceAtLeast(0)
                 Key.DirectionDown -> if (down) panelIndex = (panelIndex + 1).coerceAtMost(panelSize() - 1)
-                Key.DirectionRight -> if (down && panel == Panel.Channels) panel = Panel.None
-                Key.DirectionLeft -> if (down && panel != Panel.Channels) panel = Panel.None
+                Key.DirectionRight -> if (down) {
+                    when (panel) {
+                        Panel.Channels -> panel = Panel.None
+                        // Right from the categories: back to the channels as they were.
+                        Panel.Categories -> openPanel(Panel.Channels)
+                        else -> Unit
+                    }
+                }
+                // Left from the channels: the category column beside them (TiviMate).
+                Key.DirectionLeft -> if (down) {
+                    when (panel) {
+                        Panel.Channels -> if (categories.size > 2) openPanel(Panel.Categories)
+                        Panel.Categories -> Unit
+                        else -> panel = Panel.None
+                    }
+                }
                 in CenterKeys -> if (up) runPanel()
             }
             return@handler true
@@ -382,6 +448,32 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             ChannelBanner(viewModel, actions = if (banner == Banner.Actions && panel == Panel.None) actions else emptyList(), selected = actionIndex)
         }
         AnimatedVisibility(
+            visible = panel == Panel.Categories,
+            enter = slideInHorizontally(tween(AntresolMotion.MEDIUM_MS)) { -it } + fadeIn(tween(AntresolMotion.MEDIUM_MS)),
+            exit = fadeOut(tween(AntresolMotion.MEDIUM_MS)),
+            modifier = Modifier.align(Alignment.CenterStart),
+        ) {
+            val highlighted = categories.getOrNull(panelIndex)?.filter ?: state.filter
+            CategoryColumn(
+                options = categories.map { option ->
+                    CategoryEntry(
+                        label = (option.filter as? ChannelFilter.Category)?.let { option.label?.takeIf(String::isNotBlank) } ?: filterTitle(option.filter, state.categories),
+                        count = option.count,
+                        current = option.filter == state.filter,
+                    )
+                },
+                selected = panelIndex,
+            ) {
+                ChannelListPanel(
+                    guide = Channels.miniGuide(Channels.filter(state.channels, highlighted, state.categories), state.channelId),
+                    title = filterTitle(highlighted, state.categories),
+                    currentId = state.channelId,
+                    selected = -1,
+                    startPadding = 12.dp,
+                )
+            }
+        }
+        AnimatedVisibility(
             visible = panel == Panel.Channels,
             enter = slideInHorizontally(tween(AntresolMotion.MEDIUM_MS)) { -it } + fadeIn(tween(AntresolMotion.MEDIUM_MS)),
             exit = slideOutHorizontally(tween(AntresolMotion.MEDIUM_MS)) { -it } + fadeOut(tween(AntresolMotion.MEDIUM_MS)),
@@ -403,6 +495,13 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             is LiveStream.Ready -> if (viewModel.awaitingPicture || (viewModel.isBuffering && !viewModel.paused)) Spinner()
             is LiveStream.Failed -> FailedView(stream.message, stream.external)
         }
+        if (typed.isNotEmpty() || noChannel != null) {
+            DigitsOverlay(
+                text = noChannel?.let { stringResource(R.string.tv_no_channel, it) } ?: ChannelDigits.display(typed),
+                channel = ChannelDigits.number(typed)?.let { n -> state.channels.firstOrNull { it.number == n } },
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 36.dp, end = ScreenPaddingH),
+            )
+        }
         if (panel == Panel.Audio || panel == Panel.Subtitles) {
             val options = if (panel == Panel.Audio) {
                 audioEntries.map { e ->
@@ -423,6 +522,82 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
 }
 
 private val CenterKeys = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
+
+/** How long «No channel 23» stays. */
+private const val NO_CHANNEL_MS = 2_000L
+
+/**
+ * The number typed on the remote, top right like TiviMate: «23_» large, and the channel it will
+ * switch to (its logo or tile and name) when there is one.
+ */
+@Composable
+internal fun DigitsOverlay(text: String, channel: Channel?, modifier: Modifier = Modifier) {
+    val urls = LocalMediaUrls.current
+    Row(
+        modifier
+            .background(AntresolColors.Glass, AntresolShapes.card)
+            .padding(horizontal = 24.dp, vertical = 14.dp)
+            .testTag("live-digits"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (channel != null) {
+            ChannelLogo(urls?.image(channel.logoUrl), height = 32.dp, altUrl = urls?.image(channel.logoAlt), name = channel.name)
+            Text(channel.name, style = Antresol.typography.title, color = AntresolColors.LabelSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 280.dp))
+        }
+        Text(text, style = Antresol.typography.heroTitle.copy(fontFeatureSettings = "tnum"), color = AntresolColors.Label, maxLines = 1)
+    }
+}
+
+/** One row of the category column. */
+internal data class CategoryEntry(val label: String, val count: Int, val current: Boolean)
+
+/**
+ * TiviMate's group column at the left of the channel panel: Favourites, All, then each category with
+ * its channel count; the selected row white, the current list marked. [channels] (the highlighted
+ * category's channels) is drawn beside it.
+ */
+@Composable
+internal fun CategoryColumn(options: List<CategoryEntry>, selected: Int, channels: @Composable () -> Unit) {
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (selected - 3).coerceAtLeast(0))
+    LaunchedEffect(selected) {
+        val visible = listState.layoutInfo.visibleItemsInfo.map { it.index }
+        if (selected !in visible.drop(1).dropLast(1)) listState.animateScrollToItem((selected - 3).coerceAtLeast(0))
+    }
+    Row(
+        Modifier
+            .fillMaxHeight()
+            .background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.95f), 0.8f to Color.Black.copy(alpha = 0.85f), 1f to Color.Transparent)),
+    ) {
+        Column(
+            Modifier.fillMaxHeight().width(CategoryColumnWidth + ScreenPaddingH).padding(start = ScreenPaddingH - 12.dp, top = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(stringResource(app.antresol.tv.R.string.tv_categories), style = Antresol.typography.sectionTitle, modifier = Modifier.padding(start = 12.dp))
+            LazyColumn(state = listState, userScrollEnabled = false, verticalArrangement = Arrangement.spacedBy(PanelRowGap), modifier = Modifier.testTag("category-column")) {
+                itemsIndexed(options) { index, option ->
+                    val isSelected = index == selected
+                    val content = if (isSelected) AntresolColors.LabelInverse else AntresolColors.Label
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .background(if (isSelected) AntresolColors.Label else if (option.current) AntresolColors.FillTertiary else Color.Transparent, AntresolShapes.control)
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(option.label, style = Antresol.typography.bodyEmphasis, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Text(option.count.toString(), style = Antresol.typography.caption.copy(fontFeatureSettings = "tnum"), color = content.copy(alpha = 0.6f), maxLines = 1)
+                    }
+                }
+            }
+        }
+        channels()
+    }
+}
+
+private val CategoryColumnWidth = 240.dp
 
 /**
  * The info bar at the bottom: the channel's number large with its name, the programme on air (still,
@@ -448,7 +623,7 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
             val logo = urls?.image(channel.logoUrl)
             val logoAlt = urls?.image(channel.logoAlt)
             // With a logo the column widens by the logo's box, so the name keeps its two lines.
-            Column(Modifier.width(if (logo != null || logoAlt != null) 132.dp + BannerLogoHeight * 1.5f + 12.dp else 132.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(Modifier.width(132.dp + BannerLogoHeight * 1.5f + 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         channel.number.toString(),
@@ -456,7 +631,7 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                         color = AntresolColors.Label,
                         maxLines = 1,
                     )
-                    ChannelLogo(logo, height = BannerLogoHeight, altUrl = logoAlt)
+                    ChannelLogo(logo, height = BannerLogoHeight, altUrl = logoAlt, name = channel.name)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(channel.name, style = Antresol.typography.title, color = AntresolColors.LabelSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -616,9 +791,8 @@ private fun ActionButton(icon: ImageVector, selected: Boolean) {
  * channel on screen has the live dot.
  */
 @Composable
-internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, selected: Int) {
+internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, selected: Int, startPadding: androidx.compose.ui.unit.Dp = ScreenPaddingH - 12.dp) {
     val urls = LocalMediaUrls.current
-    val reserveLogo = reserveLogoSlot(guide.channels.map { it.logoUrl ?: it.logoAlt })
     val nowMs = rememberNowMs()
     val context = LocalContext.current
     val numberStyle = Antresol.typography.title.copy(fontFeatureSettings = "tnum")
@@ -631,9 +805,9 @@ internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, 
     Column(
         modifier = Modifier
             .fillMaxHeight()
-            .width(GuidePanelWidth + ScreenPaddingH)
+            .width(GuidePanelWidth + startPadding + 12.dp)
             .background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.92f), 0.85f to Color.Black.copy(alpha = 0.8f), 1f to Color.Transparent))
-            .padding(start = ScreenPaddingH - 12.dp, top = 36.dp),
+            .padding(start = startPadding, top = 36.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(title, style = Antresol.typography.sectionTitle, modifier = Modifier.padding(start = 12.dp))
@@ -686,7 +860,7 @@ internal fun ChannelListPanel(guide: MiniGuide, title: String, currentId: Long, 
                         modifier = Modifier.width(numberWidth),
                     )
                     // A logo column, as in the list, only when some channel of the panel has a logo.
-                    if (reserveLogo) ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp, reserve = true, altUrl = urls?.image(channel.logoAlt), name = channel.name)
+                    ChannelLogo(urls?.image(channel.logoUrl), height = 26.dp, reserve = true, altUrl = urls?.image(channel.logoAlt), name = channel.name)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (channel.id == currentId) {

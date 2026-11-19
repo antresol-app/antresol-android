@@ -222,6 +222,8 @@
     <string name="tv_favorites_empty">No favourite channels yet</string>
     <string name="tv_favorites_empty_hint">Touch and hold a channel, or hold OK on it, to add it to Favourites.</string>
     <string name="tv_last_channel">Last channel</string>
+    <string name="tv_watching">Now watching</string>
+    <string name="tv_no_channel">No channel %1$d</string>
     <string name="tv_watch_now">Watch</string>
     <string name="tv_tomorrow">Tomorrow</string>
     <string name="tv_yesterday">Yesterday</string>

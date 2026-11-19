@@ -120,27 +120,51 @@ object Channels {
         val counts = HashMap<String, Int>()
         val firstSeen = ArrayList<String>()
         var ungrouped = 0
+        val exclusive = exclusiveIds(server)
         for (channel in sortedByNumber(channels)) {
-            val ids = categoriesOf(channel)
+            // A channel of an exclusive category counts only there.
+            val ids = categoriesOf(channel).let { all -> all.filter { it in exclusive }.ifEmpty { all } }
             if (ids.isEmpty()) ungrouped++
             for (id in ids) if (counts.merge(id, 1, Int::plus) == 1) firstSeen += id
         }
         if (server != null) {
-            return server.mapNotNull { category -> counts[category.id]?.let { category.copy(count = it) } }
+            return exclusiveLast(server.mapNotNull { category -> counts[category.id]?.let { category.copy(count = it) } })
         }
         // Without the server's list only a group can be named (its own text); a topic or source id has no name here.
         val groups = firstSeen.filter { it.startsWith("group:") }
             .map { id -> ChannelCategory(id, id.removePrefix("group:"), ChannelCategory.KIND_GROUP, counts.getValue(id)) }
-        return if (ungrouped > 0 && groups.isNotEmpty()) groups + ChannelCategory(NO_CATEGORY, "", ChannelCategory.KIND_GROUP, ungrouped) else groups
+        return adultLast(if (ungrouped > 0 && groups.isNotEmpty()) groups + ChannelCategory(NO_CATEGORY, "", ChannelCategory.KIND_GROUP, ungrouped) else groups)
     }
+
+    private val Adult = Regex("(^|[^\\p{L}\\d])(18\\+|xxx|adult|для взрослых|взросл\\p{L}*|эрот\\p{L}*|porn\\p{L}*)", RegexOption.IGNORE_CASE)
+
+    /** An adult category («18+», «XXX», «Для взрослых», «Adult»…), by its name. */
+    fun isAdult(category: ChannelCategory): Boolean = Adult.containsMatchIn(category.name.ifBlank { category.id.removePrefix("group:") })
+
+    /** [categories] in their order with the adult ones moved to the end (as TiviMate keeps them out of the way). */
+    fun adultLast(categories: List<ChannelCategory>): List<ChannelCategory> = categories.sortedBy { isAdult(it) }
+
+    /**
+     * The server's exclusive categories last ([ChannelCategory.exclusive], the adult one); a server
+     * that marks none (older) gets its adult categories last by name ([adultLast]).
+     */
+    fun exclusiveLast(categories: List<ChannelCategory>): List<ChannelCategory> =
+        if (categories.any { it.exclusive }) categories.sortedBy { it.exclusive } else adultLast(categories)
+
+    /** The ids of the exclusive categories in [categories]: their channels are shown only there. */
+    fun exclusiveIds(categories: List<ChannelCategory>?): Set<String> =
+        categories.orEmpty().filter { it.exclusive }.mapTo(HashSet()) { it.id }
+
+    private fun inExclusive(channel: Channel, exclusive: Set<String>): Boolean =
+        exclusive.isNotEmpty() && categoriesOf(channel).any { it in exclusive }
 
     /**
      * The category list of a big channel list (an external playlist has dozens of groups): «Favourites»
      * and «All» first (as the web's /tv), then [categoryList], each with its channel count.
      */
     fun filterOptions(channels: List<Channel>, server: List<ChannelCategory>? = null): List<ChannelFilterOption> = buildList {
-        add(ChannelFilterOption(ChannelFilter.Favorites, channels.count { it.favorite }))
-        add(ChannelFilterOption(ChannelFilter.All, channels.size))
+        add(ChannelFilterOption(ChannelFilter.Favorites, filter(channels, ChannelFilter.Favorites, server).size))
+        add(ChannelFilterOption(ChannelFilter.All, filter(channels, ChannelFilter.All, server).size))
         categoryList(channels, server).forEach { add(ChannelFilterOption(ChannelFilter.Category(it.id), it.count, it.name, it.kind)) }
     }
 
@@ -152,11 +176,20 @@ object Channels {
         categories.firstOrNull { it.id == filter.id }?.name?.takeIf { it.isNotBlank() }
             ?: filter.id.takeIf { it.startsWith("group:") }?.removePrefix("group:")?.takeIf { it.isNotBlank() }
 
-    /** The channels [filter] lets through, in the order of [channels] (already [ordered]). */
-    fun filter(channels: List<Channel>, filter: ChannelFilter): List<Channel> = when (filter) {
-        ChannelFilter.All -> channels
-        ChannelFilter.Favorites -> channels.filter { it.favorite }
-        is ChannelFilter.Category -> channels.filter { inCategory(it, filter.id) }
+    /**
+     * The channels [filter] lets through, in the order of [channels] (already [ordered]). A channel
+     * of an exclusive category ([categories]: the server's list) is only in that category: never in
+     * «All», «Favourites» or any other.
+     */
+    fun filter(channels: List<Channel>, filter: ChannelFilter, categories: List<ChannelCategory>? = null): List<Channel> {
+        val exclusive = exclusiveIds(categories)
+        return when (filter) {
+            ChannelFilter.All -> channels.filterNot { inExclusive(it, exclusive) }
+            ChannelFilter.Favorites -> channels.filter { it.favorite && !inExclusive(it, exclusive) }
+            is ChannelFilter.Category -> channels.filter {
+                inCategory(it, filter.id) && (filter.id in exclusive || !inExclusive(it, exclusive))
+            }
+        }
     }
 
     /** [filter] while it still means something (a category that is gone falls back to «All»). */

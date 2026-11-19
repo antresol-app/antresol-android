@@ -135,7 +135,7 @@ data class LiveTvState(
     val channel: Channel? get() = channels.firstOrNull { it.id == channelId }
 
     /** The channels of [filter], in the list's order. */
-    val listed: List<Channel> get() = Channels.filter(channels, filter)
+    val listed: List<Channel> get() = Channels.filter(channels, filter, categories)
 
     /**
      * The programme on air at [nowMs] and the one after it: from the guide once loaded, else from
@@ -227,6 +227,11 @@ class LiveTvSession(
      * Switches to the channel [step] places away in the list the player was opened from (+1 up, −1
      * down), by number, wrapping. False when there is none.
      */
+    /** The list the player zaps in becomes [filter] (the TV player's category column); the channel on stays. */
+    fun setFilter(filter: ChannelFilter) {
+        _state.update { it.copy(filter = filter) }
+    }
+
     fun zap(step: Int): Boolean {
         val state = _state.value
         val target = Channels.neighbour(state.listed, state.channelId, step, state.channel?.number) ?: return false

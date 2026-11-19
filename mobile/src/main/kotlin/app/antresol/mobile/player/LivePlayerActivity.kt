@@ -10,6 +10,9 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.view.OrientationEventListener
+import android.content.pm.ActivityInfo
 import android.util.Rational
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -42,7 +45,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * A live channel, full screen and landscape, in its own activity like the video player. It closes
+ * A live channel in its own activity like the video player: in portrait the picture on top with the
+ * programme and the channels under it, in landscape full screen ([LiveFullscreen]). It closes
  * a video that is still open (picture-in-picture) and pauses music; a profile switch closes it.
  * Leaving the app while the channel plays shrinks it to picture-in-picture; closing that window
  * ends it. One at a time: opening another channel or a video closes this one.
@@ -52,6 +56,30 @@ class LivePlayerActivity : ComponentActivity() {
     private lateinit var viewModel: LivePlayerViewModel
     private var mediaSession: MediaSession? = null
     private var inPictureInPicture by mutableStateOf(false)
+
+    // Full screen (LiveFullscreen): landscape on a phone, or the button on a tablet.
+    private var landscape by mutableStateOf(false)
+    private var smallestWidthDp by mutableStateOf(0)
+    private var userFullscreen by mutableStateOf(false)
+
+    /** The picture alone, immersive (the system bars hidden). */
+    val fullscreen: Boolean
+        get() = LiveFullscreen.isFullscreen(landscape, smallestWidthDp, userFullscreen, inPictureInPicture)
+
+    /** The orientation the full-screen button locked, until the phone is held that way (null: none). */
+    private var lockedLandscape: Boolean? = null
+    private val orientationListener by lazy {
+        object : OrientationEventListener(this) {
+            override fun onOrientationChanged(degrees: Int) {
+                val target = lockedLandscape ?: return
+                if (!LiveFullscreen.heldAsLocked(degrees, target)) return
+                lockedLandscape = null
+                disable()
+                // With auto-rotate off the lock stays: the sensor would not turn the picture back.
+                if (autoRotate()) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
+        }
+    }
 
     private val canPictureInPicture: Boolean by lazy {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
@@ -76,7 +104,40 @@ class LivePlayerActivity : ComponentActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         locale.onConfigurationChanged()
         super.onConfigurationChanged(newConfig)
+        readConfiguration(newConfig)
     }
+
+    private fun readConfiguration(config: Configuration) {
+        landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+        smallestWidthDp = config.smallestScreenWidthDp
+        applySystemBars()
+    }
+
+    /** Immersive in full screen (bars come back with a swipe), the status bar over the picture otherwise. */
+    private fun applySystemBars() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (fullscreen) hide(WindowInsetsCompat.Type.systemBars()) else show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    /** The full-screen button: turns the phone's picture, or toggles in place on a tablet. */
+    fun toggleFullscreen() {
+        when (val t = LiveFullscreen.toggle(fullscreen, smallestWidthDp, userFullscreen)) {
+            is LiveFullscreen.Toggle.InPlace -> {
+                userFullscreen = t.fullscreen
+                applySystemBars()
+            }
+            is LiveFullscreen.Toggle.Rotate -> {
+                lockedLandscape = t.landscape
+                requestedOrientation = t.orientation
+                if (orientationListener.canDetectOrientation()) orientationListener.enable()
+            }
+        }
+    }
+
+    private fun autoRotate(): Boolean =
+        runCatching { Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION) == 1 }.getOrDefault(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -111,10 +172,7 @@ class LivePlayerActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            hide(WindowInsetsCompat.Type.systemBars())
-        }
+        readConfiguration(resources.configuration)
 
         val filter = ChannelFilter.fromKey(intent.getStringExtra(EXTRA_FILTER))
         viewModel = ViewModelProvider(
@@ -134,7 +192,9 @@ class LivePlayerActivity : ComponentActivity() {
                         viewModel = viewModel,
                         inPictureInPicture = inPictureInPicture,
                         canPictureInPicture = canPictureInPicture,
+                        fullscreen = fullscreen,
                         onPictureInPicture = ::enterPictureInPicture,
+                        onToggleFullscreen = ::toggleFullscreen,
                         onExit = ::finish,
                     )
                 }
@@ -153,6 +213,7 @@ class LivePlayerActivity : ComponentActivity() {
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         inPictureInPicture = isInPictureInPictureMode
+        applySystemBars()
     }
 
     override fun onStop() {
@@ -163,6 +224,7 @@ class LivePlayerActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        orientationListener.disable()
         releaseMediaSession()
         if (current?.get() === this) current = null
         super.onDestroy()

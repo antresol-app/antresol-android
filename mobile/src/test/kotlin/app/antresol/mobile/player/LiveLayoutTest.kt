@@ -12,6 +12,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import app.antresol.core.channels.Channels
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
@@ -55,17 +65,42 @@ class LiveLayoutTest {
     )
     private val next = program.copy(id = "3-2", title = "Moscow Does Not Believe in Tears", start = program.end, end = iso(now + 200 * 60_000))
     private val channel = Channel(id = 3, number = 3, name = "Документальное и научно-популярное", category = "Кино", favorite = true, now = program, next = next)
-    private val state = LiveTvState(listOf(channel, channel.copy(id = 4, number = 4)), 3, emptyList(), LiveStream.Ready("x", 1))
-    private val allActions = TopBarActions(favorite = true, audio = true, subtitles = true, channels = true, pictureInPicture = true)
+    private val others = listOf(
+        channel.copy(id = 1, number = 1, name = "All Series", favorite = false, logoUrl = null),
+        channel.copy(id = 4, number = 4, name = "Comedy", favorite = false),
+        channel.copy(id = 5, number = 5, name = "Kids", favorite = false),
+        channel.copy(id = 6, number = 6, name = "Music", favorite = false),
+    )
+    private val state = LiveTvState(listOf(others[0], channel) + others.drop(1), 3, emptyList(), LiveStream.Ready("x", 1))
+    private fun ui(fullscreen: Boolean) = LiveControlsUi(fullscreen = fullscreen, paused = false, centre = true, behindLive = false, tracks = true, channels = true, pictureInPicture = true)
 
     private fun show(content: @Composable () -> Unit) = compose.setContent {
         AntresolTheme { Box(Modifier.fillMaxSize().background(AntresolColors.Background)) { content() } }
     }
 
+    /** A stand-in for the picture (a dusk sea). */
+    @Composable
+    private fun Picture(modifier: Modifier) = Box(modifier.background(Brush.verticalGradient(listOf(Color(0xFF1B3A5C), Color(0xFF3F6E8C), Color(0xFFB88A5A), Color(0xFF173247)))))
+
+    @Composable
+    private fun Controls(fullscreen: Boolean, s: LiveTvState = state, u: LiveControlsUi = ui(fullscreen)) =
+        LiveControls(s, u, {}, {}, {}, {}, {}, {}, {}, {})
+
+    /** The portrait player: the picture with its controls, the details and the list under it. */
+    private fun portrait(controls: Boolean = true, s: LiveTvState = state) = show {
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
+                Picture(Modifier.fillMaxSize())
+                if (controls) Controls(fullscreen = false, s = s)
+            }
+            LiveBelow(s, Channels.miniGuide(s.listed, s.channelId), behindLive = false, onGoLive = {}, onFavorite = {}, onTune = {}, modifier = Modifier.weight(1f))
+        }
+    }
+
     private fun bars() = show {
         Box(Modifier.fillMaxSize()) {
-            LiveTopBar(allActions, {}, {}, {}, {}, {}, {}, {}, Modifier.align(Alignment.TopCenter))
-            Box(Modifier.align(Alignment.BottomCenter)) { InfoBar(state) }
+            Picture(Modifier.fillMaxSize())
+            Controls(fullscreen = true)
         }
     }
 
@@ -99,22 +134,74 @@ class LiveLayoutTest {
 
     @Test
     @Config(sdk = [35], qualifiers = "w360dp-h640dp-port")
-    fun playerBarsFitA360dpPortraitScreen() {
-        bars()
-        compose.onNodeWithTag("live-more").assertExists()
-        compose.onNodeWithTag("live-audio").assertDoesNotExist()
+    fun thePortraitPlayerFitsA360dpScreen() {
+        portrait()
+        compose.onNodeWithTag("live-tracks").assertExists()
+        compose.onNodeWithTag("live-fullscreen").assertExists()
+        // The guide button and the star are full-screen controls: in portrait the list and the star are below.
+        compose.onNodeWithTag("live-guide").assertDoesNotExist()
+        compose.onAllNodesWithTag("live-favorite").assertCountEquals(1)
         assertNothingOverflows()
-        capture("robolectric-player-bars-360dp-portrait")
+        capture("portrait-360dp")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-xhdpi")
+    fun portraitShot() {
+        portrait()
+        assertNothingOverflows()
+        capture("portrait")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-xhdpi")
+    fun portraitStartingShot() {
+        show {
+            Column(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black)) {
+                    Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Spinner()
+                        Text(stringResource(app.antresol.ui.R.string.tv_starting))
+                    }
+                }
+                LiveBelow(state, Channels.miniGuide(state.listed, state.channelId), behindLive = true, onGoLive = {}, onFavorite = {}, onTune = {}, modifier = Modifier.weight(1f))
+            }
+        }
+        capture("portrait-starting-behind-live")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w891dp-h411dp-land-xhdpi")
+    fun landscapeShot() {
+        bars()
+        compose.onNodeWithTag("live-guide").assertExists()
+        assertNothingOverflows()
+        capture("landscape-controls")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w891dp-h411dp-land-xhdpi")
+    fun landscapeSideGuideShot() {
+        show {
+            Box(Modifier.fillMaxSize()) {
+                Picture(Modifier.fillMaxSize())
+                SideGuide(Channels.miniGuide(state.listed, state.channelId), "All Channels", state.channelId, {}, {}, {})
+            }
+        }
+        compose.onNodeWithTag("live-side-guide").assertExists()
+        assertNothingOverflows()
+        capture("landscape-side-guide")
     }
 
     @Test
     @Config(sdk = [35], qualifiers = "w640dp-h360dp-land")
     fun playerBarsFitASmallPhoneInLandscape() {
         bars()
-        compose.onNodeWithTag("live-audio").assertExists()
+        compose.onNodeWithTag("live-tracks").assertExists()
         compose.onNodeWithTag("live-pip").assertExists()
+        compose.onNodeWithTag("live-guide").assertExists()
         assertNothingOverflows()
-        capture("robolectric-player-bars-640x360dp-landscape")
+        capture("landscape-640x360dp")
     }
 
     @Test
@@ -124,10 +211,9 @@ class LiveLayoutTest {
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
         val line = compose.onNodeWithTag("live-progress", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val density = compose.activity.resources.displayMetrics.density
-        // The bar's 24 dp side padding is the only space left beside the line.
-        assertEquals(root.width - 48 * density, line.width, density)
+        // The line takes what LIVE and the full-screen button leave: most of the width.
+        assertTrue("the line is ${line.width} of ${root.width}", line.width > root.width * 0.7f)
         assertNothingOverflows()
-        capture("robolectric-player-bars-997x448dp-landscape")
     }
 
     @Test
@@ -143,7 +229,7 @@ class LiveLayoutTest {
         compose.onAllNodesWithText("until", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("до ", substring = true).assertCountEquals(0)
         assertNothingOverflows()
-        capture("robolectric-list-row-360dp")
+        capture("list-row-360dp")
     }
 
     /** Round 5: eight audio renditions with long names, the case of «Много голосов». */
@@ -153,7 +239,13 @@ class LiveLayoutTest {
     )
 
     private fun trackSheet(selected: Int = 1) = show {
-        LiveTrackSheet("Audio", eightVoices.mapIndexed { i, name -> TrackOption(name, i == selected) {} }, onDismiss = {})
+        LiveTrackSheet(
+            listOf(
+                TrackSection("Audio", eightVoices.mapIndexed { i, name -> TrackOption(name, i == selected) {} }),
+                TrackSection("Subtitles", listOf(TrackOption("Off", selected != 7) {}, TrackOption("Русские", false) {})),
+            ),
+            onDismiss = {},
+        )
     }
 
     @Test
@@ -194,7 +286,7 @@ class LiveLayoutTest {
         compose.waitForIdle()
         assertEveryChoiceReachable()
         assertNothingOverflows()
-        capture("robolectric-track-sheet-360dp")
+        capture("track-sheet-360dp")
     }
 
     @Test

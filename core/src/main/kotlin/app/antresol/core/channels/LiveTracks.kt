@@ -31,9 +31,10 @@ data class LiveTrackSelection(val audio: ProgramTrack?, val subtitles: ProgramTr
  * track»). The master carries up to 8 audio and 6 subtitle renditions with arbitrary names, in no
  * fixed order; the programme's `audio`/`subtitles` list the ones it really has. Nothing here
  * assumes a name, a count or a position:
- * - audio = the first of the device's languages ([select]'s `system`: the system locale list) the
- *   programme has, else the first of the profile's `audioLangs`, else the original (a track named
- *   so), else its first — the interface language stays the profile's;
+ * - audio = the first of the profile's `audioLangs` («Мои языки», as for films, where the server
+ *   picks the voice by them) the programme has, else the first of the device's languages
+ *   ([select]'s `system`: the system locale list), else the original (a track named so), else its
+ *   first; with the profile's `preferCleaned` the voice's cleaned twin when it has one;
  * - subtitles by `subMode` (`off`; `always`: the first of `subLangs` present; `foreign`: when the
  *   audio's language is not one of `audioLangs`);
  * - the viewer's [LiveTrackChoice] wins: the programme's rendition with the same `name`, else its
@@ -53,10 +54,13 @@ object LiveTracks {
     fun defaultAudio(program: ChannelProgram?, prefs: PlaybackPrefs?, system: List<String> = emptyList()): ProgramTrack? {
         val audio = program?.audio.orEmpty()
         if (audio.isEmpty()) return null
-        (system + prefs?.audioLangs.orEmpty()).map(::lang).filter { it.isNotEmpty() }.forEach { wanted ->
-            audio.firstOrNull { langOf(it) == wanted }?.let { return it }
-        }
-        return audio.firstOrNull { ORIGINAL.containsMatchIn(it.name) || ORIGINAL.containsMatchIn(it.label) } ?: audio.first()
+        // A cleaned voice is never picked by language: its voice is, then swapped for it below.
+        val voices = audio.filter { it.cleanedOf == null }.ifEmpty { audio }
+        val voice = (prefs?.audioLangs.orEmpty() + system).map(::lang).filter { it.isNotEmpty() }.firstNotNullOfOrNull { wanted ->
+            voices.firstOrNull { langOf(it) == wanted }
+        } ?: voices.firstOrNull { ORIGINAL.containsMatchIn(it.name) || ORIGINAL.containsMatchIn(it.label) } ?: voices.first()
+        if (prefs?.preferCleaned == true) audio.firstOrNull { it.cleanedOf == voice.name }?.let { return it }
+        return voice
     }
 
     fun defaultSubtitles(program: ChannelProgram?, prefs: PlaybackPrefs?, audio: ProgramTrack?): ProgramTrack? {

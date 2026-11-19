@@ -44,6 +44,10 @@
 
     <!-- Playback, readers, settings -->
     <string name="player_pip">Picture in Picture</string>
+    <string name="player_fullscreen">Full Screen</string>
+    <string name="player_fullscreen_exit">Exit Full Screen</string>
+    <string name="player_audio_subtitles">Audio &amp; Subtitles</string>
+    <string name="player_close">Close</string>
     <string name="player_skip_back">Back %1$d seconds</string>
     <string name="player_skip_forward">Forward %1$d seconds</string>
     <string name="now_playing_title">Now Playing</string>

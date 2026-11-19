@@ -36,6 +36,16 @@ class ChannelLogoFallbackTest {
     }
 
     @Test
+    fun aChannelsTileColourIsTheSameOnEveryPlatform() {
+        // The web's channelTone: trimmed, lower-cased code points, h = (h * 31 + cp) >>> 0, grad-(h % 7 + 1).
+        assertEquals("grad-6", channelTileGradient("Documentaries"))
+        assertEquals("grad-4", channelTileGradient("Первый канал"))
+        assertEquals("grad-7", channelTileGradient("  All Series "))
+        assertEquals("grad-2", channelTileGradient("Кино"))
+        assertEquals(channelTileGradient("кино"), channelTileGradient("КИНО"))
+    }
+
+    @Test
     fun initialsAsTheWebMakesThem() {
         assertEquals("ПК", channelInitials("Первый канал"))
         assertEquals("Д", channelInitials("Дождь HD"))

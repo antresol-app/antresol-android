@@ -42,6 +42,10 @@
 
     <!-- Playback, readers, settings -->
     <string name="player_pip">Картинка в картинке</string>
+    <string name="player_fullscreen">Во весь экран</string>
+    <string name="player_fullscreen_exit">Выйти из полноэкранного режима</string>
+    <string name="player_audio_subtitles">Звук и субтитры</string>
+    <string name="player_close">Закрыть</string>
     <string name="player_skip_back">Назад на %1$d с</string>
     <string name="player_skip_forward">Вперёд на %1$d с</string>
     <string name="now_playing_title">Сейчас играет</string>

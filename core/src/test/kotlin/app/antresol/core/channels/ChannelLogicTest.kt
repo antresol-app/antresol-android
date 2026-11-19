@@ -291,4 +291,35 @@ class ChannelLogicTest {
         assertEquals(listOf(2L, 4L, 1L, 3L), Channels.miniGuide(ordered, 1).channels.map { it.id })
         assertEquals(2, Channels.miniGuide(ordered, 1).currentIndex)
     }
+
+    @Test
+    fun adultCategoriesGoLast() {
+        fun cat(id: String, name: String) = ChannelCategory(id, name, ChannelCategory.KIND_GROUP, 1)
+        val server = listOf(cat("g1", "Новости"), cat("g2", "Для взрослых"), cat("g3", "Кино"), cat("g4", "XXX"), cat("g5", "18+"), cat("g6", "Детские"))
+        val channels = server.mapIndexed { i, c -> Channel(id = i + 1L, number = i + 1, name = "c$i", categories = listOf(c.id)) }
+        assertEquals(listOf("Новости", "Кино", "Детские", "Для взрослых", "XXX", "18+"), Channels.categoryList(channels, server).map { it.name })
+        assertEquals(false, Channels.isAdult(cat("g7", "Взрослые мультфильмы о жизни").copy(name = "Мультфильмы")))
+        assertEquals(true, Channels.isAdult(cat("group:Взрослое", "")))
+        // A filter's favourites and «All» stay first.
+        assertEquals(ChannelFilter.Favorites, Channels.filterOptions(channels, server).first().filter)
+    }
+
+    @Test
+    fun anExclusiveCategoryKeepsItsChannelsToItselfAndComesLast() {
+        val adult = ChannelCategory("ai:adult", "18+", ChannelCategory.KIND_AI, exclusive = true)
+        val films = ChannelCategory("ai:films", "Фильмы", ChannelCategory.KIND_AI)
+        val server = listOf(adult, films)
+        val a = Channel(id = 1, number = 1, name = "a", favorite = true, categories = listOf("ai:films"))
+        val b = Channel(id = 2, number = 2, name = "b", favorite = true, categories = listOf("ai:adult", "ai:films"))
+        val all = listOf(a, b)
+        assertEquals(listOf(a), Channels.filter(all, ChannelFilter.All, server))
+        assertEquals(listOf(a), Channels.filter(all, ChannelFilter.Favorites, server))
+        assertEquals(listOf(a), Channels.filter(all, ChannelFilter.Category("ai:films"), server))
+        assertEquals(listOf(b), Channels.filter(all, ChannelFilter.Category("ai:adult"), server))
+        assertEquals(listOf("Фильмы" to 1, "18+" to 1), Channels.categoryList(all, server).map { it.name to it.count })
+        val options = Channels.filterOptions(all, server)
+        assertEquals(listOf(1, 1), options.take(2).map { it.count })
+        // Without the server's list (or the flag) nothing is hidden.
+        assertEquals(all, Channels.filter(all, ChannelFilter.All))
+    }
 }

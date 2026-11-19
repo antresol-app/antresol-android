@@ -277,6 +277,22 @@ object MobileIcons {
         roundedRect(12f, 12f, 18f, 16.5f, 1f)
     }
 
+    /** Four corners pointing out: full screen. */
+    val FullscreenEnter: ImageVector = lineIcon("FullscreenEnter") {
+        moveTo(4f, 9f); lineTo(4f, 4f); lineTo(9f, 4f)
+        moveTo(15f, 4f); lineTo(20f, 4f); lineTo(20f, 9f)
+        moveTo(20f, 15f); lineTo(20f, 20f); lineTo(15f, 20f)
+        moveTo(9f, 20f); lineTo(4f, 20f); lineTo(4f, 15f)
+    }
+
+    /** Four corners pointing in: leave full screen. */
+    val FullscreenExit: ImageVector = lineIcon("FullscreenExit") {
+        moveTo(4f, 9f); lineTo(9f, 9f); lineTo(9f, 4f)
+        moveTo(15f, 4f); lineTo(15f, 9f); lineTo(20f, 9f)
+        moveTo(20f, 15f); lineTo(15f, 15f); lineTo(15f, 20f)
+        moveTo(9f, 20f); lineTo(9f, 15f); lineTo(4f, 15f)
+    }
+
     /** Arrow around a circle, counter-clockwise; mirror it for forward skips. */
     val SkipBackCircle: ImageVector = lineIcon("SkipBackCircle") {
         moveTo(5.2f, 9.5f)

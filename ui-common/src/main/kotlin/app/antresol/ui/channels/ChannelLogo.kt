@@ -2,7 +2,6 @@ package app.antresol.ui.channels
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Alignment
@@ -10,11 +9,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import app.antresol.ui.theme.AntresolColors
+import app.antresol.ui.theme.AntresolGradients
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,13 +30,6 @@ import app.antresol.ui.image.AntresolImageLoader
 import app.antresol.ui.theme.AntresolShapes
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-
-/**
- * The neutral box a channel's uploaded logo sits in: an opaque mid-dark grey (iOS system grey 5),
- * the same under every logo, so a logo drawn for a light or a dark background stays readable and
- * no channel gets a colour of its own.
- */
-val ChannelLogoBox = Color(0xFF2C2C2E)
 
 /** A logo box is 3:2, the shape most channel logos are drawn for. */
 const val CHANNEL_LOGO_ASPECT = 3f / 2f
@@ -77,11 +68,28 @@ fun channelInitials(name: String): String {
 }
 
 /**
- * A channel's logo ([url], resolved by the caller from `logoUrl`), small, fitted inside a neutral
- * rounded box of [height] (3:2). When it is empty or cannot be loaded the box tries [altUrl] (the
- * guide icon, `logoAlt`). Without either, nothing is drawn, except where the list keeps the slot
- * ([reserve]): there [name] shows its initials in the same box (as the web's list rows; without a
- * name an empty slot of the same size). Never a coloured tile and never an empty grey box.
+ * The colour of a channel's generated tile: one of the avatar gradients `grad-1`…`grad-7` (never
+ * the grey `grad-8`), picked by a hash of the name exactly as the web's `channelTone`: the trimmed,
+ * lower-cased name's Unicode code points, `h = (h * 31 + cp) >>> 0`, then `grad-(h % 7 + 1)`.
+ */
+fun channelTileGradient(name: String): String {
+    var h = 0L
+    val text = name.trim().lowercase()
+    var i = 0
+    while (i < text.length) {
+        val cp = text.codePointAt(i)
+        h = (h * 31 + cp) and 0xFFFFFFFFL
+        i += Character.charCount(cp)
+    }
+    return "grad-${(h % 7).toInt() + 1}"
+}
+
+/**
+ * A channel's identity, the same in every list, card, banner and player: its logo ([url], resolved
+ * by the caller from `logoUrl`), else [altUrl] (the guide icon, `logoAlt`), drawn as it is in a 3:2
+ * slot of [height] — no box behind it; without either (or when neither loads) a generated tile:
+ * the channel's colour ([channelTileGradient]) with its initials in white. Without a [name] nothing
+ * is drawn, or, where a list keeps the column ([reserve]), an empty slot of the same size.
  */
 @Composable
 fun ChannelLogo(
@@ -97,27 +105,15 @@ fun ChannelLogo(
     val current = sources.getOrNull(failed)
     if (current == null) {
         when {
-            !reserve -> Unit
-            !name.isNullOrBlank() -> LogoBox(height, modifier.testTag("channel-initials")) {
-                BasicText(
-                    channelInitials(name),
-                    maxLines = 1,
-                    style = TextStyle(
-                        color = AntresolColors.LabelSecondary,
-                        fontSize = with(LocalDensity.current) { (height * 0.42f).toSp() },
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                    ),
-                    modifier = Modifier.align(Alignment.Center),
-                )
-            }
-            else -> Spacer(modifier.size(width = height * CHANNEL_LOGO_ASPECT, height = height).testTag("channel-logo-slot"))
+            !name.isNullOrBlank() -> ChannelTile(name, height, modifier)
+            reserve -> Spacer(modifier.size(width = height * CHANNEL_LOGO_ASPECT, height = height).testTag("channel-logo-slot"))
+            else -> Unit
         }
         return
     }
-    LogoBox(height, modifier.testTag("channel-logo")) {
+    Box(modifier.size(width = height * CHANNEL_LOGO_ASPECT, height = height).testTag("channel-logo")) {
         val context = LocalContext.current
-        // A logo is drawn on the box above: it is asked for as it is, never as the server's smaller JPEG copy.
+        // A logo is drawn as it is, never as the server's smaller JPEG copy (it would get a background).
         val request = remember(current, context) {
             ImageRequest.Builder(context).data(current).setParameter(AntresolImageLoader.TRANSPARENT, true, memoryCacheKey = null).build()
         }
@@ -126,22 +122,34 @@ fun ChannelLogo(
             contentDescription = null,
             contentScale = ContentScale.Fit,
             onError = { failed++ },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = height * 0.14f, vertical = height * 0.12f),
+            modifier = Modifier.fillMaxSize(),
         )
     }
 }
 
+/** The generated tile of a channel without a logo: its colour and its initials in white. */
 @Composable
-private fun LogoBox(height: Dp, modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
+fun ChannelTile(name: String, height: Dp, modifier: Modifier = Modifier) {
+    val gradient = remember(name) { AntresolGradients.avatar(channelTileGradient(name)) }
     Box(
         modifier
             .size(width = height * CHANNEL_LOGO_ASPECT, height = height)
             .clip(if (height >= 32.dp) AntresolShapes.badge else LogoShapeSmall)
-            .background(ChannelLogoBox),
-        content = content,
-    )
+            .background(gradient)
+            .testTag("channel-initials"),
+    ) {
+        BasicText(
+            channelInitials(name),
+            maxLines = 1,
+            style = TextStyle(
+                color = Color.White,
+                fontSize = with(LocalDensity.current) { (height * 0.44f).toSp() },
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            ),
+            modifier = Modifier.align(Alignment.Center),
+        )
+    }
 }
 
 private val LogoShapeSmall = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)

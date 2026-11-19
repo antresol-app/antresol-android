@@ -130,7 +130,7 @@ class ChannelsViewModel(
     val filterOptions: List<ChannelFilterOption> by derivedStateOf { Channels.filterOptions(channels.orEmpty(), serverCategories) }
 
     /** The channels of the [filter], in the list's order. */
-    val shown: List<Channel> by derivedStateOf { Channels.filter(channels.orEmpty(), filter) }
+    val shown: List<Channel> by derivedStateOf { Channels.filter(channels.orEmpty(), filter, serverCategories) }
 
     /** The last channel while the profile can still see it. */
     val lastChannel: Channel? by derivedStateOf { Channels.lastChannel(channels.orEmpty(), lastChannelId) }

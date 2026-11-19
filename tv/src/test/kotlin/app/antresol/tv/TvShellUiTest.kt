@@ -518,6 +518,32 @@ class TvShellUiTest {
         assertTrue(fake.requests.none { it.contains("/api/me/managed") })
     }
 
+    /**
+     * The tester's crash: Down through Home with the shelves a real server sends. «Вышло новое» lists followed titles off
+     * the library as cards with id 0, several of one kind, and the shelf row keyed by kind and id threw «Key was
+     * already used» the moment it scrolled into view. Every shelf is reached, the off-library cards are not shown, and
+     * each shelf's row scrolls to its end.
+     */
+    @Test
+    fun scrollingDownThroughEveryHomeShelf() {
+        val seen = ArrayList<String>()
+        var trackedShown = false
+        repeat(8) {
+            key(KeyEvent.KEYCODE_DPAD_DOWN)
+            seen += focusedTitle()
+            trackedShown = trackedShown || compose.onAllNodes(hasText("New Releases"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            // Along the row to its end and back, so every card of it is composed.
+            key(KeyEvent.KEYCODE_DPAD_RIGHT, times = 7)
+            key(KeyEvent.KEYCODE_DPAD_LEFT, times = 7)
+        }
+        shot("shell-home-bottom")
+        assertTrue("Down did not reach the last shelf: $seen", seen.any { it.startsWith("Movie") })
+        for (off in listOf("Far Away Show", "Another Far Show", "Far Away Film")) {
+            assertTrue("$off is shown", compose.onAllNodes(hasText(off) or hasContentDescription(off), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        }
+        assertTrue("the New Releases shelf (its card in the library) was not shown", trackedShown)
+    }
+
     /** Item 7: no Books tab, no book scope or tiles in search. */
     @Test
     fun noBooksOnTv() {

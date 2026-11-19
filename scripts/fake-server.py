@@ -137,11 +137,20 @@ def new_account(name):
     return account
 
 
+def tracked_cards():
+    """«Вышло новое» as the server sends it: a followed title in the library is its own card; one off the library is
+    the TMDB title with id 0 (the apps cannot open it), so two of them share kind and id."""
+    off = [{"id": 0, "kind": "series", "title": title, "subtitle": "S2 · E1", "poster": "", "tmdbKind": "series",
+            "tmdbId": tmdb, "season": 2, "episode": 1} for title, tmdb in [("Far Away Show", 9001), ("Another Far Show", 9002)]]
+    return [series_card()] + off + [{"id": 0, "kind": "movie", "title": "Far Away Film", "tmdbKind": "movie", "tmdbId": 9003}]
+
+
 def home():
     # Another history has another Continue Watching: what this device watched on its own.
     resume = [movie_card(MOVIE + 10, progress=0.6)] if history["current"] else [episode_card(EPISODES[1], 1, 2, progress=0.4), movie_card(MOVIE, progress=0.3)]
     return {"hero": [series_card()], "shelves": [
         {"id": "continue", "title": "Continue Watching", "cards": resume},
+        {"id": "tracked-new", "title": "New Releases", "cards": tracked_cards()},
         {"id": "recent-series", "title": "New Series", "cards": [series_card()]},
         {"id": "recent-movies", "title": "New Movies", "cards": [movie_card(MOVIE + i) for i in range(6)]}]}
 

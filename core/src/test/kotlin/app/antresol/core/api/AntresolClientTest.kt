@@ -466,4 +466,30 @@ class AntresolClientTest {
         assertEquals("false", offBody["separate"]!!.jsonPrimitive.content)
         assertEquals("true", offBody["merge"]!!.jsonPrimitive.content)
     }
+
+    /**
+     * «Вышло новое» as servers write it (v0.8.2 and later): a followed title off the library is a TMDB card with id 0
+     * (no `id` would be the same), so two of them share kind and id. The apps' shelf rows are keyed by kind and id and
+     * crashed on the repeated key; Home gives the apps only cards they can open, each once.
+     */
+    @Test
+    fun homeLeavesOutCardsOffTheLibraryAndRepeats() = runTest {
+        enqueue(
+            """{"hero":[{"id":5,"kind":"series","title":"Show"}],"shelves":[
+              {"id":"continue","title":"Continue","cards":[{"id":7,"kind":"movie","title":"Film"}]},
+              {"id":"tracked-new","title":"New Releases","cards":[
+                {"id":5,"kind":"series","title":"Show","subtitle":"S2 · E1"},
+                {"id":0,"kind":"series","title":"Far Show","tmdbKind":"series","tmdbId":9001,"season":2,"episode":1},
+                {"id":0,"kind":"series","title":"Other Far Show","tmdbKind":"series","tmdbId":9002,"season":1,"episode":3},
+                {"kind":"movie","title":"Far Film","tmdbKind":"movie","tmdbId":9003}]},
+              {"id":"watchlist","title":"Want","cards":[{"id":0,"kind":"movie","title":"Far Film"}]},
+              {"id":"recent-movies","title":"Movies","cards":[{"id":7,"kind":"movie","title":"Film"},{"id":7,"kind":"movie","title":"Film"},{"id":7,"kind":"episode","title":"E"}]}
+            ]}""",
+        )
+        val home = client.home()
+        assertEquals(listOf("continue", "tracked-new", "recent-movies"), home.shelves.map { it.id })
+        assertEquals(listOf(5L), home.shelves[1].cards.map { it.id })
+        assertEquals(listOf("movie" to 7L, "episode" to 7L), home.shelves[2].cards.map { it.kind to it.id })
+        assertEquals(listOf(5L), home.hero.map { it.id })
+    }
 }

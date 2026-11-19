@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -15,6 +16,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Watch Next and the «Antresol» preview channel on the TV home screen (androidx.tvprovider). The library
+         declares WRITE_EPG_DATA itself (a normal permission, granted at install, no Play Console declaration; the
+         provider enforces it on writes). READ_EPG_DATA, which it also declares, has not been enforced since
+         Android 6 and the app never reads other apps' listings, so it is dropped. -->
+    <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" tools:node="remove" />
 
     <uses-feature
         android:name="android.software.leanback"
@@ -51,7 +58,24 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Tiles of the TV home screen and `adb shell am start -d antresol://play/19?u=1`: antresol://play/{id}
+                 plays from where the profile stopped, antresol://title/{kind}/{id} opens a title's page. Not
+                 BROWSABLE: a web page cannot start them. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="antresol" android:host="play" />
+                <data android:scheme="antresol" android:host="title" />
+            </intent-filter>
         </activity>
+
+        <!-- The cached pictures of the home screen tiles for the launcher (it cannot send the server's login):
+             read only, and only files named by a digest that belongs to this install. -->
+        <provider
+            android:name=".homechannels.HomeArtworkProvider"
+            android:authorities="${applicationId}.homeart"
+            android:exported="true"
+            android:grantUriPermissions="false" />
 
         <receiver
             android:name=".autostart.AutostartReceiver"

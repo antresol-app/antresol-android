@@ -83,6 +83,18 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   last channel playing. Android 10+ lets an app start its screen from the background only with «Display over other
   apps», so the setting guides to it (the system page, or the adb command on a TV without one); a small foreground
   service listens for the screen. Notes for Play: [docs/PLAY_STORE.md](docs/PLAY_STORE.md).
+- **Android TV home screen**: Watch Next (the system's «Play Next» row) shows this profile's started movies and
+  episodes with a progress bar, and the next episode of a series; one preview channel «Antresol» («Новое в
+  медиатеке») shows the recent movies and new series. Both come from the server's `GET /api/home` (the lists the app's
+  own Home shows, so a kid profile gets what the server gives it and «Отдельная история» is already resolved), the
+  length for the progress bar from `GET /api/progress/{id}`. A tile opens `antresol://play/{id}?u={profile}` (plays
+  from where the profile stopped) or `antresol://title/{kind}/{id}?u={profile}` (the title's page); the same
+  addresses work from `adb shell am start -a android.intent.action.VIEW -d "antresol://play/19?u=1"`. They are
+  refreshed when the app opens, after a player closes, when the profile changes or signs out, and every 30 minutes
+  by WorkManager; nothing is asked or scheduled while nobody is signed in, and the tiles of the profile that left
+  are removed. The launcher cannot send the server's login, so the pictures are fetched by the app, shrunk, and
+  served to it by a read-only content provider (`{package}.homeart`). The first time the channel exists, the system
+  asks once to add it to the home screen. Code: `tv/.../homechannels/`.
 - **Music**: album, artist and playlist pages with Play, Shuffle, Favorite and the track list. A
   Media3 `MediaSessionService` keeps music playing while you browse or leave the app and publishes
   it to the system's now-playing card and remote. Now Playing has an artwork-tinted background,

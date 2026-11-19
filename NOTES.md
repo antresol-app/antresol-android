@@ -1579,3 +1579,38 @@ Robolectric, in the unit-test tasks. «On a device» here means the release APKs
   programme on, the stale stretch before it ending where the page's programme begins. The ruler's
   first time is not drawn while cut. Not verified: E-7 with Chromium's real timing, E-8 on a phone,
   the phone guide, a real server's rebuild, a real TV.
+
+## TV home screen: Watch Next and the «Antresol» channel (tester item 28, 2026-11-19)
+
+Nothing of Antresol showed on the Google TV / Android TV home screen (tvOS has Top Shelf). Built in
+`tv/src/main/kotlin/app/antresol/tv/homechannels/`, androidx.tvprovider 1.1.0 + WorkManager 2.10.5.
+
+- What: Watch Next gets the `continue` shelf of `GET /api/home` (started videos → `WATCH_NEXT_TYPE_CONTINUE` with
+  position and length from `GET /api/progress/{id}`; next-up episodes, which have no progress → `..._NEXT`; at most
+  10). One preview channel «Antresol» (`PreviewChannelHelper`) gets recent movies and new series interleaved, minus
+  watched titles, titles with no poster and what is already continuing (at most 20). The server's lists are used as
+  they come (kid limits, «Отдельная история» are resolved by it).
+- Why the pictures go through our own provider: the launcher has no login and the server's images need the Bearer
+  header (`?mk=` is refused for images). The app fetches each picture, shrinks it (≤ 960 px, JPEG), keeps it in
+  `cacheDir/tv-home` for 7 days and `HomeArtworkProvider` (`{package}.homeart`, read only) serves exactly those
+  files; a file's name is SHA-256(install secret + server path), so only someone who read it from the TV provider
+  can ask for it. A Watch Next tile whose picture cannot be had shows `tv_banner`; a channel tile is skipped.
+- Diff: each program's internal provider id is `{wn|ch}:{serverId}:{userId}:{kind}:{id}` and its first internal flag a
+  64-bit FNV digest of everything shown ([ProgramSpec.fingerprint]); a run adds, updates (by digest) and removes. A
+  changed Watch Next row is rewritten whole, because that row is ordered by last-engagement time (`now - rank` min). A
+  tile the user dismissed stays in the provider (hidden) and is only updated, so it does not come back.
+- When: app start (≤ every 5 min), after a player's final progress write (`PendingWrites.completions`), profile
+  change / sign-out, and a 30-minute periodic WorkManager job (network required). Nobody signed in: the one run that
+  notices removes the programs and cancels the periodic job; no request is made. The channel is created by the first
+  run; the activity then asks once (`TvContractCompat.requestChannelBrowsable`, from the foreground) and never again.
+- Deep links (`MainActivity`, exported VIEW filter, not BROWSABLE): `antresol://play/{id}?u={userId}` →
+  `PlayerRoute(id, Resume)` (the player continues from the server's saved position), `antresol://title/{kind}/{id}?u=`
+  → the detail page. `u` is the profile that published the tile; a link of another profile is ignored, and so is a
+  link older than 60 s. An open player/trailer/channel/reader is closed first.
+- Permissions: nothing declared by us. The library's manifest merges in `WRITE_EPG_DATA` (normal, install time, no Play
+  Console declaration; the provider enforces it on writes, so it is needed despite the brief) and WorkManager's
+  `ACCESS_NETWORK_STATE`; the deprecated `READ_EPG_DATA` is removed. No new foreground-service permission.
+- Not verified on a device (no TV or emulator was available to this run): the provider writes (`PreviewChannelHelper`
+  against the real TvProvider), the launcher drawing the content:// pictures, the one-time browsable dialog, a tile
+  opening the app. Unit tests cover the mapping, the diff and the whole run against an in-memory provider, the
+  deep links against the manifest, the picture cache and provider. Checked by hand: see the README's adb line.

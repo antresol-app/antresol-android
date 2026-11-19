@@ -98,6 +98,7 @@ import app.antresol.tv.ui.music.SongsScreen
 import app.antresol.tv.ui.music.SongsViewModel
 import app.antresol.tv.ui.nowplaying.NowPlayingScreen
 import app.antresol.tv.ui.nowplaying.NowPlayingViewModel
+import app.antresol.tv.homechannels.HomeLink
 import app.antresol.tv.ui.player.LivePlayerScreen
 import app.antresol.tv.ui.player.PlayerScreen
 import app.antresol.tv.ui.player.TrailerEmbedScreen
@@ -350,6 +351,25 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         }
     }
 
+    // A tile of the TV home screen (Watch Next, the «Antresol» channel) or a deep link opened the app: play from where
+    // the profile stopped, or open the title's page. Once, while fresh, and only for the profile that is signed in.
+    // Collected, not keyed: clearing the request must not cancel the work it started.
+    LaunchedEffect(app) {
+        app.deepLinkRequested.filterNotNull().collect { request ->
+            app.deepLinkRequested.value = null
+            if (!request.fresh(SystemClock.elapsedRealtime()) || request.link.userId != state.session.userId) return@collect
+            // A player, trailer, live channel or reader that is open is left first, so two never run together.
+            repeat(MEDIA_SCREENS_DEEP) {
+                val current = navController.currentBackStackEntry?.destination
+                if (current != null && MEDIA_ROUTES.any { current.hasRoute(it) }) navController.popBackStack()
+            }
+            when (val link = request.link) {
+                is HomeLink.Play -> play(link.itemId, ResumeMode.Resume)
+                is HomeLink.Open -> navController.navigate(DetailRoute(link.kind, link.itemId))
+            }
+        }
+    }
+
     CompositionLocalProvider(LocalMediaUrls provides client.urls) {
         Box(
             Modifier
@@ -570,6 +590,10 @@ internal const val TAB_RESET_MS = 5_000L
 /** After a page's transition, how often and how many times the shell checks that something has focus. */
 private const val SETTLE_STEP_MS = 120L
 private const val SETTLE_CHECKS = 8
+
+/** Full-screen media that a deep link closes before it opens something else (at most this many are stacked). */
+private const val MEDIA_SCREENS_DEEP = 3
+private val MEDIA_ROUTES = listOf(PlayerRoute::class, LiveRoute::class, TrailerRoute::class, ComicReaderRoute::class)
 
 /** Whether the current page may take focus now: it is the current entry and the nav does not have focus. */
 private val LocalPageCanTakeFocus = staticCompositionLocalOf<() -> Boolean> { { false } }

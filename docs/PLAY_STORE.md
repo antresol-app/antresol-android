@@ -98,6 +98,24 @@ The answers cover the phone and TV builds.
   looking for servers on the home network; no location permission), `CAMERA` (phone only, asked on the
   «Sign in a TV» screen to read the TV's QR code; the camera is not required, the code can be typed).
 
+## TV home screen (Watch Next, the «Antresol» channel): permissions
+
+The TV build puts this profile's «Continue Watching» into the system's Watch Next row and keeps one preview channel
+«Antresol» («Новое в медиатеке», recent movies and new series) on the home screen of Google TV and Android TV. The
+merged TV manifest gains two permissions, both normal (granted at install, no runtime prompt, **no Play Console
+declaration**), and no foreground service of any type:
+
+- `com.android.providers.tv.permission.WRITE_EPG_DATA`, declared by androidx.tvprovider itself: the TV provider
+  enforces it on writes of channels and programs. (The library also declares the deprecated `READ_EPG_DATA`; the TV
+  manifest removes it.)
+- `android.permission.ACCESS_NETWORK_STATE`, from WorkManager, for the 30-minute refresh that runs only with a network.
+
+WorkManager's `SystemForegroundService` is in the merged manifest without a `foregroundServiceType` and is never
+started (the sync is a short periodic job). The app also exposes a read-only content provider (`{package}.homeart`)
+that gives the launcher the cached posters, and `antresol://play/{id}` / `antresol://title/{kind}/{id}` deep links
+(not browsable). Data safety: nothing new is collected or sent; the posters are the user's own server's pictures,
+copied to the app's cache on the device.
+
 ## TV autostart: permissions and Play Console declarations
 
 The TV build has «Open Antresol at power on» in Settings (off by default; Russian «Открывать Antresol при включении»).

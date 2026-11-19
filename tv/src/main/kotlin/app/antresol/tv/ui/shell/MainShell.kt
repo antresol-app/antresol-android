@@ -17,7 +17,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.activity.compose.BackHandler
 import android.content.Context
 import android.os.SystemClock
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.filterNotNull
 import android.content.ContextWrapper
 import androidx.compose.animation.core.animateFloatAsState
@@ -36,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,9 +52,11 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -114,8 +118,12 @@ import app.antresol.tv.ui.settings.SettingsScreen
 import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.core.channels.ChannelFilter
-import app.antresol.core.channels.Channels
 import app.antresol.tv.autostart.AutostartTarget
+import app.antresol.tv.autostart.ChannelAutostart
+import app.antresol.tv.autostart.ChannelStart
+import app.antresol.tv.autostart.LastChannel
+import app.antresol.core.channels.LiveApi
+import app.antresol.core.channels.liveApi
 import app.antresol.core.channels.LiveTvSession
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.channelsApi
@@ -343,31 +351,60 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     // "Open Antresol at power on" started the app: show what the setting says, once, and only while
     // the request is fresh (an old one belongs to a start the viewer has long since taken over).
     // Collected, not keyed: clearing the request must not cancel the work it started.
+    val signedIn by rememberUpdatedState(state)
     LaunchedEffect(app) {
         app.autostartRequested.filterNotNull().collect { request ->
             app.autostartRequested.value = null
             if (!request.fresh(SystemClock.elapsedRealtime())) return@collect
-            when (request.target) {
-                // The task was just brought forward as it was (or a cold start opened Home).
-                AutostartTarget.Last -> Unit
-                AutostartTarget.Tv -> selectTab(NavTab.Tv)
-                AutostartTarget.Channel -> {
-                    val list = try {
-                        client.channels()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null
+            // The channel this profile was watching when the app last left the front, as the device remembers it.
+            val record = ChannelAutostart.recordFor(
+                app.lastChannel.get(), signedIn.session.serverId, signedIn.session.userId,
+                historyId = signedIn.user?.deviceHistory?.id, historyKnown = signedIn.user != null,
+            )
+            // The server is often not reachable yet right after the TV started: tried for a while.
+            val channels = suspend { ChannelAutostart.untilAnswered { client.channels() } }
+            val start = when (request.target) {
+                // The task was just brought forward as it was (or a cold start opened Home), unless the viewer
+                // was watching a live channel: that channel plays again.
+                AutostartTarget.Last ->
+                    if (navController.currentBackStackEntry?.destination?.hasRoute(LiveRoute::class) == true) {
+                        ChannelStart.Stay // the player is in front again and picks the stream up itself
+                    } else {
+                        ChannelAutostart.resumeLast(record) { channels()?.channels }
                     }
-                    val channel = list?.let { Channels.lastChannel(it.channels, it.lastChannel) ?: Channels.sortedByNumber(it.channels).firstOrNull() }
+                AutostartTarget.Tv -> ChannelStart.OpenTv
+                AutostartTarget.Channel -> ChannelAutostart.lastChannel(record) { channels()?.let { it.channels to it.lastChannel } }
+            }
+            when (start) {
+                ChannelStart.Stay -> Unit
+                ChannelStart.OpenTv -> selectTab(NavTab.Tv)
+                is ChannelStart.Play -> {
+                    // A player or reader that is open is left first, so two never run together.
+                    repeat(MEDIA_SCREENS_DEEP) {
+                        val current = navController.currentBackStackEntry?.destination
+                        if (current != null && MEDIA_ROUTES.any { current.hasRoute(it) }) navController.popBackStack()
+                    }
                     // The TV tab stays under the player: Back from the channel lands on the list.
                     selectTab(NavTab.Tv)
-                    if (channel != null) {
-                        audio.pause()
-                        navController.navigate(LiveRoute(channel.id, ChannelFilter.All.key))
-                    }
+                    audio.pause()
+                    navController.navigate(LiveRoute(start.channelId, ChannelFilter.All.key))
                 }
             }
+        }
+    }
+
+    // «Где остановился» knows the viewer was watching a channel while the live player is the page on screen. Leaving
+    // it in the app (Back, another page) forgets it; the app going to the background with it (standby, the Home
+    // key, a power cut) keeps it.
+    // Only a move off the player counts: the first page of a cold start must not forget the channel it is to resume.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var wasOnLive by remember { mutableStateOf(false) }
+    LaunchedEffect(backStack?.destination) {
+        val onLive = backStack?.destination?.hasRoute(LiveRoute::class) == true
+        val left = wasOnLive && !onLive
+        wasOnLive = onLive
+        if (left && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            withContext(Dispatchers.IO) { app.lastChannel.set(null) }
         }
     }
 
@@ -551,7 +588,20 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 composable<LiveRoute> { entry ->
                     val route = entry.toRoute<LiveRoute>()
-                    LivePlayerScreen(viewModel = viewModel { LivePlayerViewModel(app, client, route.channelId, ChannelFilter.fromKey(route.filter), platform = LiveTvSession.PLATFORM_ANDROID_TV) })
+                    val owner = LastChannel(state.session.serverId, state.session.userId, state.user?.deviceHistory?.id, route.channelId)
+                    LivePlayerScreen(
+                        viewModel = viewModel {
+                            // The channel tuned in (zapping included) is remembered on the device too, before the server.
+                            val base = client.liveApi()
+                            val api = object : LiveApi by base {
+                                override suspend fun setLast(channelId: Long) {
+                                    withContext(Dispatchers.IO) { app.lastChannel.set(owner.copy(channelId = channelId)) }
+                                    base.setLast(channelId)
+                                }
+                            }
+                            LivePlayerViewModel(app, client, route.channelId, ChannelFilter.fromKey(route.filter), api = api, platform = LiveTvSession.PLATFORM_ANDROID_TV)
+                        },
+                    )
                 }
                 composable<TrailerRoute> { entry ->
                     val route = entry.toRoute<TrailerRoute>()

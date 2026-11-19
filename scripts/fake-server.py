@@ -72,6 +72,8 @@ last_channel = [3]
 big = {"channels": len(LENGTHS), "categories": None, "legacy": False}
 # The AI topics (code, name) a big playlist's channels get, as the server's categories (ids ai:<code>).
 AI_TOPICS = [("news", "News"), ("sport", "Sport"), ("movies", "Movies"), ("kids", "Kids"), ("music", "Music"), ("documentary", "Documentary")]
+# --live-hls: the directory of an HLS stream (index.m3u8 and its segments) every channel plays; None: channels do not play.
+live_hls = [None]
 # The schedule's day: fixed for the run.
 DAY = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 # --rebuild-after: guide pages still to answer before the rebuild (None: never), and when it happened (ms).
@@ -513,6 +515,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(204, b"")
         if path in ("/api/channels/last", "/api/channels/opened"):
             return self.send(204, b"")
+        # --live-hls: every channel plays that HLS directory (its media key is any key).
+        if path == "/api/auth/media-key" and live_hls[0]:
+            return self.send(200, {"key": "fake-media-key", "expiresAt": "2099-01-01T00:00:00Z"})
+        if (match := re.fullmatch(r"/api/channels/live/\d+/([\w.-]+)", path)) and live_hls[0]:
+            file = live_hls[0] / match[1]
+            if not file.is_file():
+                return self.send(404, {"error": "not found"})
+            kind = "application/vnd.apple.mpegurl" if file.suffix == ".m3u8" else "video/mp2t"
+            return self.send(200, file.read_bytes(), kind)
         if match := re.fullmatch(r"/api/items/(\d+)/trailers", path):
             return self.send(200, trailers(int(match[1]), self.embed_key))
         if match := re.fullmatch(r"/api/items/(\d+)", path):
@@ -556,9 +567,12 @@ if __name__ == "__main__":
     args.add_argument("--channels", type=int, metavar="N", help="serve N channels (default 8), to try a big playlist")
     args.add_argument("--categories", type=int, metavar="M", help="spread the channels over M categories (named like a playlist's groups)")
     args.add_argument("--old-categories", action="store_true", help="answer as a server without `categories` (the apps use each channel's `category` text)")
+    args.add_argument("--live-hls", type=Path, metavar="DIR", help="an HLS stream (index.m3u8 and segments) every channel plays, e.g. made with "
+                      "ffmpeg -i test-fixtures/resources/trailer-sample.mp4 -c copy -hls_list_size 0 -f hls DIR/index.m3u8")
     args.add_argument("--kid", action="store_true", help="the profile is a kid's (no «Отдельная история»; its writes answer 403)")
     options = args.parse_args()
     ME["isKid"] = options.kid
+    live_hls[0] = options.live_hls
     big["legacy"] = options.old_categories
     if options.channels:
         big["channels"] = options.channels

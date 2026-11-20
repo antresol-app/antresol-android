@@ -214,6 +214,7 @@
     <string name="tv_category_kind_ai">Topics</string>
     <string name="tv_category_kind_source">Sources</string>
     <string name="tv_category_kind_group">Groups</string>
+    <string name="tv_category_kind_lang">Languages</string>
     <string name="tv_until">until %1$s</string>
     <string name="tv_next_short">Next %1$s %2$s</string>
     <string name="tv_favorite_add">Add to Favourites</string>

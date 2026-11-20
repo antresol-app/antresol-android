@@ -24,5 +24,6 @@ fun categoryKindTitle(kind: String?): String? = when (kind) {
     ChannelCategory.KIND_AI -> stringResource(R.string.tv_category_kind_ai)
     ChannelCategory.KIND_SOURCE -> stringResource(R.string.tv_category_kind_source)
     ChannelCategory.KIND_GROUP -> stringResource(R.string.tv_category_kind_group)
+    "lang" -> stringResource(R.string.tv_category_kind_lang)
     else -> null
 }

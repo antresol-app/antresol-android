@@ -603,7 +603,12 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                                     base.setLast(channelId)
                                 }
                             }
-                            LivePlayerViewModel(app, client, route.channelId, ChannelFilter.fromKey(route.filter), api = api, platform = LiveTvSession.PLATFORM_ANDROID_TV)
+                            // «Качество» is the app's default quality setting, shared with films.
+                            LivePlayerViewModel(
+                                app, client, route.channelId, ChannelFilter.fromKey(route.filter), api = api, platform = LiveTvSession.PLATFORM_ANDROID_TV,
+                                quality = app.settings.current.defaultQuality,
+                                onQualityChosen = { value -> app.settings.update { it.copy(defaultQuality = value) } },
+                            )
                         },
                     )
                 }

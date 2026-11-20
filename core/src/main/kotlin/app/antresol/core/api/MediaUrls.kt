@@ -1,6 +1,7 @@
 package app.antresol.core.api
 
 import app.antresol.core.model.Kind
+import app.antresol.core.model.Quality
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.net.URLEncoder
@@ -62,10 +63,19 @@ class MediaUrls(baseUrl: String) {
 
     /**
      * A channel's live HLS playlist (`/api/channels/live/{id}/index.m3u8`). With [mediaKey] the server
-     * signs every segment line with the same key, so the player needs no headers.
+     * signs every segment line with the same key, so the player needs no headers. [quality] is a
+     * [app.antresol.core.model.Quality] value sent as `q` (none for auto); the server carries it
+     * into every URI of the playlists.
      */
-    fun liveChannel(channelId: Long, mediaKey: String? = null): String =
-        build("api", "channels", "live", channelId.toString(), "index.m3u8") { mk(mediaKey) }
+    fun liveChannel(channelId: Long, mediaKey: String? = null, quality: String? = null): String =
+        build("api", "channels", "live", channelId.toString(), "index.m3u8") {
+            liveQualityParam(quality)?.let { addQueryParameter("q", it) }
+            mk(mediaKey)
+        }
+
+    /** `/api/channels/live/quality?q=`: what the server would apply for the choice [quality]. */
+    fun liveQuality(quality: String): String =
+        build("api", "channels", "live", "quality") { addQueryParameter("q", liveQualityParam(quality) ?: Quality.AUTO) }
 
     fun withMediaKey(url: String, mediaKey: String?): String {
         if (mediaKey == null) return url
@@ -173,3 +183,6 @@ class MediaUrls(baseUrl: String) {
 
 /** The server address typed by the user cannot be parsed as a URL. */
 class InvalidServerAddressException(message: String, cause: Throwable? = null) : IllegalArgumentException(message, cause)
+
+/** The `q` of a live channel URL for [quality]: null for auto or an unknown value (the server's default). */
+fun liveQualityParam(quality: String?): String? = quality?.takeIf { it in Quality.ALL && it != Quality.AUTO }

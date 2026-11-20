@@ -77,6 +77,7 @@ import app.antresol.core.channels.LiveStream
 import app.antresol.core.channels.LiveTvState
 import app.antresol.core.channels.MiniGuide
 import app.antresol.core.channels.liveAudioEntries
+import app.antresol.ui.playback.liveQualityMenu
 import app.antresol.core.model.Channel
 import app.antresol.mobile.R as MobileR
 import app.antresol.mobile.ui.channels.ChannelRow
@@ -167,19 +168,20 @@ fun LivePlayerScreen(
     var controls by remember { mutableStateOf(true) }
     var guide by remember { mutableStateOf(false) }
     var tracks by remember { mutableStateOf(false) }
+    var quality by remember { mutableStateOf(false) }
     var touches by remember { mutableIntStateOf(0) }
     // The side guide is a full-screen thing: in portrait the list is under the picture.
     LaunchedEffect(fullscreen) { if (!fullscreen) guide = false }
     LiveBackHandler(
         guideOpen = guide,
-        menuOpen = tracks,
-        onCloseMenu = { tracks = false },
+        menuOpen = tracks || quality,
+        onCloseMenu = { tracks = false; quality = false },
         onCloseGuide = { guide = false },
         fullscreen = fullscreen && !inPictureInPicture,
         onExitFullscreen = onToggleFullscreen,
     )
-    LaunchedEffect(controls, guide, touches, viewModel.isPlaying, state.channelId, tracks) {
-        if (tracks || !viewModel.isPlaying) return@LaunchedEffect
+    LaunchedEffect(controls, guide, touches, viewModel.isPlaying, state.channelId, tracks, quality) {
+        if (tracks || quality || !viewModel.isPlaying) return@LaunchedEffect
         if (guide) {
             delay(GUIDE_HIDE_MS)
             guide = false
@@ -212,6 +214,7 @@ fun LivePlayerScreen(
     )
     val overlays = !inPictureInPicture
     val canTracks = viewModel.audioOptions.isNotEmpty() || viewModel.subtitleOptions.isNotEmpty()
+    val canQuality = viewModel.qualityOptions.isNotEmpty()
     val density = LocalDensity.current
 
     // Outside the Column's scope, so the overlays inside are the Box's (not ColumnScope's) AnimatedVisibility.
@@ -262,6 +265,7 @@ fun LivePlayerScreen(
                         centre = ready,
                         behindLive = viewModel.behindLive,
                         tracks = canTracks,
+                        quality = canQuality,
                         channels = state.listed.size > 1,
                         pictureInPicture = canPictureInPicture,
                     ),
@@ -273,6 +277,7 @@ fun LivePlayerScreen(
                     onGoLive = { viewModel.goLive(); touches++ },
                     onFavorite = { viewModel.toggleFavorite(); touches++ },
                     onFullscreen = { onToggleFullscreen(); touches++ },
+                    onQuality = { quality = true; touches++ },
                 )
             }
             if (overlays) {
@@ -317,6 +322,11 @@ fun LivePlayerScreen(
         }
     }
     if (tracks) LiveTracksSheet(viewModel, onDismiss = { tracks = false })
+    // «Качество»: the film player's sheet (Авто / Оригинал / 1080p / 720p / 480p, or the stream's own variants)
+    if (quality) {
+        val content = liveQualityMenu(viewModel)
+        if (content == null) quality = false else PlayerMenuSheet(content, onDismiss = { quality = false })
+    }
 }
 
 /** Starting, buffering and failure, centred in the picture. */
@@ -349,6 +359,8 @@ internal data class LiveControlsUi(
     val behindLive: Boolean,
     val tracks: Boolean,
     val channels: Boolean,
+    /** «Качество» is offered (always on our channels; on an external one when its stream has several variants). */
+    val quality: Boolean = false,
     val pictureInPicture: Boolean,
 )
 
@@ -370,6 +382,7 @@ internal fun LiveControls(
     onGoLive: () -> Unit,
     onFavorite: () -> Unit,
     onFullscreen: () -> Unit,
+    onQuality: () -> Unit = {},
 ) {
     val side = if (ui.fullscreen) 20.dp else 10.dp
     val button = if (ui.fullscreen) 44.dp else 40.dp
@@ -413,6 +426,9 @@ internal fun LiveControls(
             }
             if (ui.tracks) {
                 RoundIconButton(AntresolIcons.Subtitles, stringResource(MobileR.string.player_audio_subtitles), onTracks, glass = true, size = button, iconSize = button / 2, modifier = Modifier.testTag("live-tracks"))
+            }
+            if (ui.quality) {
+                RoundIconButton(AntresolIcons.Sliders, stringResource(R.string.detail_quality), onQuality, glass = true, size = button, iconSize = button / 2, modifier = Modifier.testTag("live-quality"))
             }
             if (ui.pictureInPicture) {
                 RoundIconButton(MobileIcons.Pip, stringResource(MobileR.string.player_pip), onPictureInPicture, glass = true, size = button, iconSize = button / 2, modifier = Modifier.testTag("live-pip"))

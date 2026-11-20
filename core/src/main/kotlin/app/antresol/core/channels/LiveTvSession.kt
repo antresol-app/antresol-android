@@ -6,6 +6,8 @@ import app.antresol.core.model.Channel
 import app.antresol.core.model.ChannelCategory
 import app.antresol.core.model.ChannelProgram
 import app.antresol.core.model.PlaybackPrefs
+import app.antresol.core.model.Quality
+import app.antresol.core.model.QualityInfo
 import app.antresol.core.model.StreamSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +43,12 @@ interface LiveApi {
     /** Starts the channel's stream and returns the URL for the player (see [AntresolClient.openLiveChannel]). */
     suspend fun open(channelId: Long): String
 
+    /** [open] in the [app.antresol.core.model.Quality] [quality] (`?q=` on the master; auto: none). */
+    suspend fun open(channelId: Long, quality: String): String = open(channelId)
+
+    /** What the server applies to our channels for the choice [quality] (`/api/channels/live/quality`); null: unknown. */
+    suspend fun quality(quality: String): QualityInfo? = null
+
     /** `PUT /api/channels/last`: the channel tuned in becomes the profile's last channel. */
     suspend fun setLast(channelId: Long)
 
@@ -75,6 +83,10 @@ fun AntresolClient.liveApi(): LiveApi {
         override suspend fun guide(channelId: Long): List<ChannelProgram> = client.channelGuide(channelId, Channels.GUIDE_HOURS).programs
 
         override suspend fun open(channelId: Long): String = client.openLiveChannel(channelId)
+
+        override suspend fun open(channelId: Long, quality: String): String = client.openLiveChannel(channelId, quality)
+
+        override suspend fun quality(quality: String): QualityInfo = client.liveQuality(quality)
 
         override suspend fun setLast(channelId: Long) = client.setLastChannel(channelId)
 
@@ -179,7 +191,12 @@ class LiveTvSession(
     channelId: Long,
     filter: ChannelFilter = ChannelFilter.All,
     private val platform: String = PLATFORM_ANDROID,
+    quality: String = Quality.AUTO,
 ) {
+    /** The [Quality] our channels are opened in (`?q=`); external channels play their own variants. */
+    var quality: String = quality
+        private set
+
     private val _state = MutableStateFlow(LiveTvState(emptyList(), channelId, emptyList(), LiveStream.Starting(0), filter))
     val state: StateFlow<LiveTvState> = _state.asStateFlow()
 
@@ -267,6 +284,19 @@ class LiveTvSession(
         return true
     }
 
+    /**
+     * The viewer picks a quality: our channel's stream is opened again in it (at the live edge); an
+     * external channel is not reopened (the player limits its own variants).
+     */
+    fun setQuality(value: String) {
+        if (value == quality) return
+        quality = value
+        val state = _state.value
+        if (state.channel?.external == true || (state.stream as? LiveStream.Ready)?.external == true) return
+        failures = 0
+        open()
+    }
+
     /** "Try Again" after a failure. */
     fun retry() {
         failures = 0
@@ -316,7 +346,7 @@ class LiveTvSession(
             }
             while (isActive) {
                 try {
-                    val url = api.open(channelId)
+                    val url = api.open(channelId, quality)
                     _state.update { it.copy(stream = LiveStream.Ready(url, ++generation)) }
                     markLast(channelId)
                     return@launch

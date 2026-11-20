@@ -69,6 +69,7 @@ import app.antresol.mobile.ui.components.RoundIconButton
 import app.antresol.mobile.ui.components.SkipSecondsButton
 import app.antresol.mobile.ui.components.TimeSlider
 import app.antresol.ui.playback.PlayerMenu
+import app.antresol.ui.playback.PlayerMenuContent
 import app.antresol.ui.playback.playerMenu
 import app.antresol.ui.userMessage
 import app.antresol.ui.R as UiR
@@ -455,7 +456,13 @@ private fun UpNextPanel(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit, onCanc
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MenuSheet(menu: PlayerMenu, viewModel: VideoPlayerViewModel, onDismiss: () -> Unit) {
-    val content = playerMenu(menu, viewModel)
+    PlayerMenuSheet(playerMenu(menu, viewModel), onDismiss)
+}
+
+/** A player menu as a bottom sheet: title, note, ticked rows (the film player's and the channel player's «Качество»). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PlayerMenuSheet(content: PlayerMenuContent, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),

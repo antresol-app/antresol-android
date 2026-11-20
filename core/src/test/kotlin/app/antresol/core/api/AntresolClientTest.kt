@@ -320,6 +320,24 @@ class AntresolClientTest {
     }
 
     @Test
+    fun liveChannelQualityGoesToTheMasterAndTheQualityEndpoint() = runTest {
+        client.token = "t"
+        val expires = java.time.Instant.now().plus(java.time.Duration.ofHours(12)).toString()
+        enqueue("""{"key":"k1","expiresAt":"$expires"}""")
+        enqueue("#EXTM3U\n", headers = mapOf("X-Antresol-Quality" to "720"))
+        enqueue("""{"selected":"auto","applied":"720","remote":true}""")
+        val url = client.openLiveChannel(4, "720")
+        assertTrue(url, url.endsWith("/api/channels/live/4/index.m3u8?q=720&mk=k1"))
+        val info = client.liveQuality("auto")
+        assertEquals(app.antresol.core.model.QualityInfo("auto", "720", true), info)
+        assertEquals("/api/auth/media-key", server.takeRequest().path)
+        assertEquals("/api/channels/live/4/index.m3u8?q=720&mk=k1", server.takeRequest().path)
+        val quality = server.takeRequest()
+        assertEquals("/api/channels/live/quality?q=auto", quality.path)
+        assertEquals("Bearer t", quality.getHeader("Authorization"))
+    }
+
+    @Test
     fun lyricsNotFoundIsNull() = runTest {
         client.token = "t"
         enqueue("""{"error":"No lyrics"}""", code = 404)

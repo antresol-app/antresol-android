@@ -31,6 +31,7 @@ import app.antresol.tv.ui.components.VerticalShelfScrolling
 import app.antresol.tv.ui.components.RoundIconButton
 import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.ui.playback.MenuOption
+import app.antresol.ui.playback.liveQualityMenu
 import app.antresol.tv.ui.channels.filterTitle
 import app.antresol.tv.ui.channels.LiveProgressBar
 import app.antresol.tv.ui.channels.KeyHint
@@ -130,10 +131,10 @@ private val GuidePanelWidth = 380.dp
 private enum class Banner { Hidden, Zap, Actions }
 
 /** What is open over the picture besides the banner. */
-private enum class Panel { None, Channels, Categories, Audio, Subtitles }
+private enum class Panel { None, Channels, Categories, Audio, Subtitles, Quality }
 
 /** A button of the banner. */
-private enum class LiveAction { PlayPause, GoLive, Favorite, Audio, Subtitles, Channels }
+private enum class LiveAction { PlayPause, GoLive, Favorite, Audio, Subtitles, Quality, Channels }
 
 /**
  * A channel live, full screen (Android TV Live Channels / TiviMate). Up/Down (and Channel+/−, Page
@@ -176,8 +177,11 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         add(LiveAction.Favorite)
         if (viewModel.audioOptions.isNotEmpty()) add(LiveAction.Audio)
         if (viewModel.subtitleOptions.isNotEmpty()) add(LiveAction.Subtitles)
+        if (viewModel.qualityOptions.isNotEmpty()) add(LiveAction.Quality)
         if (state.listed.size > 1) add(LiveAction.Channels)
     }
+    // «Качество»: the film player's menu content (labels, choices), drawn as this player's key panel
+    val quality = liveQualityMenu(viewModel)
     val guide = viewModel.miniGuide
     val selection = viewModel.trackSelection
     // a cleaned voice is not a row: «Очищенный перевод» last (core liveAudioEntries)
@@ -261,6 +265,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             Panel.Categories -> categories.indexOfFirst { it.filter == state.filter }.coerceAtLeast(0)
             Panel.Audio -> audioEntries.indexOfFirst { it.checked && !it.isToggle }.coerceAtLeast(0)
             Panel.Subtitles -> subtitles.indexOfFirst { it.name == selection.subtitles?.name } + 1
+            Panel.Quality -> quality?.options?.indexOfFirst { it.selected }?.coerceAtLeast(0) ?: 0
             Panel.None -> 0
         }
         if (next == Panel.Channels) banner = Banner.Hidden
@@ -276,6 +281,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             LiveAction.Favorite -> viewModel.toggleFavorite()
             LiveAction.Audio -> openPanel(Panel.Audio)
             LiveAction.Subtitles -> openPanel(Panel.Subtitles)
+            LiveAction.Quality -> openPanel(Panel.Quality)
             LiveAction.Channels -> openPanel(Panel.Channels)
         }
     }
@@ -285,6 +291,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         Panel.Categories -> categories.size
         Panel.Audio -> audioEntries.size
         Panel.Subtitles -> subtitles.size + 1
+        Panel.Quality -> quality?.options?.size ?: 0
         Panel.None -> 0
     }
 
@@ -306,6 +313,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
             }
             Panel.Audio -> audioEntries.getOrNull(panelIndex)?.let { viewModel.selectAudio(it.plays) }
             Panel.Subtitles -> viewModel.selectSubtitles(subtitles.getOrNull(panelIndex - 1))
+            Panel.Quality -> quality?.options?.getOrNull(panelIndex)?.onSelect?.invoke()
             Panel.None -> Unit
         }
         panel = Panel.None
@@ -518,6 +526,13 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
                 selected = panelIndex,
             )
         }
+        if (panel == Panel.Quality && quality != null) {
+            KeyPanel(
+                title = quality.title,
+                actions = quality.options.map { option -> PanelAction(option.label, AntresolIcons.Check.takeIf { option.selected }) },
+                selected = panelIndex,
+            )
+        }
     }
 }
 
@@ -699,6 +714,7 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                             LiveAction.Favorite -> if (channel.favorite) AntresolIcons.StarFilled else AntresolIcons.Star
                             LiveAction.Audio -> AntresolIcons.Audio
                             LiveAction.Subtitles -> AntresolIcons.Subtitles
+                            LiveAction.Quality -> AntresolIcons.Sliders
                             LiveAction.Channels -> AntresolIcons.List
                         },
                         selected = index == selected,
@@ -713,6 +729,8 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                             LiveAction.Audio -> stringResource(R.string.detail_audio) + (viewModel.trackSelection.audio?.let { " · " + it.label.ifBlank { it.name } } ?: "")
                             LiveAction.Subtitles -> stringResource(R.string.detail_subtitles) + " · " +
                                 (viewModel.trackSelection.subtitles?.let { it.label.ifBlank { it.name } } ?: stringResource(R.string.detail_subtitles_off))
+                            LiveAction.Quality -> stringResource(R.string.detail_quality) +
+                                (liveQualityMenu(viewModel)?.options?.firstOrNull { it.selected }?.let { " · " + it.label } ?: "")
                             LiveAction.Channels -> stringResource(R.string.tv_channel_list)
                         },
                         style = Antresol.typography.bodyEmphasis,

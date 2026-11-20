@@ -177,7 +177,13 @@ class LivePlayerActivity : ComponentActivity() {
         val filter = ChannelFilter.fromKey(intent.getStringExtra(EXTRA_FILTER))
         viewModel = ViewModelProvider(
             this,
-            viewModelFactory { initializer { LivePlayerViewModel(applicationContext, client, channelId, filter) } },
+            viewModelFactory {
+                initializer {
+                    // «Качество» is the app's video quality setting, shared with films.
+                    val settings = app.settings
+                    LivePlayerViewModel(applicationContext, client, channelId, filter, quality = settings.videoQuality, onQualityChosen = settings::updateVideoQuality)
+                }
+            },
         )[LivePlayerViewModel::class.java]
         // Headset buttons, Bluetooth, the picture-in-picture window's play/pause; live, no seeking.
         mediaSession = LiveMediaSession.build(this, viewModel.player)

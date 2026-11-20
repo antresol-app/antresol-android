@@ -53,6 +53,8 @@ import app.antresol.core.model.PlaylistPatch
 import app.antresol.core.model.Profile
 import app.antresol.core.model.Progress
 import app.antresol.core.model.ProgressUpdate
+import app.antresol.core.model.Quality
+import app.antresol.core.model.QualityInfo
 import app.antresol.core.model.SearchResults
 import app.antresol.core.model.SetupStatus
 import app.antresol.core.model.ShelvesResponse
@@ -454,11 +456,18 @@ class AntresolClient(
      * answer 503 with `Retry-After` (see [app.antresol.core.channels.LiveStartPolicy]); any non-2xx
      * answer is thrown as [ApiException] with the server's message.
      */
-    suspend fun openLiveChannel(id: Long): String {
-        val url = urls.liveChannel(id, mediaKeys.get(LIVE_KEY_LIFETIME))
+    suspend fun openLiveChannel(id: Long, quality: String = Quality.AUTO): String {
+        val url = urls.liveChannel(id, mediaKeys.get(LIVE_KEY_LIFETIME), quality)
         execute(buildRequest("GET", url.toHttpUrl(), null))
         return url
     }
+
+    /**
+     * `GET /api/channels/live/quality?q=`: the quality the server applies to our channels for the
+     * choice [quality] (`applied`, and `remote` when the device is away from home).
+     */
+    suspend fun liveQuality(quality: String): QualityInfo =
+        send("GET", urls.liveQuality(quality).toHttpUrl(), null)
 
     /**
      * The URL the player opens for an external channel's [url]: a provider URL as it is (the media

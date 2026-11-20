@@ -118,6 +118,13 @@ class MediaUrlsTest {
         assertEquals("http://nas.local:8420/api/comics/13/page/0", urls.comicPage(13, 0))
         assertEquals("http://nas.local:8420/api/channels/live/2/index.m3u8?mk=v1.2.1.9.x", urls.liveChannel(2, "v1.2.1.9.x"))
         assertEquals("http://nas.local:8420/api/channels/live/2/index.m3u8", urls.liveChannel(2))
+        // `q` for any choice but auto; the media key stays
+        assertEquals("http://nas.local:8420/api/channels/live/2/index.m3u8?q=720&mk=k", urls.liveChannel(2, "k", "720"))
+        assertEquals("http://nas.local:8420/api/channels/live/2/index.m3u8?q=original", urls.liveChannel(2, quality = "original"))
+        assertEquals("http://nas.local:8420/api/channels/live/2/index.m3u8?mk=k", urls.liveChannel(2, "k", "auto"))
+        assertEquals("http://nas.local:8420/api/channels/live/2/index.m3u8", urls.liveChannel(2, quality = "4k"))
+        assertEquals("http://nas.local:8420/api/channels/live/quality?q=auto", urls.liveQuality("auto"))
+        assertEquals("http://nas.local:8420/api/channels/live/quality?q=1080", urls.liveQuality("1080"))
     }
 
     @Test

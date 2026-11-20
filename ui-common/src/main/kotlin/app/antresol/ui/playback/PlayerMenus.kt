@@ -67,6 +67,31 @@ fun playerMenu(menu: PlayerMenu, viewModel: VideoPlayerViewModel): PlayerMenuCon
     return PlayerMenuContent(title, options, note = if (menu == PlayerMenu.Quality) streamNote(viewModel) else null)
 }
 
+/**
+ * The live channel player's «Качество», in the film player's [PlayerMenuContent] (same rows, same
+ * labels); null when the channel offers no choice (an external stream with a single variant).
+ */
+@Composable
+fun liveQualityMenu(viewModel: LivePlayerViewModel): PlayerMenuContent? {
+    val options = viewModel.qualityOptions.ifEmpty { return null }
+    val auto = stringResource(R.string.quality_auto)
+    val original = stringResource(R.string.quality_original)
+    fun label(value: String) = when (value) {
+        Quality.AUTO -> auto
+        Quality.ORIGINAL -> original
+        else -> "${value}p"
+    }
+    return PlayerMenuContent(
+        title = stringResource(R.string.detail_quality),
+        options = options.map { option ->
+            // «Авто · 720p»: what the server applies away from home (as the web player shows it)
+            val text = option.applied?.let { "${label(option.value)} · ${label(it)}" } ?: label(option.value)
+            MenuOption(text, option.selected) { viewModel.selectQuality(option.value) }
+        },
+        note = null,
+    )
+}
+
 /** "Auto", "Original" or "720p". */
 @Composable
 fun qualityLabel(value: String): String = when (value) {

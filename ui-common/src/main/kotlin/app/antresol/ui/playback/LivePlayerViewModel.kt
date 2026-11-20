@@ -43,6 +43,11 @@ import app.antresol.core.channels.LiveTvState
 import app.antresol.core.channels.liveApi
 import app.antresol.core.model.ChannelProgram
 import app.antresol.core.model.ProgramTrack
+import app.antresol.core.model.Quality
+import app.antresol.core.model.QualityInfo
+import app.antresol.core.api.attempt
+import app.antresol.core.channels.LiveQuality
+import app.antresol.core.channels.LiveQualityOption
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -83,16 +88,39 @@ class LivePlayerViewModel(
     client: AntresolClient,
     channelId: Long,
     filter: ChannelFilter = ChannelFilter.All,
-    api: LiveApi = client.liveApi(),
+    private val api: LiveApi = client.liveApi(),
     private val clock: () -> Long = System::currentTimeMillis,
     platform: String = LiveTvSession.PLATFORM_ANDROID,
     private val trackMemory: ExternalTrackMemory = DeviceExternalTrackMemory(context),
+    /** The [Quality] our channels open in (the app's video quality setting, shared with films). */
+    quality: String = Quality.AUTO,
+    /** The viewer picked a quality for our channels: the app saves it as its setting. */
+    private val onQualityChosen: (String) -> Unit = {},
 ) : ViewModel() {
     private val client: AntresolClient = client.pinned()
 
     val player: ExoPlayer = buildVideoPlayer(context, this.client)
 
-    private val session = LiveTvSession(api, viewModelScope, channelId, filter, platform)
+    private val session = LiveTvSession(api, viewModelScope, channelId, filter, platform, quality)
+
+    /** The quality our channels are opened in («Качество»). */
+    var quality: String by mutableStateOf(session.quality)
+        private set
+
+    /** What the server applies for [quality] (for «Авто · 720p»); null until read. */
+    private var qualityInfo: QualityInfo? by mutableStateOf(null)
+    private var qualityInfoFor: String? = null
+
+    /** An external stream's video variants (heights) and the height the viewer limited it to (null: auto). */
+    private var streamHeights: List<Int> by mutableStateOf(emptyList())
+    private var externalMaxHeight: Int? by mutableStateOf(null)
+
+    /**
+     * The «Качество» choices: our channel — Авто / Оригинал / 1080p / 720p / 480p; an external one —
+     * Авто and the stream's own heights when its master has several (else none: no menu).
+     */
+    val qualityOptions: List<LiveQualityOption>
+        get() = if (isExternal) LiveQuality.external(streamHeights, externalMaxHeight) else LiveQuality.own(quality, qualityInfo)
 
     /** The viewer's audio/subtitle choice on the channel on screen (remembered per channel on the device, never sent). */
     var trackChoice: LiveTrackChoice by mutableStateOf(trackMemory.get(channelId) ?: LiveTrackChoice())
@@ -251,6 +279,8 @@ class LivePlayerViewModel(
                     awaitingPicture = true
                     streamAudio = emptyList()
                     streamSubtitles = emptyList()
+                    streamHeights = emptyList()
+                    clearExternalLimit()
                     trackChoice = trackMemory.get(next.channelId) ?: LiveTrackChoice()
                     behindLive = false
                 }
@@ -341,6 +371,48 @@ class LivePlayerViewModel(
         applyTracks()
     }
 
+    /**
+     * The viewer picks a quality. Our channel: the stream is opened again with `?q=` (at the live
+     * edge) and the choice saved as the app's setting. An external channel: the player keeps to the
+     * stream's variants up to that height (not saved); «Авто» lifts the limit.
+     */
+    fun selectQuality(value: String) {
+        if (released) return
+        if (isExternal) {
+            val height = LiveQuality.externalMaxHeight(value)
+            if (height == externalMaxHeight) return
+            externalMaxHeight = height
+            val builder = player.trackSelectionParameters.buildUpon()
+            if (height == null) builder.clearVideoSizeConstraints() else builder.setMaxVideoSize(Int.MAX_VALUE, height)
+            player.trackSelectionParameters = builder.build()
+            return
+        }
+        if (value == quality || value !in Quality.ALL) return
+        quality = value
+        qualityInfo = null
+        qualityInfoFor = null
+        onQualityChosen(value)
+        session.setQuality(value)
+    }
+
+    private fun clearExternalLimit() {
+        if (externalMaxHeight == null) return
+        externalMaxHeight = null
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().clearVideoSizeConstraints().build()
+    }
+
+    /** Reads what the server applies for [quality] once per choice (the «Авто» detail). */
+    private fun loadQualityInfo() {
+        val wanted = quality
+        if (qualityInfoFor == wanted) return
+        qualityInfoFor = wanted
+        viewModelScope.launch {
+            val info = attempt { api.quality(wanted) }
+            if (quality == wanted) qualityInfo = info else return@launch
+            if (info == null) qualityInfoFor = null
+        }
+    }
+
     private fun remember(choice: LiveTrackChoice) {
         trackChoice = choice.forMemory()
         trackMemory.put(state.channelId, trackChoice)
@@ -375,6 +447,9 @@ class LivePlayerViewModel(
                     loaded = stream
                     loadedMime = MimeTypes.APPLICATION_M3U8
                     awaitingPicture = true
+                    streamHeights = emptyList()
+                    clearExternalLimit()
+                    loadQualityInfo()
                     player.setMediaItem(mediaItem(stream.url, metadata()))
                     player.prepare()
                     player.play()
@@ -401,6 +476,7 @@ class LivePlayerViewModel(
         awaitingPicture = true
         streamAudio = emptyList()
         streamSubtitles = emptyList()
+        streamHeights = emptyList()
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(stream.userAgent?.takeIf { it.isNotBlank() } ?: Util.getUserAgent(context, USER_AGENT_APP))
             .setAllowCrossProtocolRedirects(true)
@@ -420,6 +496,13 @@ class LivePlayerViewModel(
         streamAudio = if (external) ExternalTracks.options(tracks.streamTracks(C.TRACK_TYPE_AUDIO), ::trackName) else emptyList()
         // Ours too: a stream whose subtitle renditions the guide does not list still offers them.
         streamSubtitles = ExternalTracks.options(tracks.streamTracks(C.TRACK_TYPE_TEXT), ::trackName)
+        // An external master's variants (one adaptive video group); ours go through `?q=` instead.
+        streamHeights = if (external) {
+            tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+                .flatMap { group -> (0 until group.length).filter(group::isTrackSupported).map { group.getTrackFormat(it).height } }
+        } else {
+            emptyList()
+        }
     }
 
     private fun Tracks.streamTracks(type: Int): List<StreamTrack> =

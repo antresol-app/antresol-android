@@ -36,6 +36,17 @@ object AntresolIcons {
         lineTo(12f, 7.7f)
     }
 
+    /** Back to the channel watched before (a hooked arrow). */
+    val Recall: ImageVector = lineIcon("Recall") {
+        moveTo(9f, 5f)
+        lineTo(4.5f, 9.5f)
+        lineTo(9f, 14f)
+        moveTo(4.5f, 9.5f)
+        lineTo(14.5f, 9.5f)
+        arcToRelative(5f, 5f, 0f, false, true, 0f, 10f)
+        lineTo(11f, 19.5f)
+    }
+
     val ChevronUp: ImageVector = lineIcon("ChevronUp") {
         moveTo(5.5f, 14.5f)
         lineTo(12f, 8f)

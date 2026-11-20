@@ -318,6 +318,7 @@ fun LivePlayerScreen(
                 onFavorite = viewModel::toggleFavorite,
                 onTune = tune,
                 modifier = Modifier.weight(1f),
+                path = viewModel.playbackPath,
             )
         }
     }
@@ -509,6 +510,7 @@ internal fun LiveBelow(
     onTune: (Channel) -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
+    path: app.antresol.core.channels.LivePlaybackPath? = null,
 ) {
     val nowMs = rememberNowMs()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -523,7 +525,7 @@ internal fun LiveBelow(
             contentPadding = PaddingValues(bottom = bottom + 16.dp),
         ) {
             item(key = "details") {
-                LiveDetails(state, behindLive, onGoLive, onFavorite, Modifier.padding(horizontal = 20.dp, vertical = 14.dp))
+                LiveDetails(state, behindLive, onGoLive, onFavorite, Modifier.padding(horizontal = 20.dp, vertical = 14.dp), path)
                 Box(Modifier.fillMaxWidth().height(1.dp).background(AntresolColors.Hairline))
                 if (guide.channels.size > 1) {
                     Text(
@@ -547,7 +549,14 @@ internal fun LiveBelow(
  * title, the episode, start and end around the progress, «Далее …».
  */
 @Composable
-internal fun LiveDetails(state: LiveTvState, behindLive: Boolean, onGoLive: () -> Unit, onFavorite: () -> Unit, modifier: Modifier = Modifier) {
+internal fun LiveDetails(
+    state: LiveTvState,
+    behindLive: Boolean,
+    onGoLive: () -> Unit,
+    onFavorite: () -> Unit,
+    modifier: Modifier = Modifier,
+    path: app.antresol.core.channels.LivePlaybackPath? = null,
+) {
     val context = LocalContext.current
     val urls = app.antresol.mobile.ui.LocalMediaUrls.current
     val nowMs = rememberNowMs(1_000L)
@@ -588,6 +597,24 @@ internal fun LiveDetails(state: LiveTvState, behindLive: Boolean, onGoLive: () -
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        if (state.noSupportedAudio) {
+            Text(
+                stringResource(R.string.tv_no_supported_audio),
+                style = Antresol.typography.bodyEmphasis,
+                maxLines = 2,
+                modifier = Modifier.padding(top = 4.dp).testTag("live-no-audio"),
+            )
+        }
+        // How the stream arrives: «Напрямую · host» / «Через Antresol», its format, codecs and source.
+        if (path != null) {
+            Text(
+                app.antresol.ui.playback.playbackPathText(path),
+                style = Antresol.typography.caption.copy(color = AntresolColors.LabelSecondary),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp).testTag("live-path"),
             )
         }
     }

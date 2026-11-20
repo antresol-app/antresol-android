@@ -117,6 +117,10 @@ sealed interface LiveStream {
         val source: Int = 0,
         /** An external stream's [app.antresol.core.model.StreamSource.format]: `hls`, `ts` or null (unknown). */
         val format: String? = null,
+        /** How many sources the external channel has (the banner's «Источник n из m»). */
+        val sourceCount: Int = 1,
+        /** The external source's own URL is the server's hidden-address redirect («Через Antresol»). */
+        val viaServer: Boolean = false,
     ) : LiveStream
 
     /**
@@ -143,6 +147,10 @@ data class LiveTvState(
     val categories: List<ChannelCategory> = emptyList(),
     /** The list has the favourites first (the server's order; a star changed here moves its channel). */
     val favoritesFirst: Boolean = false,
+    /** The channel watched before this one («Предыдущий канал»), null until a switch. */
+    val previousChannelId: Long? = null,
+    /** Every source of the external channel on screen plays without a sound the device decodes. */
+    val noSupportedAudio: Boolean = false,
 ) {
     val channel: Channel? get() = channels.firstOrNull { it.id == channelId }
 
@@ -192,6 +200,8 @@ class LiveTvSession(
     filter: ChannelFilter = ChannelFilter.All,
     private val platform: String = PLATFORM_ANDROID,
     quality: String = Quality.AUTO,
+    /** The external sources that played badly here: tried last. */
+    private val sourceMemory: ExternalSourceMemory = InMemoryExternalSourceMemory(),
 ) {
     /** The [Quality] our channels are opened in (`?q=`); external channels play their own variants. */
     var quality: String = quality
@@ -212,6 +222,9 @@ class LiveTvSession(
     private var externalIndex = 0
     private var externalPlayed = false
     private var externalReopens = 0
+    /** The sources of this opening that played without sound, and the one kept although silent. */
+    private var silentSources = mutableSetOf<Int>()
+    private var acceptedSilent = false
 
     /** Opens the stream and starts the periodic refresh (again after [stop]). */
     fun start() {
@@ -276,8 +289,9 @@ class LiveTvSession(
 
     /** Switches to [channelId] (the mini-guide). False when it is already on. */
     fun tune(channelId: Long): Boolean {
-        if (channelId == _state.value.channelId) return false
-        _state.update { it.copy(channelId = channelId, programs = emptyList()) }
+        val current = _state.value.channelId
+        if (channelId == current) return false
+        _state.update { it.copy(channelId = channelId, programs = emptyList(), previousChannelId = current, noSupportedAudio = false) }
         failures = 0
         open()
         reloadGuide()
@@ -295,6 +309,72 @@ class LiveTvSession(
         if (state.channel?.external == true || (state.stream as? LiveStream.Ready)?.external == true) return
         failures = 0
         open()
+    }
+
+    /** «Предыдущий канал»: back to the channel watched before (and from there back again). False when there is none. */
+    fun tunePrevious(): Boolean {
+        val previous = _state.value.previousChannelId ?: return false
+        return tune(previous)
+    }
+
+    /**
+     * The external stream on screen shows pictures but has no sound the device decodes (no audio
+     * track, or none it supports): the next source, remembered as bad; with none left it plays on
+     * with [LiveTvState.noSupportedAudio].
+     */
+    fun streamSilent() {
+        val stream = _state.value.stream as? LiveStream.Ready ?: return
+        if (!stream.external) return
+        if (acceptedSilent) {
+            _state.update { it.copy(noSupportedAudio = true) }
+            return
+        }
+        silentSources += externalIndex
+        externalSources.getOrNull(externalIndex)?.let { sourceMemory.markBad(_state.value.channelId, it.url) }
+        when (val step = ExternalFallback.afterSilence(externalIndex, externalSources.size)) {
+            is ExternalFallback.Step.TryNext -> switchExternal(step.index)
+            is ExternalFallback.Step.AcceptSilent -> {
+                acceptedSilent = true
+                _state.update { it.copy(noSupportedAudio = true) }
+            }
+            ExternalFallback.Step.GiveUp -> Unit
+        }
+    }
+
+    /** The own URL of the external source on screen (a path for the server's redirect); null for our channels. */
+    fun currentSourceUrl(): String? =
+        if ((_state.value.stream as? LiveStream.Ready)?.external == true) externalSources.getOrNull(externalIndex)?.url else null
+
+    /** The external stream on screen plays with sound: its source loses a bad mark. */
+    fun streamHasSound() {
+        val stream = _state.value.stream as? LiveStream.Ready ?: return
+        if (!stream.external) return
+        externalSources.getOrNull(externalIndex)?.let { sourceMemory.markGood(_state.value.channelId, it.url) }
+    }
+
+    /**
+     * The stream has waited for data for a long time while playing: an external channel moves to
+     * its next source (this one remembered as bad); the last source, or our channel, is opened again
+     * at the live edge.
+     */
+    fun streamStalled() {
+        val stream = _state.value.stream as? LiveStream.Ready ?: return
+        if (stream.external && !acceptedSilent && externalIndex + 1 < externalSources.size) {
+            externalSources.getOrNull(externalIndex)?.let { sourceMemory.markBad(_state.value.channelId, it.url) }
+            switchExternal(externalIndex + 1)
+        } else {
+            streamFailed()
+        }
+    }
+
+    private fun switchExternal(index: Int) {
+        val channelId = _state.value.channelId
+        externalIndex = index
+        externalPlayed = false
+        externalReopens = 0
+        openJob?.cancel()
+        _state.update { it.copy(stream = LiveStream.Starting(externalIndex)) }
+        openJob = scope.launch { openExternal(channelId) }
     }
 
     /** "Try Again" after a failure. */
@@ -328,7 +408,7 @@ class LiveTvSession(
     private fun open(delayMs: Long = 0) {
         openJob?.cancel()
         val channelId = _state.value.channelId
-        _state.update { it.copy(stream = LiveStream.Starting(failures)) }
+        _state.update { it.copy(stream = LiveStream.Starting(failures), noSupportedAudio = false) }
         openJob = scope.launch {
             if (delayMs > 0) delay(delayMs)
             // Whether the channel is external is in the list: wait for its first load (briefly).
@@ -337,10 +417,13 @@ class LiveTvSession(
             }
             val channel = _state.value.channels.firstOrNull { it.id == channelId }
             if (channel?.external == true) {
-                externalSources = channel.stream?.sources.orEmpty().filter(::playable)
+                // the sources that played badly here lately go last
+                externalSources = sourceMemory.ordered(channelId, channel.stream?.sources.orEmpty().filter(::playable))
                 externalIndex = 0
                 externalPlayed = false
                 externalReopens = 0
+                silentSources = mutableSetOf()
+                acceptedSilent = false
                 openExternal(channelId)
                 return@launch
             }
@@ -383,7 +466,12 @@ class LiveTvSession(
             if (url != null) {
                 _state.update {
                     if (it.channelId != channelId) it
-                    else it.copy(stream = LiveStream.Ready(url, ++generation, true, source.userAgent, source.referrer, externalIndex, source.format))
+                    else it.copy(
+                        stream = LiveStream.Ready(
+                            url, ++generation, true, source.userAgent, source.referrer, externalIndex, source.format,
+                            sourceCount = externalSources.size, viaServer = source.url.startsWith("/"),
+                        ),
+                    )
                 }
                 markLast(channelId)
                 return
@@ -402,7 +490,22 @@ class LiveTvSession(
         val channelId = _state.value.channelId
         val reopen = externalPlayed && externalReopens < MAX_EXTERNAL_REOPENS
         externalPlayed = false
-        if (reopen) externalReopens++ else externalIndex++
+        if (reopen) {
+            externalReopens++
+        } else {
+            externalSources.getOrNull(externalIndex)?.let { sourceMemory.markBad(channelId, it.url) }
+            // the silent source kept as the last resort failed too: nothing more to try
+            val step = if (acceptedSilent) ExternalFallback.Step.GiveUp else ExternalFallback.afterFailure(externalIndex, externalSources.size, silentSources)
+            when (step) {
+                is ExternalFallback.Step.TryNext -> externalIndex = step.index
+                is ExternalFallback.Step.AcceptSilent -> {
+                    externalIndex = step.index
+                    acceptedSilent = true
+                }
+                // past the end: openExternal fails the channel
+                ExternalFallback.Step.GiveUp -> externalIndex = externalSources.size
+            }
+        }
         openJob?.cancel()
         _state.update { it.copy(stream = LiveStream.Starting(externalIndex)) }
         openJob = scope.launch {

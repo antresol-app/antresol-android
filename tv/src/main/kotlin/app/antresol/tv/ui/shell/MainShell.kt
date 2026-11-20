@@ -126,6 +126,7 @@ import app.antresol.core.channels.LiveApi
 import app.antresol.core.channels.liveApi
 import app.antresol.core.channels.LiveTvSession
 import app.antresol.ui.channels.ChannelPrefsModel
+import app.antresol.ui.channels.ChannelsView
 import app.antresol.ui.channels.ChannelsViewModel
 import app.antresol.ui.channels.channelPrefsApi
 import app.antresol.ui.channels.channelsApi
@@ -291,6 +292,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     // Tabs: a tab left for another one resets to its root after TAB_RESET_MS, unless the user
     // comes back first (an accidental switch keeps everything).
     val resets = remember { HashMap<NavTab, Job>() }
+    // The live player's Guide key: the TV tab opens on its guide.
+    val guideRequests = remember { kotlinx.coroutines.flow.MutableStateFlow(false) }
     val selectTab: (NavTab) -> Unit = { tab ->
         val leaving = navController.currentTab()
         resets.remove(tab)?.cancel()
@@ -465,8 +468,17 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                     LibraryGrid(GridSource(GridKind.Shows), stringResource(R.string.nav_tv_shows), open, onScrolledToTop, LocalPageCanTakeFocus.current)
                 }
                 page<ChannelsRoute>(contentFocus) {
+                    val channelsViewModel = viewModel { ChannelsViewModel(client.channelsApi()) }
+                    LaunchedEffect(channelsViewModel) {
+                        guideRequests.collect { requested ->
+                            if (requested) {
+                                guideRequests.value = false
+                                channelsViewModel.showView(ChannelsView.Guide)
+                            }
+                        }
+                    }
                     ChannelsScreen(
-                        viewModel = viewModel { ChannelsViewModel(client.channelsApi()) },
+                        viewModel = channelsViewModel,
                         onWatch = { channel, filter ->
                             // Live TV takes over the screen and the speakers, like a video.
                             audio.pause()
@@ -609,6 +621,11 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                                 quality = app.settings.current.defaultQuality,
                                 onQualityChosen = { value -> app.settings.update { it.copy(defaultQuality = value) } },
                             )
+                        },
+                        onGuide = {
+                            navController.popBackStack()
+                            guideRequests.value = true
+                            selectTab(NavTab.Tv)
                         },
                     )
                 }

@@ -32,6 +32,7 @@ import app.antresol.tv.ui.components.RoundIconButton
 import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.ui.playback.MenuOption
 import app.antresol.ui.playback.liveQualityMenu
+import app.antresol.ui.playback.playbackPathText
 import app.antresol.tv.ui.channels.filterTitle
 import app.antresol.tv.ui.channels.LiveProgressBar
 import app.antresol.tv.ui.channels.KeyHint
@@ -134,7 +135,7 @@ private enum class Banner { Hidden, Zap, Actions }
 private enum class Panel { None, Channels, Categories, Audio, Subtitles, Quality }
 
 /** A button of the banner. */
-private enum class LiveAction { PlayPause, GoLive, Favorite, Audio, Subtitles, Quality, Channels }
+private enum class LiveAction { PlayPause, GoLive, Favorite, Previous, Audio, Subtitles, Quality, Channels }
 
 /**
  * A channel live, full screen (Android TV Live Channels / TiviMate). Up/Down (and Channel+/−, Page
@@ -150,9 +151,14 @@ private enum class LiveAction { PlayPause, GoLive, Favorite, Audio, Subtitles, Q
  * continues from the stopped picture while the stream holds it, else at the live edge; more than
  * 10 s behind the edge «В эфир» replaces «Прямой эфир» in the banner and its button (or ⏩) jumps
  * back. No seeking otherwise, nothing sent to the server.
+ *
+ * Holding OK brings up the banner's buttons too; the remote's Last Channel key (and the banner's
+ * «Предыдущий канал») goes back to the channel watched before, Info shows the banner, Guide opens
+ * the full guide ([onGuide]). The banner's quiet line tells how the stream arrives («Напрямую ·
+ * host» / «Через Antresol»), its format, codecs and source.
  */
 @Composable
-fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
+fun LivePlayerScreen(viewModel: LivePlayerViewModel, onGuide: () -> Unit = {}) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onBackground() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.onForeground() }
     val context = LocalContext.current
@@ -175,6 +181,7 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         add(LiveAction.PlayPause)
         if (viewModel.behindLive) add(LiveAction.GoLive)
         add(LiveAction.Favorite)
+        if (state.previousChannelId != null) add(LiveAction.Previous)
         if (viewModel.audioOptions.isNotEmpty()) add(LiveAction.Audio)
         if (viewModel.subtitleOptions.isNotEmpty()) add(LiveAction.Subtitles)
         if (viewModel.qualityOptions.isNotEmpty()) add(LiveAction.Quality)
@@ -192,6 +199,8 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
     // The remote's digits: «23_» and the switch 1.5 s after the last one, or at once on OK.
     var typed by remember { mutableStateOf("") }
     var noChannel by remember { mutableStateOf<Int?>(null) }
+    // OK held: the repeat opened the buttons, its release does nothing more.
+    var longOk by remember { mutableStateOf(false) }
 
     LaunchedEffect(banner, interactions, viewModel.isPlaying, state.channelId, panel) {
         if (banner != Banner.Hidden && viewModel.isPlaying && panel == Panel.None) {
@@ -279,6 +288,10 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
                 actionIndex = 0
             }
             LiveAction.Favorite -> viewModel.toggleFavorite()
+            LiveAction.Previous -> if (viewModel.tunePrevious()) {
+                banner = Banner.Zap
+                actionIndex = 0
+            }
             LiveAction.Audio -> openPanel(Panel.Audio)
             LiveAction.Subtitles -> openPanel(Panel.Subtitles)
             LiveAction.Quality -> openPanel(Panel.Quality)
@@ -334,6 +347,44 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel) {
         if (typed.isNotEmpty() && event.key in CenterKeys) {
             if (up) commitDigits()
             return@handler true
+        }
+        // OK held (the key repeats): the banner's buttons, as Right; the release is used up.
+        if (event.key in CenterKeys) {
+            if (down && event.nativeKeyEvent.repeatCount > 0) {
+                if (!longOk) {
+                    longOk = true
+                    if (panel == Panel.None && !failed && banner != Banner.Actions) {
+                        banner = Banner.Actions
+                        actionIndex = 0
+                    }
+                }
+                return@handler true
+            }
+            if (up && longOk) {
+                longOk = false
+                return@handler true
+            }
+        }
+        // The remote's Last Channel, Info and Guide keys, wherever the focus is.
+        when (event.key) {
+            Key.LastChannel -> {
+                if (down && viewModel.tunePrevious()) {
+                    if (panel == Panel.Channels || panel == Panel.Categories) panel = Panel.None
+                    if (banner != Banner.Actions) banner = Banner.Zap
+                }
+                return@handler true
+            }
+            Key.Info -> {
+                if (down) {
+                    panel = Panel.None
+                    banner = if (banner == Banner.Hidden) Banner.Zap else Banner.Hidden
+                }
+                return@handler true
+            }
+            Key.Guide -> {
+                if (up) onGuide()
+                return@handler true
+            }
         }
         val channelStep = when (event.key) {
             Key.ChannelUp, Key.PageUp, Key.MediaNext -> 1
@@ -703,6 +754,25 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                     KeyHint("▶", stringResource(R.string.tv_ok_actions))
                 }
             }
+            if (state.noSupportedAudio) {
+                Text(
+                    stringResource(R.string.tv_no_supported_audio),
+                    style = Antresol.typography.bodyEmphasis,
+                    color = AntresolColors.Label,
+                    maxLines = 1,
+                    modifier = Modifier.testTag("live-no-audio"),
+                )
+            }
+            viewModel.playbackPath?.let { path ->
+                Text(
+                    playbackPathText(path),
+                    style = Antresol.typography.caption,
+                    color = AntresolColors.LabelSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("live-path"),
+                )
+            }
         }
         if (actions.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -712,6 +782,7 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                             LiveAction.PlayPause -> if (viewModel.paused) AntresolIcons.Play else AntresolIcons.Pause
                             LiveAction.GoLive -> AntresolIcons.Tv
                             LiveAction.Favorite -> if (channel.favorite) AntresolIcons.StarFilled else AntresolIcons.Star
+                            LiveAction.Previous -> AntresolIcons.Recall
                             LiveAction.Audio -> AntresolIcons.Audio
                             LiveAction.Subtitles -> AntresolIcons.Subtitles
                             LiveAction.Quality -> AntresolIcons.Sliders
@@ -726,6 +797,8 @@ private fun ChannelBanner(viewModel: LivePlayerViewModel, actions: List<LiveActi
                             LiveAction.PlayPause -> stringResource(if (viewModel.paused) R.string.action_play else R.string.player_pause)
                             LiveAction.GoLive -> stringResource(R.string.tv_go_live)
                             LiveAction.Favorite -> stringResource(if (channel.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add)
+                            LiveAction.Previous -> stringResource(R.string.tv_previous_channel) +
+                                (state.previousChannelId?.let { id -> state.channels.firstOrNull { it.id == id } }?.let { " · ${it.number} ${it.name}" } ?: "")
                             LiveAction.Audio -> stringResource(R.string.detail_audio) + (viewModel.trackSelection.audio?.let { " · " + it.label.ifBlank { it.name } } ?: "")
                             LiveAction.Subtitles -> stringResource(R.string.detail_subtitles) + " · " +
                                 (viewModel.trackSelection.subtitles?.let { it.label.ifBlank { it.name } } ?: stringResource(R.string.detail_subtitles_off))

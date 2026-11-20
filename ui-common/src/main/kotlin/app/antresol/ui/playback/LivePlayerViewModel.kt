@@ -48,6 +48,10 @@ import app.antresol.core.model.QualityInfo
 import app.antresol.core.api.attempt
 import app.antresol.core.channels.LiveQuality
 import app.antresol.core.channels.LiveQualityOption
+import app.antresol.core.channels.ExternalSourceMemory
+import app.antresol.core.channels.LivePlaybackPath
+import app.antresol.core.channels.MediaCodecs
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -69,6 +73,12 @@ import kotlinx.coroutines.launch
  * Subtitles: the viewer's choice, else the profile's subtitle mode and languages. The options are
  * the programme's renditions from the guide; when the guide names none but the stream has text
  * tracks (`EXT-X-MEDIA TYPE=SUBTITLES`), the stream's own tracks are offered instead.
+ *
+ * The banner's [playbackPath] tells how the stream arrives («Напрямую · host» / «Через Antresol»),
+ * its format and codecs, and the source tried. An external stream that shows pictures without a sound
+ * the device decodes, or that waits for data longer than [STALL_MS] while playing, gives way to its
+ * next source ([LiveTvSession.streamSilent], [LiveTvSession.streamStalled]); such sources are kept per
+ * channel on the device ([DeviceExternalSourceMemory]) and tried last.
  *
  * Live may be paused ([togglePause]; the media session's play/pause, picture-in-picture's and a
  * remote's key go through the same player). A resume picks up where it stopped while the stream
@@ -96,12 +106,13 @@ class LivePlayerViewModel(
     quality: String = Quality.AUTO,
     /** The viewer picked a quality for our channels: the app saves it as its setting. */
     private val onQualityChosen: (String) -> Unit = {},
+    sourceMemory: ExternalSourceMemory = DeviceExternalSourceMemory(context),
 ) : ViewModel() {
     private val client: AntresolClient = client.pinned()
 
     val player: ExoPlayer = buildVideoPlayer(context, this.client)
 
-    private val session = LiveTvSession(api, viewModelScope, channelId, filter, platform, quality)
+    private val session = LiveTvSession(api, viewModelScope, channelId, filter, platform, quality, sourceMemory)
 
     /** The quality our channels are opened in («Качество»). */
     var quality: String by mutableStateOf(session.quality)
@@ -174,6 +185,19 @@ class LivePlayerViewModel(
     var hasPicture: Boolean by mutableStateOf(false)
         private set
 
+    /** How the stream on screen arrives, its format and codecs (the banner's quiet line); null while none is loaded. */
+    var playbackPath: LivePlaybackPath? by mutableStateOf(null)
+        private set
+
+    /** Waits a moment after the first frame, then looks at the audio tracks. */
+    private var audioCheck: Job? = null
+
+    /** Counts a stall while playing; past [STALL_MS] the stream is stuck. */
+    private var stallWatch: Job? = null
+
+    /** The stream on screen has drawn a frame (a stall before that is the start's timeout, not this watch). */
+    private var streamStarted = false
+
     /** The programme on air now (from the guide, else the channel list). */
     val onAirProgram: ChannelProgram?
         get() = state.onAir(clock()).first
@@ -213,15 +237,21 @@ class LivePlayerViewModel(
         override fun onRenderedFirstFrame() {
             hasPicture = true
             awaitingPicture = false
+            if (!streamStarted) {
+                streamStarted = true
+                checkAudioSoon()
+            }
         }
 
         override fun onTracksChanged(tracks: Tracks) {
             readStreamTracks(tracks)
             applyTracks()
+            updatePath()
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             isBuffering = playbackState == Player.STATE_BUFFERING
+            watchStall(playbackState)
         }
 
         // A pause from anywhere (the centre button, a key, the media session, picture-in-picture);
@@ -336,6 +366,9 @@ class LivePlayerViewModel(
     /** Switches to [channelId] (from the mini-guide). False when it is already on. */
     fun tune(channelId: Long): Boolean = session.tune(channelId)
 
+    /** «Предыдущий канал»; false when there is none yet. */
+    fun tunePrevious(): Boolean = session.tunePrevious()
+
     /** Channel up (+1, the next number) or down (−1), wrapping. False when there is no other channel. */
     fun zap(step: Int): Boolean = session.zap(step)
 
@@ -446,6 +479,7 @@ class LivePlayerViewModel(
                 } else {
                     loaded = stream
                     loadedMime = MimeTypes.APPLICATION_M3U8
+                    streamLoaded()
                     awaitingPicture = true
                     streamHeights = emptyList()
                     clearExternalLimit()
@@ -460,6 +494,8 @@ class LivePlayerViewModel(
             is LiveStream.Starting, is LiveStream.Failed -> if (loaded != null) {
                 loaded = null
                 isPlaying = false
+                audioCheck?.cancel()
+                stallWatch?.cancel()
                 player.stop()
             }
         }
@@ -473,6 +509,7 @@ class LivePlayerViewModel(
     private fun loadExternal(stream: LiveStream.Ready, mime: String?) {
         loaded = stream
         loadedMime = mime
+        streamLoaded()
         awaitingPicture = true
         streamAudio = emptyList()
         streamSubtitles = emptyList()
@@ -488,6 +525,70 @@ class LivePlayerViewModel(
         player.setMediaSource(source)
         player.prepare()
         player.play()
+    }
+
+    /** A new stream goes to the player: its path from scratch, the checks wait for its first frame. */
+    private fun streamLoaded() {
+        streamStarted = false
+        audioCheck?.cancel()
+        stallWatch?.cancel()
+        updatePath()
+    }
+
+    /** The banner's path: the loaded stream's route, format and source, the player's codecs. */
+    private fun updatePath() {
+        val stream = loaded ?: run {
+            playbackPath = null
+            return
+        }
+        val video = MediaCodecs.name(player.videoFormat?.sampleMimeType)
+        val audio = MediaCodecs.name(player.audioFormat?.sampleMimeType)
+        playbackPath = if (!stream.external) {
+            LivePlaybackPath.own(video, audio)
+        } else {
+            // the source's own URL (the provider's, never the resolved redirect's)
+            val url = if (stream.viaServer) "/" else session.currentSourceUrl() ?: stream.url
+            LivePlaybackPath.external(url, stream.format ?: if (loadedMime == MimeTypes.VIDEO_MP2T) "ts" else null, stream.source, stream.sourceCount, video, audio)
+        }
+    }
+
+    /**
+     * A moment after an external stream's first frame: pictures but no audio track the device
+     * plays (none at all, none supported, none selected) is a silent stream — the next source.
+     */
+    private fun checkAudioSoon() {
+        audioCheck?.cancel()
+        val current = loaded ?: return
+        if (!current.external) return
+        audioCheck = viewModelScope.launch {
+            delay(AUDIO_CHECK_MS)
+            if (released || loaded !== current) return@launch
+            val groups = player.currentTracks.groups
+            if (groups.none { it.type == C.TRACK_TYPE_VIDEO }) return@launch
+            val audio = groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+            val playable = audio.any { group -> (0 until group.length).any { group.isTrackSupported(it) } } &&
+                player.currentTracks.isTypeSelected(C.TRACK_TYPE_AUDIO)
+            if (playable) session.streamHasSound() else session.streamSilent()
+        }
+    }
+
+    /** Buffering while it should play, after the stream started: past [STALL_MS] it is stuck. */
+    private fun watchStall(playbackState: Int) {
+        if (playbackState != Player.STATE_BUFFERING) {
+            stallWatch?.cancel()
+            stallWatch = null
+            return
+        }
+        if (!streamStarted || stallWatch?.isActive == true) return
+        val current = loaded ?: return
+        stallWatch = viewModelScope.launch {
+            delay(STALL_MS)
+            if (released || loaded !== current || player.playbackState != Player.STATE_BUFFERING || !player.playWhenReady) return@launch
+            isPlaying = false
+            loaded = null
+            player.stop()
+            session.streamStalled()
+        }
     }
 
     /** The external stream's audio and subtitle groups, as the picker's options. */
@@ -653,6 +754,12 @@ class LivePlayerViewModel(
             PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
             PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
         )
+
+        /** How long after an external stream's first frame its audio tracks are looked at. */
+        const val AUDIO_CHECK_MS = 3_000L
+
+        /** Waiting for data this long while playing is a stuck stream. */
+        const val STALL_MS = 8_000L
 
         /** How often the media session's title is checked against the programme on air. */
         const val METADATA_TICK_MS = 10_000L

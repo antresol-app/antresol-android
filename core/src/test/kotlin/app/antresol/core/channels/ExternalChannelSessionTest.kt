@@ -68,8 +68,11 @@ class ExternalChannelSessionTest {
 
     private val api = FakeApi()
 
-    private fun TestScope.session(channelId: Long, platform: String = LiveTvSession.PLATFORM_ANDROID) =
-        LiveTvSession(api, backgroundScope, channelId, platform = platform)
+    private fun TestScope.session(
+        channelId: Long,
+        platform: String = LiveTvSession.PLATFORM_ANDROID,
+        memory: ExternalSourceMemory = InMemoryExternalSourceMemory(),
+    ) = LiveTvSession(api, backgroundScope, channelId, platform = platform, sourceMemory = memory)
 
     private fun LiveTvSession.ready() = state.value.stream as LiveStream.Ready
 
@@ -171,5 +174,82 @@ class ExternalChannelSessionTest {
         session.retry()
         runCurrent()
         assertEquals("http://dead.example.test/x", session.ready().url)
+    }
+
+    @Test
+    fun aSilentSourceGivesWayToTheNextAndTheLastSilentOnePlaysWithTheNote() = runTest {
+        val session = session(100)
+        session.start()
+        runCurrent()
+        assertEquals(3, session.ready().sourceCount)
+        session.streamSilent()
+        runCurrent()
+        assertEquals("http://b.example.test/1.m3u8", session.ready().url)
+        assertEquals(1, session.ready().source)
+        session.streamSilent()
+        runCurrent()
+        assertTrue(session.ready().viaServer)
+        // the last one is silent too: it stays on, with the note
+        session.streamSilent()
+        runCurrent()
+        assertTrue(session.ready().viaServer)
+        assertTrue(session.state.value.noSupportedAudio)
+    }
+
+    @Test
+    fun withNothingElseASilentPictureBeatsAFailure() = runTest {
+        val session = session(100)
+        session.start()
+        runCurrent()
+        session.streamSilent()
+        runCurrent()
+        // the second and third fail outright: back to the first (silent) one, with the note once it plays
+        session.streamFailed()
+        runCurrent()
+        session.streamFailed()
+        runCurrent()
+        assertEquals("http://a.example.test/1.m3u8", session.ready().url)
+        session.streamSilent()
+        assertTrue(session.state.value.noSupportedAudio)
+        // and when that one fails too, the channel fails (no loop)
+        session.streamFailed()
+        runCurrent()
+        assertEquals(LiveStream.Failed(null, external = true), session.state.value.stream)
+    }
+
+    @Test
+    fun aStalledSourceGivesWayToTheNextAndIsTriedLastNextTime() = runTest {
+        val memory = InMemoryExternalSourceMemory()
+        val session = session(100, memory = memory)
+        session.start()
+        runCurrent()
+        session.streamPlaying()
+        session.streamStalled()
+        runCurrent()
+        assertEquals("http://b.example.test/1.m3u8", session.ready().url)
+        assertTrue(memory.isBad(100, "http://a.example.test/1.m3u8"))
+        // the next opening of the channel starts from the good ones
+        session.retry()
+        runCurrent()
+        assertEquals("http://b.example.test/1.m3u8", session.ready().url)
+        assertEquals(0, session.ready().source)
+        // with sound it loses the mark
+        session.streamHasSound()
+        assertTrue(!memory.isBad(100, "http://b.example.test/1.m3u8"))
+    }
+
+    @Test
+    fun previousChannelGoesBackAndForth() = runTest {
+        val session = session(100)
+        session.start()
+        runCurrent()
+        assertTrue(!session.tunePrevious())
+        assertTrue(session.tune(1))
+        runCurrent()
+        assertEquals(100L, session.state.value.previousChannelId)
+        assertTrue(session.tunePrevious())
+        runCurrent()
+        assertEquals(100L, session.state.value.channelId)
+        assertEquals(1L, session.state.value.previousChannelId)
     }
 }

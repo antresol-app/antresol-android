@@ -271,4 +271,11 @@
     <string name="history_managed_name">Название</string>
     <string name="history_managed_name_placeholder">Например, Гостиная</string>
     <string name="history_managed_create">Создать</string>
+    <!-- The live banner's playback path and the remote's previous channel -->
+    <string name="tv_previous_channel">Предыдущий канал</string>
+    <string name="tv_path_direct">Напрямую · %1$s</string>
+    <string name="tv_path_direct_plain">Напрямую</string>
+    <string name="tv_path_antresol">Через Antresol</string>
+    <string name="tv_path_source">Источник %1$d из %2$d</string>
+    <string name="tv_no_supported_audio">У канала нет поддерживаемого звука</string>
 </resources>

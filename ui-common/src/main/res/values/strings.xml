@@ -271,4 +271,11 @@
     <string name="history_managed_name">Name</string>
     <string name="history_managed_name_placeholder">For example, Living Room</string>
     <string name="history_managed_create">Create</string>
+    <!-- The live banner's playback path and the remote's previous channel -->
+    <string name="tv_previous_channel">Previous Channel</string>
+    <string name="tv_path_direct">Direct · %1$s</string>
+    <string name="tv_path_direct_plain">Direct</string>
+    <string name="tv_path_antresol">Via Antresol</string>
+    <string name="tv_path_source">Source %1$d of %2$d</string>
+    <string name="tv_no_supported_audio">This channel has no supported audio</string>
 </resources>

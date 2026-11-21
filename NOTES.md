@@ -1649,3 +1649,24 @@ The apps show what the server's addons offer, by the protocol in docs/API.md sec
 - Trailers: the web lists at most three per item and plays one without `play` in the embedded player; the apps did the
   latter already and now cap the list at three too (`Trailers.MAX_TRAILERS`).
 
+## TV density and the channels page
+
+- **Density**: the TV app draws for a 960×540 dp canvas (type in `Type.kt`, cards in `Cards.kt`), but a TV reports a
+  density of its own: a 1080p one is often tvdpi (213 dpi), 1442×811 dp, where everything came out small in one
+  corner (the Channels page, with its fixed 430 dp list and 960 dp preview, had a narrow list at the top left, the
+  preview at the far right and the lower half empty). `AntresolTvTheme` now wraps its content in `DesignCanvas`
+  (`ui/components/DesignCanvas.kt`): `LocalDensity` is `min(width / 960, height / 540)` of the window, so the canvas is
+  never smaller than the design (a taller screen has more height, a wider one more width), the system's font scale
+  is kept, and `canvasHeight()` gives the window's height in canvas dp (Home's hero and the detail header used the
+  configuration's `screenHeightDp`, which counts in the density the TV reports). At 960 dp xhdpi nothing changes.
+- **Channels page** (`ChannelsScreen.kt`): the header (title, `Channels | Guide`, the category button next to it, the
+  guide has the same header) never scrolls; under it the list is on a panel (46% of the width less the gap) beside the
+  card of the focused programme (the rest), both the full height. Row height = the panel's room / channels, between
+  62 and 104 dp; from 84 dp up a row has the programme's still. Down/Up walk the list (scrolling the panel), Left from
+  a row opens the categories, Down from the header enters the list on the channel the card shows.
+- Tests: `DesignCanvasTest` (the maths, and the window is 960 canvas dp wide at xhdpi and tvdpi), `ChannelsLayoutTest`
+  (the page's geometry in canvas dp at both densities, focus and the card, the guide's header; screenshots to
+  `$CHANNEL_SHOTS_DIR`), `TvDensityUiTest` (Home, Movies and a series page laid out the same at both densities;
+  screenshots to `$DENSITY_SHOTS_DIR`).
+- Not verified on a real TV: the density a given box reports, and the page on a real remote (the tests drive D-pad
+  key events in Robolectric).

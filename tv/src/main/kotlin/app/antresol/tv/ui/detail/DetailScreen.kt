@@ -33,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -75,6 +74,7 @@ import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.ScreenPaddingH
+import app.antresol.tv.ui.components.canvasHeight
 import app.antresol.tv.ui.components.ShelfRow
 import app.antresol.tv.ui.components.TrackRow
 import app.antresol.tv.ui.components.TvIcons
@@ -271,7 +271,7 @@ private fun DetailContent(
     val book = model.book
     val chapters = book?.takeIf { it.isAudiobook }?.detail?.chapters.orEmpty()
     val tall = model.rows.isEmpty() && video?.seasons.isNullOrEmpty() && music?.tracks.isNullOrEmpty() && chapters.isEmpty()
-    val headerHeight = (LocalConfiguration.current.screenHeightDp * if (tall) 1f else 0.62f).dp
+    val headerHeight = canvasHeight() * if (tall) 1f else 0.62f
     val firstKey = when {
         video?.playTarget != null -> PLAY_KEY
         video != null && offer.watch.isNotEmpty() -> WAY_PRIMARY_KEY

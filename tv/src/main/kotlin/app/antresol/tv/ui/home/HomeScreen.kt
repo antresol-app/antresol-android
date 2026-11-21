@@ -26,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -43,6 +42,7 @@ import app.antresol.tv.ui.components.ScreenPaddingH
 import app.antresol.tv.ui.components.ShelfRow
 import app.antresol.tv.ui.components.VerticalShelfScrolling
 import app.antresol.tv.ui.components.cardFocusKey
+import app.antresol.tv.ui.components.canvasHeight
 import app.antresol.tv.ui.components.defaultShape
 import app.antresol.tv.ui.components.rememberFocusMemory
 import app.antresol.tv.ui.components.remembersFocus
@@ -96,7 +96,7 @@ private fun HomeContentView(
     val focus = rememberFocusMemory()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val heroHeight = (LocalConfiguration.current.screenHeightDp * 0.72f).dp
+    val heroHeight = canvasHeight() * 0.72f
     var heroIndex by rememberSaveable { mutableIntStateOf(0) }
     val heroCard = content.hero.getOrNull(heroIndex % content.hero.size.coerceAtLeast(1))
     var heroFocused by remember { mutableStateOf(false) }

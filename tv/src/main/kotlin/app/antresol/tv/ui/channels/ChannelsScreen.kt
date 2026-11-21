@@ -2,13 +2,17 @@ package app.antresol.tv.ui.channels
 
 import app.antresol.ui.channels.ChannelLogo
 import app.antresol.ui.channels.channelNumberWidth
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,7 +25,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,16 +35,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -50,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -73,6 +82,7 @@ import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.ui.R
 import app.antresol.ui.channels.ChannelsView
 import app.antresol.ui.channels.ChannelsViewModel
+import app.antresol.ui.channels.LiveBadge
 import app.antresol.ui.channels.categoryKindTitle
 import app.antresol.ui.channels.channelFilterTitle
 import app.antresol.ui.channels.ProgrammeStill
@@ -87,8 +97,13 @@ import app.antresol.ui.theme.AntresolMotion
 import app.antresol.ui.theme.AntresolShapes
 import kotlinx.coroutines.launch
 
-/** Width of the channel list; the preview of the focused channel takes the rest. */
-private val ListWidth = 430.dp
+/** The channel list's share of the page's width; the card of the focused channel's programme takes the rest. */
+private const val ListShare = 0.46f
+
+/** The list's rows: as tall as the panel allows for the channels there are (a still at the end when they are this tall), never lower than a compact row. */
+private val CompactRowHeight = 62.dp
+private val TallRowHeight = 104.dp
+private val RowWithStillHeight = 84.dp
 
 /** A row's channel number: the section-title size with tabular figures. */
 private val ChannelNumberStyle: TextStyle
@@ -96,10 +111,12 @@ private val ChannelNumberStyle: TextStyle
 
 /**
  * The «ТВ» tab on the television, like Android TV Live Channels / TiviMate: the title with the view
- * switch «Каналы | Телегид» and the category button; then ONE numbered channel list with a preview
- * of the focused channel's programme (its still, time and progress, overview, what is next), or the
- * programme guide grid. Focus starts on the profile's last channel; OK tunes in; holding OK offers
- * the favourite. The player zaps inside the list it was opened from.
+ * switch «Каналы | Телегид» and the category button next to it; then ONE numbered channel list on a
+ * panel (the left ~46%, the full height under the header) beside a card of the focused channel's
+ * programme (its still across the card, time and progress, overview, what is next, the keys), or the
+ * programme guide grid. A few channels make tall rows with the programme's still; many make compact
+ * rows. Focus starts on the profile's last channel; OK tunes in; holding OK offers the favourite. The
+ * player zaps inside the list it was opened from.
  *
  * Categories: a big list (an external playlist has dozens of groups) cannot be a row of pills, so
  * the category button («Все каналы · 842 ⌄») opens a list on the left (All, Favourites, then each
@@ -240,7 +257,7 @@ fun ChannelsScreen(
     }
 }
 
-/** «ТВ», «Каналы | Телегид» and the category button on one line. */
+/** «ТВ», «Каналы | Телегид» and the category button next to it, on one line. */
 @Composable
 private fun Header(
     viewModel: ChannelsViewModel,
@@ -274,14 +291,12 @@ private fun Header(
                     .focusRequester(viewFocus),
             )
             Spacer(Modifier.width(16.dp))
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                CategoryButton(
-                    label = channelFilterTitle(viewModel.filter, viewModel.serverCategories.orEmpty()),
-                    count = viewModel.shown.size,
-                    onClick = onCategories,
-                    modifier = Modifier.focusRequester(categoryFocus),
-                )
-            }
+            CategoryButton(
+                label = channelFilterTitle(viewModel.filter, viewModel.serverCategories.orEmpty()),
+                count = viewModel.shown.size,
+                onClick = onCategories,
+                modifier = Modifier.focusRequester(categoryFocus),
+            )
         }
     }
 }
@@ -352,8 +367,9 @@ private fun CategoriesPanel(viewModel: ChannelsViewModel, onDismiss: () -> Unit)
 }
 
 /**
- * The header and the channel list in one lazy column (so D-pad search moves between them, as on
- * the other pages), with the focused channel's programme drawn on the right.
+ * The header, then the channel list on a panel (left) and the card of the focused channel's programme
+ * (right), both the page's full height under the header. The header stays where it is: only the list
+ * scrolls, inside its panel.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -368,6 +384,8 @@ private fun ChannelList(
     onCategories: () -> Unit,
     refocus: Int,
 ) {
+    // The header never scrolls away (the list scrolls in its panel): the navigation stays.
+    LaunchedEffect(Unit) { onScrolledToTop(true) }
     val shown = viewModel.shown
     val numberWidth = channelNumberWidth(remember(shown) { shown.map { it.number } }, ChannelNumberStyle)
     val last = viewModel.lastChannel
@@ -379,12 +397,13 @@ private fun ChannelList(
     // The first time focus comes into the list (from the navigation), it lands on the last channel.
     var entered by rememberSaveable(viewModel.filter.key) { mutableStateOf(false) }
     LaunchedEffect(viewModel.filter.key, shown.isNotEmpty()) {
-        if (shown.isNotEmpty() && canTakeFocus()) entered = startFocus.tryRequestFocus()
+        if (shown.isEmpty()) return@LaunchedEffect
+        // Another category: the list scrolls to the start channel first, so that its row exists to take focus.
+        if (listState.layoutInfo.visibleItemsInfo.none { it.index == startIndex }) listState.scrollToItem(if (startIndex > 3) startIndex - 1 else 0)
+        if (canTakeFocus()) entered = startFocus.tryRequestFocus()
     }
     val focused = shown.firstOrNull { it.id == focusedId } ?: shown.firstOrNull()
     val scope = rememberCoroutineScope()
-    val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 40 } }
-    LaunchedEffect(atTop) { onScrolledToTop(atTop) }
     // Up/Down walk the list one channel at a time (scrolled first, so the row is there to focus).
     val rowFocus = remember { mutableMapOf<Long, FocusRequester>() }
     fun rowRequester(id: Long) = rowFocus.getOrPut(id) { FocusRequester() }
@@ -399,89 +418,117 @@ private fun ChannelList(
         if (target < 0) return false // Up from the first channel: the header.
         if (target >= shown.size) return true
         scope.launch {
-            val lazyIndex = target + 1 // after the header item
-            val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == lazyIndex }
-            val viewportEnd = listState.layoutInfo.viewportEndOffset
-            val topLimit = listState.layoutInfo.viewportStartOffset + listState.layoutInfo.viewportSize.height / 6
-            val fullyIn = info != null && info.offset >= topLimit && info.offset + info.size <= viewportEnd
-            if (!fullyIn) listState.animateScrollToItem((lazyIndex - if (delta > 0) 4 else 1).coerceAtLeast(0))
+            val layout = listState.layoutInfo
+            val info = layout.visibleItemsInfo.firstOrNull { it.index == target }
+            val fullyIn = info != null && info.offset >= 0 && info.offset + info.size <= layout.viewportEndOffset - layout.afterContentPadding
+            // Not all of it in view: scroll so that it has one more row beyond it in the direction of travel.
+            if (!fullyIn) listState.animateScrollToItem((target - if (delta > 0) (layout.visibleItemsInfo.size - 2).coerceAtLeast(0) else 1).coerceAtLeast(0))
             rowRequester(shown[target].id).tryRequestFocus(6)
         }
         return true
     }
-    Box(Modifier.fillMaxSize()) {
-        VerticalShelfScrolling {
-            LazyColumn(
-                state = listState,
-                contentPadding = PaddingValues(top = 84.dp, bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .onPreviewKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        when (event.key) {
-                            Key.DirectionDown -> step(1)
-                            Key.DirectionUp -> step(-1)
-                            // The list is one column: Left from a channel opens the categories (as in TiviMate).
-                            Key.DirectionLeft -> (focusedIndex >= 0).also { if (it) onCategories() }
-                            else -> false
-                        }
-                    },
+    Column(Modifier.fillMaxSize().padding(top = 84.dp)) {
+        header()
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = ScreenPaddingH)
+                .padding(bottom = 28.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            // Few channels: the rows grow to fill the panel (to TallRowHeight, with the programme's still); many: compact rows.
+            BoxWithConstraints(
+                Modifier
+                    .weight(ListShare)
+                    .fillMaxHeight()
+                    .testTag("tv/channel-list")
+                    .clip(AntresolShapes.sheet)
+                    .background(AntresolColors.BackgroundRaised),
             ) {
-                item(key = "header") { header() }
-                itemsIndexed(shown, key = { _, channel -> channel.id }) { index, channel ->
-                    TvChannelRow(
-                        channel = channel,
-                        numberWidth = numberWidth,
-                        nowMs = nowMs,
-                        last = channel.id == last?.id,
-                        onClick = { onWatch(channel) },
-                        onLongClick = { onMenu(channel) },
+                val rowHeight = ((maxHeight - PanelPadding * 2) / shown.size.coerceAtLeast(1)).coerceIn(CompactRowHeight, TallRowHeight)
+                VerticalShelfScrolling {
+                    LazyColumn(
+                        state = listState,
+                        contentPadding = PaddingValues(PanelPadding),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                         modifier = Modifier
-                            .padding(start = ScreenPaddingH - 12.dp)
-                            .width(ListWidth)
-                            .then(if (index == startIndex) Modifier.focusRequester(startFocus) else Modifier)
-                            .focusRequester(rowRequester(channel.id))
-                            .onFocusChanged { state ->
-                                if (!state.isFocused) {
-                                    if (focusedIndex == index) focusedIndex = -1
-                                    return@onFocusChanged
+                            .fillMaxSize()
+                            // Down from the header enters the list on the channel that has the card (if its row is composed).
+                            .focusProperties {
+                                enter = {
+                                    val row = shown.indexOfFirst { it.id == focused?.id }
+                                    if (row >= 0 && listState.layoutInfo.visibleItemsInfo.any { it.index == row }) rowRequester(shown[row].id) else FocusRequester.Default
                                 }
-                                focusedIndex = index
-                                focusedId = channel.id
-                                if (!entered) {
-                                    entered = true
-                                    if (index != startIndex) scope.launch { startFocus.tryRequestFocus() }
+                            }
+                            .focusGroup()
+                            .onPreviewKeyEvent { event ->
+                                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                when (event.key) {
+                                    Key.DirectionDown -> step(1)
+                                    Key.DirectionUp -> step(-1)
+                                    // The list is one column: Left from a channel opens the categories (as in TiviMate).
+                                    Key.DirectionLeft -> (focusedIndex >= 0).also { if (it) onCategories() }
+                                    else -> false
                                 }
                             },
-                    )
+                    ) {
+                        itemsIndexed(shown, key = { _, channel -> channel.id }) { index, channel ->
+                            TvChannelRow(
+                                channel = channel,
+                                numberWidth = numberWidth,
+                                nowMs = nowMs,
+                                last = channel.id == last?.id,
+                                height = rowHeight,
+                                still = rowHeight >= RowWithStillHeight,
+                                onClick = { onWatch(channel) },
+                                onLongClick = { onMenu(channel) },
+                                modifier = Modifier
+                                    .then(if (index == startIndex) Modifier.focusRequester(startFocus) else Modifier)
+                                    .focusRequester(rowRequester(channel.id))
+                                    .onFocusChanged { state ->
+                                        if (!state.isFocused) {
+                                            if (focusedIndex == index) focusedIndex = -1
+                                            return@onFocusChanged
+                                        }
+                                        focusedIndex = index
+                                        focusedId = channel.id
+                                        if (!entered) {
+                                            entered = true
+                                            if (index != startIndex) scope.launch { startFocus.tryRequestFocus() }
+                                        }
+                                    },
+                            )
+                        }
+                    }
                 }
             }
-        }
-        if (focused != null) {
-            ChannelPreview(
-                focused,
-                nowMs,
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 84.dp + HeaderHeight, end = ScreenPaddingH)
-                    .width(PreviewWidth),
-            )
+            if (focused != null) ProgrammeCard(focused, nowMs, Modifier.weight(1f - ListShare).fillMaxHeight())
         }
     }
 }
 
+/** The panel's inner margin: the first and last row keep this far from its edge. */
+private val PanelPadding = 12.dp
+
 private val OkKeys = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 
-/** The header row's height with its bottom gap (the preview starts under it). */
-private val HeaderHeight = 64.dp
-
-/** The preview's width: what is right of the list. */
-private val PreviewWidth = 960.dp - ScreenPaddingH * 2 - ListWidth - 28.dp
-
-/** One row of the TV list: number, logo (or initials), name with the star, the programme and its progress, its still when it has one. */
+/**
+ * One row of the TV list, [height] tall: number, logo (or initials), name with the star, the programme
+ * and its progress, and (when the row is tall, [still]) the programme's still at its end.
+ */
 @Composable
-private fun TvChannelRow(channel: Channel, numberWidth: Dp, nowMs: Long, last: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun TvChannelRow(
+    channel: Channel,
+    numberWidth: Dp,
+    nowMs: Long,
+    last: Boolean,
+    height: Dp,
+    still: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val urls = LocalMediaUrls.current
     val program = Channels.showing(channel, nowMs)
     val description = listOfNotNull(
@@ -496,6 +543,7 @@ private fun TvChannelRow(channel: Channel, numberWidth: Dp, nowMs: Long, last: B
         onLongClick = onLongClick,
         modifier = modifier
             .fillMaxWidth()
+            .height(height)
             .onFocusChanged { hasFocus = it.isFocused }
             .semantics { contentDescription = description },
         shape = ClickableSurfaceDefaults.shape(AntresolShapes.control),
@@ -504,7 +552,7 @@ private fun TvChannelRow(channel: Channel, numberWidth: Dp, nowMs: Long, last: B
     ) {
         val content = LocalContentColor.current
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -533,73 +581,89 @@ private fun TvChannelRow(channel: Channel, numberWidth: Dp, nowMs: Long, last: B
                     program?.let(Channels::programLine) ?: stringResource(R.string.tv_nothing),
                     style = Antresol.typography.caption,
                     color = content.copy(alpha = 0.75f),
-                    maxLines = 1,
+                    maxLines = if (still) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (program != null) {
-                    // Times and «Далее» are in the preview on the right; the row stays a TV list row.
+                    // Times and «Далее» are on the card at the right; the row stays a TV list row.
                     LiveProgressBar(Channels.progress(program, nowMs), content.copy(alpha = 0.8f), Modifier.padding(top = 4.dp))
                 }
             }
             // The programme's picture only when it has one: no empty grey box.
-            programmeArt(program)?.let { art ->
-                ProgrammeStill(
-                    url = urls?.image(art),
-                    shape = AntresolShapes.badge,
-                    modifier = Modifier.width(80.dp).aspectRatio(AntresolMotion.BACKDROP_ASPECT),
-                )
+            if (still) {
+                programmeArt(program)?.let { art ->
+                    ProgrammeStill(
+                        url = urls?.image(art),
+                        shape = AntresolShapes.badge,
+                        modifier = Modifier.height(64.dp).aspectRatio(AntresolMotion.BACKDROP_ASPECT),
+                    )
+                }
             }
         }
     }
 }
 
-/** The focused channel's programme: the still, «N · name», title, time and progress, facts, overview, next. */
+/**
+ * The focused channel's programme as a card: its still across the whole card, «N · name» and LIVE on
+ * top, and over a scrim on the lower part the facts, title, episode, time and progress, overview,
+ * what is next and the key hints.
+ */
 @Composable
-private fun ChannelPreview(channel: Channel, nowMs: Long, modifier: Modifier = Modifier) {
+private fun ProgrammeCard(channel: Channel, nowMs: Long, modifier: Modifier = Modifier) {
     val urls = LocalMediaUrls.current
     val context = LocalContext.current
     val program = Channels.showing(channel, nowMs)
     val next = channel.next?.takeIf { it != program }
-    // The key hints are measured first and always get their full height; the programme above takes
-    // what is left (the overview shortens), so a long text never squeezes the «OK» chips.
-    Column(modifier.height(540.dp - 84.dp - HeaderHeight)) {
-        Column(Modifier.weight(1f).clipToBounds(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // At most 280 dp wide, so the programme's text and «Далее» fit under it on the 540 dp screen.
-            ProgrammeStill(
-                url = urls?.image(programmeArt(program)),
-                shape = AntresolShapes.card,
-                modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(AntresolMotion.BACKDROP_ASPECT),
-            )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                ChannelLogo(urls?.image(channel.logoUrl), height = 24.dp, altUrl = urls?.image(channel.logoAlt), name = channel.name)
+    Box(modifier.testTag("tv/channel-card").clip(AntresolShapes.sheet).background(AntresolColors.BackgroundElevated)) {
+        ProgrammeStill(urls?.image(programmeArt(program)), Modifier.fillMaxSize(), shape = RectangleShape)
+        // Clear over the picture's upper part, dark under the text.
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    0.3f to AntresolColors.Background.copy(alpha = 0.05f),
+                    0.62f to AntresolColors.Background.copy(alpha = 0.82f),
+                    1f to AntresolColors.Background.copy(alpha = 0.97f),
+                ),
+            ),
+        )
+        Row(
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp)
+                .clip(AntresolShapes.pill)
+                .background(AntresolColors.Background.copy(alpha = 0.55f))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ChannelLogo(urls?.image(channel.logoUrl), height = 22.dp, altUrl = urls?.image(channel.logoAlt), name = channel.name)
                 Text(
                     stringResource(R.string.tv_channel_number, channel.number, channel.name),
-                    style = Antresol.typography.caption.copy(fontFeatureSettings = "tnum"),
+                    style = Antresol.typography.caption.copy(fontFeatureSettings = "tnum", color = AntresolColors.Label),
                     maxLines = 1,
                 )
                 if (channel.favorite) FavoriteMark()
             }
-            Text(program?.let(Channels::programLine) ?: stringResource(R.string.tv_nothing), style = Antresol.typography.sectionTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (program != null && Channels.isOnAir(program, nowMs)) LiveBadge()
+        }
+        Column(
+            Modifier.align(Alignment.BottomStart).padding(horizontal = 22.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             if (program != null) {
-                ProgramTime(program, nowMs)
-                programFacts(program).takeIf { it.isNotEmpty() }?.let { Text(it, style = Antresol.typography.caption) }
-                if (program.overview.isNotBlank()) {
-                    // Takes what is left after everything else: two lines, one, or none (Compose
-                    // does not shorten text to a height, so the line count steps down instead).
-                    var lines by remember(program.id, program.overview) { mutableIntStateOf(2) }
-                    if (lines > 0) {
-                        Text(
-                            program.overview,
-                            style = Antresol.typography.body,
-                            color = AntresolColors.LabelSecondary,
-                            maxLines = lines,
-                            overflow = TextOverflow.Ellipsis,
-                            // One step per layout made with the current count (a layout can be reported twice).
-                            onTextLayout = { if (it.hasVisualOverflow && it.layoutInput.maxLines == lines && lines > 0) lines-- },
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                    }
+                programFacts(program).takeIf { it.isNotEmpty() }?.let { Text(it.uppercase(), style = Antresol.typography.eyebrow) }
+                Text(program.title, style = Antresol.typography.pageTitle.copy(fontSize = 26.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (program.subtitle.isNotBlank()) {
+                    Text(program.subtitle, style = Antresol.typography.sectionTitle, color = AntresolColors.LabelSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                ProgramTime(program, nowMs, Modifier.padding(top = 2.dp))
+                if (program.overview.isNotBlank()) {
+                    Text(program.overview, style = Antresol.typography.body, color = AntresolColors.LabelSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            } else {
+                Text(stringResource(R.string.tv_nothing), style = Antresol.typography.sectionTitle)
             }
             if (next != null) {
                 Text(
@@ -610,10 +674,10 @@ private fun ChannelPreview(channel: Channel, nowMs: Long, modifier: Modifier = M
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(top = 12.dp, bottom = 20.dp)) {
-            KeyHint("OK", stringResource(R.string.tv_watch_now))
-            KeyHint("OK ⋯", stringResource(if (channel.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add))
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(top = 4.dp)) {
+                KeyHint("OK", stringResource(R.string.tv_watch_now))
+                KeyHint("OK ⋯", stringResource(if (channel.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add))
+            }
         }
     }
 }

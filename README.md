@@ -46,6 +46,12 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   «Sign In with Your Phone» (a QR and a 6-character code a signed-in phone approves; the TV gets a
   normal device token; the code renews itself every 5 minutes), with «Sign In with the Remote» (profile
   picker, password step) as the fallback. The session is restored on launch.
+- **Screen size**: every size is drawn for a 960×540 dp canvas. A TV reports its own density (a 1080p one is often
+  tvdpi, so 1440×810 dp), so the app normalises it once at its root (`DesignCanvas`, `ui/components`): 960 dp is the
+  window's width (or its height, on a screen taller than 16:9) at any density, and the page is laid out the same.
+  A screen wider than 16:9 has more canvas width, so new layouts use weights and fractions of the width (as the TV
+  page's panel and card do), not widths worked out from 960. Use `canvasHeight()`, not the configuration's
+  `screenHeightDp`, for a height taken from the screen.
 - **Shell**: a centred glass pill (Search, Home, Movies, Shows, TV, Music), the now-playing chip
   while music or an audiobook is loaded, and the avatar, which opens Settings. Down from the pills
   enters the page and returns to the element that was focused there. A tab left for another one is
@@ -74,9 +80,11 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   A title off the library, found by an addon's search row in Search, has a page of its own. Nothing shows without
   addons, nor for a kid profile.
 - **TV (live channels)**: one numbered list of the server's channels (own and external, in channel
-  number order) with a preview of the focused channel's programme, or the programme guide («Channels |
-  Guide»); focus starts on the channel this profile watched last. The category button («All Channels ·
-  842 ⌄»; a playlist can have dozens of groups) opens a list on the left (All, Favourites, then the
+  number order) on a panel (the left ~46% of the page, its full height) beside a card of the focused
+  channel's programme (its still across the card, title, episode, time and progress, overview, what is next,
+  the keys; a few channels make tall rows with the programme's still, many make compact rows), or the
+  programme guide («Channels | Guide»); focus starts on the channel this profile watched last. The category
+  button next to the view switch («All Channels · 842 ⌄»; a playlist can have dozens of groups) opens a list on the left (All, Favourites, then the
   server's categories with their channel counts: its AI topics first, the sources, the playlists'
   groups, under headings when there is more than one kind; an older server's `category` texts
   without it), as does Left from the first column of the list or the guide, and narrows both to the

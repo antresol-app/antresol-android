@@ -24,6 +24,7 @@ import app.antresol.tv.autostart.AutostartRequest
 import app.antresol.tv.autostart.AutostartTarget
 import app.antresol.tv.homechannels.DeepLinkRequest
 import app.antresol.tv.settings.TvSettings
+import app.antresol.tv.ui.components.DesignCanvas
 import app.antresol.tv.ui.root.AntresolTvRoot
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolTheme
@@ -108,25 +109,30 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** The Antresol theme with TV type sizes, plus the tv-material theme for TV components. */
+/**
+ * The Antresol theme with TV type sizes, plus the tv-material theme for TV components, on the design canvas
+ * (960×540 dp whatever density the TV reports, see [DesignCanvas]).
+ */
 @Composable
 fun AntresolTvTheme(content: @Composable () -> Unit) {
-    AntresolTheme(typography = AntresolTypography.tv) {
-        MaterialTheme(
-            colorScheme = darkColorScheme(
-                primary = AntresolColors.Label,
-                onPrimary = AntresolColors.LabelInverse,
-                secondary = AntresolColors.Accent,
-                background = AntresolColors.Background,
-                onBackground = AntresolColors.Label,
-                surface = AntresolColors.BackgroundElevated,
-                onSurface = AntresolColors.Label,
-                surfaceVariant = AntresolColors.GlassLight,
-                onSurfaceVariant = AntresolColors.LabelSecondary,
-                border = AntresolColors.Accent,
-                error = AntresolColors.Red,
-            ),
-            content = content,
-        )
+    DesignCanvas {
+        AntresolTheme(typography = AntresolTypography.tv) {
+            MaterialTheme(
+                colorScheme = darkColorScheme(
+                    primary = AntresolColors.Label,
+                    onPrimary = AntresolColors.LabelInverse,
+                    secondary = AntresolColors.Accent,
+                    background = AntresolColors.Background,
+                    onBackground = AntresolColors.Label,
+                    surface = AntresolColors.BackgroundElevated,
+                    onSurface = AntresolColors.Label,
+                    surfaceVariant = AntresolColors.GlassLight,
+                    onSurfaceVariant = AntresolColors.LabelSecondary,
+                    border = AntresolColors.Accent,
+                    error = AntresolColors.Red,
+                ),
+                content = content,
+            )
+        }
     }
 }

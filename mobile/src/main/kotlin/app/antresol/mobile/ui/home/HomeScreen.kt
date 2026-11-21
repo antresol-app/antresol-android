@@ -45,13 +45,15 @@ fun HomeScreen(
     onSeeAll: (Shelf) -> Unit,
     /** «On Air Now», after the first shelf (as on the web); draws nothing without channels. */
     onAir: @Composable () -> Unit = {},
+    /** A pull to refresh started: what else the session caches is read again too. */
+    onPullRefresh: () -> Unit = {},
 ) {
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
         onPauseOrDispose { }
     }
     val bottom = LocalBottomBarPadding.current
-    RefreshBox(viewModel.refreshing, onRefresh = viewModel::pullToRefresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
+    RefreshBox(viewModel.refreshing, onRefresh = { onPullRefresh(); viewModel.pullToRefresh() }, Modifier.fillMaxSize().background(AntresolColors.Background)) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = pageListPadding(bottom.calculateBottomPadding() + 16.dp),

@@ -26,7 +26,12 @@ fun AntresolClient.videoApi(): VideoApi = object : VideoApi {
 }
 
 /** One answer of `/api/play`, ready for the player: the absolute `?mk=` URL and the timeline. */
-data class VideoSource(val play: PlayResponse, val url: String) {
+data class VideoSource(
+    val play: PlayResponse,
+    val url: String,
+    /** [url] is an HLS playlist: the core's own HLS session, or the playlist of a stream an addon serves. */
+    val playlist: Boolean = play.isHls,
+) {
     val timeline = StreamTimeline(play)
     val session: String? get() = play.hlsSession
     val isHls: Boolean get() = play.isHls

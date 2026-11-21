@@ -55,12 +55,16 @@ data class DetailRoute(val kind: String, val id: Long) {
     constructor(card: Card) : this(card.kind, card.id)
 }
 
+/** The page of a movie or series that is not in the library, by its TMDB id (`/api/title`). */
+@Serializable
+data class TitleRoute(val kind: String, val tmdbId: Long)
+
 /**
  * The video player for a movie, episode, season or series id (a series plays its next episode).
  * [resume] is a [app.antresol.tv.ui.player.ResumeMode] name.
  */
 @Serializable
-data class PlayerRoute(val itemId: Long, val resume: String)
+data class PlayerRoute(val itemId: Long, val resume: String, val way: String = "")
 
 /**
  * A trailer, full screen: with [play] (the server fetches it) in the app's own player, else the

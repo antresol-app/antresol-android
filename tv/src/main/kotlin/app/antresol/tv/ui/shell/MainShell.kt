@@ -99,6 +99,8 @@ import app.antresol.tv.ui.detail.DetailScreen
 import app.antresol.tv.ui.detail.DetailViewModel
 import app.antresol.tv.ui.home.HomeScreen
 import app.antresol.tv.ui.home.HomeViewModel
+import app.antresol.core.ways.WayTicket
+import app.antresol.core.ways.WayPlayback
 import app.antresol.ui.load
 import app.antresol.tv.ui.music.SongsScreen
 import app.antresol.tv.ui.music.SongsViewModel
@@ -136,6 +138,7 @@ import app.antresol.ui.history.deviceHistoryApi
 import app.antresol.ui.language.uiLanguageApi
 import app.antresol.tv.ui.settings.restartInNewLanguage
 import app.antresol.ui.playback.LivePlayerViewModel
+import app.antresol.ui.playback.DeviceCaps
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
@@ -254,11 +257,23 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val showNav = navVisible && (navFocused || contentAtTop)
     val navAlpha by animateFloatAsState(if (showNav) 1f else 0f, tween(AntresolMotion.MEDIUM_MS), label = "nav-alpha")
 
-    val open: (Card) -> Unit = { card -> navController.navigate(DetailRoute(card)) }
+    // A title off the library (an addon's search result) opens the page made from its TMDB id; anything else its card.
+    val open: (Card) -> Unit = { card ->
+        if (card.opensTitlePage) navController.navigate(TitleRoute(card.kind, card.tmdbId ?: 0)) else navController.navigate(DetailRoute(card))
+    }
     val play: (Long, ResumeMode) -> Unit = { id, mode ->
         // Video takes over the screen and the speakers.
         audio.pause()
         navController.navigate(PlayerRoute(id, mode.name))
+    }
+    // A way may pick a quality by what the TV shows: the display and the decoder limit it (as the player does).
+    val wayMaxHeight: suspend () -> Int? = {
+        withContext(Dispatchers.Default) { runCatching { DeviceCaps.current(app, limitToDisplay = true).maxHeight }.getOrNull() }
+    }
+    // What an addon's way answered with plays in the same player.
+    val playWay: (WayPlayback) -> Unit = { playback ->
+        audio.pause()
+        navController.navigate(PlayerRoute(0, ResumeMode.Resume.name, WayTicket.put(playback)))
     }
     // Hero Play and Continue Watching: video cards resume in the player, anything else opens its page.
     val playCard: (Card) -> Unit = { card ->
@@ -514,7 +529,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 page<SearchRoute>(contentFocus) {
                     SearchScreen(
-                        viewModel = viewModel { SearchViewModel(client, audio) },
+                        viewModel = viewModel { SearchViewModel(client, audio, app.ways) },
                         onOpen = open,
                         onNowPlaying = nowPlaying,
                         onBrowse = { target ->
@@ -573,10 +588,11 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 page<DetailRoute>(contentFocus) { entry ->
                     val route = entry.toRoute<DetailRoute>()
                     DetailScreen(
-                        viewModel = viewModel { DetailViewModel(client, audio, route.kind, route.id, app.pendingWrites) },
+                        viewModel = viewModel { DetailViewModel(client, audio, route.kind, route.id, app.pendingWrites, waysSource = app.ways, maxHeight = wayMaxHeight) },
                         audio = audio,
                         onOpen = open,
                         onPlay = play,
+                        onPlayWay = playWay,
                         onNowPlaying = nowPlaying,
                         onRead = { volumeId, fromStart -> navController.navigate(ComicReaderRoute(volumeId, fromStart)) },
                         onTrailer = { trailer, name ->
@@ -588,6 +604,29 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         canTakeFocus = LocalPageCanTakeFocus.current,
                         onPanelOpenChanged = { panelOpen = it },
                         onClose = { navController.popBackStack() },
+                    )
+                }
+                page<TitleRoute>(contentFocus) { entry ->
+                    val route = entry.toRoute<TitleRoute>()
+                    DetailScreen(
+                        viewModel = viewModel {
+                            DetailViewModel(client, audio, route.kind, 0, app.pendingWrites, tmdbId = route.tmdbId, waysSource = app.ways, maxHeight = wayMaxHeight)
+                        },
+                        audio = audio,
+                        onOpen = open,
+                        onPlay = play,
+                        onPlayWay = playWay,
+                        onNowPlaying = nowPlaying,
+                        onRead = { _, _ -> },
+                        onTrailer = { _, _ -> },
+                        onScrolledToTop = onScrolledToTop,
+                        canTakeFocus = LocalPageCanTakeFocus.current,
+                        onPanelOpenChanged = { panelOpen = it },
+                        onClose = { navController.popBackStack() },
+                        // The library has it after all: its own page replaces this one.
+                        onOpenLibraryItem = { card ->
+                            navController.navigate(DetailRoute(card)) { popUpTo<TitleRoute> { inclusive = true } }
+                        },
                     )
                 }
                 composable<ComicReaderRoute> { entry ->
@@ -642,12 +681,21 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 composable<PlayerRoute> { entry ->
                     val route = entry.toRoute<PlayerRoute>()
-                    PlayerScreen(
-                        viewModel = viewModel {
-                            PlayerViewModel(app, client, app.appScope, route.itemId, ResumeMode.valueOf(route.resume), app.settings.current, app.pendingWrites)
-                        },
-                        onExit = { navController.popBackStack() },
-                    )
+                    val way = route.way.takeIf { it.isNotEmpty() }?.let { WayTicket.get(it) }
+                    if (route.way.isNotEmpty() && way == null) {
+                        // The video of a way outlived its process: there is nothing to play.
+                        LaunchedEffect(Unit) { navController.popBackStack() }
+                    } else {
+                        PlayerScreen(
+                            viewModel = viewModel {
+                                PlayerViewModel(
+                                    app, client, app.appScope, route.itemId, ResumeMode.valueOf(route.resume), app.settings.current, app.pendingWrites,
+                                    way = way,
+                                )
+                            },
+                            onExit = { navController.popBackStack() },
+                        )
+                    }
                 }
             }
             if (navVisible) {

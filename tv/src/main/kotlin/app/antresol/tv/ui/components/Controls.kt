@@ -82,15 +82,19 @@ fun OptionsPanel(
     focusIndex: Int = options.indexOfFirst { it.selected }.coerceAtLeast(0),
     noteLines: Int = 3,
     fromStart: Boolean = false,
+    /** A pick closes the panel (the default); a list that leads on to another keeps it open. */
+    closeOnSelect: Boolean = true,
+    /** What starts the focus again: the title, or another one for a panel that shows one list after another. */
+    focusKey: Any = title,
 ) {
-    val focus = remember(title) { FocusRequester() }
-    val panelFocus = remember(title) { FocusRequester() }
+    val focus = remember(focusKey) { FocusRequester() }
+    val panelFocus = remember(focusKey) { FocusRequester() }
     // Scrolled so the row to focus is composed (a lazy row below the fold cannot take focus).
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (focusIndex - 2).coerceAtLeast(0))
     // Whether focus is inside the panel: a request on a row that is not laid out yet is ignored
     // without an error, so the request is repeated until focus has really arrived.
-    var inPanel by remember(title) { mutableStateOf(false) }
-    LaunchedEffect(title) {
+    var inPanel by remember(focusKey) { mutableStateOf(false) }
+    LaunchedEffect(focusKey) {
         repeat(PANEL_FOCUS_FRAMES) {
             if (inPanel) return@LaunchedEffect
             // Never leave focus behind the scrim: fall back to the panel's first row.
@@ -140,9 +144,17 @@ fun OptionsPanel(
                     }
                     MenuRow(
                         option = option,
+                        onLongClick = option.onLongSelect?.let { longSelect ->
+                            {
+                                // The held OK goes on after the panel is gone: its release must not click what opens next.
+                                HeldKeyGuard.arm { false }
+                                longSelect()
+                                if (closeOnSelect) onDismiss()
+                            }
+                        },
                         onClick = {
                             option.onSelect()
-                            onDismiss()
+                            if (closeOnSelect) onDismiss()
                         },
                         modifier = if (index == focusIndex) Modifier.focusRequester(focus) else Modifier,
                     )
@@ -153,9 +165,10 @@ fun OptionsPanel(
 }
 
 @Composable
-private fun MenuRow(option: MenuOption, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun MenuRow(option: MenuOption, onClick: () -> Unit, modifier: Modifier = Modifier, onLongClick: (() -> Unit)? = null) {
     Surface(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = modifier.fillMaxWidth(),
         shape = ClickableSurfaceDefaults.shape(AntresolShapes.control),
         colors = listRowColors(),
@@ -169,14 +182,18 @@ private fun MenuRow(option: MenuOption, onClick: () -> Unit, modifier: Modifier 
             Box(Modifier.size(20.dp)) {
                 if (option.selected) Icon(AntresolIcons.Check, contentDescription = null, tint = LocalContentColor.current)
             }
-            Text(
-                option.label,
-                style = Antresol.typography.bodyEmphasis,
-                color = LocalContentColor.current,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
+            Column(Modifier.weight(1f, fill = false)) {
+                Text(
+                    option.label,
+                    style = Antresol.typography.bodyEmphasis,
+                    color = LocalContentColor.current,
+                    maxLines = if (option.detail != null) 2 else 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                option.detail?.takeIf { it.isNotBlank() }?.let { detail ->
+                    Text(detail, style = Antresol.typography.caption, color = LocalContentColor.current.copy(alpha = 0.7f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
             option.badge?.let { badge ->
                 Text(
                     badge,
@@ -187,6 +204,9 @@ private fun MenuRow(option: MenuOption, onClick: () -> Unit, modifier: Modifier 
                         .border(1.dp, LocalContentColor.current.copy(alpha = 0.5f), AntresolShapes.badge)
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
+            }
+            if (option.more) {
+                Icon(AntresolIcons.ChevronRight, contentDescription = null, tint = LocalContentColor.current, modifier = Modifier.size(16.dp))
             }
         }
     }

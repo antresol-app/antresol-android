@@ -10,9 +10,20 @@ import app.antresol.ui.format.TrackLabels
 
 /**
  * One choice of a menu: its label, whether it is the current one, and a small badge after the label.
- * A [section] is a heading the menu draws above this choice (the first of a group).
+ * A [section] is a heading the menu draws above this choice (the first of a group). A [detail] is a
+ * second line under the label, [more] says the choice leads on to another list, and [onLongSelect]
+ * is what a long press does (hold OK) when that is something else.
  */
-data class MenuOption(val label: String, val selected: Boolean, val badge: String? = null, val section: String? = null, val onSelect: () -> Unit)
+data class MenuOption(
+    val label: String,
+    val selected: Boolean,
+    val badge: String? = null,
+    val section: String? = null,
+    val detail: String? = null,
+    val more: Boolean = false,
+    val onLongSelect: (() -> Unit)? = null,
+    val onSelect: () -> Unit,
+)
 
 /** The menus of the video player. */
 enum class PlayerMenu { Audio, Subtitles, Quality, AutoSkip }

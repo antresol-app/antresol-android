@@ -10,6 +10,7 @@ import app.antresol.core.model.DeviceInfo
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
+import app.antresol.core.ways.WaysCatalog
 import app.antresol.mobile.playback.PlaybackConnection
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.data.DataStoreSessionStore
@@ -39,6 +40,9 @@ class AntresolMobileApp : Application(), ImageLoaderFactory {
 
     /** Final progress writes of closed players and readers, awaited by screens that show progress. */
     val pendingWrites = PendingWrites()
+
+    /** What the addons of the signed-in profile offer (ways to watch, searches); asked once per sign-in. */
+    val ways = WaysCatalog { session.client }
 
     /** Antresol servers on the home network for the server screen (UDP probe + mDNS). */
     var serverFinder: ServerFinder = ServerFinder.None

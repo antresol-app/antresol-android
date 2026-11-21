@@ -1,0 +1,4 @@
+{"title":"Source","note":"Pick a source","rows":[
+  {"ref":"s1","label":"1080p · HDR · 12.3 GB","detail":"Second line","badges":["4K","Dolby Vision"],"current":true,"final":false},
+  {"ref":"s2","label":"720p","final":true}
+],"empty":"Nothing found"}

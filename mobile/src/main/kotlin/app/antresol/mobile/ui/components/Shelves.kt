@@ -65,7 +65,8 @@ fun Shelf(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.padding(top = 4.dp),
         ) {
-            items(cards, key = { "${it.kind}:${it.id}" }) { card ->
+            // A title off the library has id 0: its TMDB id keeps the keys apart.
+            items(cards, key = { "${it.kind}:${it.id}:${it.tmdbId ?: 0}" }) { card ->
                 val cardStyle = style ?: card.defaultStyle()
                 MediaCard(
                     card = card,

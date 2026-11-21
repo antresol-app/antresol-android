@@ -139,7 +139,8 @@ fun SearchScreen(
                 LoadState.Loading -> item(key = "loading") { Placeholder { LoadingView() } }
                 is LoadState.Failed -> item(key = "error") { Placeholder { ErrorView(results.error, onRetry = viewModel::retry, takeFocus = false) } }
                 is LoadState.Ready -> {
-                    val rows = viewModel.scope.filter(results.value)
+                    // The addons' rows follow the library's, as they arrive.
+                    val rows = viewModel.scope.filter(results.value) + viewModel.scope.filterAddons(viewModel.addonRows)
                     if (rows.isEmpty()) {
                         item(key = "empty") { Placeholder { MessageView(stringResource(R.string.search_no_results, viewModel.query)) } }
                     } else {

@@ -1,0 +1,4 @@
+{"titles":[
+  {"kind":"movie","tmdbId":603,"title":"The Matrix","year":1999,"poster":"https://image.example/matrix.jpg","overview":"A hacker learns the truth.","inLibrary":true,"libraryItemId":42},
+  {"kind":"series","tmdbId":1399,"title":"Game of Thrones","year":2011,"poster":"/api/images/got","inLibrary":false}
+]}

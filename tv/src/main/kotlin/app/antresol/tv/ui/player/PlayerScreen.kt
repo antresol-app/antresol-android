@@ -238,6 +238,8 @@ private fun PlayingOverlay(viewModel: PlayerViewModel, onExit: () -> Unit) {
             subtitleChoice = subtitleChoice,
             nextEpisode = viewModel.nextEpisode != null,
             autoSkipChoice = viewModel.hasSkipSegments,
+            // A stream an addon serves has its quality picked with the way.
+            qualityChoice = viewModel.canChooseQuality,
         ),
         isPlaying = viewModel.isPlaying,
         busy = viewModel.isBuffering || viewModel.isSwitching,

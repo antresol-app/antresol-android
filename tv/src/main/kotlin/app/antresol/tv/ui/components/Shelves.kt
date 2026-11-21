@@ -44,7 +44,7 @@ val ScreenPaddingH = 48.dp
 val TopNavHeight = 76.dp
 
 /** Stable focus key of a card inside a shelf. */
-fun cardFocusKey(shelfId: String, card: Card): String = "$shelfId/${card.kind}/${card.id}"
+fun cardFocusKey(shelfId: String, card: Card): String = "$shelfId/${card.kind}/${card.id}${card.tmdbId?.takeIf { card.id <= 0 }?.let { "/$it" }.orEmpty()}"
 
 /**
  * A titled horizontal row of cards. D-pad up/down into the row returns to the card that was focused
@@ -89,7 +89,8 @@ fun ShelfRow(
                     .trapHorizontalFocus()
                     .focusRestorer(),
             ) {
-                items(cards, key = { "${it.kind}/${it.id}" }) { card ->
+                // A title off the library has id 0: its TMDB id keeps the keys apart.
+                items(cards, key = { "${it.kind}/${it.id}/${it.tmdbId ?: 0}" }) { card ->
                     MediaCard(
                         card = card,
                         onClick = { onOpen(card) },

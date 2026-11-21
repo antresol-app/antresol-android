@@ -45,7 +45,20 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.tv.material3.Text
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.core.model.AddonWay
 import app.antresol.core.model.Trailer
+import app.antresol.core.library.EpisodeState
+import app.antresol.core.library.GuideEpisode
+import app.antresol.core.ways.WayCall
+import app.antresol.core.ways.WayPlayback
+import app.antresol.core.ways.WayTarget
+import app.antresol.ui.components.wayIcon
+import kotlinx.coroutines.launch
+import app.antresol.ui.ways.Attach
+import app.antresol.ui.ways.busyState
+import app.antresol.ui.ways.offerState
+import app.antresol.ui.ways.pickerState
+import app.antresol.ui.ways.statesState
 import app.antresol.ui.trailers.Trailers
 import app.antresol.ui.trailers.trailerLabel
 import app.antresol.core.playback.Chapters
@@ -102,6 +115,11 @@ private const val PLAYLIST_KEY = "action/playlist"
 /** Focus key of the Trailer button of a movie or series page. */
 private const val TRAILER_KEY = "action/trailer"
 
+/** Focus keys of the ways' buttons: the first way when nothing plays, the list of the others, a keep way. */
+private const val WAY_PRIMARY_KEY = "action/way-primary"
+private const val WAYS_KEY = "action/ways"
+private fun keepKey(way: AddonWay) = "action/keep/${way.key}"
+
 /**
  * The detail page of any card: tinted backdrop, artwork, title, meta and overview. Movies,
  * episodes and series add Play/Resume, watchlist and watched actions, track and cast lines, and
@@ -123,25 +141,35 @@ fun DetailScreen(
     onPanelOpenChanged: (Boolean) -> Unit,
     /** The page's item is gone (a deleted playlist): leave the page. */
     onClose: () -> Unit,
+    /** Plays what an addon's way answered with (see [WayPlayback]). */
+    onPlayWay: (WayPlayback) -> Unit = {},
+    /** The title page was opened for something the library has: show the library's own page instead. */
+    onOpenLibraryItem: (Card) -> Unit = {},
 ) {
     // Back from the player: progress, watched marks and the next episode changed.
     var resumedOnce by remember { mutableStateOf(false) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         if (resumedOnce) viewModel.refresh() else resumedOnce = true
+        viewModel.ways?.refreshStates()
     }
     Box(Modifier.fillMaxSize().testTag("page/detail")) {
         when (val state = viewModel.state) {
             LoadState.Loading -> LoadingView()
             is LoadState.Failed -> ErrorView(state.error, onRetry = viewModel::reload, takeFocus = canTakeFocus())
-            is LoadState.Ready -> DetailContent(
-                model = state.value,
-                viewModel = viewModel,
-                audio = audio,
-                actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead, onClose, onTrailer),
-                onScrolledToTop = onScrolledToTop,
-                canTakeFocus = canTakeFocus,
-                onPanelOpenChanged = onPanelOpenChanged,
-            )
+            is LoadState.Ready -> {
+                state.value.video?.libraryItemId?.let { libraryId ->
+                    LaunchedEffect(libraryId) { onOpenLibraryItem(Card(id = libraryId, kind = state.value.card.kind, title = state.value.card.title)) }
+                }
+                DetailContent(
+                    model = state.value,
+                    viewModel = viewModel,
+                    audio = audio,
+                    actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead, onClose, onTrailer, onPlayWay, onOpenLibraryItem),
+                    onScrolledToTop = onScrolledToTop,
+                    canTakeFocus = canTakeFocus,
+                    onPanelOpenChanged = onPanelOpenChanged,
+                )
+            }
         }
     }
 }
@@ -154,7 +182,18 @@ private class DetailActions(
     val read: (Long, Boolean) -> Unit,
     val close: () -> Unit,
     val trailer: (Trailer, String) -> Unit,
+    val playWay: (WayPlayback) -> Unit,
+    val openLibraryItem: (Card) -> Unit,
 )
+
+/** The panels of the addons' ways: the watch ways of the title, one episode's, and the menu of a keep way. */
+private sealed interface WaysPanel {
+    data class Watch(val ways: List<AddonWay>) : WaysPanel
+
+    data class Episode(val episode: GuideEpisode, val ways: List<AddonWay>) : WaysPanel
+
+    data class Keep(val way: AddonWay) : WaysPanel
+}
 
 /** The side panels of a detail page: playlists (music) and the trailer chooser (video). */
 private enum class PlaylistPanel { AddTo, Name, ConfirmDelete, Trailers }
@@ -173,14 +212,41 @@ private fun DetailContent(
     var panel by remember { mutableStateOf<PlaylistPanel?>(null) }
     var hadPanel by remember { mutableStateOf(false) }
     var lastPanel by remember { mutableStateOf<PlaylistPanel?>(null) }
-    LaunchedEffect(panel) {
-        onPanelOpenChanged(panel != null)
+    // The addons' ways: the watch ways join Play (or are its first button), the keep ways are buttons of their own.
+    val ways = viewModel.ways
+    val offer = ways.offerState()
+    val wayStates = ways.statesState()
+    val wayBusy = ways.busyState()
+    val picker = ways.pickerState()
+    var waysPanel by remember { mutableStateOf<WaysPanel?>(null) }
+    val pageScope = androidx.compose.runtime.rememberCoroutineScope()
+    var wayNotice by remember { mutableStateOf<String?>(null) }
+    // Where focus goes back to when what a way opened closes.
+    var wayReturnKey by remember { mutableStateOf(WAYS_KEY) }
+    val wayTarget = model.wayTarget()
+    val resourcesOfPage = LocalContext.current.resources
+    ways.Attach(wayTarget, resourcesOfPage, onPlay = actions.playWay, onText = { wayNotice = it })
+    val runWay: (AddonWay, Int?, Int?, Boolean, String) -> Unit = { way, season, episode, choose, returnKey ->
+        wayNotice = null
+        wayReturnKey = returnKey
+        wayTarget?.let { ways?.start(WayCall(way, it, season, episode), choose) }
+    }
+    var hadPicker by remember { mutableStateOf(false) }
+    LaunchedEffect(panel, waysPanel, picker != null) {
+        onPanelOpenChanged(panel != null || waysPanel != null || picker != null)
         // The pill that opened the panel gets focus back.
         if (panel != null) {
             hadPanel = true
             lastPanel = panel
         } else if (hadPanel) {
+            hadPanel = false
             focus.restore(if (lastPanel == PlaylistPanel.Trailers) TRAILER_KEY else PLAYLIST_KEY)
+        }
+        if (picker != null) {
+            hadPicker = true
+        } else if (hadPicker && waysPanel == null) {
+            hadPicker = false
+            focus.restore(wayReturnKey)
         }
     }
     val context = LocalContext.current
@@ -208,6 +274,8 @@ private fun DetailContent(
     val headerHeight = (LocalConfiguration.current.screenHeightDp * if (tall) 1f else 0.62f).dp
     val firstKey = when {
         video?.playTarget != null -> PLAY_KEY
+        video != null && offer.watch.isNotEmpty() -> WAY_PRIMARY_KEY
+        video != null && video.outsideLibrary -> offer.keep.firstOrNull()?.let(::keepKey)
         !music?.tracks.isNullOrEmpty() -> PLAY_KEY
         model.card.kind == Kind.PLAYLIST -> PLAYLIST_KEY
         book != null && (book.isAudiobook || book.comic != null) -> PLAY_KEY
@@ -255,7 +323,21 @@ private fun DetailContent(
                                         // One trailer plays at once; several open the chooser.
                                         if (trailers.size == 1) openTrailer(trailers.single()) else panel = PlaylistPanel.Trailers
                                     },
+                                    ways = WaysRowState(
+                                        watch = offer.watch,
+                                        keep = offer.keep,
+                                        states = wayStates,
+                                        busy = wayBusy,
+                                        onRun = { way, returnKey -> runWay(way, null, null, false, returnKey) },
+                                        onChoose = { way, returnKey -> runWay(way, null, null, true, returnKey) },
+                                        onMore = { waysPanel = WaysPanel.Watch(offer.watch) },
+                                        onKeep = { way ->
+                                            val state = wayStates[way.key]
+                                            if (state?.active == true && state.cancel) waysPanel = WaysPanel.Keep(way) else runWay(way, null, null, false, keepKey(way))
+                                        },
+                                    ),
                                 )
+                                wayNotice?.let { Text(it, style = Antresol.typography.caption, color = AntresolColors.Label, modifier = Modifier.testTag("way-notice")) }
                                 if (trailerFailed) {
                                     Text(stringResource(R.string.trailer_no_app), style = Antresol.typography.caption, color = AntresolColors.LabelSecondary)
                                 }
@@ -332,6 +414,14 @@ private fun DetailContent(
                             focus = focus,
                             onPlayEpisode = { onPlay(it.id, ResumeMode.Ask) },
                             onOpenEpisode = { onOpen(it.toCard()) },
+                            episodeWays = { episode ->
+                                when {
+                                    wayTarget == null || model.card.kind != Kind.SERIES || ways == null -> emptyList()
+                                    episode.state == EpisodeState.Upcoming -> emptyList()
+                                    else -> ways.forEpisode(inLibrary = episode.state == EpisodeState.Downloaded)
+                                }
+                            },
+                            onEpisodeWays = { episode, list -> waysPanel = WaysPanel.Episode(episode, list) },
                         )
                     }
                 }
@@ -353,6 +443,30 @@ private fun DetailContent(
             }
         }
         PlaylistPanels(panel, model, viewModel, onPanel = { panel = it }, onDeleted = actions.close, onTrailer = openTrailer)
+        WayPanels(
+            panel = waysPanel,
+            picker = picker,
+            states = wayStates,
+            onPanel = { next ->
+                // What a panel hands focus back to: the button (or episode) that opened it.
+                val closing = waysPanel
+                waysPanel = next
+                if (next == null && picker == null) {
+                    val key = when (closing) {
+                        is WaysPanel.Episode -> episodeFocusKey(closing.episode)
+                        is WaysPanel.Keep -> keepKey(closing.way)
+                        else -> WAYS_KEY
+                    }
+                    pageScope.launch { focus.restore(key) }
+                }
+            },
+            onRun = { way, season, episode, returnKey -> runWay(way, season, episode, false, returnKey) },
+            onChoose = { way, season, episode, returnKey -> runWay(way, season, episode, true, returnKey) },
+            onOpenEpisode = { episode -> episode.card?.let { onOpen(it.toCard()) } },
+            onCancel = { way -> ways?.cancel(way) },
+            onPickerChoose = { row -> ways?.choose(row) },
+            onPickerBack = { ways?.back() },
+        )
     }
 }
 
@@ -540,8 +654,12 @@ private fun VideoActions(
     onToggleWatched: () -> Unit,
     hasTrailer: Boolean,
     onTrailer: () -> Unit,
+    ways: WaysRowState? = null,
 ) {
     val target = video.playTarget
+    // Nothing of the library plays: the first way of the addons is the first button.
+    val primaryWay = ways?.watch?.firstOrNull().takeIf { target == null }
+    val moreWays = ways?.watch.orEmpty().let { if (primaryWay != null) it.drop(1) else it }
     Row(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier
@@ -575,6 +693,18 @@ private fun VideoActions(
                 )
             }
         }
+        if (primaryWay != null && ways != null) {
+            val working = ways.busy == primaryWay.key
+            PillButton(
+                text = if (working) stringResource(R.string.way_busy) else primaryWay.label,
+                onClick = { ways.onRun(primaryWay, WAY_PRIMARY_KEY) },
+                onLongClick = { ways.onChoose(primaryWay, WAY_PRIMARY_KEY) },
+                icon = wayIcon(primaryWay.icon),
+                style = PillStyle.Primary,
+                enabled = ways.busy == null,
+                modifier = Modifier.remembersFocus(focus, WAY_PRIMARY_KEY).testTag("way-primary"),
+            )
+        }
         if (video.canWatchlist) {
             PillButton(
                 text = stringResource(if (video.inWatchlist) R.string.detail_in_watchlist else R.string.action_add_watchlist),
@@ -583,12 +713,14 @@ private fun VideoActions(
                 modifier = Modifier.remembersFocus(focus, WATCHLIST_KEY),
             )
         }
-        PillButton(
-            text = stringResource(if (video.watched) R.string.action_mark_unwatched else R.string.action_mark_watched),
-            onClick = onToggleWatched,
-            icon = AntresolIcons.CheckCircle,
-            modifier = Modifier.remembersFocus(focus, WATCHED_KEY),
-        )
+        if (!video.outsideLibrary) {
+            PillButton(
+                text = stringResource(if (video.watched) R.string.action_mark_unwatched else R.string.action_mark_watched),
+                onClick = onToggleWatched,
+                icon = AntresolIcons.CheckCircle,
+                modifier = Modifier.remembersFocus(focus, WATCHED_KEY),
+            )
+        }
         // Last, so the buttons do not shift when the trailers arrive after the page.
         if (hasTrailer) {
             PillButton(
@@ -597,6 +729,40 @@ private fun VideoActions(
                 icon = AntresolIcons.Trailer,
                 modifier = Modifier.remembersFocus(focus, TRAILER_KEY).testTag("action-trailer"),
             )
+        }
+    }
+    // The other ways to watch, and the buttons of the ways that keep a copy on the server (a ring shows how far each is).
+    if (ways != null && (moreWays.isNotEmpty() || ways.keep.isNotEmpty())) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .trapHorizontalFocus(),
+        ) {
+            if (moreWays.isNotEmpty()) {
+                PillButton(
+                    text = stringResource(R.string.way_more),
+                    onClick = ways.onMore,
+                    icon = AntresolIcons.ChevronDown,
+                    modifier = Modifier.remembersFocus(focus, WAYS_KEY).testTag("ways-more"),
+                )
+            }
+            ways.keep.forEach { way ->
+                KeepWayPill(
+                    way = way,
+                    state = ways.states[way.key],
+                    working = ways.busy == way.key,
+                    onClick = { ways.onKeep(way) },
+                    onLongClick = { ways.onChoose(way, keepKey(way)) },
+                    modifier = Modifier.remembersFocus(focus, keepKey(way)).testTag("way-keep-${way.id}"),
+                )
+            }
+        }
+        // What a keep way says about itself («Saved 40%», and «Saved» once it is done), in the server's words.
+        ways.keep.forEach { way ->
+            ways.states[way.key]?.text?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = Antresol.typography.caption, color = AntresolColors.LabelSecondary)
+            }
         }
     }
 }
@@ -737,4 +903,70 @@ private fun BookActions(book: BookInfo, focus: FocusMemory, viewModel: DetailVie
             )
         }
     }
+}
+
+/** The title the ways of this page act on: a movie or series with a TMDB id; null for anything else. */
+private fun DetailModel.wayTarget(): WayTarget? {
+    val video = video ?: return null
+    val tmdbId = video.tmdbId?.takeIf { it > 0 } ?: return null
+    if (card.kind != Kind.MOVIE && card.kind != Kind.SERIES) return null
+    return WayTarget(card.kind, tmdbId, inLibrary = !video.outsideLibrary, title = card.title, poster = card.poster, backdrop = card.backdrop)
+}
+
+/** What the ways of the addons add to the actions of a title. */
+private class WaysRowState(
+    val watch: List<AddonWay>,
+    val keep: List<AddonWay>,
+    val states: Map<String, app.antresol.core.model.WayState>,
+    val busy: String?,
+    val onRun: (AddonWay, String) -> Unit,
+    val onChoose: (AddonWay, String) -> Unit,
+    val onMore: () -> Unit,
+    val onKeep: (AddonWay) -> Unit,
+)
+
+/** The panels the ways open: a list of ways, one episode's, a keep way's menu, and the choice step by step. */
+@Composable
+private fun WayPanels(
+    panel: WaysPanel?,
+    picker: app.antresol.core.ways.WayPicker?,
+    states: Map<String, app.antresol.core.model.WayState>,
+    onPanel: (WaysPanel?) -> Unit,
+    onRun: (AddonWay, Int?, Int?, String) -> Unit,
+    onChoose: (AddonWay, Int?, Int?, String) -> Unit,
+    onOpenEpisode: (GuideEpisode) -> Unit,
+    onCancel: (AddonWay) -> Unit,
+    onPickerChoose: (app.antresol.core.model.StepRow) -> Unit,
+    onPickerBack: () -> Unit,
+) {
+    when (panel) {
+        is WaysPanel.Watch -> WaysListPanel(
+            ways = panel.ways,
+            onRun = { way -> onRun(way, null, null, WAYS_KEY) },
+            onChoose = { way -> onChoose(way, null, null, WAYS_KEY) },
+            onDismiss = { onPanel(null) },
+        )
+        is WaysPanel.Episode -> {
+            val episode = panel.episode
+            val key = episodeFocusKey(episode)
+            OptionsPanel(
+                title = stringResource(R.string.way_watch_title),
+                note = stringResource(R.string.way_hold_hint),
+                options = listOfNotNull(
+                    episode.card?.let { MenuOption(stringResource(R.string.episode_open_page), selected = false) { onOpenEpisode(episode) } },
+                ) + panel.ways.map { way ->
+                    MenuOption(
+                        way.label,
+                        selected = false,
+                        onLongSelect = { onChoose(way, episode.season, episode.number, key) },
+                    ) { onRun(way, episode.season, episode.number, key) }
+                },
+                onDismiss = { onPanel(null) },
+                focusIndex = 0,
+            )
+        }
+        is WaysPanel.Keep -> KeepMenuPanel(panel.way, states[panel.way.key], onCancel = { onCancel(panel.way) }, onDismiss = { onPanel(null) })
+        null -> Unit
+    }
+    picker?.let { WayStepPanel(it, onChoose = onPickerChoose, onBack = onPickerBack) }
 }

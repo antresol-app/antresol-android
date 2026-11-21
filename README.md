@@ -24,7 +24,7 @@ the unit-test tasks above. To drive an app by hand without a server, start `scri
 (Python 3, nothing to install; `--help` for the options) and type its address on the app's server screen:
 `http://10.0.2.2:8421` in an emulator, `--host 0.0.0.0` and the computer's address for a device (its port
 is 8421, not the 8420 the live tests above look for a real server on). It plays
-the small library of the tests' `FakeServer` plus live channels with a programme guide cut into pages as
+the small library of the tests' `FakeServer` (`--addons` adds an addon with the ways protocol) plus live channels with a programme guide cut into pages as
 the server cuts them (`--rebuild-after 1` rebuilds the schedule between the first two pages, as the server
 may); debug and release builds both accept it (plain HTTP is allowed).
 
@@ -65,6 +65,14 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   ExoPlayer player sends the device's codec caps (direct play, or HLS remux/transcode), has audio,
   subtitle and quality menus, keeps the HLS session alive, saves progress every 10 s and counts
   down to the next episode.
+- **Addon ways**: what the server's addons offer for a movie or series (`x/app`, [docs/API.md](docs/API.md#13-addon-ways)):
+  the ways to watch join Play in a «more ways» panel (the first one is the first button when nothing of the library
+  plays), a way that keeps a copy on the server is a button with a progress ring and «Cancel», and the ways that run for
+  an episode are on the episode (OK on one that is not in the library, hold OK on any: its page and its ways). OK on a
+  way to watch runs it at once; hold OK chooses by hand, step by step (a panel with the server's rows, Back to the step
+  before); OK on a way that keeps a copy always opens that choice.
+  A title off the library, found by an addon's search row in Search, has a page of its own. Nothing shows without
+  addons, nor for a kid profile.
 - **TV (live channels)**: one numbered list of the server's channels (own and external, in channel
   number order) with a preview of the focused channel's programme, or the programme guide («Channels |
   Guide»); focus starts on the channel this profile watched last. The category button («All Channels ·
@@ -129,6 +137,12 @@ Live UI tests (`TvLiveUiTest`, Robolectric with D-pad key events) write screensh
   transcode when it can't. Progress is saved every 10 s, and the next episode starts after a
   countdown. A series page lists every episode of the server's guide, marked downloaded or not;
   ones not aired yet are greyed with their air date.
+- **Addon ways**: what the server's addons offer for a movie or series (`x/app`, [docs/API.md](docs/API.md#13-addon-ways)):
+  a chevron beside Play opens the ways to watch (the first one is the main button when nothing of the library plays),
+  a way that keeps a copy on the server is a round button with a progress ring and «Cancel», and a long press on an
+  episode lists the ways that run for it. A tap on a way to watch runs it at once; a long press chooses by hand, step
+  by step, in a bottom sheet; a tap on a way that keeps a copy always opens that choice. Search adds a section per addon after the library's results; a title off the library opens a page made
+  from `/api/title`. Nothing shows without addons, nor for a kid profile.
 - **TV (live channels)**: «On Air Now» on Home (after the first shelf; the tab bar keeps five tabs, as
   on the web) opens the TV page: «Continue» on top, section pills and channel cards. The live player
   is a landscape activity; channel up/down buttons and vertical swipes switch channels without a

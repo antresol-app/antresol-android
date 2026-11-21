@@ -36,6 +36,7 @@ Conventions:
 10. [Admin and other endpoints (brief)](#10-other-endpoints)
 11. [Client implementation notes](#11-client-implementation-notes)
 12. [Live TV channels](#12-live-tv-channels)
+13. [Addon ways (`x/app`)](#13-addon-ways)
 
 ---
 
@@ -1223,3 +1224,61 @@ programme without a rendition's track plays a same-language fallback there (subt
 A channel keeps running on the server for a while after its last viewer left, so switching through
 many channels quickly can hit the "too many channels" limit.
 
+---
+
+## 13. Addon ways
+
+An addon of the server can offer the apps *ways*: to watch a title from some source, or to keep a copy of it on
+the server. The apps know no addon by name: every id, label, step and message comes from the server (labels in the
+profile's language, `Accept-Language`). An addon that does not speak the protocol answers 404 and is skipped; a kid
+profile gets 403 on all of it and sees nothing of it.
+
+**Discovery.** `GET /api/addons/web` lists the addons open to the profile (`[{id, entry, style?}]`; only `id` is
+used). For each, `GET /api/addons/{id}/x/app` answers `AppInfo`:
+`{v, ways: [{id, label, icon, role, kinds, scope, episodes}], search?: {label}}`. `role` is `watch` (a way to watch)
+or `keep` (a way to keep a copy on the server); `icon` is `play`, `download`, `globe` or `list` (anything else is
+`play`); `scope` is `any`, `outside` (only what is not in the library) or `inside`; `episodes` says the way runs for
+one episode. The apps join the ways of all addons in the order of the addons' ids, ask once per sign-in, and ask again
+after a profile or server change and on Home's pull to refresh.
+
+**Calls** (all under `/api/addons/{id}/x/app`):
+
+| Call | Body or query | Answer |
+|---|---|---|
+| `GET search?q=` | | `{titles: [{kind, tmdbId, title, year?, poster?, overview?, inLibrary, libraryItemId?}]}` |
+| `POST step` | `{way, kind, tmdbId, season?, episode?, ref?}` | `{title, rows: [{ref, label, detail?, badges, current, final}], note?, empty?}` |
+| `POST run` | the same, plus `startSec?`, `maxHeight?`, `quick?`, `refresh?` | one of `{input}`, `{play}`, `{done}`, `{pick: true}` |
+| `PUT progress` | `{session, way, kind, tmdbId, season?, episode?, positionMs, durationMs, finished?}` | 204 |
+| `DELETE play/{session}` | | 204 |
+| `GET state?kind=&tmdbId=[&season=]` | | `{ways: {<wayId>: {active, fraction?, text?, cancel?}}}` |
+| `POST cancel` | `{way, kind, tmdbId, season?}` | `{done}` |
+
+A `step` row with `final: false` opens the next step with its `ref`; `final: true` runs the way with it. `ref` is
+opaque (it can be 1-2 KB): kept and sent as it is. 404 on `step` or `run` means the way is gone (the apps ask for the
+ways again); every other failure carries `{error}` in the server's words, shown as it is. `run` with `quick` and no
+`ref` lets the addon use what it remembers or finds best, and answers `{pick: true}` when it cannot: the apps then
+open the choice from its first step. A tap on a way to watch runs it with `quick`, a long press (hold OK on the TV)
+opens the choice directly; a tap on a way that keeps a copy always opens the choice (as on the web: the quality and
+the release are picked first), and a final row runs it.
+
+**What a run answers.** `{input}` plays through the core's input player: `GET /api/play/input/{id}` (where to
+start), `POST /api/play/input/{id}` with the body of `/api/play` (202 `{pending:true}` while the video is prepared:
+asked again every 1.5 s for up to 90 s), `PUT /api/play/input/{id}/progress {positionMs, durationMs, keepalive}`.
+The answer is `/api/play`'s, so the player's audio, subtitle and quality menus and its HLS session work as for a
+file. `{play}` is a stream the addon serves itself (`{url, mode, kind: hls|mp4, startSec, durationMs, subtitles,
+quality, session, progress: {path, every}}`): its `url` and `subtitles[].url` are server paths that get `?mk=`; the
+position goes to `PUT progress` every `every` seconds, on a pause and when the player closes, and the addon's
+session is closed with `DELETE play/{session}`. A 410 on the media means the link went stale: the run is sent again
+with `refresh: true` and the position as `startSec`, and the video goes on from there. `{done}` is a sentence to show
+(the state of the way changed: it is asked again). The apps ask `state` every 5 s while a keep way is `active` and
+draw a ring on its button (`fraction`, else turning), with `text` beside it; `cancel: true` adds «Cancel» to the menu
+of the button.
+
+**Titles off the library.** A search result with `inLibrary` opens the library card `libraryItemId`; any other opens
+the page made from `GET /api/title/{kind}/{tmdbId}`, which shows the ways whose `scope` is `any` or `outside`.
+
+### Trailers
+
+`GET /api/items/{id}/trailers` lists at most the best three the apps offer (as the web does). A trailer with `play`
+plays in the app's own player; one without it in the embedded YouTube player (the YouTube app or the browser only on
+a device without a WebView), exactly as the web's trailer sheet does without an addon.

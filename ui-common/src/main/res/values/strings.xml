@@ -279,4 +279,17 @@
     <string name="tv_path_antresol">Via Antresol</string>
     <string name="tv_path_source">Source %1$d of %2$d</string>
     <string name="tv_no_supported_audio">This channel has no supported audio</string>
+    <!-- Ways of the server's addons (their names, steps and results are the server's own words) -->
+    <string name="way_episode_code">S%1$d · E%2$d</string>
+    <string name="way_watch_title">Watch</string>
+    <string name="way_more">More ways to watch</string>
+    <string name="way_hold_hint">Hold a way to choose by hand</string>
+    <string name="way_step_back">Back to the previous step</string>
+    <string name="way_busy">Opening…</string>
+    <string name="way_cancel">Cancel</string>
+    <string name="way_empty_step">Nothing to choose from</string>
+    <string name="way_not_available">This is not available anymore. Try again.</string>
+    <string name="error_input_not_ready">The video is not ready yet. Try again in a moment.</string>
+    <string name="episode_open_page">Open Episode Page</string>
+    <string name="title_page_in_library">This title is in your library</string>
 </resources>

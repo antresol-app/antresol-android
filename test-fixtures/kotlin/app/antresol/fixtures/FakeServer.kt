@@ -42,6 +42,33 @@ class FakeServer {
 
     private val busyAnswered = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    /**
+     * The `x/app` protocol of one addon ("alpha"): a way to watch (a source and a quality to pick, or a
+     * remembered one), a way that keeps a copy on the server, a title search, and a title outside the
+     * library. Off by default: the server then has no addons, as a demo server.
+     */
+    @Volatile var addons: Boolean = false
+
+    /** A remembered choice: the watch way's quick run plays at once instead of opening the choice. */
+    @Volatile var wayRemembered: Boolean = false
+
+    /** The keep way is working (its state says so, with a progress ring and a way to cancel). */
+    @Volatile var keepActive: Boolean = false
+
+    /** The input the way plays is still being prepared for this many asks (answered 202). */
+    @Volatile var inputPendingAsks: Int = 0
+
+    /** The watch way answers `play` (a stream the addon serves itself) instead of an input of the core's player. */
+    @Volatile var wayDirect: Boolean = false
+
+    /** The first media link (session "s1") answers 410 every time: it is stale, and a run with `refresh` makes a new one ("s2"). */
+    @Volatile var staleLink: Boolean = false
+
+    /** The `x/app` requests the addon got, `METHOD path?query body`. */
+    val addonCalls = CopyOnWriteArrayList<String>()
+
+    private val inputAsks = java.util.concurrent.atomic.AtomicInteger(0)
+
     /** Delay of `GET /api/items/{id}` answers, to land them mid-transition. */
     @Volatile var itemDelayMs: Long = 0
 
@@ -69,6 +96,10 @@ class FakeServer {
                 if (path.startsWith("/api/me/managed") || path.startsWith("/api/me/devices/")) {
                     return history(request.method.orEmpty(), path, request.body.readUtf8())
                 }
+                if (addons && (path.startsWith("/api/addons/") || path.startsWith("/api/title/") || path.startsWith("/api/play/input/"))) {
+                    return addon(request.method.orEmpty(), path, request.body.readUtf8())
+                }
+                if (path == "/api/addons/web") return json("[]")
                 return answer(request.method.orEmpty(), path)
             }
         }
@@ -91,9 +122,11 @@ class FakeServer {
             path == "/api/profiles" -> json("""[{"id":1,"name":"Alex","avatar":"grad-3","hasPassword":false}]""")
             path == "/api/auth/token" -> json("""{"token":"test-device-token","user":${me()}}""")
             path == "/api/me" -> json(me())
+            path == "/api/auth/media-key" -> json("""{"key":"test-mk","expiresAt":"2099-01-01T00:00:00Z"}""")
             path == "/api/me/ui-language" -> json("""{"language":"","effective":"en"}""")
             path == "/api/me/playback-prefs" -> json("""{"audioLangs":[],"subMode":"off","subLangs":[]}""")
             path == "/api/home" -> json(home())
+            path == "/api/search" -> json("""{"library":[${movieCard(MOVIE_ID)}],"albums":[],"artists":[],"songs":[]}""")
             path == "/api/items" -> json(if ("kind=series" in query) shows() else movies())
             path.matches(Regex("/api/items/\\d+/trailers")) -> json(trailers(path.split('/')[3].toLong()))
             path.matches(Regex("/api/items/\\d+")) -> json(item(path.substringAfterLast('/').toLong()))
@@ -139,6 +172,117 @@ class FakeServer {
             else -> MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
         }
     }
+
+    /** The `x/app` protocol of "alpha", `GET /api/title`, and the core's input player for what the way plays. */
+    private fun addon(method: String, fullPath: String, body: String): MockResponse {
+        val path = fullPath.substringBefore('?')
+        val query = fullPath.substringAfter('?', "")
+        if (path.startsWith("/api/addons/alpha/x/")) {
+            addonCalls += "$method ${path.removePrefix("/api/addons/alpha/x/")}${if (query.isEmpty()) "" else "?$query"} $body"
+        }
+        fun bodyOf(name: String) = Regex("\"$name\"\\s*:\\s*\"([^\"]*)\"").find(body)?.groupValues?.get(1)
+        return when {
+            path == "/api/addons/web" -> json("""[{"id":"alpha","entry":"/api/addons/alpha/web/index.js"}]""")
+            path == "/api/addons/alpha/x/app" -> json(
+                """{"v":1,"ways":[
+                    {"id":"watch","label":"Watch from a source","icon":"globe","role":"watch","kinds":["movie","series"],"scope":"any","episodes":true},
+                    {"id":"keep","label":"Keep on the server","icon":"download","role":"keep","kinds":["movie","series"],"scope":"outside","episodes":false}
+                   ],"search":{"label":"Find and watch"}}""",
+            )
+            path == "/api/addons/alpha/x/app/search" -> json(
+                """{"titles":[
+                    {"kind":"movie","tmdbId":$MOVIE_TMDB,"title":"Movie 1","year":2019,"poster":"/api/images/local/$MOVIE_ID/poster","inLibrary":true,"libraryItemId":$MOVIE_ID},
+                    {"kind":"movie","tmdbId":$OUTSIDE_TMDB,"title":"Far Away Film","year":2020,"poster":"/api/images/local/outside/poster","inLibrary":false}
+                   ]}""",
+            )
+            path == "/api/addons/alpha/x/app/step" -> when (bodyOf("ref")) {
+                null -> json(
+                    """{"title":"Source","note":"Pick a source","rows":[
+                        {"ref":"src-1","label":"Source One","detail":"Fast","badges":["HD"],"current":true,"final":false},
+                        {"ref":"src-2","label":"Source Two","final":false}]}""",
+                )
+                "src-1", "src-2" -> json(
+                    """{"title":"Quality","rows":[
+                        {"ref":"q-1080","label":"1080p","detail":"12.3 GB","badges":["4K"],"final":true},
+                        {"ref":"q-720","label":"720p","final":true}]}""",
+                )
+                else -> json("""{"title":"Nothing","rows":[],"empty":"Nothing found"}""")
+            }
+            path == "/api/addons/alpha/x/app/run" -> when {
+                bodyOf("way") == "keep" -> json("""{"done":"Started"}""")
+                body.contains("\"refresh\":true") -> json(directPlay("s2"))
+                body.contains("\"quick\":true") && !wayRemembered && !wayDirect -> json("""{"pick":true}""")
+                wayDirect -> json(directPlay("s1"))
+                else -> json("""{"input":"in-1"}""")
+            }
+            path == "/api/addons/alpha/x/app/progress" && method == "PUT" -> MockResponse().setResponseCode(204)
+            path.startsWith("/api/addons/alpha/x/app/play/") && method == "DELETE" -> MockResponse().setResponseCode(204)
+            path.matches(Regex("/api/addons/alpha/x/media/s\\d/video\\.mp4")) -> {
+                val session = path.substringAfter("media/").substringBefore('/')
+                when {
+                    "mk=test-mk" !in query -> MockResponse().setResponseCode(401).setBody("""{"error":"no key"}""")
+                    session == "s1" && staleLink ->
+                        MockResponse().setResponseCode(410).setBody("""{"error":"The link is stale"}""")
+                    else -> {
+                        val bytes = requireNotNull(FakeServer::class.java.getResourceAsStream("/trailer-sample.mp4")).use { it.readBytes() }
+                        MockResponse().setHeader("Content-Type", "video/mp4").setBody(Buffer().write(bytes))
+                    }
+                }
+            }
+            path.matches(Regex("/api/addons/alpha/x/media/s\\d/subs/0\\.vtt")) -> {
+                if ("mk=test-mk" !in query) {
+                    MockResponse().setResponseCode(401)
+                } else {
+                    MockResponse().setHeader("Content-Type", "text/vtt").setBody("WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nHello\n")
+                }
+            }
+            path == "/api/addons/alpha/x/app/state" -> json(
+                if (keepActive) {
+                    """{"ways":{"keep":{"active":true,"fraction":0.4,"text":"Saved 40%","cancel":true}}}"""
+                } else {
+                    """{"ways":{}}"""
+                },
+            )
+            path == "/api/addons/alpha/x/app/cancel" -> {
+                keepActive = false
+                json("""{"done":"Cancelled"}""")
+            }
+            path.matches(Regex("/api/title/(movie|series)/\\d+")) -> {
+                val kind = path.split('/')[3]
+                val tmdb = path.substringAfterLast('/').toLong()
+                val inLibrary = tmdb == MOVIE_TMDB
+                json(
+                    """{"tmdbId":$tmdb,"extId":"","kind":"$kind","title":"Far Away ${if (kind == "movie") "Film" else "Show"}","year":2020,
+                        "poster":"/api/images/local/outside/poster","overview":"A title the library does not have.","inLibrary":$inLibrary,
+                        "libraryItemId":${if (inLibrary) MOVIE_ID.toString() else "null"},"backdrop":"/api/images/local/outside/backdrop",
+                        "genres":["Drama"],"runtime":95,"cast":[],"seasons":[{"number":1,"episodes":3}]}""",
+                )
+            }
+            path == "/api/play/input/in-1" && method == "GET" ->
+                json("""{"id":"in-1","addonId":"alpha","name":"Movie.mkv","itemId":0,"slow":false,"startSec":0}""")
+            path == "/api/play/input/in-1" && method == "POST" ->
+                if (inputAsks.getAndIncrement() < inputPendingAsks) {
+                    MockResponse().setResponseCode(202).setHeader("Content-Type", "application/json").setBody("""{"pending":true}""")
+                } else {
+                    json(
+                        """{"mode":"direct","url":"/api/play/input/in-1/direct","startSec":0,"durationMs":30000,"audio":[],"audioIndex":-1,
+                            "subtitles":[],"quality":{"selected":"auto","applied":"auto"}}""",
+                    )
+                }
+            path == "/api/play/input/in-1/progress" -> MockResponse().setResponseCode(204)
+            path == "/api/play/input/in-1/direct" -> {
+                val bytes = requireNotNull(FakeServer::class.java.getResourceAsStream("/trailer-sample.mp4")).use { it.readBytes() }
+                MockResponse().setHeader("Content-Type", "video/mp4").setBody(Buffer().write(bytes))
+            }
+            else -> MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
+        }
+    }
+
+    /** The `play` answer of a run: an MP4 the addon serves under its session [session], with one subtitle. */
+    private fun directPlay(session: String): String =
+        """{"play":{"mode":"stream","kind":"mp4","url":"/api/addons/alpha/x/media/$session/video.mp4","startSec":0,"durationMs":30000,"audio":[],"audioIndex":-1,
+            "subtitles":[{"index":0,"lang":"en","label":"English","codec":"webvtt","external":true,"url":"/api/addons/alpha/x/media/$session/subs/0.vtt"}],
+            "quality":{"options":["1080p"],"current":"1080p"},"session":"$session","progress":{"path":"x/app/progress","every":3}}}"""
 
     /** `POST /api/trailers/{key}/play` and the MP4 it points at (a 30 s 160x90 clip, `mk` required). */
     private fun trailer(method: String, path: String, query: String): MockResponse {
@@ -249,6 +393,7 @@ class FakeServer {
     private fun item(id: Long): String = when (id) {
         SERIES_ID -> """
             {"id":$SERIES_ID,"kind":"series","title":"The Test Show","year":2021,"poster":"/api/images/local/$SERIES_ID/poster",
+             ${if (addons) """"tmdbId":$SERIES_TMDB,""" else ""}
              "backdrop":"/api/images/local/$SERIES_ID/backdrop","overview":"A test series about testing things on a television.",
              "genres":["Drama","Comedy"],"rating":"16+","cast":$CAST,
              "seasons":[
@@ -264,6 +409,7 @@ class FakeServer {
         in EPISODE_IDS -> """{"id":$id,"kind":"episode","title":"Episode","seriesId":$SERIES_ID,"files":[{"id":${id + 1000},"durationMs":2700000}]}"""
         else -> """
             {"id":$id,"kind":"movie","title":"Movie ${id - MOVIE_ID + 1}","year":2019,"poster":"/api/images/local/$id/poster",
+             ${if (addons) """"tmdbId":${MOVIE_TMDB + (id - MOVIE_ID)},""" else ""}
              "backdrop":"/api/images/local/$id/backdrop","overview":"A test movie.","genres":["Adventure"],"runtime":104,
              "cast":$CAST,"files":[{"id":${id + 1000},"durationMs":6240000,"audio":[],"subs":[]}],"actions":{"play":true}}
         """.trimIndent()
@@ -281,6 +427,10 @@ class FakeServer {
         const val SERVER_ID = "fedcba9876543210fedcba9876543210"
         const val SERIES_ID = 500L
         const val MOVIE_ID = 100L
+        /** TMDB ids: the library movie 100 (its neighbours follow by offset), the series, and a title off the library. */
+        const val MOVIE_TMDB = 603L
+        const val SERIES_TMDB = 1399L
+        const val OUTSIDE_TMDB = 9001L
         const val MOVIE_COUNT = 23
         const val SHOW_COUNT = 30
         val EPISODE_IDS = (601L..606L).toList()

@@ -20,6 +20,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -38,14 +39,18 @@ import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.FileInfo
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
+import app.antresol.core.model.PlayMode
+import app.antresol.core.model.PlayResponse
 import app.antresol.core.model.PlaybackCaps
 import app.antresol.core.model.Progress
 import app.antresol.core.model.Quality
+import app.antresol.core.model.QualityInfo
 import app.antresol.core.model.SubTrack
 import app.antresol.core.playback.CodecSupport
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.playback.PlaybackReporter
+import app.antresol.core.playback.PlaybackTiming
 import app.antresol.core.playback.Resume
 import app.antresol.core.playback.SkipAction
 import app.antresol.core.playback.SkipNote
@@ -58,6 +63,11 @@ import app.antresol.core.playback.VideoSource
 import app.antresol.core.playback.WebVtt
 import app.antresol.core.playback.playbackApi
 import app.antresol.core.playback.videoApi
+import app.antresol.core.ways.PlaybackDisplay
+import app.antresol.core.ways.WayPlayback
+import app.antresol.core.ways.inputPlaybackApi
+import app.antresol.core.ways.inputVideoApi
+import app.antresol.core.ways.wayPlaybackApi
 import app.antresol.ui.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -72,7 +82,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.Duration
 import java.util.UUID
+import kotlin.time.Duration.Companion.seconds
 
 /** How the player picks its start position. */
 enum class ResumeMode {
@@ -128,6 +140,10 @@ class VideoPlayerOptions(
  * track and quality changes, side-loaded WebVTT subtitles shifted to the HLS start, and recovery
  * when the server drops the session or the device fails to decode. ExoPlayer lives here so it
  * survives recomposition. Shared by the TV and phone players; each keeps its own controls.
+ *
+ * With a [way] (a video an addon serves, see [WayPlayback]) it plays that instead of a library
+ * item: an input through the core's input player (the same session, caps, tracks and recovery as a
+ * file), a stream the addon serves itself directly, reporting its position to the addon.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 open class VideoPlayerViewModel(
@@ -139,6 +155,7 @@ open class VideoPlayerViewModel(
     private val options: VideoPlayerOptions,
     /** Final writes and session stops, awaited by screens that show progress. */
     private val pendingWrites: PendingWrites,
+    private val way: WayPlayback? = null,
 ) : ViewModel() {
     /**
      * The client for every call of this player (sessions, keepalives, progress, media key, subtitles),
@@ -223,7 +240,12 @@ open class VideoPlayerViewModel(
     val subtitleTracks: List<SubTrack> get() = source?.play?.subtitles.orEmpty().filter { it.url != null }
     val quality: String get() = source?.play?.quality?.selected?.ifEmpty { null } ?: Quality.AUTO
 
+    /** A stream the addon serves itself is playing (no choice of quality: the quality was picked with the way). */
+    val canChooseQuality: Boolean get() = wayDirect == null
+
     private var currentItemId = itemId
+    private var wayDirect: WayPlayback.Direct? = null
+    private var endedPlayback = false
     private var pendingFile: FileInfo? = null
     private var session: VideoSession? = null
     private var reporter: PlaybackReporter? = null
@@ -296,7 +318,7 @@ open class VideoPlayerViewModel(
 
     init {
         player.addListener(listener)
-        start(itemId, resume)
+        if (way != null) startWay(way) else start(itemId, resume)
         loadAutoSkip()
         viewModelScope.launch {
             while (isActive) {
@@ -409,21 +431,39 @@ open class VideoPlayerViewModel(
         }
     }
 
-    private suspend fun begin(file: FileInfo, startMs: Long) {
+    private suspend fun begin(file: FileInfo, startMs: Long) = beginStream(
+        startMs = startMs,
+        fallbackDurationMs = file.durationMs ?: 0L,
+        reportApi = client.playbackApi(),
+        reportItemId = currentItemId,
+        newSession = { caps -> VideoSession(client.videoApi(), file.id, caps, quality = options.defaultQuality) },
+    )
+
+    /**
+     * Opens a stream through a [VideoSession] built by [newSession] (a library file, or an input of
+     * the core's input player), reports to [reportApi], and plays it from [startMs].
+     */
+    private suspend fun beginStream(
+        startMs: Long,
+        fallbackDurationMs: Long,
+        reportApi: app.antresol.core.playback.PlaybackApi,
+        reportItemId: Long,
+        newSession: (PlaybackCaps) -> VideoSession,
+    ) {
         releaseStream()
         // Enumerating codecs can take hundreds of ms on a slow device: keep it off the main thread.
         val caps = withContext(Dispatchers.Default) { DeviceCaps.current(context, limitToDisplay = options.limitToDisplay) }
-        val newSession = VideoSession(client.videoApi(), file.id, caps, quality = options.defaultQuality)
+        val newSession = newSession(caps)
         session = newSession
         selectedSubtitle = null
         rawSubtitles.clear()
         val opened = openOrStop(newSession) { newSession.open(startMs) }
-        val duration = opened.play.durationMs.takeIf { it > 0 } ?: file.durationMs ?: 0L
+        val duration = opened.play.durationMs.takeIf { it > 0 } ?: fallbackDurationMs
         durationMs = duration
         reporter = PlaybackReporter(
-            api = client.playbackApi(),
+            api = reportApi,
             scope = viewModelScope,
-            itemId = currentItemId,
+            itemId = reportItemId,
             durationMs = duration,
             positionMs = ::reportedPositionMs,
             isPlaying = { !released && player.isPlaying },
@@ -436,6 +476,116 @@ open class VideoPlayerViewModel(
         // Opened while in the background: give the HLS slot back until the app returns.
         if (backgrounded) suspendStream(resumeAtMs = startMs)
     }
+
+    // region Ways
+
+    private fun startWay(way: WayPlayback) {
+        startJob?.cancel()
+        phase = PlayerPhase.Loading
+        item = way.display.toItem(context)
+        startJob = viewModelScope.launch {
+            try {
+                when (way) {
+                    is WayPlayback.Input -> startInput(way)
+                    is WayPlayback.Direct -> openDirect(way, startMs = (way.play.startSec * 1000).toLong())
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                phase = PlayerPhase.Failed(e)
+            }
+        }
+    }
+
+    /** The core's input player: the same session as a file's, with the file's caps, tracks and quality. */
+    private suspend fun startInput(input: WayPlayback.Input) {
+        val info = client.inputInfo(input.id)
+        beginStream(
+            startMs = (info.startSec * 1000).toLong(),
+            fallbackDurationMs = 0L,
+            reportApi = client.inputPlaybackApi(input.id),
+            reportItemId = 0L,
+            newSession = { caps -> VideoSession(client.inputVideoApi(input.id), 0L, caps, quality = options.defaultQuality) },
+        )
+    }
+
+    /**
+     * A stream the addon serves itself: its URL (and its subtitles) get the media key, the position
+     * goes to the addon every few seconds, and the addon's session is closed with the player.
+     */
+    private suspend fun openDirect(direct: WayPlayback.Direct, startMs: Long) {
+        releaseStream()
+        val play = direct.play
+        wayDirect = direct
+        endedPlayback = false
+        selectedSubtitle = null
+        rawSubtitles.clear()
+        val key = client.mediaKeys.get(Duration.ofMillis((play.durationMs - startMs).coerceAtLeast(0) + DIRECT_KEY_MARGIN_MS))
+        val subtitles = play.subtitles.filter { it.url.isNotBlank() }.map { track ->
+            SubTrack(
+                index = track.index,
+                codec = track.codec,
+                lang = track.lang,
+                title = track.label.ifBlank { track.title },
+                external = true,
+                url = client.urls.playback(track.url, key),
+            )
+        }
+        // Played like a file the server does not transcode: the player's position is the file's.
+        val response = PlayResponse(
+            mode = PlayMode.DIRECT,
+            url = play.url,
+            startSec = startMs / 1000.0,
+            durationMs = play.durationMs,
+            subtitles = subtitles,
+            quality = QualityInfo(selected = play.quality.current, applied = play.quality.current),
+        )
+        val opened = VideoSource(response, client.urls.playback(play.url, key), playlist = play.isPlaylist)
+        durationMs = play.durationMs
+        reporter = PlaybackReporter(
+            api = client.wayPlaybackApi(direct.addonId, direct.request, play.session) { endedPlayback },
+            scope = viewModelScope,
+            itemId = 0L,
+            durationMs = play.durationMs,
+            positionMs = ::reportedPositionMs,
+            isPlaying = { !released && player.isPlaying },
+            timing = PlaybackTiming(progressInterval = play.progress.every.coerceAtLeast(MIN_PROGRESS_EVERY_SEC).seconds),
+        ).also { it.start(play.session.takeIf { id -> id.isNotBlank() }) }
+        preselectSubtitle(opened)
+        resetSkip(null)
+        load(opened, opened.timeline.initialPlayerSeekMs, playWhenReady = !backgrounded)
+        phase = PlayerPhase.Playing
+    }
+
+    /**
+     * The media link of a direct stream went stale (410), or «Try Again» after a failure: run the
+     * way again with `refresh` and carry on from where it was.
+     */
+    private fun reopenDirect(direct: WayPlayback.Direct) {
+        val at = currentFileMs()
+        isSwitching = true
+        player.pause()
+        reopenJob?.cancel()
+        reopenJob = viewModelScope.launch {
+            try {
+                val request = direct.request.copy(refresh = true, startSec = at / 1000.0)
+                val play = client.wayRun(direct.addonId, request).play ?: throw PlaybackUnavailableException()
+                openDirect(direct.copy(play = play), startMs = at)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                phase = PlayerPhase.Failed(e)
+            } finally {
+                isSwitching = false
+            }
+        }
+    }
+
+    /** A 410 from the media server: its link is stale. */
+    private fun PlaybackException.isStaleMedia(): Boolean =
+        generateSequence<Throwable>(this) { it.cause }.any { it is HttpDataSource.InvalidResponseCodeException && it.responseCode == HTTP_GONE }
+
+    // endregion
 
     /** Stops the reporter and HLS session of a previous attempt (retry after a failed start). */
     private fun releaseStream() {
@@ -601,6 +751,16 @@ open class VideoPlayerViewModel(
     }
 
     fun retry() {
+        val direct = wayDirect
+        if (direct != null) {
+            phase = PlayerPhase.Playing
+            reopenDirect(direct)
+            return
+        }
+        if (way != null && session == null) {
+            startWay(way)
+            return
+        }
         if (session != null && source != null) {
             phase = PlayerPhase.Playing
             reopen(lastFileMs)
@@ -635,6 +795,7 @@ open class VideoPlayerViewModel(
 
     private fun onEnded() {
         if (phase != PlayerPhase.Playing) return
+        endedPlayback = true
         viewModelScope.launch { reporter?.flush() }
         val next = nextEpisode
         if (next == null) {
@@ -951,7 +1112,7 @@ open class VideoPlayerViewModel(
         source = opened
         val mediaItem = MediaItem.Builder()
             .setUri(opened.url)
-            .apply { if (opened.isHls) setMimeType(MimeTypes.APPLICATION_M3U8) }
+            .apply { if (opened.playlist) setMimeType(MimeTypes.APPLICATION_M3U8) }
             .setSubtitleConfigurations(listOfNotNull(subtitle))
             .build()
         // The audio override of a previous direct stream refers to tracks of another file.
@@ -1054,6 +1215,16 @@ open class VideoPlayerViewModel(
      */
     private fun recover(error: PlaybackException) {
         healthyJob?.cancel()
+        wayDirect?.let { direct ->
+            if (closed) return
+            if (error.isStaleMedia() && recoveries < MAX_RECOVERIES) {
+                recoveries++
+                reopenDirect(direct)
+            } else {
+                phase = PlayerPhase.Failed(PlaybackUnavailableException(error))
+            }
+            return
+        }
         val current = session
         if (current == null || closed) {
             phase = PlayerPhase.Failed(PlaybackUnavailableException(error))
@@ -1129,7 +1300,27 @@ open class VideoPlayerViewModel(
         private const val HEALTHY_PLAYBACK_MS = 30_000L
         private const val SUBTITLE_ATTEMPTS = 6
         private const val SUBTITLE_ID = "antresol-subtitle"
+        private const val HTTP_GONE = 410
+        private const val DIRECT_KEY_MARGIN_MS = 60 * 60 * 1000L
+        private const val MIN_PROGRESS_EVERY_SEC = 3
     }
+}
+
+/** The item the player screens show for a video of a way: its title, and «S1 · E3» for an episode. */
+private fun PlaybackDisplay.toItem(context: Context): ItemDetail {
+    val episode = if (season != null && episode != null) {
+        context.getString(R.string.way_episode_code, season, episode)
+    } else {
+        ""
+    }
+    return ItemDetail(
+        id = 0,
+        kind = if (episode.isNotEmpty()) Kind.EPISODE else Kind.MOVIE,
+        title = title,
+        subtitle = episode,
+        poster = poster,
+        backdrop = backdrop,
+    )
 }
 
 /**

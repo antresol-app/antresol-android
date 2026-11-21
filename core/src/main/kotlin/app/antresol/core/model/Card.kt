@@ -85,8 +85,13 @@ data class Card(
     val resumeSec: Double? = null,
     override val thumb: String = "",
     override val watched: Boolean = false,
+    /** A title that is not in the library ([id] 0): its TMDB id, which opens the page of the title. */
+    val tmdbId: Long? = null,
 ) : CardFields {
     override fun toCard(): Card = this
+
+    /** A title off the library with a TMDB id the apps can open a page for. */
+    val opensTitlePage: Boolean get() = id <= 0 && (tmdbId ?: 0) > 0 && (kind == Kind.MOVIE || kind == Kind.SERIES)
 }
 
 @Serializable

@@ -67,6 +67,9 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
     /** Final progress writes of closed players, awaited by screens that show progress. */
     val pendingWrites = PendingWrites()
 
+    /** What the addons of the signed-in profile offer (ways to watch, searches); asked once per sign-in. */
+    val ways = app.antresol.core.ways.WaysCatalog { session.client }
+
     /** Set when the system asks to show the now-playing screen (tap on the media session). */
     val nowPlayingRequested = MutableStateFlow(false)
 

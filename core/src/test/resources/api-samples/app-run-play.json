@@ -1,0 +1,3 @@
+{"play":{"mode":"stream","kind":"hls","url":"/api/addons/alpha/x/media/sess1/index.m3u8","startSec":120.5,"durationMs":5400000,"audio":[],"audioIndex":-1,
+ "subtitles":[{"index":0,"lang":"en","label":"English","codec":"webvtt","external":true,"url":"/api/addons/alpha/x/media/sess1/subs/0.vtt"}],
+ "quality":{"options":["720p","1080p"],"current":"1080p"},"session":"sess1","progress":{"path":"x/app/progress","every":10}}}

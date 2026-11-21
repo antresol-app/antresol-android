@@ -138,7 +138,8 @@ fun SearchScreen(
             LoadState.Loading -> item("loading") { LoadingView() }
             is LoadState.Failed -> item("error") { ErrorView(results.error, onRetry = viewModel::retry) }
             is LoadState.Ready -> {
-                val sections = results.value.sections(viewModel.filter)
+                // The addons' sections follow the library's, as they arrive.
+                val sections = results.value.sections(viewModel.filter) + viewModel.addonSections.sections(viewModel.filter)
                 if (sections.isEmpty()) {
                     item("empty") { EmptyView(stringResource(UiR.string.search_no_results, viewModel.query.trim())) }
                 }
@@ -152,7 +153,7 @@ fun SearchScreen(
                             onOpen = onOpen,
                         )
                     } else {
-                        Shelf(title = stringResource(section.titleRes()), cards = section.cards, onOpen = onOpen)
+                        Shelf(title = section.label ?: stringResource(section.titleRes()), cards = section.cards, onOpen = onOpen)
                     }
                 }
             }

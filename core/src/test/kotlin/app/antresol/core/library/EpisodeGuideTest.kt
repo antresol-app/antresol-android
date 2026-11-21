@@ -8,7 +8,9 @@ import app.antresol.core.model.GuideSource
 import app.antresol.core.model.GuideSourceMeta
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
+import app.antresol.core.model.SeasonCount
 import app.antresol.core.model.SeasonInfo
+import app.antresol.core.model.TitleInfo
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -204,4 +206,39 @@ class EpisodeGuideTest {
             server.shutdown()
         }
     }
+
+    private val outside = TitleInfo(
+        tmdbId = 1399,
+        kind = Kind.SERIES,
+        title = "Show",
+        seasons = listOf(SeasonCount(2, 3), SeasonCount(1, 2), SeasonCount(0, 5)),
+    )
+
+    @Test
+    fun aTitleOffTheLibraryHasItsGuideEpisodesNotDownloaded() {
+        val guide = EpisodeGuideResponse(
+            episodes = listOf(
+                GuideEntry(season = 1, number = 1, name = "Pilot", airDate = "2026-01-05"),
+                GuideEntry(season = 1, number = 2, name = "Next", airDate = "2027-01-05"),
+            ),
+        )
+        val built = EpisodeGuide.forTitle(outside, guide, today)
+        assertTrue(built.fromServer)
+        val episodes = built.seasons.single().episodes
+        assertEquals(listOf(EpisodeState.NotDownloaded, EpisodeState.Upcoming), episodes.map { it.state })
+        assertTrue(episodes.all { it.card == null && it.libraryIdOrNull() == null })
+        assertEquals("Pilot", episodes[0].title)
+    }
+
+    @Test
+    fun aTitleOffTheLibraryWithoutAGuideListsItsSeasonCounts() {
+        val built = EpisodeGuide.forTitle(outside, null, today)
+        assertFalse(built.fromServer)
+        assertEquals(listOf(1, 2), built.seasons.map { it.number })
+        assertEquals(listOf(2, 3), built.seasons.map { it.episodes.size })
+        assertTrue(built.seasons.flatMap { it.episodes }.all { it.state == EpisodeState.NotDownloaded && !it.isPlayable })
+        assertEquals(listOf(1, 2, 3), built.seasons[1].episodes.map { it.number })
+    }
+
+    private fun GuideEpisode.libraryIdOrNull(): Long? = card?.id
 }

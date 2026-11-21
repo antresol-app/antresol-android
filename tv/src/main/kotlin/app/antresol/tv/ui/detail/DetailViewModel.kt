@@ -25,7 +25,12 @@ import app.antresol.core.model.Progress
 import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.SubTrack
 import app.antresol.core.model.Track
+import app.antresol.core.model.TitleInfo
 import app.antresol.core.model.Trailer
+import app.antresol.core.ways.WayTarget
+import app.antresol.core.ways.WaysController
+import app.antresol.core.ways.WaysSource
+import app.antresol.core.ways.waysApi
 import app.antresol.ui.trailers.Trailers
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.Resume
@@ -117,6 +122,12 @@ data class VideoInfo(
     val cast: List<CastMember> = emptyList(),
     /** The seasons a series page lists: the server's episode guide, or the library's episodes. */
     val guide: EpisodeGuide = EpisodeGuide(emptyList(), fromServer = false),
+    /** The TMDB id of a movie or series (what the addons' ways name it by). */
+    val tmdbId: Long? = null,
+    /** The page of a movie or series that is not in the library (`/api/title`): no watchlist, watched state or trailers. */
+    val outsideLibrary: Boolean = false,
+    /** A title page opened for something the library has: the library's item, to open instead. */
+    val libraryItemId: Long? = null,
 ) {
     val seasons: List<GuideSeason> get() = guide.seasons
 }
@@ -128,6 +139,12 @@ class DetailViewModel(
     private val kind: String,
     private val id: Long,
     private val pendingWrites: PendingWrites,
+    /** Set (with [id] 0): the page of a movie or series that is not in the library, by its TMDB id. */
+    private val tmdbId: Long = 0,
+    /** The addons' ways of the session; null: none are offered. */
+    waysSource: WaysSource? = null,
+    /** The tallest picture this TV shows, for a way that picks a quality by it (null: no limit). */
+    maxHeight: suspend () -> Int? = { null },
 ) : ViewModel() {
     var state: LoadState<DetailModel> by mutableStateOf(LoadState.Loading)
         private set
@@ -143,6 +160,9 @@ class DetailViewModel(
      */
     var trailers: List<Trailer> by mutableStateOf(emptyList())
         private set
+
+    /** The addons' ways for this page (buttons, the choice panel, state rings); null without a source of them. */
+    val ways: WaysController? = waysSource?.let { WaysController(client.waysApi(), it, viewModelScope, maxHeight) }
 
     private var job: Job? = null
 
@@ -162,7 +182,8 @@ class DetailViewModel(
                 refresh()
             }
         }
-        if (kind in Kind.VIDEO) viewModelScope.launch { trailers = Trailers.fetch(client, id, kind) }
+        // A title off the library has no item to ask trailers of.
+        if (kind in Kind.VIDEO && tmdbId == 0L) viewModelScope.launch { trailers = Trailers.fetch(client, id, kind) }
     }
 
     fun reload() {
@@ -315,7 +336,9 @@ class DetailViewModel(
         }
     }
 
-    private suspend fun fetch(): DetailModel = when (kind) {
+    private suspend fun fetchTitle(): DetailModel = fetchTitleModel(client, kind, tmdbId)
+
+    private suspend fun fetch(): DetailModel = if (tmdbId > 0) fetchTitle() else when (kind) {
         Kind.ALBUM -> client.album(id).toModel()
         Kind.ARTIST -> client.artist(id).toModel()
         Kind.PLAYLIST -> client.playlist(id).toModel()
@@ -338,6 +361,34 @@ class DetailViewModel(
         }
     }
 }
+
+/** A movie or series by its TMDB id, as the page of a title that may not be in the library. */
+private suspend fun fetchTitleModel(client: AntresolClient, kind: String, tmdbId: Long): DetailModel = coroutineScope {
+    val info = client.title(kind, tmdbId)
+    val item = info.asItem()
+    val guide = EpisodeGuide.fetch(client, item)
+    DetailModel(
+        card = item.toCard(),
+        byline = item.originalTitle?.takeIf { it.isNotBlank() && it != item.title }.orEmpty(),
+        durationMs = item.runtime?.let { it * 60_000L },
+        rating = item.rating,
+        genres = item.genres,
+        overview = item.overview,
+        video = item.titleVideoInfo(info, guide),
+    )
+}
+
+internal fun ItemDetail.titleVideoInfo(info: TitleInfo, guide: EpisodeGuideResponse?, today: LocalDate = LocalDate.now()): VideoInfo = VideoInfo(
+    playTarget = null,
+    canWatchlist = false,
+    inWatchlist = false,
+    watched = false,
+    cast = cast,
+    guide = EpisodeGuide.forTitle(info, guide, today),
+    tmdbId = tmdbId,
+    outsideLibrary = true,
+    libraryItemId = info.libraryItemId?.takeIf { info.inLibrary && it > 0 },
+)
 
 private fun ItemDetail.toModel(progress: Progress?, guide: EpisodeGuideResponse?): DetailModel {
     val fileDuration = files.firstOrNull()?.durationMs
@@ -378,6 +429,7 @@ internal fun ItemDetail.videoInfo(
         subtitles = file?.subs.orEmpty(),
         cast = cast,
         guide = EpisodeGuide.build(this, guide, today),
+        tmdbId = tmdbId,
     )
 }
 

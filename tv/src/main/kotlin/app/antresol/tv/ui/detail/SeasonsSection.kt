@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
+import app.antresol.core.model.AddonWay
 import app.antresol.core.model.EpisodeCard
 import app.antresol.core.library.EpisodeGuide
 import app.antresol.core.library.EpisodeState
@@ -79,6 +80,10 @@ fun SeasonsSection(
     onPlayEpisode: (EpisodeCard) -> Unit,
     onOpenEpisode: (EpisodeCard) -> Unit,
     modifier: Modifier = Modifier,
+    /** The ways of the addons for an episode (none: the episode has only what the library gives it). */
+    episodeWays: (GuideEpisode) -> List<AddonWay> = { emptyList() },
+    /** Opens the panel of an episode's ways (OK on an episode that is not in the library, hold OK on any). */
+    onEpisodeWays: (GuideEpisode, List<AddonWay>) -> Unit = { _, _ -> },
 ) {
     val seasons = guide.seasons
     var selected by rememberSaveable {
@@ -102,7 +107,7 @@ fun SeasonsSection(
         }
         // Each season gets its own scroll state and focus restorer, starting at the episode to watch.
         key(season.number) {
-            SeasonRow(season, guide.fromServer, initialEpisodeId, focus, onPlayEpisode, onOpenEpisode, onFocusUnavailable = { focusedUnavailable = it })
+            SeasonRow(season, guide.fromServer, initialEpisodeId, focus, onPlayEpisode, onOpenEpisode, episodeWays, onEpisodeWays, onFocusUnavailable = { focusedUnavailable = it })
         }
         Text(
             stringResource(
@@ -127,6 +132,8 @@ private fun SeasonRow(
     focus: FocusMemory,
     onPlayEpisode: (EpisodeCard) -> Unit,
     onOpenEpisode: (EpisodeCard) -> Unit,
+    episodeWays: (GuideEpisode) -> List<AddonWay>,
+    onEpisodeWays: (GuideEpisode, List<AddonWay>) -> Unit,
     onFocusUnavailable: (EpisodeState?) -> Unit,
 ) {
     val episodes = season.episodes
@@ -144,14 +151,17 @@ private fun SeasonRow(
         ) {
             items(episodes, key = { it.key }) { episode ->
                 val card = episode.card?.takeIf { episode.isPlayable }
+                val ways = episodeWays(episode)
                 EpisodeTile(
                     episode = episode,
                     mark = episodeStateLabel(episode, guided),
-                    onClick = { card?.let(onPlayEpisode) },
-                    onLongClick = { card?.let(onOpenEpisode) },
+                    // An episode the library does not have plays through the addons' ways, when there are any.
+                    onClick = { if (card != null) onPlayEpisode(card) else if (ways.isNotEmpty()) onEpisodeWays(episode, ways) },
+                    // Hold OK: the episode's page, with its ways beside it when there are any.
+                    onLongClick = { if (ways.isNotEmpty()) onEpisodeWays(episode, ways) else card?.let(onOpenEpisode) },
                     surfaceModifier = Modifier
                         .remembersFocus(focus, episodeFocusKey(episode))
-                        .onFocusChanged { if (it.isFocused) onFocusUnavailable(if (card == null) episode.state else null) },
+                        .onFocusChanged { if (it.isFocused) onFocusUnavailable(if (card == null && ways.isEmpty()) episode.state else null) },
                 )
             }
         }

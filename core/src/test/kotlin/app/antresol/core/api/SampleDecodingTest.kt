@@ -1,6 +1,8 @@
 package app.antresol.core.api
 
+import app.antresol.core.model.AddonRef
 import app.antresol.core.model.AlbumDetail
+import app.antresol.core.model.AppInfo
 import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
@@ -18,6 +20,7 @@ import app.antresol.core.model.GenresResponse
 import app.antresol.core.model.Health
 import app.antresol.core.model.HlsStatus
 import app.antresol.core.model.HomeResponse
+import app.antresol.core.model.InputInfo
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.LibraryStatus
 import app.antresol.core.model.Lyrics
@@ -31,13 +34,21 @@ import app.antresol.core.model.PlaylistDetail
 import app.antresol.core.model.PlaylistList
 import app.antresol.core.model.Profile
 import app.antresol.core.model.Progress
+import app.antresol.core.model.RunResult
 import app.antresol.core.model.SearchResults
 import app.antresol.core.model.SetupStatus
+import app.antresol.core.model.TitleInfo
 import app.antresol.core.model.ShelvesResponse
 import app.antresol.core.model.TokenResponse
 import app.antresol.core.model.Track
 import app.antresol.core.model.TrackList
 import app.antresol.core.model.UserAccount
+import app.antresol.core.model.WayScope
+import app.antresol.core.model.WayRole
+import app.antresol.core.model.WaySearchResults
+import app.antresol.core.model.WayStateResponse
+import app.antresol.core.model.WayStep
+import app.antresol.core.model.toCard
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.serializer
@@ -54,6 +65,17 @@ class SampleDecodingTest {
     private val json = AntresolClient.json
 
     private val decoders: Map<String, KSerializer<*>> = mapOf(
+        "addons-web" to ListSerializer(serializer<AddonRef>()),
+        "app-info" to serializer<AppInfo>(),
+        "app-run-done" to serializer<RunResult>(),
+        "app-run-input" to serializer<RunResult>(),
+        "app-run-pick" to serializer<RunResult>(),
+        "app-run-play" to serializer<RunResult>(),
+        "app-search" to serializer<WaySearchResults>(),
+        "app-state" to serializer<WayStateResponse>(),
+        "app-step" to serializer<WayStep>(),
+        "input-info" to serializer<InputInfo>(),
+        "title-series" to serializer<TitleInfo>(),
         "auth-media-key" to serializer<MediaKey>(),
         "auth-token" to serializer<TokenResponse>(),
         "book-audiobook-mp3" to serializer<BookDetail>(),
@@ -131,6 +153,84 @@ class SampleDecodingTest {
             assertTrue("Failed to decode $name: ${decoded.exceptionOrNull()}", decoded.isSuccess)
         }
         assertEquals(files.map { it.nameWithoutExtension }.toSet(), decoders.keys)
+    }
+
+    @Test
+    fun addonWaysProtocol() {
+        val refs = sample<List<AddonRef>>("addons-web")
+        assertEquals(listOf("beta", "alpha"), refs.map { it.id })
+
+        val info = sample<AppInfo>("app-info")
+        assertEquals(1, info.v)
+        assertEquals("Find and watch", info.search?.label)
+        val watch = info.ways[0]
+        assertEquals("watch", watch.id)
+        assertEquals(WayRole.WATCH, watch.role)
+        assertEquals(WayScope.ANY, watch.scope)
+        assertEquals(listOf("movie", "series"), watch.kinds)
+        assertTrue(watch.episodes)
+        val keep = info.ways[1]
+        assertTrue(keep.isKeep)
+        assertEquals(WayScope.OUTSIDE, keep.scope)
+        assertFalse(keep.episodes)
+        // The addon id is the app's, never the server's: it is not part of the answer.
+        assertEquals("", watch.addonId)
+
+        val step = sample<WayStep>("app-step")
+        assertEquals("Source", step.title)
+        assertEquals("Pick a source", step.note)
+        assertEquals("Nothing found", step.empty)
+        assertEquals(listOf("4K", "Dolby Vision"), step.rows[0].badges)
+        assertTrue(step.rows[0].current)
+        assertFalse(step.rows[0].isFinal)
+        assertEquals("Second line", step.rows[0].detail)
+        assertTrue(step.rows[1].isFinal)
+        assertNull(step.rows[1].detail)
+
+        assertEquals("in-7f3a", sample<RunResult>("app-run-input").input)
+        assertEquals("Started", sample<RunResult>("app-run-done").done)
+        assertTrue(sample<RunResult>("app-run-pick").pick)
+        val play = sample<RunResult>("app-run-play").play!!
+        assertTrue(play.isPlaylist)
+        assertEquals(120.5, play.startSec, 0.0)
+        assertEquals(5_400_000L, play.durationMs)
+        assertEquals("sess1", play.session)
+        assertEquals(10, play.progress.every)
+        assertEquals("1080p", play.quality.current)
+        assertEquals("English", play.subtitles.single().label)
+        assertEquals("/api/addons/alpha/x/media/sess1/subs/0.vtt", play.subtitles.single().url)
+
+        val state = sample<WayStateResponse>("app-state").ways
+        assertTrue(state.getValue("keep").active)
+        assertEquals(0.4, state.getValue("keep").fraction!!, 0.0)
+        assertEquals("Saved 40%", state.getValue("keep").text)
+        assertTrue(state.getValue("keep").cancel)
+        assertFalse(state.getValue("watch").active)
+
+        val titles = sample<WaySearchResults>("app-search").titles
+        // A title in the library opens its card; one off it, the page of the title by its TMDB id.
+        val inLibrary = titles[0].toCard()
+        assertEquals(42L, inLibrary.id)
+        assertFalse(inLibrary.opensTitlePage)
+        val outside = titles[1].toCard()
+        assertEquals(0L, outside.id)
+        assertEquals(1399L, outside.tmdbId)
+        assertTrue(outside.opensTitlePage)
+
+        val input = sample<InputInfo>("input-info")
+        assertEquals("alpha", input.addonId)
+        assertEquals(12.5, input.startSec, 0.0)
+        assertEquals(1399L, input.title?.tmdbId)
+
+        val title = sample<TitleInfo>("title-series")
+        assertFalse(title.inLibrary)
+        assertNull(title.libraryItemId)
+        assertEquals(2, title.seasons.size)
+        val item = title.asItem()
+        assertEquals(0L, item.id)
+        assertEquals(1399L, item.tmdbId)
+        assertEquals(57, item.runtime)
+        assertEquals("Emilia Clarke", item.cast.single().name)
     }
 
     @Test

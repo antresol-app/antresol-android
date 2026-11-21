@@ -18,6 +18,9 @@ import kotlin.time.Duration.Companion.seconds
 /** The server calls a [PlaybackReporter] makes; [AntresolClient.playbackApi] is the real one. */
 interface PlaybackApi {
     suspend fun saveProgress(itemId: Long, positionMs: Long, durationMs: Long)
+
+    /** The last write of a playback (the player closes): the same as [saveProgress] unless the server tells the two apart. */
+    suspend fun saveFinalProgress(itemId: Long, positionMs: Long, durationMs: Long) = saveProgress(itemId, positionMs, durationMs)
     suspend fun keepalive(session: String)
     suspend fun stopSession(session: String)
 }
@@ -141,7 +144,7 @@ class PlaybackReporter(
         keepaliveJob?.cancel()
         progressJob = null
         keepaliveJob = null
-        flush()
+        save(minDelta = 1, final = true)
         val session = hlsSession ?: return
         hlsSession = null
         try {
@@ -155,12 +158,12 @@ class PlaybackReporter(
         }
     }
 
-    private suspend fun save(minDelta: Long) = saveLock.withLock {
+    private suspend fun save(minDelta: Long, final: Boolean = false) = saveLock.withLock {
         val position = positionMs().coerceIn(0, durationMs.takeIf { it > 0 } ?: Long.MAX_VALUE)
         val last = lastSavedMs
         if (last != null && abs(position - last) < minDelta) return@withLock
         try {
-            api.saveProgress(itemId, position, durationMs)
+            if (final) api.saveFinalProgress(itemId, position, durationMs) else api.saveProgress(itemId, position, durationMs)
             lastSavedMs = position
         } catch (e: CancellationException) {
             throw e

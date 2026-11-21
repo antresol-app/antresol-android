@@ -1624,3 +1624,28 @@ Nothing of Antresol showed on the Google TV / Android TV home screen (tvOS has T
   against the real TvProvider), the launcher drawing the content:// pictures, the one-time browsable dialog, a tile
   opening the app. Unit tests cover the mapping, the diff and the whole run against an in-memory provider, the
   deep links against the manifest, the picture cache and provider. Checked by hand: see the README's adb line.
+
+## Addon ways (`x/app`)
+
+The apps show what the server's addons offer, by the protocol in docs/API.md section 13; no addon id is in the code.
+
+- `:core`: models (`model/Ways.kt`), the calls on `AntresolClient`, `ways/AddonWays` (discovery: `GET /api/addons/web`,
+  then `x/app` of each, sorted by id; `WaysCatalog` keeps it per (server, token) and `invalidate()` resets it, as Home's
+  pull to refresh does), `ways/WaysController` (the offer for one title, the state poll every 5 s while a keep way is
+  active, a quick run, the choice as a `WayPicker` of steps with back, the outcome `Play`/`Done`/`Failed`),
+  `ways/WayPlayback` (the input player's `VideoApi`/`PlaybackApi`, the 202 wait, the addon's own progress API, and
+  `WayTicket`, a short token that hands a playback to the player screen).
+- `:ui-common`: `VideoPlayerViewModel(way = ...)` plays a way. An input is a `VideoSession` over
+  `/api/play/input/{id}` (caps, tracks, quality, recovery as for a file); a direct stream is a plain URL with `?mk=`
+  that reports to `x/app/progress` and closes its session; a 410 runs the way again with `refresh`.
+- Phone and TV: the ways on the detail page (`VideoDetailScreen`, `DetailScreen`), the episode menus, the step sheet /
+  panel, the title page (`TitleRoute`, the detail screens with item id 0), the addons' sections of Search.
+- Decisions: on a watch way a tap is `quick` (a `pick` answer opens the choice) and a long press the choice; a keep
+  way always opens the choice (`WaysController.start`), as the web's «Скачать» does; an episode in the library counts as `inside` and one not in it as `outside` for the `scope`; the
+  state text shows also once a keep way is done; a stream the addon serves has no quality menu (the quality is a
+  step); TV has no pull to refresh, so its ways are asked again on a new sign-in or app start.
+- Tests: `PhoneWaysUiTest`, `TvWaysUiTest` (the fake server speaks the protocol with `FakeServer.addons`),
+  `core/.../ways/*`. `scripts/fake-server.py --addons` is the same for a device.
+- Trailers: the web lists at most three per item and plays one without `play` in the embedded player; the apps did the
+  latter already and now cap the list at three too (`Trailers.MAX_TRAILERS`).
+

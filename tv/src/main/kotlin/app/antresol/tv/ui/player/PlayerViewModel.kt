@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.playback.PendingWrites
+import app.antresol.core.ways.WayPlayback
 import app.antresol.tv.settings.TvPreferences
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.playback.VideoPlayerOptions
@@ -26,6 +27,7 @@ class PlayerViewModel(
     resume: ResumeMode,
     preferences: TvPreferences = TvPreferences(),
     pendingWrites: PendingWrites,
+    way: WayPlayback? = null,
 ) : VideoPlayerViewModel(
     context = context,
     client = client,
@@ -38,6 +40,7 @@ class PlayerViewModel(
         limitToDisplay = true,
     ),
     pendingWrites = pendingWrites,
+    way = way,
 ) {
     private var scrubbing = false
     private var scrubJob: Job? = null

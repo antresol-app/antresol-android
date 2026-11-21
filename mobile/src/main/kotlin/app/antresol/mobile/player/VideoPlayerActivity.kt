@@ -30,6 +30,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.session.MediaSession
 import app.antresol.core.session.AuthState
+import app.antresol.core.ways.WayTicket
 import app.antresol.mobile.AntresolMobileApp
 import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.playback.ResumeMode
@@ -85,8 +86,10 @@ class VideoPlayerActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         val client = app.session.client
-        val itemId = intent.getLongExtra(EXTRA_ITEM_ID, -1L)
-        if (client == null || itemId < 0) {
+        // A video of an addon's way comes by a token (see WayTicket); a library item by its id.
+        val way = intent.getStringExtra(EXTRA_WAY)?.let { WayTicket.get(it) }
+        val itemId = if (way != null) 0L else intent.getLongExtra(EXTRA_ITEM_ID, -1L)
+        if (client == null || itemId < 0 || (intent.hasExtra(EXTRA_WAY) && way == null)) {
             finish()
             return
         }
@@ -143,6 +146,7 @@ class VideoPlayerActivity : ComponentActivity() {
                             autoplayNext = { settings.autoplayNext },
                         ),
                         pendingWrites = app.pendingWrites,
+                        way = way,
                     )
                 }
             },
@@ -250,6 +254,7 @@ class VideoPlayerActivity : ComponentActivity() {
     companion object {
         private const val EXTRA_ITEM_ID = "itemId"
         private const val EXTRA_RESUME = "resume"
+        private const val EXTRA_WAY = "way"
         private const val SESSION_ID = "antresol-video"
         private const val MAX_RATIO = 2.39f
 
@@ -262,6 +267,11 @@ class VideoPlayerActivity : ComponentActivity() {
                 previous.closePlayer()
                 previous.finish()
             }
+        }
+
+        /** Plays what an addon's way answered with; [token] is from [WayTicket.put]. */
+        fun startWay(context: Context, token: String) {
+            context.startActivity(Intent(context, VideoPlayerActivity::class.java).putExtra(EXTRA_WAY, token))
         }
 
         /** Plays a movie or episode; a series or season id plays its next episode. */

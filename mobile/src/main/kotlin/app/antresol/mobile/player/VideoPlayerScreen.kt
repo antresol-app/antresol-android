@@ -300,7 +300,9 @@ private fun Controls(
             if (viewModel.subtitleTracks.isNotEmpty()) {
                 RoundIconButton(AntresolIcons.Subtitles, stringResource(UiR.string.detail_subtitles), { onTouch(); onMenu(PlayerMenu.Subtitles) }, glass = true, size = 44.dp, iconSize = 22.dp)
             }
-            RoundIconButton(AntresolIcons.Sliders, stringResource(UiR.string.detail_quality), { onTouch(); onMenu(PlayerMenu.Quality) }, glass = true, size = 44.dp, iconSize = 22.dp)
+            if (viewModel.canChooseQuality) {
+                RoundIconButton(AntresolIcons.Sliders, stringResource(UiR.string.detail_quality), { onTouch(); onMenu(PlayerMenu.Quality) }, glass = true, size = 44.dp, iconSize = 22.dp)
+            }
             if (viewModel.hasSkipSegments) {
                 RoundIconButton(AntresolIcons.SkipAhead, stringResource(UiR.string.player_auto_skip), { onTouch(); onMenu(PlayerMenu.AutoSkip) }, glass = true, size = 44.dp, iconSize = 22.dp)
             }

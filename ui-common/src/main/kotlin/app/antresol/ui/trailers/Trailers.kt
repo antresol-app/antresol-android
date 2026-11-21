@@ -17,19 +17,22 @@ import kotlinx.coroutines.CancellationException
  */
 object Trailers {
     /**
-     * The item's trailers, best first; empty for a [kind] without trailers and on any failure (the
-     * button just stays hidden).
+     * The item's trailers, best first and at most [MAX_TRAILERS] (the web offers the same few); empty
+     * for a [kind] without trailers and on any failure (the button just stays hidden).
      */
     suspend fun fetch(client: AntresolClient, id: Long, kind: String? = null): List<Trailer> {
         if (kind != null && kind !in Kind.VIDEO) return emptyList()
         return try {
-            client.trailers(id).trailers.filter { it.key.isNotBlank() }
+            client.trailers(id).trailers.filter { it.key.isNotBlank() }.take(MAX_TRAILERS)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             emptyList()
         }
     }
+
+    /** The best few trailers a page offers, as the web's «Ещё» menu does. */
+    const val MAX_TRAILERS = 3
 
     /** Where a trailer plays. */
     enum class Mode {

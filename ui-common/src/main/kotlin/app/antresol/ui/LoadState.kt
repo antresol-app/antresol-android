@@ -6,6 +6,7 @@ import app.antresol.core.api.InvalidServerAddressException
 import app.antresol.core.playback.TrailerBusyException
 import app.antresol.core.playback.TrailerUnavailableException
 import app.antresol.core.session.ServerNeedsSetupException
+import app.antresol.core.ways.InputNotReadyException
 import app.antresol.ui.playback.PlaybackUnavailableException
 import app.antresol.ui.playback.StreamLimitException
 import java.io.IOException
@@ -36,6 +37,7 @@ fun Throwable.userMessage(resources: Resources): String = when (this) {
     is PlaybackUnavailableException -> resources.getString(R.string.error_playback)
     is StreamLimitException -> resources.getString(R.string.error_too_many_streams)
     is TrailerBusyException -> resources.getString(R.string.trailer_busy)
+    is InputNotReadyException -> resources.getString(R.string.error_input_not_ready)
     is TrailerUnavailableException -> resources.getString(R.string.trailer_unavailable)
     is ApiException -> when {
         status == 200 -> resources.getString(R.string.error_generic)

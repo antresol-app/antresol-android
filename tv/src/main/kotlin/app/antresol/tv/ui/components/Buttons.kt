@@ -1,6 +1,7 @@
 package app.antresol.tv.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -37,6 +38,10 @@ fun PillButton(
     icon: ImageVector? = null,
     style: PillStyle = PillStyle.Glass,
     enabled: Boolean = true,
+    /** Hold OK: what else the button does (the choice of a way by hand). */
+    onLongClick: (() -> Unit)? = null,
+    /** Drawn in place of [icon] (a ring around it, say); 20 dp wide. */
+    leading: (@Composable () -> Unit)? = null,
 ) {
     val container = when (style) {
         PillStyle.Primary -> AntresolColors.Label.copy(alpha = 0.9f)
@@ -48,6 +53,13 @@ fun PillButton(
     }
     Surface(
         onClick = onClick,
+        onLongClick = onLongClick?.let { longClick ->
+            {
+                // The held OK goes on while what it opened takes focus: its release must not click that.
+                HeldKeyGuard.arm { false }
+                longClick()
+            }
+        },
         enabled = enabled,
         modifier = modifier.heightIn(min = 44.dp),
         shape = ClickableSurfaceDefaults.shape(AntresolShapes.pill),
@@ -70,11 +82,13 @@ fun PillButton(
         Row(
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(start = if (icon != null) 20.dp else 26.dp, end = 26.dp, top = 11.dp, bottom = 11.dp),
+                .padding(start = if (icon != null || leading != null) 20.dp else 26.dp, end = 26.dp, top = 11.dp, bottom = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (icon != null) {
+            if (leading != null) {
+                Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) { leading() }
+            } else if (icon != null) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = LocalContentColor.current)
             }
             Text(text, style = Antresol.typography.button, color = LocalContentColor.current, maxLines = 1)

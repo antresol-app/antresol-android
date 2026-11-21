@@ -1,6 +1,8 @@
 package app.antresol.core.api
 
+import app.antresol.core.model.AddonRef
 import app.antresol.core.model.AlbumDetail
+import app.antresol.core.model.AppInfo
 import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.AutoSkipRequest
 import app.antresol.core.model.BookDetail
@@ -23,6 +25,9 @@ import app.antresol.core.model.GenresResponse
 import app.antresol.core.model.Health
 import app.antresol.core.model.HlsStatus
 import app.antresol.core.model.HomeResponse
+import app.antresol.core.model.InputInfo
+import app.antresol.core.model.InputPlay
+import app.antresol.core.model.InputProgressBody
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.TrailerList
 import app.antresol.core.model.TrailerPlay
@@ -54,9 +59,13 @@ import app.antresol.core.model.Profile
 import app.antresol.core.model.Progress
 import app.antresol.core.model.ProgressUpdate
 import app.antresol.core.model.Quality
+import app.antresol.core.model.RunRequest
+import app.antresol.core.model.RunResult
 import app.antresol.core.model.QualityInfo
 import app.antresol.core.model.SearchResults
 import app.antresol.core.model.SetupStatus
+import app.antresol.core.model.StepRequest
+import app.antresol.core.model.TitleInfo
 import app.antresol.core.model.ShelvesResponse
 import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.TokenRequest
@@ -66,6 +75,11 @@ import app.antresol.core.model.TrackList
 import app.antresol.core.model.UiLanguage
 import app.antresol.core.model.UiLanguageRequest
 import app.antresol.core.model.WatchedRequest
+import app.antresol.core.model.WayCancelRequest
+import app.antresol.core.model.WayProgressBody
+import app.antresol.core.model.WaySearchResults
+import app.antresol.core.model.WayStateResponse
+import app.antresol.core.model.WayStep
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
@@ -489,10 +503,91 @@ class AntresolClient(
 
     // endregion
 
+
+    // region Addon ways (the `x/app` protocol, see docs/API.md)
+
+    /** `GET /api/addons/web`: the addons open to this profile (a kid profile gets 403). */
+    suspend fun addonsWeb(): List<AddonRef> = get("api/addons/web")
+
+    /** `GET x/app` of an addon: what it offers the apps. 404 when it has no part for them. */
+    suspend fun appInfo(addonId: String): AppInfo = send("GET", addonUrl(addonId, "app"), null)
+
+    /** `GET x/app/search?q=`: the titles an addon finds. */
+    suspend fun waySearch(addonId: String, query: String): WaySearchResults =
+        send("GET", addonUrl(addonId, "app", "search") { addQueryParameter("q", query) }, null)
+
+    /** `POST x/app/step`: one step of a choice; it may take seconds (the addon looks for sources). */
+    suspend fun wayStep(addonId: String, request: StepRequest): WayStep =
+        sendSlow("POST", addonUrl(addonId, "app", "step"), jsonBody(request))
+
+    /** `POST x/app/run`: runs a way; the answer says what to do next ([RunResult]). */
+    suspend fun wayRun(addonId: String, request: RunRequest): RunResult =
+        sendSlow("POST", addonUrl(addonId, "app", "run"), jsonBody(request))
+
+    /** `PUT x/app/progress`: the position of a stream an addon serves itself. */
+    suspend fun wayProgress(addonId: String, body: WayProgressBody) =
+        sendNoContent("PUT", addonUrl(addonId, "app", "progress"), jsonBody(body))
+
+    /** `DELETE x/app/play/{session}`: closes the addon's session of a stream. */
+    suspend fun wayStop(addonId: String, session: String) =
+        sendNoContent("DELETE", addonUrl(addonId, "app", "play", session), null)
+
+    /** `GET x/app/state`: the state of the addon's ways for a title ([season] for one season of a series). */
+    suspend fun wayState(addonId: String, kind: String, tmdbId: Long, season: Int? = null): WayStateResponse =
+        send(
+            "GET",
+            addonUrl(addonId, "app", "state") {
+                addQueryParameter("kind", kind)
+                addQueryParameter("tmdbId", tmdbId.toString())
+                if (season != null) addQueryParameter("season", season.toString())
+            },
+            null,
+        )
+
+    /** `POST x/app/cancel`: stops what a way started (`done` says what to show). */
+    suspend fun wayCancel(addonId: String, request: WayCancelRequest): RunResult =
+        send("POST", addonUrl(addonId, "app", "cancel"), jsonBody(request))
+
+    /** `GET /api/play/input/{id}`: what the input is and where it starts; 404 when it is gone. */
+    suspend fun inputInfo(id: String): InputInfo = send("GET", url(listOf("api", "play", "input", id)), null)
+
+    /**
+     * `POST /api/play/input/{id}`: how to play an input, as `/api/play` answers for a file. While the
+     * server still prepares it, it answers 202 `{pending:true}`: [InputPlay.Pending], to ask again.
+     * [app.antresol.core.ways.InputPlayback.open] adds the waiting.
+     */
+    suspend fun inputPlay(id: String, request: PlayRequest): InputPlay {
+        val raw = execute(buildRequest("POST", url(listOf("api", "play", "input", id)), jsonBody(request)), http = slowHttpClient)
+        if (raw.status == 202) return InputPlay.Pending
+        return InputPlay.Ready(decodeOffMain(raw.body, serializer<PlayResponse>()))
+    }
+
+    /** `PUT /api/play/input/{id}/progress`; [InputProgressBody.keepalive] marks the write of a closing player. */
+    suspend fun inputProgress(id: String, body: InputProgressBody) =
+        sendNoContent("PUT", url(listOf("api", "play", "input", id, "progress")), jsonBody(body))
+
+    /** `GET /api/title/{kind}/{tmdbId}`: a movie or series by its TMDB id, in the library or not. */
+    suspend fun title(kind: String, tmdbId: Long): TitleInfo = send("GET", url(listOf("api", "title", kind, tmdbId.toString())), null)
+
+    // endregion
+
     // region Plumbing
 
     private fun url(path: String, query: HttpUrl.Builder.() -> Unit = {}): HttpUrl =
         "${urls.baseUrl}/$path".toHttpUrl().newBuilder().apply(query).build()
+
+    private fun url(segments: List<String>, query: HttpUrl.Builder.() -> Unit = {}): HttpUrl {
+        val builder = urls.baseUrl.toHttpUrl().newBuilder()
+        segments.forEach { builder.addPathSegment(it) }
+        return builder.apply(query).build()
+    }
+
+    /** `/api/addons/{addonId}/x/<segments>`: [addonId] is the server's own text, so it is encoded as a segment. */
+    private fun addonUrl(addonId: String, vararg segments: String, query: HttpUrl.Builder.() -> Unit = {}): HttpUrl =
+        url(listOf("api", "addons", addonId, "x") + segments, query)
+
+    private suspend inline fun <reified T> sendSlow(method: String, url: HttpUrl, body: RequestBody?): T =
+        decodeOffMain(execute(buildRequest(method, url, body), http = slowHttpClient).body, serializer())
 
     private suspend inline fun <reified T> get(path: String, noinline query: HttpUrl.Builder.() -> Unit = {}): T =
         send("GET", url(path, query), null)

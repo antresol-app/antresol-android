@@ -10,7 +10,13 @@ import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
+import app.antresol.core.model.TitleInfo
+import app.antresol.core.model.TitleRef
 import app.antresol.core.model.Trailer
+import app.antresol.core.ways.WayTarget
+import app.antresol.core.ways.WaysController
+import app.antresol.core.ways.WaysSource
+import app.antresol.core.ways.waysApi
 import app.antresol.ui.LoadState
 import app.antresol.ui.trailers.Trailers
 import app.antresol.core.playback.Episodes
@@ -33,17 +39,34 @@ data class VideoDetail(
     val positionMs: Long = 0,
     /** Series: the server's episode guide, null when it has none (the library's list then). */
     val guide: EpisodeGuideResponse? = null,
+    /** The page of a title that is not in the library (`/api/title`): [item] is shaped from it, with id 0. */
+    val title: TitleInfo? = null,
 ) {
-    /** The seasons the page lists: every episode of the guide, or the library's (watched toggles show at once). */
-    fun episodeGuide(today: LocalDate = LocalDate.now()): EpisodeGuide = EpisodeGuide.build(item, guide, today)
+    /** A movie or series off the library: it has no watchlist, watched state or trailers of its own. */
+    val outsideLibrary: Boolean get() = item.id <= 0
 
-    val canWatchlist: Boolean get() = item.kind == Kind.MOVIE || item.kind == Kind.SERIES
+    /** The library's own item for a title page opened for something the library has (the page then opens it instead). */
+    val libraryItemId: Long? get() = title?.libraryItemId?.takeIf { title.inLibrary && it > 0 }
+
+    /** The seasons the page lists: every episode of the guide, or the library's (watched toggles show at once). */
+    fun episodeGuide(today: LocalDate = LocalDate.now()): EpisodeGuide =
+        title?.let { EpisodeGuide.forTitle(it, guide, today) } ?: EpisodeGuide.build(item, guide, today)
+
+    val canWatchlist: Boolean get() = !outsideLibrary && (item.kind == Kind.MOVIE || item.kind == Kind.SERIES)
+
+    /** What the addons' ways act on: a movie or series with a TMDB id; null for anything else. */
+    val wayTarget: WayTarget?
+        get() {
+            val tmdbId = item.tmdbId?.takeIf { it > 0 } ?: return null
+            if (item.kind != Kind.MOVIE && item.kind != Kind.SERIES) return null
+            return WayTarget(item.kind, tmdbId, inLibrary = !outsideLibrary, title = item.title, poster = item.poster, backdrop = item.backdrop)
+        }
 
     /** Movies and episodes play themselves; a series or season plays its next (or first) episode. */
     val playTarget: PlayTarget?
         get() = when (item.kind) {
             Kind.MOVIE, Kind.EPISODE -> if (item.files.isEmpty()) null else PlayTarget(item.id, null, resume = positionMs > 0)
-            Kind.SERIES, Kind.SEASON -> Episodes.toPlay(item)?.let { PlayTarget(it.id, it, resume = it.progress > 0.0 && !it.watched) }
+            Kind.SERIES, Kind.SEASON -> if (outsideLibrary) null else Episodes.toPlay(item)?.let { PlayTarget(it.id, it, resume = it.progress > 0.0 && !it.watched) }
             else -> null
         }
 }
@@ -52,8 +75,20 @@ data class VideoDetail(
  * Loads `/api/items/{id}` (plus `/api/progress/{id}` for a movie or episode) and toggles the
  * watchlist and watched state optimistically; a failed write is undone and reported in [failed].
  */
-class ItemDetailViewModel(private val client: AntresolClient, private val id: Long, pendingWrites: PendingWrites) :
-    LoadViewModel<VideoDetail>(pendingWrites = pendingWrites, fetch = { fetchDetail(client, id) }) {
+class ItemDetailViewModel(
+    private val client: AntresolClient,
+    private val id: Long,
+    pendingWrites: PendingWrites,
+    /** Set (with [id] 0): the page of a title that is not in the library, by its TMDB id. */
+    title: TitleRef? = null,
+    /** The addons' ways of the session; null: none are offered. */
+    waysSource: WaysSource? = null,
+    /** The tallest picture this device shows, for a way that picks a quality by it (null: no limit). */
+    maxHeight: suspend () -> Int? = { null },
+) : LoadViewModel<VideoDetail>(
+    pendingWrites = pendingWrites,
+    fetch = { if (title != null) fetchTitle(client, title) else fetchDetail(client, id) },
+) {
 
     /** A string resource to show once (a toggle could not be saved); the screen calls [consumeNotice]. */
     var notice: Int? by mutableStateOf(null)
@@ -67,8 +102,12 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
     var trailers: List<Trailer> by mutableStateOf(emptyList())
         private set
 
+    /** The addons' ways for this page (buttons, the choice sheet, state rings); null without a source of them. */
+    val ways: WaysController? = waysSource?.let { WaysController(client.waysApi(), it, viewModelScope, maxHeight) }
+
     init {
-        viewModelScope.launch { trailers = Trailers.fetch(client, id) }
+        // A title off the library has no item to ask trailers of.
+        if (title == null) viewModelScope.launch { trailers = Trailers.fetch(client, id) }
     }
 
     /** Shows string resource [res] once (an episode that is not in the library was tapped). */
@@ -123,6 +162,12 @@ class ItemDetailViewModel(private val client: AntresolClient, private val id: Lo
         optimistic(change, onFailure = { notice = R.string.detail_action_failed }, write = write)
 
     private companion object {
+        suspend fun fetchTitle(client: AntresolClient, ref: TitleRef): VideoDetail {
+            val info = client.title(ref.kind, ref.tmdbId)
+            val item = info.asItem()
+            return VideoDetail(item, watched = false, guide = EpisodeGuide.fetch(client, item), title = info)
+        }
+
         suspend fun fetchDetail(client: AntresolClient, id: Long): VideoDetail {
             val item = client.item(id)
             return when (item.kind) {

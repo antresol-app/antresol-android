@@ -32,7 +32,8 @@ fun PrimaryPillButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     enabled: Boolean = true,
-) = PillButton(text, onClick, modifier, icon, enabled, AntresolColors.Label, AntresolColors.LabelInverse, null)
+    onLongClick: (() -> Unit)? = null,
+) = PillButton(text, onClick, modifier, icon, enabled, AntresolColors.Label, AntresolColors.LabelInverse, null, onLongClick)
 
 /** The dark glass pill ("Details", "Want to Watch"). */
 @Composable
@@ -42,7 +43,8 @@ fun GlassPillButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     enabled: Boolean = true,
-) = PillButton(text, onClick, modifier, icon, enabled, AntresolColors.Glass, AntresolColors.Label, AntresolColors.GlassBorder)
+    onLongClick: (() -> Unit)? = null,
+) = PillButton(text, onClick, modifier, icon, enabled, AntresolColors.Glass, AntresolColors.Label, AntresolColors.GlassBorder, onLongClick)
 
 @Composable
 private fun PillButton(
@@ -54,6 +56,7 @@ private fun PillButton(
     fill: Color,
     content: Color,
     border: Color?,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -61,7 +64,7 @@ private fun PillButton(
             .clip(AntresolShapes.pill)
             .background(fill)
             .then(if (border != null) Modifier.border(1.dp, border, AntresolShapes.pill) else Modifier)
-            .focusClickable(AntresolShapes.pill, enabled = enabled, onClick = onClick)
+            .focusClickable(AntresolShapes.pill, enabled = enabled, onLongClick = onLongClick, onClick = onClick)
             // A layer that is always there: `alpha(1f)` is no modifier at all, and when a disabled pill
             // became enabled (the first letter of a password) the chain changed and the fill was not drawn.
             .graphicsLayer {
@@ -86,6 +89,7 @@ fun GlassIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     tint: Color = AntresolColors.Label,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Box(
         modifier = modifier
@@ -93,7 +97,7 @@ fun GlassIconButton(
             .clip(CircleShape)
             .background(AntresolColors.Glass)
             .border(1.dp, AntresolColors.GlassBorder, CircleShape)
-            .focusClickable(CircleShape, onClick = onClick),
+            .focusClickable(CircleShape, onLongClick = onLongClick, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(22.dp))

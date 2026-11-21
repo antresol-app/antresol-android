@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A small fake Antresol server for driving the apps by hand (an emulator or a device).
 
-    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>]
+    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>] [--addons]
 
 It answers what test-fixtures' FakeServer answers (passwordless profiles, one with a photo, home, grids, a film and
 a series page, trailers) with the same JSON, plus live channels and the programme guide. In an
@@ -35,6 +35,12 @@ kept. So the pages asked for later have other titles and times under ids the ear
 history switched off with merge=false comes back on the next switch on without an account). Home's
 Continue Watching is another one while the device writes a separate history, so a reload shows. With
 --kid the profile is a kid's: the writes answer 403.
+
+With --addons the server has one addon, "alpha", speaking the `x/app` protocol: a way to watch (the first
+time it opens a choice of a source and a quality, then it plays at once with what was picked; holding it
+chooses again), a way that keeps a copy on the server (a ring shows how far it is and «Cancel» stops it), a
+title search (one title of the library, one that is not: its page comes from `GET /api/title`) and the
+core's input player for what the way plays (the trailer clip). Without the flag the server has no addons.
 """
 import argparse
 import json
@@ -57,6 +63,9 @@ ME = {"id": 1, "name": "Alex", "avatar": "grad-3", "photo": "/api/profiles/1/pho
 PROFILES = [{"id": 1, "name": "Alex", "avatar": "grad-3", "photo": ME["photo"], "hasPassword": False},
             {"id": 2, "name": "Sam", "avatar": "grad-5", "hasPassword": False}]
 SERIES, MOVIE, EPISODES = 500, 100, list(range(601, 607))
+SERIES_TMDB, MOVIE_TMDB, OUTSIDE_TMDB = 1399, 603, 9001
+# --addons: the protocol of one addon, "alpha"; what its ways remember and do is kept for the run.
+addon = {"on": False, "remembered": False, "keep": {"since": None}}
 CAST = [{"name": n, "character": c, "photo": "/api/images/cast/" + n.replace(" ", "%20")}
         for n, c in [("Ada Lovelace", "The Countess"), ("Alan Turing", "The Mathematician"), ("Grace Hopper", "The Admiral")]]
 CLIP = Path(__file__).resolve().parent.parent / "test-fixtures/resources/trailer-sample.mp4"
@@ -162,11 +171,13 @@ def item(i):
         seasons = [{"id": SERIES + s, "number": s, "title": f"Season {s}",
                     "episodes": [episode_card(e, s, n + 1) for n, e in enumerate(EPISODES[(s - 1) * 4:s * 4])]} for s in (1, 2)]
         return {**series_card(), "overview": "A test series about testing things on a television.", "genres": ["Drama", "Comedy"],
-                "rating": "16+", "cast": CAST, "seasons": seasons, "next": episode_card(EPISODES[1], 1, 2, progress=0.4)}
+                "rating": "16+", "cast": CAST, "seasons": seasons, "next": episode_card(EPISODES[1], 1, 2, progress=0.4),
+                **({"tmdbId": SERIES_TMDB} if addon["on"] else {})}
     if i in EPISODES:
         return {"id": i, "kind": "episode", "title": "Episode", "seriesId": SERIES, "files": [{"id": i + 1000, "durationMs": 2700000}]}
     return {**movie_card(i), "overview": "A test movie.", "genres": ["Adventure"], "runtime": 104, "cast": CAST,
-            "files": [{"id": i + 1000, "durationMs": 6240000, "audio": [], "subs": []}], "actions": {"play": True}}
+            "files": [{"id": i + 1000, "durationMs": 6240000, "audio": [], "subs": []}], "actions": {"play": True},
+            **({"tmdbId": MOVIE_TMDB + (i - MOVIE)} if addon["on"] else {})}
 
 
 def trailers(i, embed_key):
@@ -438,6 +449,70 @@ def epg(query, now_ms):
     return {"from": iso(from_ms), "to": iso(to_ms), "channels": rows}
 
 
+def addon_answer(command, path, query, body):
+    """`x/app` of the addon "alpha", `GET /api/title` and the input player: (status, body) or None for another path."""
+    if path == "/api/addons/web":
+        return 200, [{"id": "alpha", "entry": "/api/addons/alpha/web/index.js"}]
+    if path == "/api/addons/alpha/x/app":
+        return 200, {"v": 1, "ways": [
+            {"id": "watch", "label": "Watch from a source", "icon": "globe", "role": "watch", "kinds": ["movie", "series"], "scope": "any", "episodes": True},
+            {"id": "keep", "label": "Keep on the server", "icon": "download", "role": "keep", "kinds": ["movie", "series"], "scope": "outside", "episodes": False}],
+            "search": {"label": "Find and watch"}}
+    if path == "/api/addons/alpha/x/app/search":
+        return 200, {"titles": [
+            {"kind": "movie", "tmdbId": MOVIE_TMDB, "title": "Movie 1", "year": 2019, "poster": f"/api/images/local/{MOVIE}/poster", "inLibrary": True, "libraryItemId": MOVIE},
+            {"kind": "movie", "tmdbId": OUTSIDE_TMDB, "title": "Far Away Film", "year": 2020, "poster": "/api/images/local/outside/poster", "inLibrary": False}]}
+    if path == "/api/addons/alpha/x/app/step":
+        ref = body.get("ref")
+        if ref is None:
+            return 200, {"title": "Source", "note": "Pick a source", "rows": [
+                {"ref": "src-1", "label": "Source One", "detail": "Fast", "badges": ["HD"], "current": True, "final": False},
+                {"ref": "src-2", "label": "Source Two", "final": False}]}
+        return 200, {"title": "Quality", "rows": [
+            {"ref": "q-1080", "label": "1080p", "detail": "12.3 GB", "badges": ["4K"], "final": True},
+            {"ref": "q-720", "label": "720p", "final": True}]}
+    if path == "/api/addons/alpha/x/app/run":
+        if body.get("way") == "keep":
+            addon["keep"]["since"] = datetime.now(timezone.utc).timestamp()
+            return 200, {"done": "Started"}
+        if body.get("quick") and not addon["remembered"]:
+            return 200, {"pick": True}
+        addon["remembered"] = True
+        return 200, {"input": "in-1"}
+    if path == "/api/addons/alpha/x/app/state":
+        since = addon["keep"]["since"]
+        if since is None:
+            return 200, {"ways": {}}
+        fraction = min((datetime.now(timezone.utc).timestamp() - since) / 60, 1)
+        if fraction >= 1:
+            return 200, {"ways": {"keep": {"active": False}}}
+        return 200, {"ways": {"keep": {"active": True, "fraction": fraction, "text": f"Saved {int(fraction * 100)}%", "cancel": True}}}
+    if path == "/api/addons/alpha/x/app/cancel":
+        addon["keep"]["since"] = None
+        return 200, {"done": "Cancelled"}
+    if match := re.fullmatch(r"/api/title/(movie|series)/(\d+)", path):
+        tmdb = int(match[2])
+        in_library = tmdb == MOVIE_TMDB
+        return 200, {"tmdbId": tmdb, "extId": "", "kind": match[1], "title": "Far Away " + ("Film" if match[1] == "movie" else "Show"), "year": 2020,
+                     "poster": "/api/images/local/outside/poster", "overview": "A title the library does not have.", "inLibrary": in_library,
+                     "libraryItemId": MOVIE if in_library else None, "backdrop": "/api/images/local/outside/backdrop",
+                     "genres": ["Drama"], "runtime": 95, "cast": [], "seasons": [{"number": 1, "episodes": 3}]}
+    if path == "/api/play/input/in-1" and command == "GET":
+        return 200, {"id": "in-1", "addonId": "alpha", "name": "Movie.mkv", "itemId": 0, "slow": False, "startSec": 0}
+    if path == "/api/play/input/in-1" and command == "POST":
+        return 200, {"mode": "direct", "url": "/api/play/input/in-1/direct", "startSec": 0, "durationMs": 30000, "audio": [], "audioIndex": -1,
+                     "subtitles": [], "quality": {"selected": "auto", "applied": "auto"}}
+    if path == "/api/play/input/in-1/progress":
+        return 204, b""
+    if path == "/api/play/input/in-1/direct":
+        return 200, CLIP.read_bytes()
+    if path == "/api/auth/media-key":
+        return 200, {"key": "fake-media-key", "expiresAt": "2099-01-01T00:00:00Z"}
+    if path == "/api/search":
+        return 200, {"library": [movie_card(MOVIE)], "albums": [], "artists": [], "songs": []}
+    return None
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     embed_key = "aqz-KE-bpKQ"
@@ -480,6 +555,9 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         body = json.loads(raw) if raw.strip() else {}
         kid = ME["isKid"]
+        if addon["on"] and not kid and (reply := addon_answer(self.command, path, query, body)) is not None:
+            status, answer = reply
+            return self.send(status, answer, "video/mp4" if isinstance(answer, bytes) and status == 200 else "application/json")
         if path == "/api/me/devices/current/history" and self.command == "PUT":
             return self.send(403, {"error": "Only an administrator can change this"}) if kid else self.send(*switch_history(body))
         if path == "/api/me/managed" and self.command == "POST":
@@ -569,9 +647,11 @@ if __name__ == "__main__":
     args.add_argument("--old-categories", action="store_true", help="answer as a server without `categories` (the apps use each channel's `category` text)")
     args.add_argument("--live-hls", type=Path, metavar="DIR", help="an HLS stream (index.m3u8 and segments) every channel plays, e.g. made with "
                       "ffmpeg -i test-fixtures/resources/trailer-sample.mp4 -c copy -hls_list_size 0 -f hls DIR/index.m3u8")
+    args.add_argument("--addons", action="store_true", help="the server has one addon, \"alpha\", speaking the `x/app` protocol (ways to watch and to keep, a title search)")
     args.add_argument("--kid", action="store_true", help="the profile is a kid's (no «Отдельная история»; its writes answer 403)")
     options = args.parse_args()
     ME["isKid"] = options.kid
+    addon["on"] = options.addons
     live_hls[0] = options.live_hls
     big["legacy"] = options.old_categories
     if options.channels:

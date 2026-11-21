@@ -10,6 +10,10 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
 import app.antresol.core.model.SearchResults
 import app.antresol.core.model.Track
+import app.antresol.core.model.toCard
+import app.antresol.core.ways.waysApi
+import app.antresol.core.ways.AddonSection
+import app.antresol.core.ways.WaysSource
 import app.antresol.ui.LoadState
 import app.antresol.ui.load
 import kotlinx.coroutines.Job
@@ -19,8 +23,30 @@ import kotlinx.coroutines.launch
 /** The kind filter pills of the search page. */
 enum class SearchFilter { All, Movies, Shows, Music, Books }
 
-/** One result section: cards in a row, or songs as a list. */
-data class SearchSection(val id: String, val cards: List<Card> = emptyList(), val songs: List<Track> = emptyList())
+/** One result section: cards in a row, or songs as a list. [label] is the section's own title (an addon's), else the screen names it by [id]. */
+data class SearchSection(
+    val id: String,
+    val cards: List<Card> = emptyList(),
+    val songs: List<Track> = emptyList(),
+    val label: String? = null,
+)
+
+/**
+ * The sections the addons' searches add after the library's, for [filter]: movies and shows only
+ * (what an addon finds are titles), the movies or the shows of each when the filter says so.
+ */
+fun List<AddonSection>.sections(filter: SearchFilter): List<SearchSection> {
+    val kinds = when (filter) {
+        SearchFilter.All -> null
+        SearchFilter.Movies -> setOf(Kind.MOVIE)
+        SearchFilter.Shows -> setOf(Kind.SERIES)
+        SearchFilter.Music, SearchFilter.Books -> return emptyList()
+    }
+    return mapNotNull { section ->
+        val titles = section.titles.filter { kinds == null || it.kind in kinds }
+        titles.takeIf { it.isNotEmpty() }?.let { SearchSection("addon-${section.addonId}", cards = it.map { title -> title.toCard() }, label = section.label) }
+    }
+}
 
 /** Splits `/api/search` results into the sections the [filter] shows, in the web app's order. */
 fun SearchResults.sections(filter: SearchFilter): List<SearchSection> {
@@ -56,7 +82,7 @@ const val SECTION_BOOKS = "books"
 const val SECTION_COMICS = "comics"
 
 /** Search-as-you-type over `/api/search`, debounced; the filter only regroups the last answer. */
-class SearchViewModel(private val client: AntresolClient) : ViewModel() {
+class SearchViewModel(private val client: AntresolClient, private val waysSource: WaysSource? = null) : ViewModel() {
     var query: String by mutableStateOf("")
         private set
 
@@ -66,19 +92,32 @@ class SearchViewModel(private val client: AntresolClient) : ViewModel() {
     var results: LoadState<SearchResults>? by mutableStateOf(null)
         private set
 
+    /** What the addons' searches found, after the library's results; they arrive one addon at a time, and never fail the page. */
+    var addonSections: List<AddonSection> by mutableStateOf(emptyList())
+        private set
+
     private var job: Job? = null
+    private var addonJob: Job? = null
 
     fun onQueryChange(text: String) {
         query = text
         job?.cancel()
+        addonJob?.cancel()
         if (text.isBlank()) {
             results = null
+            addonSections = emptyList()
             return
         }
         job = viewModelScope.launch {
             delay(DEBOUNCE_MS)
             if (results == null) results = LoadState.Loading
             results = load { client.search(text.trim()) }
+        }
+        val source = waysSource ?: return
+        addonJob = viewModelScope.launch {
+            delay(DEBOUNCE_MS)
+            addonSections = emptyList()
+            source.get().search(client.waysApi(), text.trim()).collect { addonSections = it }
         }
     }
 

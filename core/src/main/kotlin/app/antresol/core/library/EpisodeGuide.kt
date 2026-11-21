@@ -6,6 +6,7 @@ import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.GuideEntry
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
+import app.antresol.core.model.TitleInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
@@ -89,6 +90,26 @@ data class EpisodeGuide(val seasons: List<GuideSeason>, val fromServer: Boolean)
         }
 
         const val FETCH_TIMEOUT_MS = 6_000L
+
+        /**
+         * The seasons of a series [title] that is not in the library: the server's [guide] (each
+         * episode not downloaded, or upcoming), else the title's season counts; those rows have no
+         * name or date, and none is called upcoming.
+         */
+        fun forTitle(title: TitleInfo, guide: EpisodeGuideResponse?, today: LocalDate): EpisodeGuide {
+            if (guide != null && guide.episodes.isNotEmpty()) return build(title.asItem(), guide, today)
+            val seasons = title.seasons.filter { it.number > 0 && it.episodes > 0 }.sortedBy { it.number }.map { season ->
+                GuideSeason(
+                    number = season.number,
+                    title = "",
+                    libraryId = null,
+                    episodes = (1..season.episodes).map { number ->
+                        GuideEpisode(season.number, number, "", null, EpisodeState.NotDownloaded, card = null, watched = false, progress = 0.0)
+                    },
+                )
+            }
+            return EpisodeGuide(seasons, fromServer = false)
+        }
 
         /** The library's seasons alone (today's list). */
         fun library(item: ItemDetail): EpisodeGuide = EpisodeGuide(

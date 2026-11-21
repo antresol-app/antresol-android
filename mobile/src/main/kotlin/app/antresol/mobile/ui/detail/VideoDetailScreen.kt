@@ -27,7 +27,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -53,7 +55,11 @@ import app.antresol.core.model.CastMember
 import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.FileInfo
 import app.antresol.core.model.Kind
+import app.antresol.core.model.AddonWay
 import app.antresol.core.model.Trailer
+import app.antresol.core.ways.WayCall
+import app.antresol.core.ways.WayPlayback
+import app.antresol.core.ways.WaysController
 import app.antresol.core.library.EpisodeState
 import app.antresol.core.library.GuideEpisode
 import app.antresol.mobile.R
@@ -92,6 +98,12 @@ import app.antresol.ui.format.seasonLabel
 import app.antresol.ui.format.TrackLabels
 import app.antresol.ui.format.spokenDuration
 import app.antresol.ui.playback.ResumeMode
+import app.antresol.ui.components.wayIcon
+import app.antresol.ui.ways.Attach
+import app.antresol.ui.ways.busyState
+import app.antresol.ui.ways.offerState
+import app.antresol.ui.ways.pickerState
+import app.antresol.ui.ways.statesState
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolGradients
@@ -111,13 +123,26 @@ fun VideoDetailScreen(
     onOpen: (Card) -> Unit,
     onBack: () -> Unit,
     onPlay: (itemId: Long, mode: ResumeMode) -> Unit,
+    /** Plays what an addon's way answered with (see [WayPlayback]). */
+    onPlayWay: (WayPlayback) -> Unit = {},
+    /** The title page was opened for something the library has: show the library's own page instead. */
+    onOpenLibraryItem: (Card) -> Unit = {},
 ) {
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
+        viewModel.ways?.refreshStates()
         onPauseOrDispose { }
     }
     val snackbar = remember { SnackbarHostState() }
     NoticeSnackbar(viewModel.notice, snackbar, viewModel::consumeNotice)
+    // The addons' ways of this title: attached when the page is read; what they answer reaches the player or a notice.
+    val scope = rememberCoroutineScope()
+    val notices = remember(scope, snackbar) { NoticeSnackbars(scope, snackbar) }
+    val loaded = (viewModel.state as? LoadState.Ready)?.value
+    viewModel.ways.Attach(loaded?.wayTarget, LocalContext.current.resources, onPlay = onPlayWay, onText = notices::show)
+    loaded?.libraryItemId?.let { libraryId ->
+        LaunchedEffect(libraryId) { onOpenLibraryItem(Card(id = libraryId, kind = loaded.item.kind, title = loaded.item.title)) }
+    }
     RefreshBox(viewModel.refreshing, onRefresh = viewModel::pullToRefresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
         when (val state = viewModel.state) {
             LoadState.Loading -> DetailStateBox(onBack) { LoadingView() }
@@ -157,6 +182,48 @@ private fun VideoDetailContent(
         ?: seasons.firstOrNull()
     var selectedSeason by rememberSaveable(item.id) { mutableIntStateOf(initialSeason?.number ?: 0) }
     val season = seasons.firstOrNull { it.number == selectedSeason } ?: seasons.firstOrNull()
+    // The addons' ways: the watch ways join Play (or are its first button), the keep ways are round buttons.
+    val ways = viewModel.ways
+    val offer = ways.offerState()
+    val wayStates = ways.statesState()
+    val wayBusy = ways.busyState()
+    val picker = ways.pickerState()
+    val wayTarget = detail.wayTarget
+    var waysSheet by remember { mutableStateOf<WaysChoice?>(null) }
+    var keepMenu by remember { mutableStateOf<AddonWay?>(null) }
+    val runWay: (AddonWay, Int?, Int?, Boolean) -> Unit = { way, season, episode, choose ->
+        wayTarget?.let { ways?.start(WayCall(way, it, season, episode), choose) }
+    }
+    // A sheet opened for a run stays until the run answered (a player, a notice or the choice).
+    LaunchedEffect(wayBusy, waysSheet?.started) {
+        if (waysSheet?.started == true && ways?.busy?.value == null) waysSheet = null
+    }
+    val episodeWays: (GuideEpisode) -> List<AddonWay> = remember(offer, wayTarget) {
+        { episode ->
+            when {
+                wayTarget == null || item.kind != Kind.SERIES || ways == null -> emptyList()
+                episode.state == EpisodeState.Upcoming -> emptyList()
+                else -> ways.forEpisode(inLibrary = episode.state == EpisodeState.Downloaded)
+            }
+        }
+    }
+    val watchWays = offer.watch
+    val primaryWay = watchWays.firstOrNull().takeIf { detail.playTarget == null }
+    val rowWays = WaysRowState(
+        primary = primaryWay,
+        showMore = watchWays.size > (if (primaryWay != null) 1 else 0),
+        keep = offer.keep,
+        states = wayStates,
+        busy = wayBusy,
+        onRun = { way -> runWay(way, null, null, false) },
+        onChoose = { way -> runWay(way, null, null, true) },
+        onMore = { waysSheet = WaysChoice(watchWays, null, null) },
+        onKeep = { way ->
+            val state = wayStates[way.key]
+            if (state?.active == true && state.cancel) keepMenu = way else runWay(way, null, null, false)
+        },
+        onKeepChoose = { way -> runWay(way, null, null, true) },
+    )
     // One trailer plays at once; several open the chooser.
     var trailerSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -171,6 +238,27 @@ private fun VideoDetailContent(
     }
     val onTrailer: () -> Unit = { if (trailers.size == 1) openTrailer(trailers.single()) else trailerSheet = true }
     if (trailerSheet) TrailerSheet(trailers, onDismiss = { trailerSheet = false }, onOpen = openTrailer)
+    waysSheet?.let { choice ->
+        WaysSheet(
+            ways = choice.ways,
+            busy = wayBusy,
+            onRun = { way ->
+                waysSheet = choice.copy(started = true)
+                runWay(way, choice.season, choice.episode, false)
+            },
+            onChoose = { way ->
+                waysSheet = choice.copy(started = true)
+                runWay(way, choice.season, choice.episode, true)
+            },
+            onDismiss = { waysSheet = null },
+        )
+    }
+    keepMenu?.let { way ->
+        KeepMenuSheet(way, wayStates[way.key], onCancel = { ways?.cancel(way) }, onDismiss = { keepMenu = null })
+    }
+    picker?.let { open ->
+        WayStepSheet(open, onChoose = { row -> ways?.choose(row) }, onBack = { ways?.back() }, onDismiss = { ways?.dismiss() })
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -227,10 +315,19 @@ private fun VideoDetailContent(
                 BadgeRow(item.badges, max = 4)
             }
         }
-        detail.playTarget?.let { target ->
-            item("play") { PlayRow(target, onPlay, onTrailer = onTrailer.takeIf { trailers.isNotEmpty() }) }
+        if (detail.playTarget != null || primaryWay != null || rowWays.showMore || rowWays.keep.isNotEmpty()) {
+            item("play") {
+                PlayRow(
+                    detail.playTarget,
+                    onPlay,
+                    // Nothing to play: the trailer takes a pill of its own in the actions below.
+                    onTrailer = onTrailer.takeIf { trailers.isNotEmpty() && detail.playTarget != null },
+                    ways = rowWays,
+                )
+            }
         }
-        item("actions") {
+        // A title off the library has no watchlist, watched state or trailers: nothing to put in this row.
+        if (!detail.outsideLibrary) item("actions") {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -293,6 +390,10 @@ private fun VideoDetailContent(
             items(season.episodes, key = { it.key }) { episode ->
                 val card = episode.card
                 val mark = episodeStateLabel(episode, guide.fromServer)
+                val ofEpisode = episodeWays(episode)
+                val chooseWay: (() -> Unit)? = if (ofEpisode.isEmpty()) null else {
+                    { waysSheet = WaysChoice(ofEpisode, episode.season, episode.number) }
+                }
                 if (card != null && episode.isPlayable) {
                     EpisodeRow(
                         card,
@@ -302,13 +403,15 @@ private fun VideoDetailContent(
                         code = episode.season to episode.number,
                         mark = mark,
                         isNew = episode.isNew,
+                        onLongClick = chooseWay,
                     )
                 } else {
                     UnavailableEpisodeRow(
                         episode,
                         mark = mark,
                         onClick = if (episode.state == EpisodeState.NotDownloaded) {
-                            { viewModel.showNotice(UiR.string.episode_not_in_library) }
+                            // The ways of an episode that is not in the library: a tap opens them, else it says why it does not play.
+                            chooseWay ?: { viewModel.showNotice(UiR.string.episode_not_in_library) }
                         } else {
                             null
                         },
@@ -337,44 +440,107 @@ private fun SeasonWatchedToggle(episodes: List<EpisodeCard>, onToggle: () -> Uni
 
 /** The white Play/Resume pill ("Resume S1 E3" for a series) and, when resuming, Play from Beginning. */
 @Composable
-private fun PlayRow(target: PlayTarget, onPlay: (itemId: Long, mode: ResumeMode) -> Unit, onTrailer: (() -> Unit)? = null) {
-    val episode = target.episode
-    val label = when {
-        episode != null && target.resume -> stringResource(UiR.string.detail_resume_episode, episode.seasonNo, episode.episodeNo)
-        episode != null -> stringResource(UiR.string.detail_play_episode, episode.seasonNo, episode.episodeNo)
-        target.resume -> stringResource(UiR.string.action_resume)
-        else -> stringResource(UiR.string.action_play)
-    }
+private fun PlayRow(
+    target: PlayTarget?,
+    onPlay: (itemId: Long, mode: ResumeMode) -> Unit,
+    onTrailer: (() -> Unit)? = null,
+    ways: WaysRowState? = null,
+) {
     val wide = LocalConfiguration.current.screenWidthDp >= 600
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = PageGutter, end = PageGutter, top = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        PrimaryPillButton(
-            text = label,
-            icon = AntresolIcons.Play,
-            onClick = { onPlay(target.itemId, ResumeMode.Resume) },
-            modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.weight(1f)).testTag("detail-play"),
-        )
-        if (target.resume) {
-            GlassIconButton(
-                icon = AntresolIcons.Restart,
-                contentDescription = stringResource(UiR.string.action_play_from_start),
-                onClick = { onPlay(target.itemId, ResumeMode.FromStart) },
-                modifier = Modifier.size(50.dp).testTag("detail-play-from-start"),
-            )
+    val primary = ways?.primary
+    Column(Modifier.fillMaxWidth().padding(start = PageGutter, end = PageGutter, top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (target != null) {
+                val episode = target.episode
+                val label = when {
+                    episode != null && target.resume -> stringResource(UiR.string.detail_resume_episode, episode.seasonNo, episode.episodeNo)
+                    episode != null -> stringResource(UiR.string.detail_play_episode, episode.seasonNo, episode.episodeNo)
+                    target.resume -> stringResource(UiR.string.action_resume)
+                    else -> stringResource(UiR.string.action_play)
+                }
+                PrimaryPillButton(
+                    text = label,
+                    icon = AntresolIcons.Play,
+                    onClick = { onPlay(target.itemId, ResumeMode.Resume) },
+                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.weight(1f)).testTag("detail-play"),
+                )
+                if (target.resume) {
+                    GlassIconButton(
+                        icon = AntresolIcons.Restart,
+                        contentDescription = stringResource(UiR.string.action_play_from_start),
+                        onClick = { onPlay(target.itemId, ResumeMode.FromStart) },
+                        modifier = Modifier.size(50.dp).testTag("detail-play-from-start"),
+                    )
+                }
+            } else if (primary != null && ways != null) {
+                // Nothing of the library plays: the first way of the addons is the main button.
+                val working = ways.busy == primary.key
+                PrimaryPillButton(
+                    text = if (working) stringResource(UiR.string.way_busy) else primary.label,
+                    icon = wayIcon(primary.icon),
+                    enabled = ways.busy == null,
+                    onClick = { ways.onRun(primary) },
+                    onLongClick = { ways.onChoose(primary) },
+                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.weight(1f)).testTag("way-primary"),
+                )
+            }
+            if (onTrailer != null) {
+                GlassIconButton(
+                    icon = AntresolIcons.Trailer,
+                    contentDescription = stringResource(UiR.string.action_trailer),
+                    onClick = onTrailer,
+                    modifier = Modifier.size(50.dp).testTag("detail-trailer"),
+                )
+            }
+            if (ways != null && ways.showMore) {
+                GlassIconButton(
+                    icon = AntresolIcons.ChevronDown,
+                    contentDescription = stringResource(UiR.string.way_more),
+                    onClick = ways.onMore,
+                    modifier = Modifier.size(50.dp).testTag("ways-more"),
+                )
+            }
+            ways?.keep?.forEach { way ->
+                KeepWayButton(
+                    way = way,
+                    state = ways.states[way.key],
+                    working = ways.busy == way.key,
+                    onClick = { ways.onKeep(way) },
+                    onLongClick = { ways.onKeepChoose(way) },
+                )
+            }
         }
-        if (onTrailer != null) {
-            GlassIconButton(
-                icon = AntresolIcons.Trailer,
-                contentDescription = stringResource(UiR.string.action_trailer),
-                onClick = onTrailer,
-                modifier = Modifier.size(50.dp).testTag("detail-trailer"),
-            )
+        // What a keep way says about itself («Saved 40%», and «Saved» once it is done), in the server's words.
+        ways?.keep?.forEach { way ->
+            ways.states[way.key]?.text?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = Antresol.typography.caption, modifier = Modifier.testTag("way-keep-text-${way.id}"))
+            }
         }
     }
 }
+
+/** What the ways of the addons add to the play row of a title. */
+private class WaysRowState(
+    /** The first watch way, as the main button when nothing of the library plays. */
+    val primary: AddonWay?,
+    /** There are watch ways to list under «more ways». */
+    val showMore: Boolean,
+    val keep: List<AddonWay>,
+    val states: Map<String, app.antresol.core.model.WayState>,
+    val busy: String?,
+    val onRun: (AddonWay) -> Unit,
+    val onChoose: (AddonWay) -> Unit,
+    val onMore: () -> Unit,
+    val onKeep: (AddonWay) -> Unit,
+    val onKeepChoose: (AddonWay) -> Unit,
+)
+
+/** The ways a sheet lists, for the title ([season] and [episode] null) or for one episode of it. */
+private data class WaysChoice(val ways: List<AddonWay>, val season: Int?, val episode: Int?, val started: Boolean = false)
 
 /**
  * An episode: still with progress (tap to play), "S1 · E2", title, length and overview (tap for
@@ -390,6 +556,8 @@ private fun EpisodeRow(
     code: Pair<Int, Int> = episode.seasonNo to episode.episodeNo,
     mark: String? = null,
     isNew: Boolean = false,
+    /** The ways of the addons for this episode, by a long press. */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val urls = LocalMediaUrls.current
     val wide = LocalConfiguration.current.screenWidthDp >= 600
@@ -397,7 +565,7 @@ private fun EpisodeRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .focusClickable(AntresolShapes.control, onClick = onOpen)
+            .focusClickable(AntresolShapes.control, onLongClick = onLongClick, onClick = onOpen)
             .padding(horizontal = PageGutter, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,

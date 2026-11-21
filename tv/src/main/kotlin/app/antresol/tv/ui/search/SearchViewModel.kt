@@ -10,6 +10,10 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
 import app.antresol.core.model.SearchResults
 import app.antresol.core.model.Track
+import app.antresol.core.model.toCard
+import app.antresol.core.ways.AddonSection
+import app.antresol.core.ways.WaysSource
+import app.antresol.core.ways.waysApi
 import app.antresol.tv.playback.AudioEngine
 import app.antresol.ui.LoadState
 import app.antresol.tv.ui.detail.DetailRow
@@ -23,7 +27,12 @@ import kotlinx.coroutines.launch
  * Search-as-you-type over `/api/search`, debounced. Songs play in place; the other results open
  * their pages. The server's book results are not shown: the TV app has no books (as on Apple TV).
  */
-class SearchViewModel(private val client: AntresolClient, private val audio: AudioEngine) : ViewModel() {
+class SearchViewModel(
+    private val client: AntresolClient,
+    private val audio: AudioEngine,
+    /** The addons' ways of the session: their title searches add rows after the library's. */
+    private val waysSource: WaysSource? = null,
+) : ViewModel() {
     var query: String by mutableStateOf("")
         private set
 
@@ -42,13 +51,20 @@ class SearchViewModel(private val client: AntresolClient, private val audio: Aud
     /** The songs of the shown results, in row order (the songs row's card ids are track ids). */
     private var songs: List<Track> = emptyList()
 
+    /** What the addons' searches found (a row each, titled by the addon's own words), as they answer; never an error. */
+    var addonRows: List<DetailRow> by mutableStateOf(emptyList())
+        private set
+
     private var job: Job? = null
+    private var addonJob: Job? = null
 
     fun onQueryChange(text: String) {
         query = text
         job?.cancel()
+        addonJob?.cancel()
         if (text.isBlank()) {
             results = null
+            addonRows = emptyList()
             return
         }
         job = viewModelScope.launch {
@@ -57,6 +73,12 @@ class SearchViewModel(private val client: AntresolClient, private val audio: Aud
             results = load {
                 client.search(text.trim()).also { songs = it.songs }.toRows()
             }
+        }
+        val source = waysSource ?: return
+        addonJob = viewModelScope.launch {
+            delay(DEBOUNCE_MS)
+            addonRows = emptyList()
+            source.get().search(client.waysApi(), text.trim()).collect { sections -> addonRows = sections.map { it.toRow() } }
         }
     }
 
@@ -85,6 +107,14 @@ const val SONGS_ROW = "songs"
 enum class SearchScope {
     All, Movies, Shows, Music;
 
+    /** The rows of the addons' searches this scope shows: movies and shows only (they find titles). */
+    fun filterAddons(rows: List<DetailRow>): List<DetailRow> = when (this) {
+        All -> rows
+        Movies -> rows.map { row -> row.copy(cards = row.cards.filter { it.kind == Kind.MOVIE }) }
+        Shows -> rows.map { row -> row.copy(cards = row.cards.filter { it.kind == Kind.SERIES }) }
+        Music -> emptyList()
+    }.filter { it.cards.isNotEmpty() }
+
     /** The rows (and, for Movies / Shows, the cards of the library row) this scope shows. */
     fun filter(rows: List<DetailRow>): List<DetailRow> = when (this) {
         All -> rows
@@ -100,6 +130,8 @@ enum class SearchScope {
 }
 
 private const val LIBRARY_ROW = "library"
+
+private fun AddonSection.toRow() = DetailRow(id = "addon-$addonId", title = label, cards = titles.map { it.toCard() })
 
 /** Result sections in the web app's order. */
 private fun SearchResults.toRows(): List<DetailRow> = listOf(

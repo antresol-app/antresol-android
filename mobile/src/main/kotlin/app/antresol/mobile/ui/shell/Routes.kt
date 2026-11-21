@@ -32,6 +32,10 @@ data class DetailRoute(val kind: String, val id: Long) {
     constructor(card: Card) : this(card.kind, card.id)
 }
 
+/** The page of a movie or series that is not in the library, by its TMDB id (`/api/title`). */
+@Serializable
+data class TitleRoute(val kind: String, val tmdbId: Long)
+
 /**
  * A pushed grid page ("All Albums", "Audiobooks", a genre, a home shelf). [source] is a
  * [app.antresol.mobile.ui.browse.GridSource] encoded with [app.antresol.mobile.ui.browse.GridSource.encode].

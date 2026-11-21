@@ -1,0 +1,4 @@
+{"v":1,"ways":[
+  {"id":"watch","label":"Watch from a source","icon":"globe","role":"watch","kinds":["movie","series"],"scope":"any","episodes":true},
+  {"id":"keep","label":"Keep on the server","icon":"download","role":"keep","kinds":["movie","series"],"scope":"outside","episodes":false}
+],"search":{"label":"Find and watch"}}

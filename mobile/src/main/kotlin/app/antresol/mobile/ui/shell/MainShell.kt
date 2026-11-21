@@ -68,6 +68,9 @@ import app.antresol.core.model.Card
 import app.antresol.core.model.Channel
 import app.antresol.core.model.Kind
 import app.antresol.core.model.ShelfId
+import app.antresol.core.model.TitleRef
+import app.antresol.core.ways.WayTicket
+import app.antresol.core.ways.WayPlayback
 import app.antresol.core.playback.Resume
 import app.antresol.core.session.AuthState
 import app.antresol.core.session.SessionManager
@@ -125,7 +128,10 @@ import app.antresol.ui.channels.channelPrefsApi
 import app.antresol.ui.channels.channelsApi
 import app.antresol.ui.language.UiLanguageModel
 import app.antresol.ui.language.uiLanguageApi
+import app.antresol.ui.playback.DeviceCaps
 import app.antresol.ui.playback.ResumeMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import app.antresol.ui.theme.AntresolColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -228,8 +234,16 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     // One channel list for Home's «On Air Now» and the «ТВ» tab (in the shell's store, not a page's): one refresh, not two.
     val channels: ChannelsViewModel = viewModel(key = "channels") { ChannelsViewModel(client.channelsApi()) }
 
-    val open: (Card) -> Unit = { card -> navController.navigate(DetailRoute(card)) }
+    // A title off the library (an addon's search result) opens the page made from its TMDB id; anything else its card.
+    val open: (Card) -> Unit = { card ->
+        if (card.opensTitlePage) navController.navigate(TitleRoute(card.kind, card.tmdbId ?: 0)) else navController.navigate(DetailRoute(card))
+    }
     val playVideo: (Long, ResumeMode) -> Unit = { id, mode -> VideoPlayerActivity.start(context, id, mode) }
+    // A way may pick a quality by what the phone shows: only its decoder limits it (as the player does).
+    val wayMaxHeight: suspend () -> Int? = {
+        withContext(Dispatchers.Default) { runCatching { DeviceCaps.current(context.applicationContext, limitToDisplay = false).maxHeight }.getOrNull() }
+    }
+    val playWay: (WayPlayback) -> Unit = { playback -> VideoPlayerActivity.startWay(context, WayTicket.put(playback)) }
     val watchChannel: (Channel, ChannelFilter) -> Unit = { channel, filter -> LivePlayerActivity.start(context, channel.id, filter) }
     val read: (BookAction) -> Unit = { action ->
         when (action) {
@@ -298,6 +312,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         // Videos play (resuming); a hero album or book opens its page.
                         onPlay = { card -> if (card.kind in Kind.VIDEO) playVideo(card.id, ResumeMode.Resume) else open(card) },
                         onSeeAll = { shelf -> openGrid(GridSource.forShelf(ShelfPage.Home, shelf.id), shelf.title) },
+                        // The addons' ways are asked for again with the next page that needs them.
+                        onPullRefresh = app.ways::invalidate,
                         onAir = {
                             OnAirShelf(
                                 viewModel = channels,
@@ -355,7 +371,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 padded<SearchRoute> {
                     SearchScreen(
-                        viewModel = viewModel { SearchViewModel(client) },
+                        viewModel = viewModel { SearchViewModel(client, app.ways) },
                         playback = playback,
                         onOpen = open,
                         onTab = selectTab,
@@ -376,10 +392,11 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                     val route = entry.toRoute<DetailRoute>()
                     if (route.kind in Kind.VIDEO) {
                         VideoDetailScreen(
-                            viewModel = viewModel { ItemDetailViewModel(client, route.id, app.pendingWrites) },
+                            viewModel = viewModel { ItemDetailViewModel(client, route.id, app.pendingWrites, waysSource = app.ways, maxHeight = wayMaxHeight) },
                             onOpen = open,
                             onBack = back,
                             onPlay = playVideo,
+                            onPlayWay = playWay,
                         )
                     } else {
                         MediaDetailScreen(
@@ -390,6 +407,22 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                             onRead = read,
                         )
                     }
+                }
+                composable<TitleRoute> { entry ->
+                    val route = entry.toRoute<TitleRoute>()
+                    VideoDetailScreen(
+                        viewModel = viewModel {
+                            ItemDetailViewModel(client, 0, app.pendingWrites, title = TitleRef(route.kind, route.tmdbId), waysSource = app.ways, maxHeight = wayMaxHeight)
+                        },
+                        onOpen = open,
+                        onBack = back,
+                        onPlay = playVideo,
+                        onPlayWay = playWay,
+                        // The library has it after all: its own page replaces this one.
+                        onOpenLibraryItem = { card ->
+                            navController.navigate(DetailRoute(card)) { popUpTo<TitleRoute> { inclusive = true } }
+                        },
+                    )
                 }
                 padded<SongsRoute> { entry ->
                     SongsScreen(

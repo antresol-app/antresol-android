@@ -279,4 +279,17 @@
     <string name="tv_path_antresol">Через Antresol</string>
     <string name="tv_path_source">Источник %1$d из %2$d</string>
     <string name="tv_no_supported_audio">У канала нет поддерживаемого звука</string>
+    <!-- Способы аддонов сервера (их названия, шаги и ответы — слова сервера) -->
+    <string name="way_episode_code">S%1$d · E%2$d</string>
+    <string name="way_watch_title">Смотреть</string>
+    <string name="way_more">Другие способы посмотреть</string>
+    <string name="way_hold_hint">Удерживайте способ, чтобы выбрать вручную</string>
+    <string name="way_step_back">Назад к предыдущему шагу</string>
+    <string name="way_busy">Открываем…</string>
+    <string name="way_cancel">Отмена</string>
+    <string name="way_empty_step">Выбирать не из чего</string>
+    <string name="way_not_available">Это больше недоступно. Попробуйте ещё раз.</string>
+    <string name="error_input_not_ready">Видео ещё не готово. Попробуйте через минуту.</string>
+    <string name="episode_open_page">Открыть страницу серии</string>
+    <string name="title_page_in_library">Этот фильм или сериал есть в вашей медиатеке</string>
 </resources>

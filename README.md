@@ -66,8 +66,8 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
 - **Video**: detail pages with Play/Resume, watchlist and watched toggles, «Trailer» (played inside the app: in its own
   player when the server fetches it, else in the embedded YouTube player; a chooser when there
   are several), the cast with photos, seasons and episodes, each
-  with its own still (with the server's episode guide every episode shows: ones not in the library dimmed, ones not
-  aired yet greyed with their air date; only library episodes play). The
+  with its own still (with the server's episode guide every episode shows: ones not in the library dimmed (not when an addon's way plays them), ones not
+  aired yet greyed with their air date; library episodes play, the others by an addon's way). The
   ExoPlayer player sends the device's codec caps (direct play, or HLS remux/transcode), has audio,
   subtitle and quality menus, keeps the HLS session alive, saves progress every 10 s and counts
   down to the next episode.

@@ -69,8 +69,9 @@ fun episodeFocusKey(episode: GuideEpisode) = "episode/${episode.key}"
  * progress and watched marks. Starts on the season of [initialEpisodeId], scrolled to it.
  *
  * With the server's episode guide every episode shows: library ones play (OK) and open (hold OK)
- * as before; one that is not downloaded is dimmed and one not aired yet greyed, with their mark;
- * they take focus (so the row scrolls to them) but do nothing, and the hint under the row says why.
+ * as before; one that is not downloaded is dimmed (not when an addon's way plays it) and one not aired
+ * yet greyed, with their mark; they take focus (so the row scrolls to them), and with no way they do
+ * nothing, and the hint under the row says why.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -166,6 +167,8 @@ private fun SeasonRow(
                     episode = episode,
                     mark = episodeStateLabel(episode, guided),
                     busy = episodeBusy(episode),
+                    // A way that plays it makes the card as bright as a library one.
+                    playable = ways.isNotEmpty(),
                     // An episode the library does not have plays through the addons' ways (the title's way), when there are any.
                     onClick = { if (card != null) onPlayEpisode(card) else if (ways.isNotEmpty()) onPlayEpisodeWay(episode, ways) },
                     // Hold OK: the episode's page, with its ways beside it when there are any.
@@ -185,6 +188,7 @@ private fun EpisodeTile(
     episode: GuideEpisode,
     mark: String?,
     busy: Boolean,
+    playable: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     surfaceModifier: Modifier,
@@ -197,7 +201,7 @@ private fun EpisodeTile(
     Column(
         Modifier
             .width(CardSizes.wideWidth)
-            .alpha(EpisodeLabels.alpha(episode.state)),
+            .alpha(EpisodeLabels.alpha(episode.state, playable)),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         CardSurface(

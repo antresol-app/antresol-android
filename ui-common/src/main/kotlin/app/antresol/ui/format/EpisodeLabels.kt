@@ -31,10 +31,14 @@ object EpisodeLabels {
             ?: resources.getString(R.string.episode_not_aired)
     }
 
-    /** How strongly an episode row draws: a missing one is dimmer, an upcoming one greyed. */
-    fun alpha(state: EpisodeState): Float = when (state) {
+    /**
+     * How strongly an episode row draws: a missing one is dimmer, an upcoming one greyed. A missing
+     * episode an addon's way plays ([playable]: it has ways, so its row plays or opens them) draws
+     * as a library one; an upcoming one has none and stays greyed.
+     */
+    fun alpha(state: EpisodeState, playable: Boolean = false): Float = when (state) {
         EpisodeState.Downloaded -> 1f
-        EpisodeState.NotDownloaded -> 0.6f
+        EpisodeState.NotDownloaded -> if (playable) 1f else 0.6f
         EpisodeState.Upcoming -> 0.38f
     }
 

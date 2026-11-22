@@ -410,6 +410,7 @@ private fun VideoDetailContent(
                     UnavailableEpisodeRow(
                         episode,
                         mark = mark,
+                        playable = ofEpisode.isNotEmpty(),
                         onClick = if (episode.state == EpisodeState.NotDownloaded) {
                             // The ways of an episode that is not in the library: a tap opens them, else it says why it does not play.
                             chooseWay ?: { viewModel.showNotice(UiR.string.episode_not_in_library) }
@@ -632,9 +633,10 @@ private fun EpisodeRow(
 /**
  * An episode the library does not have: the same row as [EpisodeRow] without the still, Play and
  * watched toggle, dimmed (not downloaded) or greyed (not aired yet, [onClick] null), with its mark.
+ * A not downloaded one an addon's way plays ([playable]) is not dimmed.
  */
 @Composable
-private fun UnavailableEpisodeRow(episode: GuideEpisode, mark: String?, onClick: (() -> Unit)?) {
+private fun UnavailableEpisodeRow(episode: GuideEpisode, mark: String?, playable: Boolean, onClick: (() -> Unit)?) {
     val wide = LocalConfiguration.current.screenWidthDp >= 600
     val tag = if (episode.state == EpisodeState.Upcoming) "episode-upcoming" else "episode-missing"
     Row(
@@ -642,7 +644,7 @@ private fun UnavailableEpisodeRow(episode: GuideEpisode, mark: String?, onClick:
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.focusClickable(AntresolShapes.control, onClick = onClick) else Modifier)
             .padding(horizontal = PageGutter, vertical = 8.dp)
-            .alpha(EpisodeLabels.alpha(episode.state))
+            .alpha(EpisodeLabels.alpha(episode.state, playable))
             .testTag("$tag-${episode.season}-${episode.number}"),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,

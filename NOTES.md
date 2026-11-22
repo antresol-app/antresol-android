@@ -1650,7 +1650,8 @@ The apps show what the server's addons offer, by the protocol in docs/API.md sec
   icon), the default ticked; a row makes that way the title's default and runs it; under a line «Audio & quality…»
   opens the step choice of the ticked way. A library title has the chevron beside its own Play. An episode's tile
   is its «Play»: OK on one not in the library runs the title's way for it (as `forEpisode` allows), hold OK opens the
-  same menu (with «Open Episode Page» first). The old «More ways to watch» pill and the hold-to-choose hint are gone.
+  same menu (with «Open Episode Page» first). An episode not in the library that has ways is not dimmed (`EpisodeLabels.alpha(state, playable)`,
+  phone rows and TV tiles alike); one still to air stays greyed. The old «More ways to watch» pill and the hold-to-choose hint are gone.
 - Busy is keyed by way and subject (`WayRun`: way key, title, season, episode): only the button of the run shows
   «Opening…» (a tile for an episode); the other buttons wait (one run at a time) but do not spin.
 - Player: a stream the addon serves (`play`) lists qualities in the quality menu when its answer has two or more and

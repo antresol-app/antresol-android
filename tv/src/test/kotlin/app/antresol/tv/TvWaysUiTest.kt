@@ -8,6 +8,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -22,6 +24,7 @@ import app.antresol.fixtures.FakeServer
 import app.antresol.tv.ui.shell.MainShell
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -92,10 +95,13 @@ class TvWaysUiTest {
         // The keep way is for what is not in the library.
         assertTrue(compose.onAllNodes(hasTestTag("way-keep-keep"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
 
-        key(KeyEvent.KEYCODE_DPAD_DOWN) // actions → the ways row
-        assertFocusedText("More ways to watch")
+        key(KeyEvent.KEYCODE_DPAD_RIGHT) // Play → the chevron beside it
+        assertFocusedDescription("More ways to watch")
         key(KeyEvent.KEYCODE_DPAD_CENTER)
+        // The menu: the way with its short line, the one Play runs checked, and the choice by hand under a line.
         assertFocusedText("Watch from a source")
+        waitFor(hasText("Streams from the internet"))
+        waitFor(hasText("Audio & quality…"))
         shot("ways-tv-list")
         key(KeyEvent.KEYCODE_DPAD_CENTER) // a quick run: no remembered choice, so the choice opens
         waitFor(hasText("Source One"))
@@ -119,21 +125,34 @@ class TvWaysUiTest {
         assertTrue("the nav is hidden by the player", compose.onAllNodes(hasText("Movies") and androidx.compose.ui.test.hasClickAction()).fetchSemanticsNodes().isEmpty())
     }
 
-    /** Hold OK on a way: the choice from its first step, the addon is not asked to decide. */
+    /** «Audio & quality…» of the menu: the choice of the checked way from its first step, the addon is not asked to decide. */
     @Test
-    fun heldOkOnAWayOpensTheChoiceDirectly() {
+    fun audioAndQualityOfTheMenuOpensTheChoiceOfTheCheckedWay() {
         fake.wayRemembered = true
         start()
         openSeries()
         waitFor(hasTestTag("ways-more"))
-        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        key(KeyEvent.KEYCODE_DPAD_RIGHT)
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         assertFocusedText("Watch from a source")
-        hold(KeyEvent.KEYCODE_DPAD_CENTER, repeats = 3)
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        assertFocusedText("Audio & quality…")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
         waitFor(hasText("Source One"))
         assertTrue("no quick run: the choice was asked for", fake.addonCalls.none { it.startsWith("POST app/run") })
-        assertTrue(fake.addonCalls.any { it.startsWith("POST app/step") })
-        assertTrue("the held key did not pick a row", fake.addonCalls.count { it.startsWith("POST app/step") } == 1)
+        assertTrue(fake.addonCalls.count { it.startsWith("POST app/step") } == 1)
+    }
+
+    /** Hold OK on a way's Play opens the same menu as the chevron. */
+    @Test
+    fun heldOkOnPlayOfATitleOffTheLibraryOpensTheMenu() {
+        start()
+        openTitleOffTheLibrary()
+        assertFocusedText("Play")
+        hold(KeyEvent.KEYCODE_DPAD_CENTER, repeats = 3)
+        waitFor(hasText("Audio & quality…"))
+        assertFocusedText("Watch from a source")
+        assertTrue("no run: only the menu", fake.addonCalls.none { it.startsWith("POST app/run") })
     }
 
     @Test
@@ -141,7 +160,6 @@ class TvWaysUiTest {
         start()
         openSeries()
         waitFor(hasTestTag("ways-more"))
-        key(KeyEvent.KEYCODE_DPAD_DOWN) // ways row
         key(KeyEvent.KEYCODE_DPAD_DOWN) // season pills
         key(KeyEvent.KEYCODE_DPAD_DOWN) // episodes
         hold(KeyEvent.KEYCODE_DPAD_CENTER, repeats = 3)
@@ -199,8 +217,11 @@ class TvWaysUiTest {
         fake.keepActive = true
         start()
         openTitleOffTheLibrary()
-        // Nothing of the library plays here: the first way is the first button; no watched toggle.
+        // Nothing of the library plays here: «Play» (not a way's own label) runs the way; no watched toggle.
         assertTrue(compose.onAllNodes(hasText("Mark as Watched"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertFocusedText("Play")
+        assertTrue(compose.onAllNodes(hasText("Watch from a source"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodes(hasText("More ways to watch"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         // The keep way is working: its words and «Cancel» behind its button.
         waitFor(hasText("Saved 40%"))
         key(KeyEvent.KEYCODE_DPAD_DOWN)
@@ -229,6 +250,93 @@ class TvWaysUiTest {
         waitFor(hasText("Started"))
         val run = fake.addonCalls.last { it.startsWith("POST app/run") }
         assertTrue(run, run.contains("\"way\":\"keep\"") && run.contains("\"ref\":\"q-1080\"") && !run.contains("quick"))
+    }
+
+    /** The menu of a title off the library: a pick is remembered for the title, and Play then runs it. */
+    @Test
+    fun aWayPickedInTheMenuBecomesWhatPlayRunsForThatTitle() {
+        fake.secondWay = true
+        start()
+        openTitleOffTheLibrary()
+        assertFocusedText("Play")
+        key(KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertFocusedDescription("More ways to watch")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        assertFocusedText("Watch from a source")
+        waitFor(hasText("Second source"))
+        waitFor(hasText("Plays while it loads"))
+        shot("ways-tv-menu-two")
+        key(KeyEvent.KEYCODE_DPAD_DOWN)
+        assertFocusedText("Second source")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        // Picked: it runs (the addon has nothing remembered, so the choice opens) and is the title's way from now on.
+        waitFor(hasText("Source One"))
+        val run = fake.addonCalls.last { it.startsWith("POST app/run") }
+        assertTrue(run, run.contains("\"way\":\"watch2\"") && run.contains("\"quick\":true"))
+        assertEquals("alpha/watch2", app.wayDefaults.get("movie", FakeServer.OUTSIDE_TMDB))
+        key(KeyEvent.KEYCODE_BACK) // the choice closes: focus is back on the chevron that opened the menu
+        assertFocusedDescription("More ways to watch")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        // The menu opens on the checked one.
+        assertFocusedText("Second source")
+        key(KeyEvent.KEYCODE_BACK)
+        assertFocusedDescription("More ways to watch")
+        key(KeyEvent.KEYCODE_DPAD_LEFT)
+        assertFocusedText("Play")
+        val before = fake.addonCalls.count { it.startsWith("POST app/run") }
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitUntil { fake.addonCalls.count { it.startsWith("POST app/run") } > before }
+        assertTrue(fake.addonCalls.last { it.startsWith("POST app/run") }.contains("\"way\":\"watch2\""))
+    }
+
+    /** A run for one episode spins that episode's tile alone: not the title's Play, nor another episode. */
+    @Test
+    fun aRunForOneEpisodeShowsOpeningOnItsOwnTileOnly() {
+        fake.searchSeries = true
+        fake.runDelayMs = 1_500
+        start()
+        key(KeyEvent.KEYCODE_DPAD_UP) // the nav, on Home
+        key(KeyEvent.KEYCODE_DPAD_LEFT) // the search pill
+        runFor(900)
+        key(KeyEvent.KEYCODE_DPAD_DOWN) // into the page: the field
+        waitFor(hasSetTextAction())
+        compose.onNode(hasSetTextAction()).performTextInput("far")
+        waitFor(hasText("Movies & Shows"))
+        settle()
+        repeat(3) { key(KeyEvent.KEYCODE_DPAD_DOWN) } // the field → the scope pills → the library row → the addon's row
+        waitFor(hasText("Find and watch"))
+        settle()
+        key(KeyEvent.KEYCODE_DPAD_RIGHT) // Movie 1 → Far Away Film
+        key(KeyEvent.KEYCODE_DPAD_RIGHT) // → Far Away Show
+        waitFor(isFocused() and hasAnyDescendant(hasText("Far Away Show") or androidx.compose.ui.test.hasContentDescription("Far Away Show")))
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasTestTag("way-primary"))
+        waitFor(hasTestTag("episode-1-2"))
+        settle()
+        shot("ways-tv-title-series")
+        // The episodes are not in the library: down to them, and on to the second.
+        repeat(4) {
+            if (compose.onAllNodes(isFocused() and hasTestTag("episode-1-1"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+                key(KeyEvent.KEYCODE_DPAD_DOWN)
+            }
+        }
+        waitFor(isFocused() and hasTestTag("episode-1-1"))
+        key(KeyEvent.KEYCODE_DPAD_RIGHT)
+        waitFor(isFocused() and hasTestTag("episode-1-2"))
+        assertTrue(compose.onAllNodes(hasTestTag("episode-way-busy"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        // The run is waiting for the addon: «Opening…» on episode 2's tile, once; the title's own Play is not busy.
+        waitFor(hasTestTag("episode-way-busy"))
+        assertEquals(1, compose.onAllNodes(hasTestTag("episode-way-busy"), useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(1, compose.onAllNodes(hasText("Opening…"), useUnmergedTree = true).fetchSemanticsNodes().size)
+        // One run at a time: the title's Play waits (disabled) but does not say «Opening…».
+        compose.onNode(hasTestTag("way-primary"), useUnmergedTree = true).assertIsNotEnabled().assert(hasAnyDescendant(hasText("Play")))
+        val run = fake.addonCalls.last { it.startsWith("POST app/run") }
+        // Run as an episode of the series: the title's way, quick, for season 1 episode 2.
+        assertTrue(run, run.contains("\"season\":1") && run.contains("\"episode\":2") && run.contains("\"quick\":true"))
+        // The addon answers `pick`: the choice opens and nothing spins any more.
+        waitFor(hasText("Source One"))
+        assertTrue(compose.onAllNodes(hasTestTag("episode-way-busy"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     // region Helpers
@@ -280,6 +388,10 @@ class TvWaysUiTest {
         Thread.sleep(150)
         ShadowLooper.idleMainLooper(50, TimeUnit.MILLISECONDS)
         compose.waitForIdle()
+    }
+
+    private fun assertFocusedDescription(description: String) {
+        waitFor(isFocused() and androidx.compose.ui.test.hasContentDescription(description))
     }
 
     private fun assertFocusedText(text: String) {

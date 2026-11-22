@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,8 +83,12 @@ fun SeasonsSection(
     modifier: Modifier = Modifier,
     /** The ways of the addons for an episode (none: the episode has only what the library gives it). */
     episodeWays: (GuideEpisode) -> List<AddonWay> = { emptyList() },
-    /** Opens the panel of an episode's ways (OK on an episode that is not in the library, hold OK on any). */
+    /** Plays an episode that is not in the library by the title's way (OK on it): the first of the ways given. */
+    onPlayEpisodeWay: (GuideEpisode, List<AddonWay>) -> Unit = { _, _ -> },
+    /** Opens the menu of an episode's ways (hold OK on any episode that has some). */
     onEpisodeWays: (GuideEpisode, List<AddonWay>) -> Unit = { _, _ -> },
+    /** A run of a way for this very episode is waiting for the addon: its tile says so. */
+    episodeBusy: (GuideEpisode) -> Boolean = { false },
 ) {
     val seasons = guide.seasons
     var selected by rememberSaveable {
@@ -107,7 +112,10 @@ fun SeasonsSection(
         }
         // Each season gets its own scroll state and focus restorer, starting at the episode to watch.
         key(season.number) {
-            SeasonRow(season, guide.fromServer, initialEpisodeId, focus, onPlayEpisode, onOpenEpisode, episodeWays, onEpisodeWays, onFocusUnavailable = { focusedUnavailable = it })
+            SeasonRow(
+                season, guide.fromServer, initialEpisodeId, focus, onPlayEpisode, onOpenEpisode, episodeWays, onPlayEpisodeWay, onEpisodeWays, episodeBusy,
+                onFocusUnavailable = { focusedUnavailable = it },
+            )
         }
         Text(
             stringResource(
@@ -133,7 +141,9 @@ private fun SeasonRow(
     onPlayEpisode: (EpisodeCard) -> Unit,
     onOpenEpisode: (EpisodeCard) -> Unit,
     episodeWays: (GuideEpisode) -> List<AddonWay>,
+    onPlayEpisodeWay: (GuideEpisode, List<AddonWay>) -> Unit,
     onEpisodeWays: (GuideEpisode, List<AddonWay>) -> Unit,
+    episodeBusy: (GuideEpisode) -> Boolean,
     onFocusUnavailable: (EpisodeState?) -> Unit,
 ) {
     val episodes = season.episodes
@@ -155,11 +165,13 @@ private fun SeasonRow(
                 EpisodeTile(
                     episode = episode,
                     mark = episodeStateLabel(episode, guided),
-                    // An episode the library does not have plays through the addons' ways, when there are any.
-                    onClick = { if (card != null) onPlayEpisode(card) else if (ways.isNotEmpty()) onEpisodeWays(episode, ways) },
+                    busy = episodeBusy(episode),
+                    // An episode the library does not have plays through the addons' ways (the title's way), when there are any.
+                    onClick = { if (card != null) onPlayEpisode(card) else if (ways.isNotEmpty()) onPlayEpisodeWay(episode, ways) },
                     // Hold OK: the episode's page, with its ways beside it when there are any.
                     onLongClick = { if (ways.isNotEmpty()) onEpisodeWays(episode, ways) else card?.let(onOpenEpisode) },
                     surfaceModifier = Modifier
+                        .testTag("episode-${episode.season}-${episode.number}")
                         .remembersFocus(focus, episodeFocusKey(episode))
                         .onFocusChanged { if (it.isFocused) onFocusUnavailable(if (card == null && ways.isEmpty()) episode.state else null) },
                 )
@@ -169,7 +181,14 @@ private fun SeasonRow(
 }
 
 @Composable
-private fun EpisodeTile(episode: GuideEpisode, mark: String?, onClick: () -> Unit, onLongClick: () -> Unit, surfaceModifier: Modifier) {
+private fun EpisodeTile(
+    episode: GuideEpisode,
+    mark: String?,
+    busy: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    surfaceModifier: Modifier,
+) {
     val urls = LocalMediaUrls.current
     val outline = AntresolShapes.card
     val card = episode.card
@@ -217,7 +236,11 @@ private fun EpisodeTile(episode: GuideEpisode, mark: String?, onClick: () -> Uni
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        EpisodeMarks(isNew = episode.isNew, state = mark)
+        if (busy) {
+            Text(stringResource(R.string.way_busy), style = Antresol.typography.caption, modifier = Modifier.testTag("episode-way-busy"))
+        } else {
+            EpisodeMarks(isNew = episode.isNew, state = mark)
+        }
         card?.durationMs?.takeIf { it > 0 }?.let {
             Text(spokenDuration(it), style = Antresol.typography.caption, maxLines = 1)
         }

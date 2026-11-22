@@ -147,6 +147,7 @@ class VideoPlayerActivity : ComponentActivity() {
                         ),
                         pendingWrites = app.pendingWrites,
                         way = way,
+                        waysSource = app.ways,
                     )
                 }
             },

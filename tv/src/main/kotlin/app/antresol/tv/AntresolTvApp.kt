@@ -70,6 +70,9 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
     /** What the addons of the signed-in profile offer (ways to watch, searches); asked once per sign-in. */
     val ways = app.antresol.core.ways.WaysCatalog { session.client }
 
+    /** The way each title plays with «Play» (chosen in its menu of ways), kept on this device. */
+    val wayDefaults: app.antresol.core.ways.WayDefaults by lazy { app.antresol.ui.ways.DeviceWayDefaults(this) }
+
     /** Set when the system asks to show the now-playing screen (tap on the media session). */
     val nowPlayingRequested = MutableStateFlow(false)
 

@@ -7,6 +7,7 @@ import app.antresol.core.model.RunResult
 import app.antresol.core.model.StepRequest
 import app.antresol.core.model.StepRow
 import app.antresol.core.model.WayCancelRequest
+import app.antresol.core.model.WayRun
 import app.antresol.core.model.WayState
 import app.antresol.core.model.WayStep
 import kotlinx.coroutines.CancellationException
@@ -23,7 +24,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** A way run for a title, or for one of its episodes ([season] and [episode] together). */
-data class WayCall(val way: AddonWay, val target: WayTarget, val season: Int? = null, val episode: Int? = null) {
+data class WayCall(
+    val way: AddonWay,
+    val target: WayTarget,
+    val season: Int? = null,
+    val episode: Int? = null,
+    /** Where the video starts, seconds: set when the choice is made from a player that is already playing it. */
+    val startSec: Double? = null,
+) {
     internal fun request(ref: String? = null, quick: Boolean? = null, maxHeight: Int? = null) = RunRequest(
         way = way.id,
         kind = target.kind,
@@ -31,9 +39,13 @@ data class WayCall(val way: AddonWay, val target: WayTarget, val season: Int? = 
         season = season,
         episode = episode,
         ref = ref,
+        startSec = startSec,
         maxHeight = maxHeight,
         quick = quick,
     )
+
+    /** What the quick run in progress is: this way for this subject. */
+    internal val run: WayRun get() = WayRun(way.key, target.kind, target.tmdbId, season, episode)
 
     internal val display: PlaybackDisplay
         get() = PlaybackDisplay(
@@ -95,11 +107,14 @@ class WaysController(
     /** The tallest picture the device shows (a way may pick a quality by it); null: no limit. */
     private val maxHeight: suspend () -> Int? = { null },
     private val pollMs: Long = POLL_MS,
+    /** What each title plays with «Play» (kept by the app); by default it is forgotten with the page. */
+    private val defaults: WayDefaults = MemoryWayDefaults(),
 ) {
     private val everything = MutableStateFlow(AddonWays.NONE)
     private val offerFlow = MutableStateFlow(WayOffer())
     private val statesFlow = MutableStateFlow<Map<String, WayState>>(emptyMap())
-    private val busyFlow = MutableStateFlow<String?>(null)
+    private val busyFlow = MutableStateFlow<WayRun?>(null)
+    private val defaultFlow = MutableStateFlow<String?>(null)
     private val pickerFlow = MutableStateFlow<WayPicker?>(null)
     private val results = Channel<WayOutcome>(Channel.UNLIMITED)
 
@@ -115,8 +130,11 @@ class WaysController(
     /** The state of the ways that keep a copy, by [AddonWay.key]; a way not in the map is idle. */
     val states: StateFlow<Map<String, WayState>> = statesFlow.asStateFlow()
 
-    /** The [AddonWay.key] of the way a quick run is waiting for, else null. */
-    val busy: StateFlow<String?> = busyFlow.asStateFlow()
+    /** The quick run that is waiting for the addon (which way, for which title or episode), else null. */
+    val busy: StateFlow<WayRun?> = busyFlow.asStateFlow()
+
+    /** The [AddonWay.key] remembered for the attached title as the one «Play» runs, or null: the first way. */
+    val defaultKey: StateFlow<String?> = defaultFlow.asStateFlow()
 
     /** The open choice sheet, or null. */
     val picker: StateFlow<WayPicker?> = pickerFlow.asStateFlow()
@@ -127,6 +145,7 @@ class WaysController(
     /** Starts for [target] (again for another one): asks the session's ways and the state of its keep ways. */
     fun attach(target: WayTarget) {
         this.target = target
+        defaultFlow.value = defaults.get(target.kind, target.tmdbId)
         loadJob?.cancel()
         loadJob = scope.launch {
             val all = source.get()
@@ -181,14 +200,15 @@ class WaysController(
      * that keeps a copy on the server always goes through the sheet, as on the web: what is kept (the
      * quality, the release) is chosen first.
      */
-    fun start(call: WayCall, choose: Boolean = false) {
+    fun start(call: WayCall, choose: Boolean = false, makeDefault: Boolean = false) {
+        if (makeDefault && !call.way.isKeep) rememberDefault(call)
         if (choose || call.way.isKeep) {
             openPicker(call)
             return
         }
         // A tap while a quick run is still going is the same tap twice.
         if (busyFlow.value != null) return
-        busyFlow.value = call.way.key
+        busyFlow.value = call.run
         quickJob = scope.launch {
             try {
                 val request = call.request(quick = true, maxHeight = maxHeight())
@@ -201,6 +221,12 @@ class WaysController(
                 busyFlow.value = null
             }
         }
+    }
+
+    /** Remembers [call]'s way as the one «Play» runs for its title (and its episodes) from now on. */
+    private fun rememberDefault(call: WayCall) {
+        defaults.set(call.target.kind, call.target.tmdbId, call.way.key)
+        if (call.target.kind == target?.kind && call.target.tmdbId == target?.tmdbId) defaultFlow.value = call.way.key
     }
 
     /** A row of the open sheet: the last step's rows run the way, the others open the next step. */
@@ -293,8 +319,8 @@ class WaysController(
 
     private fun deliver(call: WayCall, request: RunRequest, result: RunResult, fromPicker: Boolean) {
         val outcome: WayOutcome? = when {
-            result.input != null -> WayOutcome.Play(WayPlayback.Input(result.input, call.display))
-            result.play != null -> WayOutcome.Play(WayPlayback.Direct(call.way.addonId, request, result.play, call.display))
+            result.input != null -> WayOutcome.Play(WayPlayback.Input(result.input, call.display, call))
+            result.play != null -> WayOutcome.Play(WayPlayback.Direct(call.way.addonId, request, result.play, call.display, call))
             result.done != null -> WayOutcome.Done(result.done)
             result.pick && !fromPicker -> {
                 openPicker(call)

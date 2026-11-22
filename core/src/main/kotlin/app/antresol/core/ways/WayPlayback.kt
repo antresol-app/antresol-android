@@ -29,8 +29,11 @@ data class PlaybackDisplay(
 sealed interface WayPlayback {
     val display: PlaybackDisplay
 
+    /** The run that made it: the player offers its choice again («Audio & source…») from this. */
+    val call: WayCall?
+
     /** Through the core's input player (`/api/play/input/{id}`). */
-    data class Input(val id: String, override val display: PlaybackDisplay) : WayPlayback
+    data class Input(val id: String, override val display: PlaybackDisplay, override val call: WayCall? = null) : WayPlayback
 
     /**
      * The addon's own stream. [request] is the run that made it: it is sent again with `refresh`
@@ -41,6 +44,7 @@ sealed interface WayPlayback {
         val request: RunRequest,
         val play: WayPlay,
         override val display: PlaybackDisplay,
+        override val call: WayCall? = null,
     ) : WayPlayback
 }
 

@@ -11,6 +11,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Glow
@@ -42,7 +44,10 @@ fun PillButton(
     onLongClick: (() -> Unit)? = null,
     /** Drawn in place of [icon] (a ring around it, say); 20 dp wide. */
     leading: (@Composable () -> Unit)? = null,
+    /** What a screen reader says for a button of an [icon] alone (an empty [text]): the pill is then round. */
+    contentDescription: String? = null,
 ) {
+    val iconOnly = text.isEmpty() && icon != null
     val container = when (style) {
         PillStyle.Primary -> AntresolColors.Label.copy(alpha = 0.9f)
         PillStyle.Glass -> AntresolColors.Glass
@@ -61,7 +66,9 @@ fun PillButton(
             }
         },
         enabled = enabled,
-        modifier = modifier.heightIn(min = 44.dp),
+        modifier = modifier
+            .heightIn(min = 44.dp)
+            .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier),
         shape = ClickableSurfaceDefaults.shape(AntresolShapes.pill),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = container,
@@ -82,7 +89,12 @@ fun PillButton(
         Row(
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(start = if (icon != null || leading != null) 20.dp else 26.dp, end = 26.dp, top = 11.dp, bottom = 11.dp),
+                .padding(
+                    start = if (iconOnly) 14.dp else if (icon != null || leading != null) 20.dp else 26.dp,
+                    end = if (iconOnly) 14.dp else 26.dp,
+                    top = 11.dp,
+                    bottom = 11.dp,
+                ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -91,7 +103,7 @@ fun PillButton(
             } else if (icon != null) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = LocalContentColor.current)
             }
-            Text(text, style = Antresol.typography.button, color = LocalContentColor.current, maxLines = 1)
+            if (!iconOnly) Text(text, style = Antresol.typography.button, color = LocalContentColor.current, maxLines = 1)
         }
     }
 }

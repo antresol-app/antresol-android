@@ -72,11 +72,14 @@ launcher (banner) and also runs on Google TV and other Android TV devices (minSd
   subtitle and quality menus, keeps the HLS session alive, saves progress every 10 s and counts
   down to the next episode.
 - **Addon ways**: what the server's addons offer for a movie or series (`x/app`, [docs/API.md](docs/API.md#13-addon-ways)):
-  the ways to watch join Play in a «more ways» panel (the first one is the first button when nothing of the library
-  plays), a way that keeps a copy on the server is a button with a progress ring and «Cancel», and the ways that run for
-  an episode are on the episode (OK on one that is not in the library, hold OK on any: its page and its ways). OK on a
-  way to watch runs it at once; hold OK chooses by hand, step by step (a panel with the server's rows, Back to the step
-  before); OK on a way that keeps a copy always opens that choice.
+  a title nothing of the library plays has «Play» as its main button, which runs the way chosen for that title (the
+  first one until a choice is made); the chevron beside it (or hold OK on Play) opens the menu of the ways with a short
+  line each and the default ticked, where a pick runs that way and makes it the title's default, and «Audio & quality…»
+  chooses by hand, step by step, with the ticked way. A way that keeps a copy on the server is a button with a progress
+  ring and «Cancel», and the ways that run for an episode are on the episode (OK on one that is not in the library
+  plays it by the title's way, hold OK opens the same menu with its page). Only the button that was pressed shows
+  «Opening…». The player of an addon's stream lists the qualities, subtitles and audio its answer gives (else the
+  stream's own tracks) and ends the audio menu with «Audio & source…», the way's own choice from where the video is.
   A title off the library, found by an addon's search row in Search, has a page of its own. Nothing shows without
   addons, nor for a kid profile.
 - **TV (live channels)**: one numbered list of the server's channels (own and external, in channel

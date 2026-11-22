@@ -17,26 +17,37 @@ import app.antresol.ui.components.WayRing
 import app.antresol.ui.components.wayIcon
 import app.antresol.ui.playback.MenuOption
 import app.antresol.ui.userMessage
+import app.antresol.ui.ways.wayHint
 
 /**
- * The ways to watch a title or an episode, as a panel on the right: OK runs a way at once, hold OK
- * chooses by hand (the panel says so). All text is the server's, the ways' own labels.
+ * The ways to watch a title or an episode, as a panel on the right: a row per way with its short hint, the one
+ * «Play» runs ([ticked]) checked. OK on a row makes it the way of this title and runs it; «Audio & quality…»
+ * under a line opens the choice of the checked way by hand, step by step. [leading] rows (an episode's page)
+ * come first. All other text is the server's, the ways' own labels.
  */
 @Composable
-fun WaysListPanel(
+fun WaysMenuPanel(
     ways: List<AddonWay>,
+    ticked: AddonWay?,
     onRun: (AddonWay) -> Unit,
     onChoose: (AddonWay) -> Unit,
     onDismiss: () -> Unit,
+    leading: List<MenuOption> = emptyList(),
 ) {
+    val rows = ways.map { way ->
+        MenuOption(way.label, selected = way.key == ticked?.key, detail = wayHint(way)) { onRun(way) }
+    }
+    val choose = ticked?.let { way ->
+        MenuOption(stringResource(R.string.way_menu_audio_quality), selected = false, more = true, divider = true) { onChoose(way) }
+    }
+    val options = leading + rows + listOfNotNull(choose)
     OptionsPanel(
         title = stringResource(R.string.way_watch_title),
-        note = stringResource(R.string.way_hold_hint),
-        options = ways.map { way ->
-            MenuOption(way.label, selected = false, onLongSelect = { onChoose(way) }) { onRun(way) }
-        },
+        options = options,
         onDismiss = onDismiss,
-        focusIndex = 0,
+        // The checked way first; on a page with leading rows (the episode's own page) from the top.
+        focusIndex = if (leading.isEmpty()) rows.indexOfFirst { it.selected }.coerceAtLeast(0) else 0,
+        width = 400.dp,
     )
 }
 

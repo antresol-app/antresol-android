@@ -27,6 +27,8 @@ import app.antresol.core.model.SubTrack
 import app.antresol.core.model.Track
 import app.antresol.core.model.TitleInfo
 import app.antresol.core.model.Trailer
+import app.antresol.core.ways.MemoryWayDefaults
+import app.antresol.core.ways.WayDefaults
 import app.antresol.core.ways.WayTarget
 import app.antresol.core.ways.WaysController
 import app.antresol.core.ways.WaysSource
@@ -145,6 +147,8 @@ class DetailViewModel(
     waysSource: WaysSource? = null,
     /** The tallest picture this TV shows, for a way that picks a quality by it (null: no limit). */
     maxHeight: suspend () -> Int? = { null },
+    /** What each title plays with «Play» (kept on this device); forgotten with the page by default. */
+    wayDefaults: WayDefaults = MemoryWayDefaults(),
 ) : ViewModel() {
     var state: LoadState<DetailModel> by mutableStateOf(LoadState.Loading)
         private set
@@ -162,7 +166,7 @@ class DetailViewModel(
         private set
 
     /** The addons' ways for this page (buttons, the choice panel, state rings); null without a source of them. */
-    val ways: WaysController? = waysSource?.let { WaysController(client.waysApi(), it, viewModelScope, maxHeight) }
+    val ways: WaysController? = waysSource?.let { WaysController(client.waysApi(), it, viewModelScope, maxHeight, defaults = wayDefaults) }
 
     private var job: Job? = null
 

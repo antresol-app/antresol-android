@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.playback.PendingWrites
 import app.antresol.core.ways.WayPlayback
+import app.antresol.core.ways.WaysSource
 import app.antresol.tv.settings.TvPreferences
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.playback.VideoPlayerOptions
@@ -28,6 +29,7 @@ class PlayerViewModel(
     preferences: TvPreferences = TvPreferences(),
     pendingWrites: PendingWrites,
     way: WayPlayback? = null,
+    waysSource: WaysSource? = null,
 ) : VideoPlayerViewModel(
     context = context,
     client = client,
@@ -41,6 +43,7 @@ class PlayerViewModel(
     ),
     pendingWrites = pendingWrites,
     way = way,
+    waysSource = waysSource,
 ) {
     private var scrubbing = false
     private var scrubJob: Job? = null

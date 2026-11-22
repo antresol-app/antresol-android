@@ -18,13 +18,17 @@ import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.antresol.core.model.AddonWay
 import app.antresol.core.model.Profile
 import app.antresol.core.session.AuthState
 import app.antresol.core.model.RunRequest
 import app.antresol.core.model.WayPlay
 import app.antresol.core.model.WayProgress
+import app.antresol.core.model.WayQuality
 import app.antresol.core.model.WaySubtitle
 import app.antresol.core.ways.PlaybackDisplay
+import app.antresol.core.ways.WayCall
+import app.antresol.core.ways.WayTarget
 import app.antresol.core.ways.WayTicket
 import app.antresol.core.ways.WayPlayback
 import app.antresol.fixtures.FakeServer
@@ -37,6 +41,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -312,6 +317,104 @@ class PhoneWaysUiTest {
         waitUntil { fake.addonCalls.any { it.startsWith("DELETE app/play/s2") } }
         // The stale session is closed too, once.
         waitUntil { fake.addonCalls.any { it.startsWith("DELETE app/play/s1") } }
+    }
+
+    private fun signIn() {
+        val session = app.session
+        runBlocking {
+            session.restore()
+            if (session.state.value !is AuthState.NoServer) session.changeServer()
+            session.connect(fake.baseUrl)
+            session.signIn(Profile(1, "Alex", "grad-3"), null)
+        }
+    }
+
+    private fun directPlayback(call: WayCall? = null): WayPlayback.Direct {
+        val play = WayPlay(
+            url = "/api/addons/alpha/x/media/s1/video.mp4",
+            mode = "stream",
+            kind = "mp4",
+            durationMs = 30_000,
+            subtitles = listOf(WaySubtitle(index = 0, lang = "en", label = "English", codec = "webvtt", url = "/api/addons/alpha/x/media/s1/subs/0.vtt")),
+            quality = WayQuality(listOf("1080p", "720p"), "1080p"),
+            session = "s1",
+            progress = WayProgress(every = 3),
+            ref = "again-ref",
+        )
+        val request = RunRequest("watch", "movie", FakeServer.MOVIE_TMDB, ref = "r-1")
+        return WayPlayback.Direct("alpha", request, play, PlaybackDisplay("Movie 1", kind = "movie"), call)
+    }
+
+    /**
+     * A stream the addon serves that lists qualities and the ref to play one: the player's quality menu offers the
+     * addon's own names, and another one runs the way again with that ref and the quality, from where it is.
+     */
+    @Test
+    fun aStreamWithQualitiesOffersThemAndSwitchingAsksTheAddonAgainFromWhereItIs() {
+        fake.addons = true
+        fake.wayQualities = true
+        fake.start()
+        signIn()
+        val token = WayTicket.put(directPlayback())
+        val intent = android.content.Intent(app, VideoPlayerActivity::class.java).putExtra("way", token)
+        val controller = Robolectric.buildActivity(VideoPlayerActivity::class.java, intent).setup().visible()
+        val player = ViewModelProvider(controller.get())[VideoPlayerViewModel::class.java]
+        waitUntil(30_000) { player.source != null }
+        assertTrue(player.canChooseQuality)
+        assertEquals(listOf("1080p", "720p"), player.wayQualities)
+        assertEquals("1080p", player.quality)
+        // No choice of the source: this playback was made without the run that made it.
+        assertFalse(player.canChooseSource)
+        player.selectQuality("720p")
+        waitUntil(30_000) { fake.addonCalls.any { it.startsWith("POST app/run") && it.contains("\"quality\":\"720p\"") } }
+        val run = fake.addonCalls.first { it.startsWith("POST app/run") }
+        assertTrue(run, run.contains("\"ref\":\"again-ref\"") && run.contains("\"refresh\":true") && run.contains("\"startSec\""))
+        // The ref the answer gave plays it again; what the viewer began with (`quick` and the first ref) is not sent.
+        assertFalse(run, run.contains("\"r-1\"") || run.contains("quick"))
+        waitUntil(30_000) { player.quality == "720p" }
+        assertEquals(listOf("1080p", "720p"), player.wayQualities)
+        controller.get().finish()
+        controller.pause().stop().destroy()
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    /**
+     * «Audio & source…» of a way's stream: the way's own choice, step by step, from the player; the row it ends on
+     * replaces the stream, asked to start where the video is.
+     */
+    @Test
+    fun theSourceChoiceOfAStreamReplacesItWhereItIs() {
+        fake.addons = true
+        fake.wayDirect = true
+        fake.start()
+        signIn()
+        val way = AddonWay(
+            id = "watch", label = "Watch from a source", icon = "globe", kinds = listOf("movie", "series"), addonId = "alpha",
+        )
+        val call = WayCall(way, WayTarget("movie", FakeServer.MOVIE_TMDB, inLibrary = true, title = "Movie 1"))
+        val first = directPlayback(call)
+        val token = WayTicket.put(first)
+        val intent = android.content.Intent(app, VideoPlayerActivity::class.java).putExtra("way", token)
+        val controller = Robolectric.buildActivity(VideoPlayerActivity::class.java, intent).setup().visible()
+        val player = ViewModelProvider(controller.get())[VideoPlayerViewModel::class.java]
+        waitUntil(30_000) { player.source != null }
+        assertTrue(player.canChooseSource)
+        assertTrue("the audio menu has the row", player.hasExtraAudioMenu)
+        player.openSourceChoice()
+        val ways = player.ways!!
+        waitUntil { ways.picker.value?.step?.title == "Source" }
+        ways.choose(ways.picker.value!!.step!!.rows.first())
+        waitUntil { ways.picker.value?.step?.title == "Quality" }
+        ways.choose(ways.picker.value!!.step!!.rows.first())
+        // The row's run starts where the player is, and what it gave plays in its place.
+        waitUntil(30_000) { fake.addonCalls.any { it.startsWith("POST app/run") && it.contains("\"ref\":\"q-1080\"") } }
+        val run = fake.addonCalls.first { it.startsWith("POST app/run") && it.contains("\"ref\":\"q-1080\"") }
+        assertTrue(run, run.contains("\"startSec\""))
+        waitUntil(30_000) { player.currentWay !== first && player.source != null }
+        assertNull(ways.picker.value)
+        controller.get().finish()
+        controller.pause().stop().destroy()
+        shadowOf(Looper.getMainLooper()).idle()
     }
 
     private fun waitStarted(): android.content.Intent {

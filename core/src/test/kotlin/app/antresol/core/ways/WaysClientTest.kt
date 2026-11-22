@@ -136,6 +136,52 @@ class WaysClientTest {
     }
 
     @Test
+    fun aRunAsksForAnotherQualityOfTheStreamThatPlaysAndReadsItsRefBack() = runTest {
+        enqueue(
+            """{"play":{"url":"/m/s2/video.mp4","kind":"mp4","session":"s2","durationMs":30000,
+                "quality":{"options":["1080p","720p","1080p"],"current":"720p"},"ref":"again-ref"}}""",
+        )
+        val result = client.wayRun(
+            "alpha",
+            RunRequest(way = "watch", kind = "movie", tmdbId = 603, ref = "again-ref", startSec = 61.5, quality = "720p", refresh = true),
+        )
+        val body = json(server.takeRequest())
+        assertEquals("720p", body["quality"]!!.jsonPrimitive.content)
+        assertEquals("again-ref", body["ref"]!!.jsonPrimitive.content)
+        assertEquals("61.5", body["startSec"]!!.jsonPrimitive.content)
+        val play = result.play!!
+        assertEquals("again-ref", play.ref)
+        assertEquals("720p", play.quality.current)
+        // Two names (the duplicate counted once) and a ref to play one with: a choice.
+        assertEquals(listOf("1080p", "720p"), play.qualityChoice)
+
+        // A run that asks for none leaves the field out.
+        enqueue("""{"done":"ok"}""")
+        client.wayRun("alpha", RunRequest(way = "watch", kind = "movie", tmdbId = 603, quick = true))
+        assertFalse(json(server.takeRequest()).containsKey("quality"))
+    }
+
+    @Test
+    fun aStreamIsAQualityChoiceOnlyWithTwoNamesAndARef() {
+        val options = app.antresol.core.model.WayQuality(listOf("1080p", "720p"), "1080p")
+        assertEquals(emptyList<String>(), app.antresol.core.model.WayPlay(quality = options).qualityChoice)
+        assertEquals(emptyList<String>(), app.antresol.core.model.WayPlay(quality = options, ref = " ").qualityChoice)
+        assertEquals(
+            emptyList<String>(),
+            app.antresol.core.model.WayPlay(quality = app.antresol.core.model.WayQuality(listOf("1080p"), "1080p"), ref = "r").qualityChoice,
+        )
+        assertEquals(listOf("1080p", "720p"), app.antresol.core.model.WayPlay(quality = options, ref = "r").qualityChoice)
+    }
+
+    @Test
+    fun aWayMayCarryAHintOfItsOwn() = runTest {
+        enqueue("""{"v":1,"ways":[{"id":"w","label":"Way","hint":"Starts right away","kinds":["movie"]},{"id":"x","label":"Other"}]}""")
+        val ways = client.appInfo("alpha").ways
+        assertEquals("Starts right away", ways[0].hint)
+        assertNull(ways[1].hint)
+    }
+
+    @Test
     fun anAddonThatDoesNotSpeakTheProtocolIsA404() = runTest {
         enqueue("""{"error":"not found"}""", code = 404)
         try {

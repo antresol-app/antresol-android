@@ -61,7 +61,8 @@ import app.antresol.ui.userMessage
 @Composable
 fun WaysSheet(
     ways: List<AddonWay>,
-    busy: String?,
+    /** The run of this way is waiting for the addon, for the title or episode the sheet is for. */
+    isBusy: (AddonWay) -> Boolean,
     onRun: (AddonWay) -> Unit,
     onChoose: (AddonWay) -> Unit,
     onDismiss: () -> Unit,
@@ -78,7 +79,7 @@ fun WaysSheet(
                 style = Antresol.typography.sectionTitle,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
-            ways.forEach { way -> WayRow(way, working = busy == way.key, onRun = { onRun(way) }, onChoose = { onChoose(way) }) }
+            ways.forEach { way -> WayRow(way, working = isBusy(way), onRun = { onRun(way) }, onChoose = { onChoose(way) }) }
             Text(
                 stringResource(UiR.string.way_hold_hint),
                 style = Antresol.typography.caption,

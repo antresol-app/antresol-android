@@ -26,6 +26,9 @@ class FakeWaysApi : WaysApi {
     var cancelResult = RunResult(done = "cancelled")
     var stepFailure: Exception? = null
     var runFailure: Exception? = null
+
+    /** When set, a run waits for it: a quick run stays «busy» until the test completes it. */
+    var runGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     var stateFailure: Exception? = null
 
     val calls = CopyOnWriteArrayList<String>()
@@ -59,6 +62,7 @@ class FakeWaysApi : WaysApi {
     override suspend fun run(addonId: String, request: RunRequest): RunResult {
         calls += "run $addonId"
         runRequests += request
+        runGate?.await()
         runFailure?.let { throw it }
         return runs(request)
     }
@@ -94,6 +98,7 @@ fun way(
     kinds: List<String> = listOf("movie", "series"),
     episodes: Boolean = false,
     label: String = id,
-) = AddonWay(id = id, label = label, role = role, scope = scope, kinds = kinds, episodes = episodes, addonId = addon)
+    hint: String? = null,
+) = AddonWay(id = id, label = label, role = role, scope = scope, kinds = kinds, episodes = episodes, hint = hint, addonId = addon)
 
 fun info(vararg ways: AddonWay, search: String? = null) = AppInfo(ways = ways.toList(), search = search?.let { WaySearch(it) })

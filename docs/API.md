@@ -1235,10 +1235,11 @@ profile gets 403 on all of it and sees nothing of it.
 
 **Discovery.** `GET /api/addons/web` lists the addons open to the profile (`[{id, entry, style?}]`; only `id` is
 used). For each, `GET /api/addons/{id}/x/app` answers `AppInfo`:
-`{v, ways: [{id, label, icon, role, kinds, scope, episodes}], search?: {label}}`. `role` is `watch` (a way to watch)
+`{v, ways: [{id, label, icon, role, kinds, scope, episodes, hint?}], search?: {label}}`. `role` is `watch` (a way to watch)
 or `keep` (a way to keep a copy on the server); `icon` is `play`, `download`, `globe` or `list` (anything else is
 `play`); `scope` is `any`, `outside` (only what is not in the library) or `inside`; `episodes` says the way runs for
-one episode. The apps join the ways of all addons in the order of the addons' ids, ask once per sign-in, and ask again
+one episode; `hint` is an optional short line under the label in the menu of ways («Starts right away»; the apps
+show a neutral one by the icon when it is absent). The apps join the ways of all addons in the order of the addons' ids, ask once per sign-in, and ask again
 after a profile or server change and on Home's pull to refresh.
 
 **Calls** (all under `/api/addons/{id}/x/app`):
@@ -1247,7 +1248,7 @@ after a profile or server change and on Home's pull to refresh.
 |---|---|---|
 | `GET search?q=` | | `{titles: [{kind, tmdbId, title, year?, poster?, overview?, inLibrary, libraryItemId?}]}` |
 | `POST step` | `{way, kind, tmdbId, season?, episode?, ref?}` | `{title, rows: [{ref, label, detail?, badges, current, final}], note?, empty?}` |
-| `POST run` | the same, plus `startSec?`, `maxHeight?`, `quick?`, `refresh?` | one of `{input}`, `{play}`, `{done}`, `{pick: true}` |
+| `POST run` | the same, plus `startSec?`, `maxHeight?`, `quick?`, `refresh?`, `quality?` | one of `{input}`, `{play}`, `{done}`, `{pick: true}` |
 | `PUT progress` | `{session, way, kind, tmdbId, season?, episode?, positionMs, durationMs, finished?}` | 204 |
 | `DELETE play/{session}` | | 204 |
 | `GET state?kind=&tmdbId=[&season=]` | | `{ways: {<wayId>: {active, fraction?, text?, cancel?}}}` |
@@ -1266,10 +1267,16 @@ start), `POST /api/play/input/{id}` with the body of `/api/play` (202 `{pending:
 asked again every 1.5 s for up to 90 s), `PUT /api/play/input/{id}/progress {positionMs, durationMs, keepalive}`.
 The answer is `/api/play`'s, so the player's audio, subtitle and quality menus and its HLS session work as for a
 file. `{play}` is a stream the addon serves itself (`{url, mode, kind: hls|mp4, startSec, durationMs, subtitles,
-quality, session, progress: {path, every}}`): its `url` and `subtitles[].url` are server paths that get `?mk=`; the
+quality: {options, current}, session, progress: {path, every}, ref?}`): its `url` and `subtitles[].url` are server paths that get `?mk=`; the
 position goes to `PUT progress` every `every` seconds, on a pause and when the player closes, and the addon's
 session is closed with `DELETE play/{session}`. A 410 on the media means the link went stale: the run is sent again
-with `refresh: true` and the position as `startSec`, and the video goes on from there. `{done}` is a sentence to show
+with `refresh: true` and the position as `startSec`, and the video goes on from there. The player's quality menu
+lists `quality.options` (two or more, and only when the answer has a `ref`; `current` is ticked): another one is
+a `run` with that `ref`, `quality` set to the name, `refresh: true` and the position as `startSec`, and the video
+goes on from there in the quality the addon plays it in. `ref` plays this very stream again; the apps keep the
+newest one. Audio tracks and subtitles the answer does not list are the stream's own (the player reads them from
+the stream). «Audio & source…» in the player's audio menu is the way's own choice again (`step`, then `run` with
+the row's `ref` and the position as `startSec`); what it answers replaces the stream where the video is. `{done}` is a sentence to show
 (the state of the way changed: it is asked again). The apps ask `state` every 5 s while a keep way is `active` and
 draw a ring on its button (`fraction`, else turning), with `text` beside it; `cancel: true` adds «Cancel» to the menu
 of the button.

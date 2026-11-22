@@ -1640,12 +1640,28 @@ The apps show what the server's addons offer, by the protocol in docs/API.md sec
   that reports to `x/app/progress` and closes its session; a 410 runs the way again with `refresh`.
 - Phone and TV: the ways on the detail page (`VideoDetailScreen`, `DetailScreen`), the episode menus, the step sheet /
   panel, the title page (`TitleRoute`, the detail screens with item id 0), the addons' sections of Search.
-- Decisions: on a watch way a tap is `quick` (a `pick` answer opens the choice) and a long press the choice; a keep
+- Decisions: on a watch way a tap is `quick` (a `pick` answer opens the choice); a keep
   way always opens the choice (`WaysController.start`), as the web's «Скачать» does; an episode in the library counts as `inside` and one not in it as `outside` for the `scope`; the
-  state text shows also once a keep way is done; a stream the addon serves has no quality menu (the quality is a
-  step); TV has no pull to refresh, so its ways are asked again on a new sign-in or app start.
-- Tests: `PhoneWaysUiTest`, `TvWaysUiTest` (the fake server speaks the protocol with `FakeServer.addons`),
-  `core/.../ways/*`. `scripts/fake-server.py --addons` is the same for a device.
+  state text shows also once a keep way is done; TV has no pull to refresh, so its ways are asked again on a new sign-in or app start.
+- TV page (`DetailScreen`): the main button of a title nothing of the library plays is «Play» (not the first way's
+  label) and runs the way remembered for the title (`WayDefaults`, `DeviceWayDefaults` on the device, key
+  `kind/tmdbId`; the first way while none) with a quick run; a chevron button beside it (`ways-more`; hold OK on
+  Play too) opens the menu: a row per watch way with its short line (`AddonWay.hint`, else a neutral one by the
+  icon), the default ticked; a row makes that way the title's default and runs it; under a line «Audio & quality…»
+  opens the step choice of the ticked way. A library title has the chevron beside its own Play. An episode's tile
+  is its «Play»: OK on one not in the library runs the title's way for it (as `forEpisode` allows), hold OK opens the
+  same menu (with «Open Episode Page» first). The old «More ways to watch» pill and the hold-to-choose hint are gone.
+- Busy is keyed by way and subject (`WayRun`: way key, title, season, episode): only the button of the run shows
+  «Opening…» (a tile for an episode); the other buttons wait (one run at a time) but do not spin.
+- Player: a stream the addon serves (`play`) lists qualities in the quality menu when its answer has two or more and
+  a `ref`; a pick runs the way again with the `ref`, the `quality` and the position (`VideoPlayerViewModel.reopenDirect`,
+  mirrors the iPhone app). A stream whose answer lists no audio or subtitles shows the stream's own tracks
+  (`OwnTracks`, ExoPlayer's groups). A stream made by a way carries its run (`WayPlayback.call`): the audio menu then
+  ends with «Audio & source…», which opens the way's step choice over the player (the picker of the player's own
+  `WaysController`) and replaces the stream where the video is (`switchWay`). Phone: the same rows through the shared
+  `playerMenu`, the picker in a `WayStepSheet`.
+- Tests: `PhoneWaysUiTest`, `TvWaysUiTest` (the fake server speaks the protocol with `FakeServer.addons`; `secondWay`,
+  `searchSeries`, `runDelayMs` and `wayQualities` shape it), `core/.../ways/*`, `OwnTracksTest`, `DeviceWayDefaultsTest`. `scripts/fake-server.py --addons` is the same for a device.
 - Trailers: the web lists at most three per item and plays one without `play` in the embedded player; the apps did the
   latter already and now cap the list at three too (`Trailers.MAX_TRAILERS`).
 

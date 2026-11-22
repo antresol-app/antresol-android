@@ -48,13 +48,15 @@ import app.antresol.core.model.AddonWay
 import app.antresol.core.model.Trailer
 import app.antresol.core.library.EpisodeState
 import app.antresol.core.library.GuideEpisode
+import app.antresol.core.model.WayRun
 import app.antresol.core.ways.WayCall
 import app.antresol.core.ways.WayPlayback
 import app.antresol.core.ways.WayTarget
-import app.antresol.ui.components.wayIcon
+import app.antresol.core.ways.defaultWay
 import kotlinx.coroutines.launch
 import app.antresol.ui.ways.Attach
 import app.antresol.ui.ways.busyState
+import app.antresol.ui.ways.defaultKeyState
 import app.antresol.ui.ways.offerState
 import app.antresol.ui.ways.pickerState
 import app.antresol.ui.ways.statesState
@@ -115,7 +117,7 @@ private const val PLAYLIST_KEY = "action/playlist"
 /** Focus key of the Trailer button of a movie or series page. */
 private const val TRAILER_KEY = "action/trailer"
 
-/** Focus keys of the ways' buttons: the first way when nothing plays, the list of the others, a keep way. */
+/** Focus keys of the ways' buttons: Play by a way when nothing of the library plays, the menu of the ways, a keep way. */
 private const val WAY_PRIMARY_KEY = "action/way-primary"
 private const val WAYS_KEY = "action/ways"
 private fun keepKey(way: AddonWay) = "action/keep/${way.key}"
@@ -186,11 +188,12 @@ private class DetailActions(
     val openLibraryItem: (Card) -> Unit,
 )
 
-/** The panels of the addons' ways: the watch ways of the title, one episode's, and the menu of a keep way. */
+/**
+ * The panels of the addons' ways: the menu of the ways to watch (the title's, or one [episode]'s), which gives focus
+ * back to [returnKey] when it closes, and the menu of a keep way.
+ */
 private sealed interface WaysPanel {
-    data class Watch(val ways: List<AddonWay>) : WaysPanel
-
-    data class Episode(val episode: GuideEpisode, val ways: List<AddonWay>) : WaysPanel
+    data class Menu(val ways: List<AddonWay>, val returnKey: String, val episode: GuideEpisode? = null) : WaysPanel
 
     data class Keep(val way: AddonWay) : WaysPanel
 }
@@ -217,6 +220,9 @@ private fun DetailContent(
     val offer = ways.offerState()
     val wayStates = ways.statesState()
     val wayBusy = ways.busyState()
+    val wayDefaultKey = ways.defaultKeyState()
+    // The way «Play» runs for this title: the one the viewer chose for it, else the first.
+    val defaultWay = offer.watch.defaultWay(wayDefaultKey)
     val picker = ways.pickerState()
     var waysPanel by remember { mutableStateOf<WaysPanel?>(null) }
     val pageScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -226,10 +232,10 @@ private fun DetailContent(
     val wayTarget = model.wayTarget()
     val resourcesOfPage = LocalContext.current.resources
     ways.Attach(wayTarget, resourcesOfPage, onPlay = actions.playWay, onText = { wayNotice = it })
-    val runWay: (AddonWay, Int?, Int?, Boolean, String) -> Unit = { way, season, episode, choose, returnKey ->
+    val runWay: (AddonWay, Int?, Int?, Boolean, String, Boolean) -> Unit = { way, season, episode, choose, returnKey, makeDefault ->
         wayNotice = null
         wayReturnKey = returnKey
-        wayTarget?.let { ways?.start(WayCall(way, it, season, episode), choose) }
+        wayTarget?.let { ways?.start(WayCall(way, it, season, episode), choose, makeDefault) }
     }
     var hadPicker by remember { mutableStateOf(false) }
     LaunchedEffect(panel, waysPanel, picker != null) {
@@ -325,15 +331,16 @@ private fun DetailContent(
                                     },
                                     ways = WaysRowState(
                                         watch = offer.watch,
+                                        defaultWay = defaultWay,
                                         keep = offer.keep,
                                         states = wayStates,
                                         busy = wayBusy,
-                                        onRun = { way, returnKey -> runWay(way, null, null, false, returnKey) },
-                                        onChoose = { way, returnKey -> runWay(way, null, null, true, returnKey) },
-                                        onMore = { waysPanel = WaysPanel.Watch(offer.watch) },
+                                        onPlay = { way -> runWay(way, null, null, false, WAY_PRIMARY_KEY, false) },
+                                        onMenu = { returnKey -> waysPanel = WaysPanel.Menu(offer.watch, returnKey) },
+                                        onChoose = { way, returnKey -> runWay(way, null, null, true, returnKey, false) },
                                         onKeep = { way ->
                                             val state = wayStates[way.key]
-                                            if (state?.active == true && state.cancel) waysPanel = WaysPanel.Keep(way) else runWay(way, null, null, false, keepKey(way))
+                                            if (state?.active == true && state.cancel) waysPanel = WaysPanel.Keep(way) else runWay(way, null, null, false, keepKey(way), false)
                                         },
                                     ),
                                 )
@@ -421,7 +428,12 @@ private fun DetailContent(
                                     else -> ways.forEpisode(inLibrary = episode.state == EpisodeState.Downloaded)
                                 }
                             },
-                            onEpisodeWays = { episode, list -> waysPanel = WaysPanel.Episode(episode, list) },
+                            // OK on an episode that is not in the library plays it by the title's way; hold OK: the menu of the ways.
+                            onPlayEpisodeWay = { episode, list ->
+                                list.defaultWay(wayDefaultKey)?.let { way -> runWay(way, episode.season, episode.number, false, episodeFocusKey(episode), false) }
+                            },
+                            onEpisodeWays = { episode, list -> waysPanel = WaysPanel.Menu(list, episodeFocusKey(episode), episode) },
+                            episodeBusy = { episode -> wayBusy?.isFor(episode.season, episode.number) == true },
                         )
                     }
                 }
@@ -447,21 +459,23 @@ private fun DetailContent(
             panel = waysPanel,
             picker = picker,
             states = wayStates,
+            defaultKey = wayDefaultKey,
             onPanel = { next ->
                 // What a panel hands focus back to: the button (or episode) that opened it.
                 val closing = waysPanel
                 waysPanel = next
                 if (next == null && picker == null) {
                     val key = when (closing) {
-                        is WaysPanel.Episode -> episodeFocusKey(closing.episode)
+                        is WaysPanel.Menu -> closing.returnKey
                         is WaysPanel.Keep -> keepKey(closing.way)
-                        else -> WAYS_KEY
+                        null -> WAYS_KEY
                     }
                     pageScope.launch { focus.restore(key) }
                 }
             },
-            onRun = { way, season, episode, returnKey -> runWay(way, season, episode, false, returnKey) },
-            onChoose = { way, season, episode, returnKey -> runWay(way, season, episode, true, returnKey) },
+            // A way picked in the menu becomes the title's way; «Audio & quality…» chooses by hand with the checked one.
+            onRun = { way, season, episode, returnKey -> runWay(way, season, episode, false, returnKey, true) },
+            onChoose = { way, season, episode, returnKey -> runWay(way, season, episode, true, returnKey, false) },
             onOpenEpisode = { episode -> episode.card?.let { onOpen(it.toCard()) } },
             onCancel = { way -> ways?.cancel(way) },
             onPickerChoose = { row -> ways?.choose(row) },
@@ -657,9 +671,10 @@ private fun VideoActions(
     ways: WaysRowState? = null,
 ) {
     val target = video.playTarget
-    // Nothing of the library plays: the first way of the addons is the first button.
-    val primaryWay = ways?.watch?.firstOrNull().takeIf { target == null }
-    val moreWays = ways?.watch.orEmpty().let { if (primaryWay != null) it.drop(1) else it }
+    // Nothing of the library plays: «Play» runs the way of the addons chosen for the title, else the first.
+    val primaryWay = ways?.defaultWay.takeIf { target == null }
+    // The menu of the ways (a chevron beside Play) when the addons offer any way to watch.
+    val hasMenu = ways != null && ways.watch.isNotEmpty()
     Row(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier
@@ -694,15 +709,26 @@ private fun VideoActions(
             }
         }
         if (primaryWay != null && ways != null) {
-            val working = ways.busy == primaryWay.key
+            // Only a run of this very button (the title itself) shows «Opening…»; one of an episode does not.
+            val working = ways.busy?.isFor(primaryWay, null, null) == true
             PillButton(
-                text = if (working) stringResource(R.string.way_busy) else primaryWay.label,
-                onClick = { ways.onRun(primaryWay, WAY_PRIMARY_KEY) },
-                onLongClick = { ways.onChoose(primaryWay, WAY_PRIMARY_KEY) },
-                icon = wayIcon(primaryWay.icon),
+                text = if (working) stringResource(R.string.way_busy) else stringResource(R.string.action_play),
+                onClick = { ways.onPlay(primaryWay) },
+                // Hold OK: the menu of the ways, as the chevron beside it.
+                onLongClick = { ways.onMenu(WAY_PRIMARY_KEY) },
+                icon = AntresolIcons.Play,
                 style = PillStyle.Primary,
                 enabled = ways.busy == null,
                 modifier = Modifier.remembersFocus(focus, WAY_PRIMARY_KEY).testTag("way-primary"),
+            )
+        }
+        if (hasMenu && ways != null) {
+            PillButton(
+                text = "",
+                onClick = { ways.onMenu(WAYS_KEY) },
+                icon = AntresolIcons.ChevronDown,
+                contentDescription = stringResource(R.string.way_more),
+                modifier = Modifier.remembersFocus(focus, WAYS_KEY).testTag("ways-more"),
             )
         }
         if (video.canWatchlist) {
@@ -731,27 +757,19 @@ private fun VideoActions(
             )
         }
     }
-    // The other ways to watch, and the buttons of the ways that keep a copy on the server (a ring shows how far each is).
-    if (ways != null && (moreWays.isNotEmpty() || ways.keep.isNotEmpty())) {
+    // The buttons of the ways that keep a copy on the server (a ring shows how far each is).
+    if (ways != null && ways.keep.isNotEmpty()) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier
                 .padding(top = 2.dp)
                 .trapHorizontalFocus(),
         ) {
-            if (moreWays.isNotEmpty()) {
-                PillButton(
-                    text = stringResource(R.string.way_more),
-                    onClick = ways.onMore,
-                    icon = AntresolIcons.ChevronDown,
-                    modifier = Modifier.remembersFocus(focus, WAYS_KEY).testTag("ways-more"),
-                )
-            }
             ways.keep.forEach { way ->
                 KeepWayPill(
                     way = way,
                     state = ways.states[way.key],
-                    working = ways.busy == way.key,
+                    working = ways.busy?.isFor(way, null, null) == true,
                     onClick = { ways.onKeep(way) },
                     onLongClick = { ways.onChoose(way, keepKey(way)) },
                     modifier = Modifier.remembersFocus(focus, keepKey(way)).testTag("way-keep-${way.id}"),
@@ -916,21 +934,25 @@ private fun DetailModel.wayTarget(): WayTarget? {
 /** What the ways of the addons add to the actions of a title. */
 private class WaysRowState(
     val watch: List<AddonWay>,
+    /** The way «Play» runs: the one remembered for the title, else the first. */
+    val defaultWay: AddonWay?,
     val keep: List<AddonWay>,
     val states: Map<String, app.antresol.core.model.WayState>,
-    val busy: String?,
-    val onRun: (AddonWay, String) -> Unit,
+    val busy: WayRun?,
+    val onPlay: (AddonWay) -> Unit,
+    /** Opens the menu of the ways; the key is what focus returns to. */
+    val onMenu: (String) -> Unit,
     val onChoose: (AddonWay, String) -> Unit,
-    val onMore: () -> Unit,
     val onKeep: (AddonWay) -> Unit,
 )
 
-/** The panels the ways open: a list of ways, one episode's, a keep way's menu, and the choice step by step. */
+/** The panels the ways open: the menu of the ways to watch, a keep way's menu, and the choice step by step. */
 @Composable
 private fun WayPanels(
     panel: WaysPanel?,
     picker: app.antresol.core.ways.WayPicker?,
     states: Map<String, app.antresol.core.model.WayState>,
+    defaultKey: String?,
     onPanel: (WaysPanel?) -> Unit,
     onRun: (AddonWay, Int?, Int?, String) -> Unit,
     onChoose: (AddonWay, Int?, Int?, String) -> Unit,
@@ -940,29 +962,18 @@ private fun WayPanels(
     onPickerBack: () -> Unit,
 ) {
     when (panel) {
-        is WaysPanel.Watch -> WaysListPanel(
-            ways = panel.ways,
-            onRun = { way -> onRun(way, null, null, WAYS_KEY) },
-            onChoose = { way -> onChoose(way, null, null, WAYS_KEY) },
-            onDismiss = { onPanel(null) },
-        )
-        is WaysPanel.Episode -> {
+        is WaysPanel.Menu -> {
             val episode = panel.episode
-            val key = episodeFocusKey(episode)
-            OptionsPanel(
-                title = stringResource(R.string.way_watch_title),
-                note = stringResource(R.string.way_hold_hint),
-                options = listOfNotNull(
-                    episode.card?.let { MenuOption(stringResource(R.string.episode_open_page), selected = false) { onOpenEpisode(episode) } },
-                ) + panel.ways.map { way ->
-                    MenuOption(
-                        way.label,
-                        selected = false,
-                        onLongSelect = { onChoose(way, episode.season, episode.number, key) },
-                    ) { onRun(way, episode.season, episode.number, key) }
-                },
+            val ticked = panel.ways.defaultWay(defaultKey)
+            WaysMenuPanel(
+                ways = panel.ways,
+                ticked = ticked,
+                leading = listOfNotNull(
+                    episode?.card?.let { MenuOption(stringResource(R.string.episode_open_page), selected = false) { onOpenEpisode(episode) } },
+                ),
+                onRun = { way -> onRun(way, episode?.season, episode?.number, panel.returnKey) },
+                onChoose = { way -> onChoose(way, episode?.season, episode?.number, panel.returnKey) },
                 onDismiss = { onPanel(null) },
-                focusIndex = 0,
             )
         }
         is WaysPanel.Keep -> KeepMenuPanel(panel.way, states[panel.way.key], onCancel = { onCancel(panel.way) }, onDismiss = { onPanel(null) })

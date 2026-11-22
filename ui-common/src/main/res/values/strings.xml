@@ -289,6 +289,10 @@
     <string name="way_cancel">Cancel</string>
     <string name="way_empty_step">Nothing to choose from</string>
     <string name="way_not_available">This is not available anymore. Try again.</string>
+    <string name="way_menu_audio_quality">Audio &amp; quality…</string>
+    <string name="way_hint_globe">Streams from the internet</string>
+    <string name="way_hint_play">Plays in the app</string>
+    <string name="player_way_source">Audio &amp; source…</string>
     <string name="error_input_not_ready">The video is not ready yet. Try again in a moment.</string>
     <string name="episode_open_page">Open Episode Page</string>
     <string name="title_page_in_library">This title is in your library</string>

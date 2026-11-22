@@ -241,7 +241,8 @@ private fun VideoDetailContent(
     waysSheet?.let { choice ->
         WaysSheet(
             ways = choice.ways,
-            busy = wayBusy,
+            // Only the run for this very title or episode spins; another episode's does not.
+            isBusy = { way -> wayBusy?.isFor(way, choice.season, choice.episode) == true },
             onRun = { way ->
                 waysSheet = choice.copy(started = true)
                 runWay(way, choice.season, choice.episode, false)
@@ -478,7 +479,8 @@ private fun PlayRow(
                 }
             } else if (primary != null && ways != null) {
                 // Nothing of the library plays: the first way of the addons is the main button.
-                val working = ways.busy == primary.key
+                // Only a run of this very button (the title itself) shows «Opening…»; one of an episode does not.
+                val working = ways.busy?.isFor(primary, null, null) == true
                 PrimaryPillButton(
                     text = if (working) stringResource(UiR.string.way_busy) else primary.label,
                     icon = wayIcon(primary.icon),
@@ -508,7 +510,7 @@ private fun PlayRow(
                 KeepWayButton(
                     way = way,
                     state = ways.states[way.key],
-                    working = ways.busy == way.key,
+                    working = ways.busy?.isFor(way, null, null) == true,
                     onClick = { ways.onKeep(way) },
                     onLongClick = { ways.onKeepChoose(way) },
                 )
@@ -531,7 +533,7 @@ private class WaysRowState(
     val showMore: Boolean,
     val keep: List<AddonWay>,
     val states: Map<String, app.antresol.core.model.WayState>,
-    val busy: String?,
+    val busy: app.antresol.core.model.WayRun?,
     val onRun: (AddonWay) -> Unit,
     val onChoose: (AddonWay) -> Unit,
     val onMore: () -> Unit,

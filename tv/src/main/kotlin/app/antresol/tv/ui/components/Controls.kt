@@ -134,6 +134,16 @@ fun OptionsPanel(
             }
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 itemsIndexed(options) { index, option ->
+                    // A thin line between groups of choices (not focusable either).
+                    if (option.divider && index > 0) {
+                        Box(
+                            Modifier
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(AntresolColors.Hairline),
+                        )
+                    }
                     // A heading is not focusable: Up and Down walk the choices.
                     option.section?.let { section ->
                         Text(

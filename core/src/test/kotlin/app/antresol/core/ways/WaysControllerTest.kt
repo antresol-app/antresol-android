@@ -326,4 +326,113 @@ class WaysControllerTest {
         assertEquals(listOf("watch"), c.forEpisode(inLibrary = true).map { it.id })
         assertEquals(listOf("watch", "out"), c.forEpisode(inLibrary = false).map { it.id })
     }
+
+    @Test
+    fun aRunBlocksOnlyTheSubjectItIsFor() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val api = FakeWaysApi().apply { runGate = gate; runs = { RunResult(input = "in-1") } }
+        val series = WayTarget("series", 1399, inLibrary = true, title = "Show")
+        val c = controller(api, watch)
+        c.attach(series)
+        runCurrent()
+        c.start(WayCall(watch, series, season = 1, episode = 2))
+        runCurrent()
+        val run = c.busy.value!!
+        // Episode 2 of season 1 spins; the title's own button and the other episodes do not.
+        assertTrue(run.isFor(watch, 1, 2))
+        assertTrue(run.isFor(1, 2))
+        assertFalse(run.isFor(watch, null, null))
+        assertFalse(run.isFor(watch, 1, 3))
+        assertFalse(run.isFor(watch, 2, 2))
+        assertFalse(run.isFor(way("other"), 1, 2))
+        // One run at a time: another tap meanwhile is the same tap twice.
+        c.start(WayCall(watch, series, season = 1, episode = 3))
+        runCurrent()
+        assertEquals(1, api.runRequests.size)
+        gate.complete(Unit)
+        runCurrent()
+        assertNull(c.busy.value)
+    }
+
+    @Test
+    fun theTitleRunDoesNotMarkItsEpisodes() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val api = FakeWaysApi().apply { runGate = gate; runs = { RunResult(input = "in-1") } }
+        val c = controller(api, watch)
+        runCurrent()
+        c.start(WayCall(watch, movie))
+        runCurrent()
+        val run = c.busy.value!!
+        assertTrue(run.isFor(watch, null, null))
+        assertFalse(run.isFor(1, 1))
+        gate.complete(Unit)
+        runCurrent()
+    }
+
+    @Test
+    fun theWayChosenInTheMenuBecomesThePlayWayOfTheTitleAndItsEpisodes() = runTest {
+        val defaults = MemoryWayDefaults()
+        val other = way("other", episodes = true)
+        val api = FakeWaysApi().apply { runs = { RunResult(input = "in-1") } }
+        val source = FakeSource(AddonWays(listOf(watch, other), emptyList()))
+        val c = WaysController(api, source, backgroundScope, pollMs = 5_000, defaults = defaults).also { it.attach(movie) }
+        runCurrent()
+        assertNull(c.defaultKey.value)
+        assertEquals(watch, c.offer.value.watch.defaultWay(c.defaultKey.value))
+        // A plain run does not choose; the menu's pick does, and runs it too.
+        c.start(WayCall(watch, movie))
+        runCurrent()
+        assertNull(c.defaultKey.value)
+        c.start(WayCall(other, movie), makeDefault = true)
+        runCurrent()
+        assertEquals("alpha/other", c.defaultKey.value)
+        assertEquals("alpha/other", defaults.get("movie", 603))
+        assertEquals("other", api.runRequests.last().way)
+        assertEquals(other, c.offer.value.watch.defaultWay(c.defaultKey.value))
+        // The episodes of a series follow the series: another page of the same title finds it again.
+        val again = WaysController(api, source, backgroundScope, pollMs = 5_000, defaults = defaults).also { it.attach(movie) }
+        assertEquals("alpha/other", again.defaultKey.value)
+    }
+
+    @Test
+    fun aRememberedWayThatTheAddonsNoLongerOfferFallsBackToTheFirst() {
+        val ways = listOf(way("a"), way("b"))
+        assertEquals("a", ways.defaultWay("alpha/gone")?.id)
+        assertEquals("b", ways.defaultWay("alpha/b")?.id)
+        assertEquals("a", ways.defaultWay(null)?.id)
+        assertNull(emptyList<app.antresol.core.model.AddonWay>().defaultWay("alpha/a"))
+    }
+
+    @Test
+    fun aKeepWayIsNeverRememberedAsThePlayWay() = runTest {
+        val defaults = MemoryWayDefaults()
+        val api = FakeWaysApi().apply { steps = { WayStep("Quality", listOf(StepRow("best", "Best", isFinal = true))) } }
+        val source = FakeSource(AddonWays(listOf(watch, keep), emptyList()))
+        val c = WaysController(api, source, backgroundScope, pollMs = 5_000, defaults = defaults).also { it.attach(movie) }
+        runCurrent()
+        c.start(WayCall(keep, movie), makeDefault = true)
+        runCurrent()
+        assertNull(defaults.get("movie", 603))
+    }
+
+    @Test
+    fun theChoiceMadeFromAPlayerStartsWhereThePlayerIs() = runTest {
+        val api = FakeWaysApi().apply {
+            steps = { WayStep("Source", listOf(StepRow("r1", "One", isFinal = true))) }
+            runs = { RunResult(input = "in-2") }
+        }
+        val c = controller(api, watch)
+        runCurrent()
+        c.start(WayCall(watch, movie, startSec = 61.5), choose = true)
+        runCurrent()
+        c.choose(c.picker.value!!.step!!.rows.single())
+        runCurrent()
+        val run = api.runRequests.single()
+        assertEquals("r1", run.ref)
+        assertEquals(61.5, run.startSec!!, 0.0001)
+        // What came back carries the call, so the player can offer the choice again from there.
+        val playback = (c.outcomes.first() as WayOutcome.Play).playback
+        assertEquals(movie, playback.call?.target)
+        assertEquals(watch, playback.call?.way)
+    }
 }

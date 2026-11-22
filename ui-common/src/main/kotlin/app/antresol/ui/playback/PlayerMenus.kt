@@ -10,9 +10,9 @@ import app.antresol.ui.format.TrackLabels
 
 /**
  * One choice of a menu: its label, whether it is the current one, and a small badge after the label.
- * A [section] is a heading the menu draws above this choice (the first of a group). A [detail] is a
- * second line under the label, [more] says the choice leads on to another list, and [onLongSelect]
- * is what a long press does (hold OK) when that is something else.
+ * A [section] is a heading the menu draws above this choice (the first of a group), a [divider] a thin line.
+ * A [detail] is a second line under the label, [more] says the choice leads on to another list, and
+ * [onLongSelect] is what a long press does (hold OK) when that is something else.
  */
 data class MenuOption(
     val label: String,
@@ -21,6 +21,7 @@ data class MenuOption(
     val section: String? = null,
     val detail: String? = null,
     val more: Boolean = false,
+    val divider: Boolean = false,
     val onLongSelect: (() -> Unit)? = null,
     val onSelect: () -> Unit,
 )
@@ -46,7 +47,7 @@ fun playerMenu(menu: PlayerMenu, viewModel: VideoPlayerViewModel): PlayerMenuCon
     val options = when (menu) {
         PlayerMenu.Audio -> viewModel.audioMenu.let { m ->
             // a cleaned voice-over is not a row: «Очищенный перевод» under the voices
-            m.rows.map { row ->
+            val tracks = m.rows.map { row ->
                 MenuOption(
                     TrackLabels.audio(resources, row.track),
                     row.checked,
@@ -57,13 +58,42 @@ fun playerMenu(menu: PlayerMenu, viewModel: VideoPlayerViewModel): PlayerMenuCon
                     MenuOption(resources.getString(R.string.track_cleaned_toggle), t.on, badge = null) { viewModel.selectAudio(t.target) }
                 },
             )
+            // A stream an addon serves lists no tracks in its answer: the ones inside the stream itself.
+            val own = if (viewModel.audioTracks.isEmpty() && viewModel.streamAudio.size > 1) {
+                viewModel.streamAudio.map { track ->
+                    MenuOption(TrackLabels.audio(resources, track), track.index == viewModel.streamAudioSelected) { viewModel.selectStreamAudio(track) }
+                }
+            } else {
+                emptyList()
+            }
+            val shown = tracks + own
+            // «Audio & source…»: the way's own choice again, from here (a way's stream only).
+            val source = if (viewModel.canChooseSource) {
+                listOf(MenuOption(stringResource(R.string.player_way_source), selected = false, more = true, divider = shown.isNotEmpty()) { viewModel.openSourceChoice() })
+            } else {
+                emptyList()
+            }
+            shown + source
         }
         PlayerMenu.Subtitles -> listOf(
-            MenuOption(stringResource(R.string.detail_subtitles_off), viewModel.selectedSubtitle == null) { viewModel.selectSubtitle(null) },
+            MenuOption(
+                stringResource(R.string.detail_subtitles_off),
+                viewModel.selectedSubtitle == null && viewModel.streamTextSelected < 0,
+            ) { viewModel.selectSubtitle(null) },
         ) + viewModel.subtitleTracks.map { track ->
             MenuOption(TrackLabels.subtitle(resources, track), track.index == viewModel.selectedSubtitle?.index) { viewModel.selectSubtitle(track) }
+        } + if (viewModel.subtitleTracks.isEmpty()) {
+            // The subtitles inside a stream an addon serves, when its answer lists none.
+            viewModel.streamText.map { track ->
+                MenuOption(TrackLabels.subtitle(resources, track), track.index == viewModel.streamTextSelected) { viewModel.selectStreamText(track) }
+            }
+        } else {
+            emptyList()
         }
-        PlayerMenu.Quality -> Quality.ALL.map { value ->
+        // The core's qualities, or for a stream an addon serves the names its answer lists.
+        PlayerMenu.Quality -> viewModel.wayQualities.ifEmpty { null }?.map { name ->
+            MenuOption(name, name == viewModel.quality) { viewModel.selectQuality(name) }
+        } ?: Quality.ALL.map { value ->
             MenuOption(qualityLabel(value), value == viewModel.quality) { viewModel.selectQuality(value) }
         }
         // «Пропускать сам»: each row turns its kind on or off (the profile's, on every device)
@@ -114,6 +144,8 @@ fun qualityLabel(value: String): String = when (value) {
 /** "Direct Stream · container mkv isn't supported…": how the server delivers the stream and why. */
 @Composable
 private fun streamNote(viewModel: VideoPlayerViewModel): String? {
+    // An addon's stream is not delivered by the server's own modes: its qualities are the addon's.
+    if (viewModel.wayQualities.isNotEmpty()) return null
     val play = viewModel.source?.play ?: return null
     val mode = stringResource(
         when (play.mode) {

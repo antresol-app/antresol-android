@@ -68,6 +68,8 @@ import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.RoundIconButton
 import app.antresol.mobile.ui.components.SkipSecondsButton
 import app.antresol.mobile.ui.components.TimeSlider
+import app.antresol.mobile.ui.detail.WayStepSheet
+import app.antresol.ui.ways.pickerState
 import app.antresol.ui.playback.PlayerMenu
 import app.antresol.ui.playback.PlayerMenuContent
 import app.antresol.ui.playback.playerMenu
@@ -182,8 +184,9 @@ private fun PlayingLayer(
     var seekFlash by remember { mutableStateOf<Int?>(null) }
     // While the seek bar is dragged the controls stay, or the slider would vanish mid-gesture.
     var scrubbing by remember { mutableStateOf(false) }
-    LaunchedEffect(visible, viewModel.isPlaying, menu, touches, scrubbing) {
-        if (visible && viewModel.isPlaying && menu == null && !scrubbing) {
+    val choosingSource = viewModel.ways.pickerState() != null
+    LaunchedEffect(visible, viewModel.isPlaying, menu, touches, scrubbing, choosingSource) {
+        if (visible && viewModel.isPlaying && menu == null && !scrubbing && !choosingSource) {
             delay(CONTROLS_HIDE_MS)
             visible = false
         }
@@ -267,6 +270,10 @@ private fun PlayingLayer(
         )
     }
     menu?.let { open -> MenuSheet(open, viewModel, onDismiss = { menu = null }) }
+    // «Audio & source…»: the way's own choice, step by step, over the picture.
+    viewModel.ways.pickerState()?.let { open ->
+        WayStepSheet(open, onChoose = { row -> viewModel.ways?.choose(row) }, onBack = { viewModel.ways?.back() }, onDismiss = { viewModel.ways?.dismiss() })
+    }
 }
 
 @Composable
@@ -294,10 +301,10 @@ private fun Controls(
             GlassIconButton(MobileIcons.ChevronLeft, stringResource(UiR.string.player_back), onExit)
             TitleBlock(viewModel.item, Modifier.weight(1f))
             val audioMenu = remember(viewModel.source) { viewModel.audioMenu }
-            if (audioMenu.rows.size > 1 || audioMenu.toggle != null) {
+            if (audioMenu.rows.size > 1 || audioMenu.toggle != null || viewModel.hasExtraAudioMenu) {
                 RoundIconButton(AntresolIcons.Audio, stringResource(UiR.string.detail_audio), { onTouch(); onMenu(PlayerMenu.Audio) }, glass = true, size = 44.dp, iconSize = 22.dp)
             }
-            if (viewModel.subtitleTracks.isNotEmpty()) {
+            if (viewModel.subtitleTracks.isNotEmpty() || viewModel.hasExtraSubtitleMenu) {
                 RoundIconButton(AntresolIcons.Subtitles, stringResource(UiR.string.detail_subtitles), { onTouch(); onMenu(PlayerMenu.Subtitles) }, glass = true, size = 44.dp, iconSize = 22.dp)
             }
             if (viewModel.canChooseQuality) {
@@ -515,14 +522,17 @@ internal fun CleanedBadge(text: String) {
 /** A short message pill at the top (for example, subtitles that failed to load). */
 @Composable
 private fun Notice(viewModel: VideoPlayerViewModel) {
-    val message = viewModel.notice ?: return
-    LaunchedEffect(message) {
+    val message = viewModel.notice
+    val sentence = viewModel.noticeText
+    if (message == null && sentence == null) return
+    LaunchedEffect(message, sentence) {
         delay(NOTICE_MS)
         viewModel.notice = null
+        viewModel.noticeText = null
     }
     Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing).padding(top = 20.dp), contentAlignment = Alignment.TopCenter) {
         Text(
-            text = stringResource(message),
+            text = sentence ?: stringResource(message!!),
             style = Antresol.typography.body,
             modifier = Modifier
                 .background(AntresolColors.Glass, AntresolShapes.pill)

@@ -588,7 +588,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 page<DetailRoute>(contentFocus) { entry ->
                     val route = entry.toRoute<DetailRoute>()
                     DetailScreen(
-                        viewModel = viewModel { DetailViewModel(client, audio, route.kind, route.id, app.pendingWrites, waysSource = app.ways, maxHeight = wayMaxHeight) },
+                        viewModel = viewModel { DetailViewModel(client, audio, route.kind, route.id, app.pendingWrites, waysSource = app.ways, maxHeight = wayMaxHeight, wayDefaults = app.wayDefaults) },
                         audio = audio,
                         onOpen = open,
                         onPlay = play,
@@ -610,7 +610,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                     val route = entry.toRoute<TitleRoute>()
                     DetailScreen(
                         viewModel = viewModel {
-                            DetailViewModel(client, audio, route.kind, 0, app.pendingWrites, tmdbId = route.tmdbId, waysSource = app.ways, maxHeight = wayMaxHeight)
+                            DetailViewModel(client, audio, route.kind, 0, app.pendingWrites, tmdbId = route.tmdbId, waysSource = app.ways, maxHeight = wayMaxHeight, wayDefaults = app.wayDefaults)
                         },
                         audio = audio,
                         onOpen = open,
@@ -690,7 +690,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                             viewModel = viewModel {
                                 PlayerViewModel(
                                     app, client, app.appScope, route.itemId, ResumeMode.valueOf(route.resume), app.settings.current, app.pendingWrites,
-                                    way = way,
+                                    way = way, waysSource = app.ways,
                                 )
                             },
                             onExit = { navController.popBackStack() },

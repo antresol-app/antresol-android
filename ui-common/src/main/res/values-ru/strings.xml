@@ -289,6 +289,10 @@
     <string name="way_cancel">Отмена</string>
     <string name="way_empty_step">Выбирать не из чего</string>
     <string name="way_not_available">Это больше недоступно. Попробуйте ещё раз.</string>
+    <string name="way_menu_audio_quality">Озвучка и качество…</string>
+    <string name="way_hint_globe">Идёт из интернета</string>
+    <string name="way_hint_play">Играет в приложении</string>
+    <string name="player_way_source">Озвучка и источник…</string>
     <string name="error_input_not_ready">Видео ещё не готово. Попробуйте через минуту.</string>
     <string name="episode_open_page">Открыть страницу серии</string>
     <string name="title_page_in_library">Этот фильм или сериал есть в вашей медиатеке</string>

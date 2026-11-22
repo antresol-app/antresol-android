@@ -64,6 +64,18 @@ class FakeServer {
     /** The first media link (session "s1") answers 410 every time: it is stale, and a run with `refresh` makes a new one ("s2"). */
     @Volatile var staleLink: Boolean = false
 
+    /** A second way to watch ("watch2", «Second source»): the menu of ways has two rows. */
+    @Volatile var secondWay: Boolean = false
+
+    /** The addon's search also finds a series that is not in the library («Far Away Show»). */
+    @Volatile var searchSeries: Boolean = false
+
+    /** The addon's `run` answers after this many ms (a run that is still waiting). */
+    @Volatile var runDelayMs: Long = 0
+
+    /** The stream the addon serves lists two qualities and the `ref` that plays it in either (a choice in the player). */
+    @Volatile var wayQualities: Boolean = false
+
     /** The `x/app` requests the addon got, `METHOD path?query body`. */
     val addonCalls = CopyOnWriteArrayList<String>()
 
@@ -186,6 +198,7 @@ class FakeServer {
             path == "/api/addons/alpha/x/app" -> json(
                 """{"v":1,"ways":[
                     {"id":"watch","label":"Watch from a source","icon":"globe","role":"watch","kinds":["movie","series"],"scope":"any","episodes":true},
+                    ${if (secondWay) """{"id":"watch2","label":"Second source","icon":"play","hint":"Plays while it loads","role":"watch","kinds":["movie","series"],"scope":"any","episodes":true},""" else ""}
                     {"id":"keep","label":"Keep on the server","icon":"download","role":"keep","kinds":["movie","series"],"scope":"outside","episodes":false}
                    ],"search":{"label":"Find and watch"}}""",
             )
@@ -193,6 +206,7 @@ class FakeServer {
                 """{"titles":[
                     {"kind":"movie","tmdbId":$MOVIE_TMDB,"title":"Movie 1","year":2019,"poster":"/api/images/local/$MOVIE_ID/poster","inLibrary":true,"libraryItemId":$MOVIE_ID},
                     {"kind":"movie","tmdbId":$OUTSIDE_TMDB,"title":"Far Away Film","year":2020,"poster":"/api/images/local/outside/poster","inLibrary":false}
+                    ${if (searchSeries) """,{"kind":"series","tmdbId":$OUTSIDE_SERIES_TMDB,"title":"Far Away Show","year":2021,"poster":"/api/images/local/outside/poster","inLibrary":false}""" else ""}
                    ]}""",
             )
             path == "/api/addons/alpha/x/app/step" -> when (bodyOf("ref")) {
@@ -209,8 +223,10 @@ class FakeServer {
                 else -> json("""{"title":"Nothing","rows":[],"empty":"Nothing found"}""")
             }
             path == "/api/addons/alpha/x/app/run" -> when {
+                runDelayMs > 0 && bodyOf("way") != "keep" -> json(if (wayRemembered) """{"input":"in-1"}""" else """{"pick":true}""").setBodyDelay(runDelayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
                 bodyOf("way") == "keep" -> json("""{"done":"Started"}""")
-                body.contains("\"refresh\":true") -> json(directPlay("s2"))
+                // A link made again (stale, or another quality: `quality` names it) is the second session.
+                body.contains("\"refresh\":true") -> json(directPlay("s2", bodyOf("quality")))
                 body.contains("\"quick\":true") && !wayRemembered && !wayDirect -> json("""{"pick":true}""")
                 wayDirect -> json(directPlay("s1"))
                 else -> json("""{"input":"in-1"}""")
@@ -279,10 +295,13 @@ class FakeServer {
     }
 
     /** The `play` answer of a run: an MP4 the addon serves under its session [session], with one subtitle. */
-    private fun directPlay(session: String): String =
-        """{"play":{"mode":"stream","kind":"mp4","url":"/api/addons/alpha/x/media/$session/video.mp4","startSec":0,"durationMs":30000,"audio":[],"audioIndex":-1,
+    private fun directPlay(session: String, quality: String? = null): String {
+        val options = if (wayQualities) """["1080p","720p"]""" else """["1080p"]"""
+        val ref = if (wayQualities) ""","ref":"again-ref"""" else ""
+        return """{"play":{"mode":"stream","kind":"mp4","url":"/api/addons/alpha/x/media/$session/video.mp4","startSec":0,"durationMs":30000,"audio":[],"audioIndex":-1,
             "subtitles":[{"index":0,"lang":"en","label":"English","codec":"webvtt","external":true,"url":"/api/addons/alpha/x/media/$session/subs/0.vtt"}],
-            "quality":{"options":["1080p"],"current":"1080p"},"session":"$session","progress":{"path":"x/app/progress","every":3}}}"""
+            "quality":{"options":$options,"current":"${quality ?: "1080p"}"},"session":"$session","progress":{"path":"x/app/progress","every":3}$ref}}"""
+    }
 
     /** `POST /api/trailers/{key}/play` and the MP4 it points at (a 30 s 160x90 clip, `mk` required). */
     private fun trailer(method: String, path: String, query: String): MockResponse {
@@ -431,6 +450,9 @@ class FakeServer {
         const val MOVIE_TMDB = 603L
         const val SERIES_TMDB = 1399L
         const val OUTSIDE_TMDB = 9001L
+
+        /** A series the addon's search finds that is not in the library. */
+        const val OUTSIDE_SERIES_TMDB = 9002L
         const val MOVIE_COUNT = 23
         const val SHOW_COUNT = 30
         val EPISODE_IDS = (601L..606L).toList()

@@ -63,6 +63,11 @@ data class AddonWay(
     val scope: String = WayScope.ANY,
     /** Can be run for one episode (season and episode given). */
     val episodes: Boolean = false,
+    /**
+     * A short line under [label] in the menu of ways («Starts right away»), in the profile's language; an addon
+     * that sends none gets a neutral line by its [icon] in the apps.
+     */
+    val hint: String? = null,
     @Transient val addonId: String = "",
 ) {
     val isKeep: Boolean get() = role == WayRole.KEEP
@@ -147,6 +152,11 @@ data class RunRequest(
     val quick: Boolean? = null,
     /** The media link of an earlier run went stale (410): make a new one. */
     val refresh: Boolean? = null,
+    /**
+     * One of the names of [WayQuality.options] of an earlier `play` answer: with the [ref] that answer gave
+     * ([WayPlay.ref]) the stream plays again in that quality.
+     */
+    val quality: String? = null,
 )
 
 /** The answer of `POST x/app/run`: exactly one of the fields is set. */
@@ -177,8 +187,17 @@ data class WayPlay(
     /** The addon's session: closed with `DELETE x/app/play/{session}`. */
     val session: String = "",
     val progress: WayProgress = WayProgress(),
+    /**
+     * The `ref` that plays this very stream again (a stale link, another of the [quality] options): sent with `run`.
+     * Absent: the addon cannot play it in another quality, so none is offered.
+     */
+    val ref: String? = null,
 ) {
     val isPlaylist: Boolean get() = kind.equals(KIND_HLS, ignoreCase = true)
+
+    /** The qualities to choose from: two or more, and a [ref] to play one with; empty otherwise. */
+    val qualityChoice: List<String>
+        get() = if (ref.isNullOrBlank()) emptyList() else quality.options.filter { it.isNotBlank() }.distinct().takeIf { it.size >= 2 }.orEmpty()
 
     companion object {
         const val KIND_HLS = "hls"
@@ -217,6 +236,26 @@ data class WayProgressBody(
     val durationMs: Long,
     val finished: Boolean? = null,
 )
+
+/**
+ * A quick run that is under way: which way, for which subject (the title, or one of its episodes). Only the
+ * button of that way on that subject shows «Opening…»; another episode's button, or the title's, does not. One
+ * run at a time: the controller refuses a second while this one is going.
+ */
+data class WayRun(
+    /** [AddonWay.key]. */
+    val way: String,
+    val kind: String,
+    val tmdbId: Long,
+    val season: Int? = null,
+    val episode: Int? = null,
+) {
+    /** The run is for this subject (any way): [season] and [episode] null for the title itself. */
+    fun isFor(season: Int?, episode: Int?): Boolean = this.season == season && this.episode == episode
+
+    /** The run is of [way] for this subject. */
+    fun isFor(way: AddonWay, season: Int?, episode: Int?): Boolean = this.way == way.key && isFor(season, episode)
+}
 
 /** `GET x/app/state`: the state of the ways of one addon for one title. */
 @Serializable

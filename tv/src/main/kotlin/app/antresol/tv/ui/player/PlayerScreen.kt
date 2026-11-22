@@ -71,6 +71,8 @@ import app.antresol.ui.playback.PlayerMenu
 import app.antresol.ui.playback.PlayerPhase
 import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.playback.rememberKeepScreenOn
+import app.antresol.ui.ways.pickerState
+import app.antresol.tv.ui.detail.WayStepPanel
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
@@ -214,9 +216,11 @@ private fun PlayingOverlay(viewModel: PlayerViewModel, onExit: () -> Unit) {
     // The position ticks twice a second for the whole film: it is read by the seek bar only (the
     // lambdas below), and the rest is the same between passes, so nothing is recomposed while the
     // controls are hidden.
-    val source = viewModel.source
-    val audioChoice = remember(source) { viewModel.audioTracks.size > 1 }
-    val subtitleChoice = remember(source) { viewModel.subtitleTracks.isNotEmpty() }
+    // The tracks inside an addon's stream and its «Audio & source…» join the server's lists, so the menus are
+    // never missing (a stream that lists nothing still has its own tracks) nor empty.
+    val audioChoice = viewModel.audioTracks.size > 1 || viewModel.hasExtraAudioMenu
+    val subtitleChoice = viewModel.subtitleTracks.isNotEmpty() || viewModel.hasExtraSubtitleMenu
+    val picker = viewModel.ways.pickerState()
     val exit by rememberUpdatedState(onExit)
     val actions = remember(viewModel) {
         TransportActions(
@@ -238,7 +242,7 @@ private fun PlayingOverlay(viewModel: PlayerViewModel, onExit: () -> Unit) {
             subtitleChoice = subtitleChoice,
             nextEpisode = viewModel.nextEpisode != null,
             autoSkipChoice = viewModel.hasSkipSegments,
-            // A stream an addon serves has its quality picked with the way.
+            // A stream an addon serves: only the qualities its answer lists.
             qualityChoice = viewModel.canChooseQuality,
         ),
         isPlaying = viewModel.isPlaying,
@@ -246,6 +250,10 @@ private fun PlayingOverlay(viewModel: PlayerViewModel, onExit: () -> Unit) {
         title = { TitleBlock(viewModel.item) },
         actions = actions,
         menuContent = { menu, onDismiss -> TrackMenu(menu = menu, viewModel = viewModel, onDismiss = onDismiss) },
+        // «Audio & source…»: the way's own choice, step by step, over the picture.
+        panel = picker?.let { open ->
+            { WayStepPanel(open, onChoose = { row -> viewModel.ways?.choose(row) }, onBack = { viewModel.ways?.back() }) }
+        },
         skip = SkipOverlay(
             pill = viewModel.skipPill,
             note = viewModel.skipNote,
@@ -301,7 +309,13 @@ internal fun PlayingOverlayContent(
     onBack: (() -> Unit)? = null,
     /** The skip pills (recap, intro, credits); null: none (trailers). */
     skip: SkipOverlay? = null,
+    /**
+     * A panel of the player's own that holds focus while it is up (the way's choice): the controls stay, and
+     * Back is the panel's. Null: none.
+     */
+    panel: (@Composable () -> Unit)? = null,
 ) {
+    val panelOpen = panel != null
     var controlsVisible by remember { mutableStateOf(true) }
     var menu by remember { mutableStateOf<PlayerMenu?>(null) }
     var interactions by remember { mutableIntStateOf(0) }
@@ -319,10 +333,12 @@ internal fun PlayingOverlayContent(
     val currentSkipShownKey by rememberUpdatedState(skipShownKey)
     val nextPillShown = skip?.pill is SkipPill.Next
 
-    LaunchedEffect(controlsVisible, menu) {
+    LaunchedEffect(controlsVisible, menu, panelOpen) {
         val opener = lastMenu
         when {
             menu != null -> lastMenu = menu
+            // The panel holds focus; the button that opened it (through its menu) gets it back when it closes.
+            panelOpen -> Unit
             controlsVisible && opener != null -> {
                 lastMenu = null
                 if (!menuFocus.getValue(opener).tryRequestFocus()) seekFocus.tryRequestFocus()
@@ -337,8 +353,8 @@ internal fun PlayingOverlayContent(
     // A skip pill (not «Следующая серия», nor the note of an automatic skip: OK pauses while those are
     // up) with the controls hidden takes focus, so OK presses it (the web's Enter); when it goes, focus
     // returns to the overlay (or, with the controls up, to the seek bar).
-    LaunchedEffect(skipKey, skipShownKey, controlsVisible, menu) {
-        if (menu != null) return@LaunchedEffect
+    LaunchedEffect(skipKey, skipShownKey, controlsVisible, menu, panelOpen) {
+        if (menu != null || panelOpen) return@LaunchedEffect
         when {
             !controlsVisible && skipKey != null -> if (!skipFocus.tryRequestFocus()) rootFocus.tryRequestFocus()
             !controlsVisible -> rootFocus.tryRequestFocus()
@@ -346,14 +362,14 @@ internal fun PlayingOverlayContent(
         }
         if (skipShownKey == null) skipFocused = false
     }
-    LaunchedEffect(controlsVisible, interactions, isPlaying, menu) {
-        if (controlsVisible && isPlaying && menu == null) {
+    LaunchedEffect(controlsVisible, interactions, isPlaying, menu, panelOpen) {
+        if (controlsVisible && isPlaying && menu == null && !panelOpen) {
             delay(CONTROLS_HIDE_MS)
             controlsVisible = false
         }
     }
     BackHandler(enabled = menu != null) { menu = null }
-    BackHandler(enabled = menu == null && controlsVisible) { if (onBack != null) onBack() else controlsVisible = false }
+    BackHandler(enabled = menu == null && !panelOpen && controlsVisible) { if (onBack != null) onBack() else controlsVisible = false }
 
     Box(
         Modifier
@@ -363,7 +379,7 @@ internal fun PlayingOverlayContent(
                 // Back with the controls up hides them in one press. Taken here, before the focused
                 // button: as a key it would first become a focus "exit" to this box and be used up.
                 // With a menu open the menu takes Back itself (OptionsPanel).
-                if (event.key == Key.Back && menu == null && (controlsVisible || onBack != null)) {
+                if (event.key == Key.Back && menu == null && !panelOpen && (controlsVisible || onBack != null)) {
                     if (event.type == KeyEventType.KeyUp) {
                         if (onBack != null) onBack() else controlsVisible = false
                     }
@@ -409,6 +425,7 @@ internal fun PlayingOverlayContent(
             )
         }
         menu?.let { open -> menuContent(open) { menu = null } }
+        panel?.invoke()
     }
 }
 
@@ -631,12 +648,15 @@ private fun UpNextOverlay(phase: PlayerPhase.UpNext, onPlayNow: () -> Unit, onCa
 /** A short message pill at the top (for example, subtitles that failed to load). */
 @Composable
 private fun Notice(viewModel: PlayerViewModel) {
-    val message = viewModel.notice ?: return
-    LaunchedEffect(message) {
+    val message = viewModel.notice
+    val text = viewModel.noticeText
+    if (message == null && text == null) return
+    LaunchedEffect(message, text) {
         delay(NOTICE_MS)
         viewModel.notice = null
+        viewModel.noticeText = null
     }
     Box(Modifier.fillMaxWidth().padding(top = 28.dp), contentAlignment = Alignment.TopCenter) {
-        GlassNotice(stringResource(message))
+        GlassNotice(text ?: stringResource(message!!))
     }
 }

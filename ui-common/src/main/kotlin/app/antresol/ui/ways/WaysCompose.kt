@@ -6,6 +6,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.res.stringResource
+import app.antresol.core.model.AddonWay
+import app.antresol.core.model.WayIcon
+import app.antresol.core.model.WayRun
 import app.antresol.core.model.WayState
 import app.antresol.core.ways.WayOffer
 import app.antresol.core.ways.WayOutcome
@@ -13,6 +17,7 @@ import app.antresol.core.ways.WayPicker
 import app.antresol.core.ways.WayPlayback
 import app.antresol.core.ways.WayTarget
 import app.antresol.core.ways.WaysController
+import app.antresol.ui.R
 import app.antresol.ui.userMessage
 
 // What the screens read of a [WaysController]. All of them accept null: a page without addons' ways
@@ -26,9 +31,24 @@ fun WaysController?.offerState(): WayOffer = this?.offer?.collectAsState()?.valu
 @Composable
 fun WaysController?.statesState(): Map<String, WayState> = this?.states?.collectAsState()?.value ?: emptyMap()
 
-/** The key of the way a quick run waits for. */
+/** The quick run that waits for the addon: which way, for which title or episode (see [WayRun.isFor]). */
 @Composable
-fun WaysController?.busyState(): String? = this?.busy?.collectAsState()?.value
+fun WaysController?.busyState(): WayRun? = this?.busy?.collectAsState()?.value
+
+/** The [AddonWay.key] remembered for the title as the way «Play» runs, or null (the first way runs). */
+@Composable
+fun WaysController?.defaultKeyState(): String? = this?.defaultKey?.collectAsState()?.value
+
+/**
+ * The line under [way]'s label in the menu of ways: its own `hint`, else a neutral one by its icon (a web stream,
+ * or one the app plays); null when there is none.
+ */
+@Composable
+fun wayHint(way: AddonWay): String? = way.hint?.takeIf { it.isNotBlank() } ?: when (way.icon) {
+    WayIcon.GLOBE -> stringResource(R.string.way_hint_globe)
+    WayIcon.PLAY -> stringResource(R.string.way_hint_play)
+    else -> null
+}
 
 /** The open choice sheet. */
 @Composable

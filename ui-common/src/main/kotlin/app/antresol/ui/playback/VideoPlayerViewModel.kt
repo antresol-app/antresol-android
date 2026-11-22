@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -64,11 +65,16 @@ import app.antresol.core.playback.WebVtt
 import app.antresol.core.playback.playbackApi
 import app.antresol.core.playback.videoApi
 import app.antresol.core.ways.PlaybackDisplay
+import app.antresol.core.ways.WayOutcome
 import app.antresol.core.ways.WayPlayback
+import app.antresol.core.ways.WaysController
+import app.antresol.core.ways.WaysSource
 import app.antresol.core.ways.inputPlaybackApi
 import app.antresol.core.ways.inputVideoApi
+import app.antresol.core.ways.waysApi
 import app.antresol.core.ways.wayPlaybackApi
 import app.antresol.ui.R
+import app.antresol.ui.userMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -156,6 +162,8 @@ open class VideoPlayerViewModel(
     /** Final writes and session stops, awaited by screens that show progress. */
     private val pendingWrites: PendingWrites,
     private val way: WayPlayback? = null,
+    /** The addons' ways of the session: with it a way's stream offers «Audio & source…» (its own choice again). */
+    waysSource: WaysSource? = null,
 ) : ViewModel() {
     /**
      * The client for every call of this player (sessions, keepalives, progress, media key, subtitles),
@@ -240,11 +248,67 @@ open class VideoPlayerViewModel(
     val subtitleTracks: List<SubTrack> get() = source?.play?.subtitles.orEmpty().filter { it.url != null }
     val quality: String get() = source?.play?.quality?.selected?.ifEmpty { null } ?: Quality.AUTO
 
-    /** A stream the addon serves itself is playing (no choice of quality: the quality was picked with the way). */
-    val canChooseQuality: Boolean get() = wayDirect == null
+    /**
+     * The quality menu has something to choose. A file or an input of the core: always (the core's qualities). A
+     * stream the addon serves itself: only the qualities its answer lists ([wayQualities]).
+     */
+    val canChooseQuality: Boolean get() = wayDirect == null || wayQualities.isNotEmpty()
+
+    /**
+     * The qualities of the stream an addon serves itself, by the addon's own names, that it can play again (two
+     * or more, and a `ref` to play one with); empty for anything else. [quality] is the one that plays.
+     */
+    val wayQualities: List<String> get() = wayDirect?.play?.qualityChoice.orEmpty()
+
+    /** The way being played (what `way` was, then what «Audio & source…» replaced it with); null: a library item. */
+    var currentWay: WayPlayback? by mutableStateOf(way)
+        private set
+
+    /** The way's own step-by-step choice (a way's stream): its picker is [ways]' `picker`; null for a library item. */
+    val ways: WaysController? = if (way?.call != null && waysSource != null) {
+        WaysController(this.client.waysApi(), waysSource, viewModelScope, { wayMaxHeight() })
+    } else {
+        null
+    }
+
+    /** The stream can offer «Audio & source…»: the choice of the way that made it. */
+    val canChooseSource: Boolean get() = ways != null && currentWay?.call != null
+
+    /**
+     * Something besides the server's own lists to show in the audio menu: the tracks of an addon's stream that its
+     * answer lists none of (ExoPlayer's own), and «Audio & source…».
+     */
+    val hasExtraAudioMenu: Boolean get() = canChooseSource || (audioTracks.isEmpty() && streamAudio.size > 1)
+
+    /** The same for the subtitle menu: the subtitles inside an addon's stream, when its answer lists none. */
+    val hasExtraSubtitleMenu: Boolean get() = subtitleTracks.isEmpty() && streamText.isNotEmpty()
+
+    /** The audio tracks inside the stream an addon serves (ExoPlayer's); [AudioTrack.index] is their order. */
+    var streamAudio: List<AudioTrack> by mutableStateOf(emptyList())
+        private set
+
+    /** The order of the one of [streamAudio] that plays, or -1. */
+    var streamAudioSelected: Int by mutableIntStateOf(-1)
+        private set
+
+    /** The subtitles inside the stream an addon serves (ExoPlayer's), [SubTrack.index] their order. */
+    var streamText: List<SubTrack> by mutableStateOf(emptyList())
+        private set
+
+    /** The order of the one of [streamText] that shows, or -1. */
+    var streamTextSelected: Int by mutableIntStateOf(-1)
+        private set
+
+    /** A sentence to show briefly (what a way said, or why the choice of one failed); the screen clears it. */
+    var noticeText: String? by mutableStateOf(null)
 
     private var currentItemId = itemId
-    private var wayDirect: WayPlayback.Direct? = null
+    private var wayDirect: WayPlayback.Direct? by mutableStateOf(null)
+
+    /** The quality picked in the menu of an addon's stream: kept when its link is made again (a stale one). */
+    private var wayQuality: String? = null
+    private var streamAudioChoice: Int? = null
+    private var streamTextChoice: Int? = null
     private var endedPlayback = false
     private var pendingFile: FileInfo? = null
     private var session: VideoSession? = null
@@ -267,6 +331,7 @@ open class VideoPlayerViewModel(
     private var released = false
     private var startJob: Job? = null
     private var reopenJob: Job? = null
+    private var switchJob: Job? = null
     private var seekJob: Job? = null
     private var subtitleJob: Job? = null
     private var upNextJob: Job? = null
@@ -313,12 +378,15 @@ open class VideoPlayerViewModel(
         override fun onTracksChanged(tracks: Tracks) {
             applyTextSelection()
             applyAudioSelection()
+            applyStreamAudio()
+            refreshStreamTracks(tracks)
         }
     }
 
     init {
         player.addListener(listener)
         if (way != null) startWay(way) else start(itemId, resume)
+        ways?.let { controller -> viewModelScope.launch { controller.outcomes.collect(::onWayOutcome) } }
         loadAutoSkip()
         viewModelScope.launch {
             while (isActive) {
@@ -482,6 +550,7 @@ open class VideoPlayerViewModel(
     private fun startWay(way: WayPlayback) {
         startJob?.cancel()
         phase = PlayerPhase.Loading
+        currentWay = way
         item = way.display.toItem(context)
         startJob = viewModelScope.launch {
             try {
@@ -497,11 +566,69 @@ open class VideoPlayerViewModel(
         }
     }
 
+    /**
+     * «Audio & source…»: opens the choice of the way that made this stream, step by step ([ways]' picker), from the
+     * position the video is at, so what it picks resumes there ([onWayOutcome]). Nothing happens without a way.
+     */
+    fun openSourceChoice() {
+        val controller = ways ?: return
+        val call = currentWay?.call ?: return
+        if (phase != PlayerPhase.Playing) return
+        controller.start(call.copy(startSec = currentFileMs() / 1000.0), choose = true)
+    }
+
+    /** What the choice made: a stream replaces this one where it is; a sentence or a failure is shown. */
+    private fun onWayOutcome(outcome: WayOutcome) {
+        when (outcome) {
+            is WayOutcome.Play -> switchWay(outcome.playback)
+            is WayOutcome.Done -> noticeText = outcome.text
+            is WayOutcome.Failed -> noticeText = outcome.error.userMessage(context.resources)
+        }
+    }
+
+    /**
+     * Plays [next] (another source, another voice-over: what the way's choice made) in place of the stream that
+     * plays, from where that one is. The old one is saved and let go as the new one opens.
+     */
+    private fun switchWay(next: WayPlayback) {
+        if (closed || released) return
+        val at = currentFileMs()
+        currentWay = next
+        streamAudioChoice = null
+        streamTextChoice = null
+        wayQuality = null
+        isSwitching = true
+        player.pause()
+        startJob?.cancel()
+        reopenJob?.cancel()
+        switchJob?.cancel()
+        switchJob = viewModelScope.launch {
+            try {
+                when (next) {
+                    is WayPlayback.Input -> startInput(next, startAtMs = at)
+                    is WayPlayback.Direct -> openDirect(next, startMs = at)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                phase = PlayerPhase.Failed(e)
+            } finally {
+                isSwitching = false
+            }
+        }
+    }
+
+    /** The tallest picture this device shows, for a way that picks a quality by it (null: no limit). */
+    private suspend fun wayMaxHeight(): Int? = withContext(Dispatchers.Default) {
+        runCatching { DeviceCaps.current(context, limitToDisplay = options.limitToDisplay).maxHeight }.getOrNull()
+    }
+
     /** The core's input player: the same session as a file's, with the file's caps, tracks and quality. */
-    private suspend fun startInput(input: WayPlayback.Input) {
-        val info = client.inputInfo(input.id)
+    private suspend fun startInput(input: WayPlayback.Input, startAtMs: Long? = null) {
+        wayDirect = null
+        val startMs = startAtMs ?: (client.inputInfo(input.id).startSec * 1000).toLong()
         beginStream(
-            startMs = (info.startSec * 1000).toLong(),
+            startMs = startMs,
             fallbackDurationMs = 0L,
             reportApi = client.inputPlaybackApi(input.id),
             reportItemId = 0L,
@@ -561,15 +688,26 @@ open class VideoPlayerViewModel(
      * The media link of a direct stream went stale (410), or «Try Again» after a failure: run the
      * way again with `refresh` and carry on from where it was.
      */
-    private fun reopenDirect(direct: WayPlayback.Direct) {
+    private fun reopenDirect(direct: WayPlayback.Direct, quality: String? = null) {
         val at = currentFileMs()
         isSwitching = true
         player.pause()
         reopenJob?.cancel()
         reopenJob = viewModelScope.launch {
             try {
-                val request = direct.request.copy(refresh = true, startSec = at / 1000.0)
+                // The ref the last answer gave plays the same stream again, in the quality chosen in the menu
+                // (kept for the next stale link); an answer without one is run as it was asked.
+                val ref = direct.play.ref?.takeIf { it.isNotBlank() }
+                val chosen = (quality ?: wayQuality)?.takeIf { it in direct.play.qualityChoice }
+                val request = direct.request.copy(
+                    ref = ref ?: direct.request.ref,
+                    quick = if (ref != null) null else direct.request.quick,
+                    quality = if (ref != null) chosen else null,
+                    refresh = true,
+                    startSec = at / 1000.0,
+                )
                 val play = client.wayRun(direct.addonId, request).play ?: throw PlaybackUnavailableException()
+                wayQuality = chosen
                 openDirect(direct.copy(play = play), startMs = at)
             } catch (e: CancellationException) {
                 throw e
@@ -711,6 +849,11 @@ open class VideoPlayerViewModel(
 
     fun selectQuality(value: String) {
         if (value == quality) return
+        // A stream an addon serves: one of its own names, the addon plays it again from where this one is.
+        wayDirect?.let { direct ->
+            if (value in wayQualities) reopenDirect(direct, quality = value)
+            return
+        }
         reopen(currentFileMs(), quality = value)
     }
 
@@ -730,6 +873,7 @@ open class VideoPlayerViewModel(
 
     fun selectSubtitle(track: SubTrack?) {
         subtitleJob?.cancel()
+        streamTextChoice = null
         if (track == null) {
             selectedSubtitle = null
             applyTextSelection()
@@ -757,8 +901,9 @@ open class VideoPlayerViewModel(
             reopenDirect(direct)
             return
         }
-        if (way != null && session == null) {
-            startWay(way)
+        val playing = currentWay
+        if (playing != null && session == null) {
+            startWay(playing)
             return
         }
         if (session != null && source != null) {
@@ -1003,6 +1148,7 @@ open class VideoPlayerViewModel(
         player.pause()
         startJob?.cancel()
         reopenJob?.cancel()
+        switchJob?.cancel()
         upNextJob?.cancel()
         healthyJob?.cancel()
         pendingReopen = null
@@ -1159,17 +1305,65 @@ open class VideoPlayerViewModel(
     /** Shows only the side-loaded subtitle (never tracks embedded in a direct-play MKV). */
     private fun applyTextSelection() {
         if (released) return
+        // The subtitles inside a stream an addon serves are offered only when its answer lists none (then it is the choice).
+        val own = streamTextChoice?.takeIf { selectedSubtitle == null && wayDirect != null }
         val builder = player.trackSelectionParameters.buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, selectedSubtitle == null)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, selectedSubtitle == null && own == null)
         if (selectedSubtitle != null) {
             val group = player.currentTracks.groups.firstOrNull { group ->
                 group.type == C.TRACK_TYPE_TEXT &&
                     (0 until group.length).any { group.getTrackFormat(it).id?.contains(SUBTITLE_ID) == true }
             }
             if (group != null) builder.addOverride(TrackSelectionOverride(group.mediaTrackGroup, 0))
+        } else if (own != null) {
+            ownGroups(player.currentTracks, C.TRACK_TYPE_TEXT).getOrNull(own)?.let { builder.addOverride(TrackSelectionOverride(it.mediaTrackGroup, 0)) }
         }
         player.trackSelectionParameters = builder.build()
+    }
+
+    private fun ownGroups(tracks: Tracks, type: Int): List<Tracks.Group> = OwnTracks.groups(tracks, type, SUBTITLE_ID)
+
+    /** Plays the audio track of the stream an addon serves that was picked in the menu, as the player re-reads its tracks. */
+    private fun applyStreamAudio() {
+        if (released || wayDirect == null) return
+        val wanted = streamAudioChoice ?: return
+        val group = ownGroups(player.currentTracks, C.TRACK_TYPE_AUDIO).getOrNull(wanted) ?: return
+        if (group.isSelected) return
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+            .build()
+    }
+
+    /** What the stream an addon serves holds itself (audio and subtitles), for the menus when its answer lists none. */
+    private fun refreshStreamTracks(tracks: Tracks) {
+        if (wayDirect == null) {
+            streamAudio = emptyList()
+            streamText = emptyList()
+            streamAudioSelected = -1
+            streamTextSelected = -1
+            return
+        }
+        val audio = ownGroups(tracks, C.TRACK_TYPE_AUDIO)
+        streamAudio = OwnTracks.audio(audio)
+        streamAudioSelected = OwnTracks.selected(audio)
+        val text = ownGroups(tracks, C.TRACK_TYPE_TEXT)
+        streamText = OwnTracks.text(text)
+        streamTextSelected = OwnTracks.selected(text)
+    }
+
+    /** Plays [track] of [streamAudio]: the stream itself switches, nothing is asked of the server. */
+    fun selectStreamAudio(track: AudioTrack) {
+        streamAudioChoice = track.index
+        applyStreamAudio()
+    }
+
+    /** Shows [track] of [streamText], or none ([track] null). */
+    fun selectStreamText(track: SubTrack?) {
+        subtitleJob?.cancel()
+        selectedSubtitle = null
+        streamTextChoice = track?.index
+        applyTextSelection()
     }
 
     /**

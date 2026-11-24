@@ -66,6 +66,7 @@ import app.antresol.mobile.R
 import app.antresol.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.LocalMediaUrls
+import app.antresol.mobile.ui.components.ActionFlow
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.GlassPillButton
@@ -329,11 +330,9 @@ private fun VideoDetailContent(
         }
         // A title off the library has no watchlist, watched state or trailers: nothing to put in this row.
         if (!detail.outsideLibrary) item("actions") {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                val buttonModifier = if (configuration.screenWidthDp >= 600) Modifier else Modifier.weight(1f)
+            // Each pill keeps its whole label on one line: one that does not fit beside the others goes below them.
+            ActionFlow(modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 16.dp)) {
+                val buttonModifier = if (configuration.screenWidthDp >= 600) Modifier else Modifier.grow()
                 if (detail.canWatchlist) {
                     GlassPillButton(
                         text = stringResource(R.string.detail_watchlist),
@@ -451,11 +450,8 @@ private fun PlayRow(
     val wide = LocalConfiguration.current.screenWidthDp >= 600
     val primary = ways?.primary
     Column(Modifier.fillMaxWidth().padding(start = PageGutter, end = PageGutter, top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        // The main button keeps its whole label on one line: when the buttons beside it do not fit, they go below it.
+        ActionFlow(modifier = Modifier.fillMaxWidth(), firstAlone = true) {
             if (target != null) {
                 val episode = target.episode
                 val label = when {
@@ -468,7 +464,7 @@ private fun PlayRow(
                     text = label,
                     icon = AntresolIcons.Play,
                     onClick = { onPlay(target.itemId, ResumeMode.Resume) },
-                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.weight(1f)).testTag("detail-play"),
+                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.grow()).testTag("detail-play"),
                 )
                 if (target.resume) {
                     GlassIconButton(
@@ -488,7 +484,7 @@ private fun PlayRow(
                     enabled = ways.busy == null,
                     onClick = { ways.onRun(primary) },
                     onLongClick = { ways.onChoose(primary) },
-                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.weight(1f)).testTag("way-primary"),
+                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.grow()).testTag("way-primary"),
                 )
             }
             if (onTrailer != null) {

@@ -6,6 +6,8 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -657,6 +659,7 @@ private fun VideoFacts(video: VideoInfo) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VideoActions(
     video: VideoInfo,
@@ -675,8 +678,11 @@ private fun VideoActions(
     val primaryWay = ways?.defaultWay.takeIf { target == null }
     // The menu of the ways (a chevron beside Play) when the addons offer any way to watch.
     val hasMenu = ways != null && ways.watch.isNotEmpty()
-    Row(
+    // Every label stays whole: the buttons go on one line while they fit, and the one that does not (the longer
+    // Russian labels) goes below instead of running off the screen.
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier
             .padding(top = 8.dp)
             .trapHorizontalFocus(),

@@ -1178,8 +1178,8 @@ implement the same wire format.
   not_antresol` (not in the spec's list); the TV's HTML page says "not set up yet".
 - `PairingFlow(initial = StartedPairing)`: shows and polls the handed-over code first, no second `start`
   (that would cancel the code the phone is approving). Used once per flow instance.
-- `TvSetupSender` (phone POST, 40 s read timeout since the TV checks the server first), `setUpTv` /
-  `approveTvCode` (sid check, lookup, approve).
+- `TvSetupSender` (phone POST, 40 s read timeout since the TV checks the server first), `sendTvSetup` (send + sid check) /
+  `approveTvCode` (lookup, approve).
 - Tests: `TvSetupTest` (links, nonces, validation, JSON contract, listener on loopback incl. rate limit,
   form redirect, error pages; coordinator vs MockWebServer; sender; flow with a handed-over code).
   `TvSetupIntegrationTest` with `ANTRESOL_TVSETUP_E2E=<base URL>` (+ `ANTRESOL_PAIRING_E2E_PASSWORD`):

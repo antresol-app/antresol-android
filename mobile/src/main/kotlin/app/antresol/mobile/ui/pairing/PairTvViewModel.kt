@@ -14,9 +14,9 @@ import app.antresol.core.tvsetup.ScannedTvCode
 import app.antresol.core.tvsetup.TvSetupAnswer
 import app.antresol.core.tvsetup.TvSetupApprover
 import app.antresol.core.tvsetup.TvSetupLink
-import app.antresol.core.tvsetup.TvSetupOtherServerException
 import app.antresol.core.tvsetup.TvSetupSender
 import app.antresol.core.tvsetup.approveTvCode
+import app.antresol.core.tvsetup.sendTvSetup
 import app.antresol.core.pairing.PairLink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -160,9 +160,7 @@ class PairTvViewModel(
             var code = confirm.code
             step = try {
                 if (code == null) {
-                    val answer = sendSetup(confirm.link, confirm.serverUrl, ownServerId)
-                    if (!answer.sid.equals(ownServerId, ignoreCase = true)) throw TvSetupOtherServerException()
-                    code = answer.code
+                    code = sendTvSetup(sendSetup, confirm.link, confirm.serverUrl, ownServerId).code
                 }
                 val target = if (confirm.selectedUserId == ownUserId) 0 else confirm.selectedUserId
                 approveTvCode(api.asTvSetupApprover(), code, target)

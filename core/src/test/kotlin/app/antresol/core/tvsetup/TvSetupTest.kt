@@ -445,13 +445,13 @@ class TvSetupTest {
         }
         val (_, link2) = listen(handler = TvSetupHandler { server, _ -> TvSetupAccepted(TvSetupAnswer("ABC234", "e".repeat(32), server, "TV")) })
         try {
-            setUpTv(sender, approver, link2, "http://192.168.1.10:8420", serverId, 0)
+            sendTvSetup(sender::send, link2, "http://192.168.1.10:8420", serverId)
             fail("no error")
         } catch (_: TvSetupOtherServerException) {
         }
         assertTrue(calls.isEmpty())
         val (_, link3) = listen(handler = TvSetupHandler { server, sid -> TvSetupAccepted(TvSetupAnswer("ABC234", sid!!, server, "TV")) })
-        setUpTv(sender, approver, link3, "http://192.168.1.10:8420", serverId, 7)
+        approveTvCode(approver, sendTvSetup(sender::send, link3, "http://192.168.1.10:8420", serverId).code, 7)
         assertEquals(listOf("lookup ABC234", "approve ABC234 7"), calls)
     }
 

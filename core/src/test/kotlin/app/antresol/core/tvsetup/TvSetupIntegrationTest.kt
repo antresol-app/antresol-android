@@ -68,7 +68,8 @@ class TvSetupIntegrationTest {
 
                 override suspend fun approve(code: String, userId: Long): PairApproved = phone.pairApprove(code, userId)
             }
-            val answer = setUpTv(TvSetupSender(), approver, scanned.link, baseUrl, serverId, 0)
+            val answer = sendTvSetup(TvSetupSender()::send, scanned.link, baseUrl, serverId)
+            approveTvCode(approver, answer.code, 0)
             assertEquals(serverId, answer.sid)
             assertEquals(baseUrl, answer.server)
             assertEquals("E2E Setup TV", answer.device)

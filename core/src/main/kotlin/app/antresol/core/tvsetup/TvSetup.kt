@@ -123,21 +123,18 @@ interface TvSetupApprover {
 class TvSetupOtherServerException : IOException("The TV joined another server")
 
 /**
- * The whole phone flow after «Настроить»: POST the phone's [serverUrl] / [serverId] to the TV,
- * check the answer's `sid`, look the code up and approve it for [userId] (0 = the phone's own
- * profile). Returns the TV's answer.
+ * The first step of the phone flow after «Настроить»: [send] (the TV call, [TvSetupSender.send]) the phone's
+ * [serverUrl] / [serverId] to the TV of [link] and check that the TV joined that server (its answer's `sid`).
+ * Returns the TV's answer; its code is then approved with [approveTvCode], which a retry may do alone.
  */
-suspend fun setUpTv(
-    sender: TvSetupSender,
-    approver: TvSetupApprover,
+suspend fun sendTvSetup(
+    send: suspend (TvSetupLink, String, String) -> TvSetupAnswer,
     link: TvSetupLink,
     serverUrl: String,
     serverId: String,
-    userId: Long,
 ): TvSetupAnswer {
-    val answer = sender.send(link, serverUrl, serverId)
+    val answer = send(link, serverUrl, serverId)
     if (!answer.sid.equals(serverId, ignoreCase = true)) throw TvSetupOtherServerException()
-    approveTvCode(approver, answer.code, userId)
     return answer
 }
 

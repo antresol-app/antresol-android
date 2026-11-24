@@ -28,11 +28,14 @@ object AntresolImageLoader {
         baseUrl: () -> String?,
         token: () -> String?,
         language: () -> String,
-    ): ImageLoader = create(
-        context,
-        OkHttpClient.Builder().addInterceptor(AntresolHeadersInterceptor(baseUrl, token, language)).build(),
-        baseUrl,
-    )
+    ): ImageLoader = create(context, artworkHttpClient(baseUrl, token, language), baseUrl)
+
+    /**
+     * The API client's timeouts (a first `?w=` resize of a big picture on a busy server takes longer than
+     * OkHttp's 10 s read default and would show as a failed image) and the headers of the providers.
+     */
+    internal fun artworkHttpClient(baseUrl: () -> String?, token: () -> String?, language: () -> String): OkHttpClient =
+        AntresolClient.defaultHttpClient().newBuilder().addInterceptor(AntresolHeadersInterceptor(baseUrl, token, language)).build()
 
     /**
      * Request parameter of artwork drawn in a box of its own shape (a poster in a poster tile, a cover

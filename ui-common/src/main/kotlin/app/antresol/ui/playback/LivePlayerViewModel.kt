@@ -221,6 +221,14 @@ class LivePlayerViewModel(
     val miniGuide: MiniGuide
         get() = liveMiniGuide(state, clock())
 
+    /**
+     * «В эфир»: how far the picture is behind the live edge. It runs also while paused (the edge moves
+     * on and the button must appear), but not in the background, where the stream is dropped.
+     */
+    private val edgeTicker = Ticker(viewModelScope, EDGE_TICK_MS) {
+        if (!released) behindLive = LiveEdge.showGoLive(liveClock())
+    }
+
     private var loaded: LiveStream.Ready? = null
 
     /** The MIME type the loaded external stream was given (HLS guessed for a URL without extension). */
@@ -327,13 +335,7 @@ class LivePlayerViewModel(
                 applyTracks()
             }
         }
-        // «В эфир»: how far the picture is behind the live edge.
-        viewModelScope.launch {
-            while (true) {
-                delay(EDGE_TICK_MS)
-                if (!released) behindLive = LiveEdge.showGoLive(liveClock())
-            }
-        }
+        edgeTicker.set(true)
         session.start()
     }
 
@@ -458,6 +460,8 @@ class LivePlayerViewModel(
     fun onBackground() {
         if (backgrounded || released) return
         backgrounded = true
+        edgeTicker.set(false)
+        behindLive = false
         session.stop()
         player.stop()
         loaded = null
@@ -467,6 +471,7 @@ class LivePlayerViewModel(
     fun onForeground() {
         if (!backgrounded || released) return
         backgrounded = false
+        edgeTicker.set(true)
         session.start()
     }
 

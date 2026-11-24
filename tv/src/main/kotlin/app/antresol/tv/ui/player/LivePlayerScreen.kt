@@ -195,7 +195,8 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel, onGuide: () -> Unit = {}) {
     val audioEntries = liveAudioEntries(viewModel.audioOptions, viewModel.trackSelection.audio?.name)
     val subtitles = viewModel.subtitleOptions
     // TiviMate's group column: Favourites, All, then the categories (adult ones last, core Channels.categoryList).
-    val categories = Channels.filterOptions(state.channels, state.categories.ifEmpty { null })
+    // Remembered: every channel is read, and the root recomposes on each metadata tick and key.
+    val categories = remember(state.channels, state.categories) { Channels.filterOptions(state.channels, state.categories.ifEmpty { null }) }
     // The remote's digits: «23_» and the switch 1.5 s after the last one, or at once on OK.
     var typed by remember { mutableStateOf("") }
     var noChannel by remember { mutableStateOf<Int?>(null) }
@@ -523,8 +524,11 @@ fun LivePlayerScreen(viewModel: LivePlayerViewModel, onGuide: () -> Unit = {}) {
                 },
                 selected = panelIndex,
             ) {
+                val highlightedGuide = remember(state.channels, highlighted, state.categories, state.channelId) {
+                    Channels.miniGuide(Channels.filter(state.channels, highlighted, state.categories), state.channelId)
+                }
                 ChannelListPanel(
-                    guide = Channels.miniGuide(Channels.filter(state.channels, highlighted, state.categories), state.channelId),
+                    guide = highlightedGuide,
                     title = filterTitle(highlighted, state.categories),
                     currentId = state.channelId,
                     selected = -1,

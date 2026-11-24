@@ -343,10 +343,16 @@ open class VideoPlayerViewModel(
     /** The final write and stop for this player started ([close]). */
     private var closed = false
 
+    /** The position clock: runs only while the video plays or loads to play in front (see [syncTicker]). */
+    private val ticker = Ticker(viewModelScope, TICK_MS, ::tick)
+
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
             isPlaying = playing
         }
+
+        // Any change (play, pause, a seek, buffering) goes through here once the other callbacks are done.
+        override fun onEvents(player: Player, events: Player.Events) = syncTicker()
 
         override fun onPlaybackStateChanged(state: Int) {
             isBuffering = state == Player.STATE_BUFFERING
@@ -388,12 +394,6 @@ open class VideoPlayerViewModel(
         if (way != null) startWay(way) else start(itemId, resume)
         ways?.let { controller -> viewModelScope.launch { controller.outcomes.collect(::onWayOutcome) } }
         loadAutoSkip()
-        viewModelScope.launch {
-            while (isActive) {
-                tick()
-                delay(TICK_MS)
-            }
-        }
     }
 
     // region Starting
@@ -1469,6 +1469,16 @@ open class VideoPlayerViewModel(
     }
 
     private fun reportedPositionMs(): Long = pendingSeekMs ?: currentFileMs()
+
+    /**
+     * The clock ticks while the video plays or buffers to play and the app is in front. Otherwise
+     * (paused, ended, in the background, closing) it sleeps and any change reads the position once,
+     * so a paused seek or the final position of a pause is still shown.
+     */
+    private fun syncTicker() {
+        ticker.set(!backgrounded && !released && !closed && keepsScreenOn(player.playWhenReady, player.playbackState))
+        if (!ticker.running) tick()
+    }
 
     private fun tick() {
         if (released || source == null) return

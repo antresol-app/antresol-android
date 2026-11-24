@@ -21,10 +21,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.filterNotNull
 import android.content.ContextWrapper
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
@@ -459,11 +463,12 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 navController = navController,
                 startDestination = ShellRootRoute,
                 modifier = Modifier.fillMaxSize(),
-                // Short fades: the default 700 ms feels slow on a TV and keeps both pages composed.
-                enterTransition = { fadeIn(tween(AntresolMotion.FAST_MS)) },
+                // Short fades: the default 700 ms feels slow on a TV and keeps both pages composed. A detail page
+                // opens with a small zoom in and closes with the same zoom out (the Apple TV app's open and close).
+                enterTransition = { if (targetState.isDetailPage()) detailZoomIn() else fadeIn(tween(AntresolMotion.FAST_MS)) },
                 exitTransition = { fadeOut(tween(AntresolMotion.FAST_MS)) },
                 popEnterTransition = { fadeIn(tween(AntresolMotion.FAST_MS)) },
-                popExitTransition = { fadeOut(tween(AntresolMotion.FAST_MS)) },
+                popExitTransition = { if (initialState.isDetailPage()) detailZoomOut() else fadeOut(tween(AntresolMotion.FAST_MS)) },
             ) {
                 composable<ShellRootRoute> { Box(Modifier.fillMaxSize()) }
                 page<HomeRoute>(contentFocus) {
@@ -916,6 +921,22 @@ private val SHELF_GRIDS = mapOf(
     "artists" to GridKind.Artists,
     "playlists" to GridKind.Playlists,
 )
+
+/** A title's or an album's page: the pages that zoom open and shut. */
+private fun NavBackStackEntry.isDetailPage(): Boolean = destination.hasRoute(DetailRoute::class) || destination.hasRoute(TitleRoute::class)
+
+/** A detail page grows from a little smaller while it fades in. */
+private fun detailZoomIn(): EnterTransition =
+    fadeIn(tween(AntresolMotion.MEDIUM_MS, easing = AntresolMotion.easeOut)) +
+        scaleIn(tween(AntresolMotion.MEDIUM_MS, easing = AntresolMotion.easeOut), initialScale = DETAIL_ZOOM)
+
+/** ...and shrinks back the same way when it closes. */
+private fun detailZoomOut(): ExitTransition =
+    fadeOut(tween(AntresolMotion.MEDIUM_MS, easing = AntresolMotion.easeOut)) +
+        scaleOut(tween(AntresolMotion.MEDIUM_MS, easing = AntresolMotion.easeOut), targetScale = DETAIL_ZOOM)
+
+/** How much smaller than full size a detail page is when it starts to open or ends closing. */
+private const val DETAIL_ZOOM = 0.9f
 
 /** Switches tabs the TV way: one entry per tab on the root, each keeping its own scroll and focus state. */
 private fun NavHostController.navigateToTab(tab: NavTab) {

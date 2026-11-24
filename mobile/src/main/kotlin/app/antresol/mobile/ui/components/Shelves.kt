@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
@@ -60,21 +61,24 @@ fun Shelf(
 ) {
     Column(modifier = modifier.padding(top = 20.dp)) {
         SectionTitle(title, onSeeAll = onSeeAll)
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = PageGutter),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(top = 4.dp),
-        ) {
-            // A title off the library has id 0: its TMDB id keeps the keys apart.
-            items(cards, key = { "${it.kind}:${it.id}:${it.tmdbId ?: 0}" }) { card ->
-                val cardStyle = style ?: card.defaultStyle()
-                MediaCard(
-                    card = card,
-                    onClick = { onOpen(card) },
-                    style = cardStyle,
-                    width = CardSizes.width(cardStyle),
-                    onLongClick = onLongPress?.let { { it(card) } },
-                )
+        // The shelf's title tells its tiles apart from the same card in another shelf (the poster zoom's key).
+        CompositionLocalProvider(LocalPosterOrigin provides title) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = PageGutter),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                // A title off the library has id 0: its TMDB id keeps the keys apart.
+                items(cards, key = { "${it.kind}:${it.id}:${it.tmdbId ?: 0}" }) { card ->
+                    val cardStyle = style ?: card.defaultStyle()
+                    MediaCard(
+                        card = card,
+                        onClick = { onOpen(card) },
+                        style = cardStyle,
+                        width = CardSizes.width(cardStyle),
+                        onLongClick = onLongPress?.let { { it(card) } },
+                    )
+                }
             }
         }
     }

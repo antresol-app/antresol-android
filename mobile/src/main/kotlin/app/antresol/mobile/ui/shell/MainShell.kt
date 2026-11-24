@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -98,6 +99,9 @@ import app.antresol.mobile.ui.browse.ShelfPage
 import app.antresol.mobile.ui.channels.ChannelsScreen
 import app.antresol.mobile.ui.channels.OnAirShelf
 import app.antresol.mobile.ui.components.HeaderProfile
+import app.antresol.mobile.ui.components.POSTER_ZOOM_MS
+import app.antresol.mobile.ui.components.PosterZoomHost
+import app.antresol.mobile.ui.components.ProvidePosterTransition
 import app.antresol.mobile.ui.components.LocalHeaderProfile
 import app.antresol.mobile.ui.detail.BookAction
 import app.antresol.mobile.ui.detail.ItemDetailViewModel
@@ -295,199 +299,208 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         ),
     ) {
         Box(Modifier.fillMaxSize().background(AntresolColors.Background)) {
-            NavHost(
-                navController = navController,
-                startDestination = HomeRoute,
-                modifier = Modifier.fillMaxSize(),
-                enterTransition = { fadeIn(tween(200)) },
-                exitTransition = { fadeOut(tween(200)) },
-                popEnterTransition = { fadeIn(tween(200)) },
-                popExitTransition = { fadeOut(tween(200)) },
-            ) {
-                composable<HomeRoute> {
-                    HomeScreen(
-                        viewModel = viewModel { LoadViewModel(pendingWrites = app.pendingWrites) { HomeContent.from(client.home()) } },
-                        onOpen = open,
-                        onContinue = continueCard,
-                        // Videos play (resuming); a hero album or book opens its page.
-                        onPlay = { card -> if (card.kind in Kind.VIDEO) playVideo(card.id, ResumeMode.Resume) else open(card) },
-                        onSeeAll = { shelf -> openGrid(GridSource.forShelf(ShelfPage.Home, shelf.id), shelf.title) },
-                        // The addons' ways are asked for again with the next page that needs them.
-                        onPullRefresh = app.ways::invalidate,
-                        onAir = {
-                            OnAirShelf(
-                                viewModel = channels,
-                                onWatch = { channel -> watchChannel(channel, ChannelFilter.All) },
-                                onSeeAll = { selectTab(NavTab.Tv) },
+            // The poster of a tile zooms into its page and back (Apple TV's open and close): the pages share it.
+            PosterZoomHost(Modifier.fillMaxSize()) {
+                NavHost(
+                    navController = navController,
+                    startDestination = HomeRoute,
+                    modifier = Modifier.fillMaxSize(),
+                    enterTransition = { fadeIn(tween(pageFadeMs())) },
+                    exitTransition = { fadeOut(tween(pageFadeMs())) },
+                    popEnterTransition = { fadeIn(tween(pageFadeMs())) },
+                    popExitTransition = { fadeOut(tween(pageFadeMs())) },
+                ) {
+                    composable<HomeRoute> {
+                        ProvidePosterTransition {
+                            HomeScreen(
+                                viewModel = viewModel { LoadViewModel(pendingWrites = app.pendingWrites) { HomeContent.from(client.home()) } },
+                                onOpen = open,
+                                onContinue = continueCard,
+                                // Videos play (resuming); a hero album or book opens its page.
+                                onPlay = { card -> if (card.kind in Kind.VIDEO) playVideo(card.id, ResumeMode.Resume) else open(card) },
+                                onSeeAll = { shelf -> openGrid(GridSource.forShelf(ShelfPage.Home, shelf.id), shelf.title) },
+                                // The addons' ways are asked for again with the next page that needs them.
+                                onPullRefresh = app.ways::invalidate,
+                                onAir = {
+                                    OnAirShelf(
+                                        viewModel = channels,
+                                        onWatch = { channel -> watchChannel(channel, ChannelFilter.All) },
+                                        onSeeAll = { selectTab(NavTab.Tv) },
+                                    )
+                                },
                             )
-                        },
-                    )
-                }
-                padded<ChannelsRoute> {
-                    ChannelsScreen(
-                        viewModel = channels,
-                        onWatch = watchChannel,
-                    )
-                }
-                padded<MoviesRoute> {
-                    CardGridScreen(
-                        title = context.getString(R.string.nav_movies),
-                        viewModel = viewModel { CardGridViewModel(client, GridSource.Items(Kind.MOVIE)) },
-                        onOpen = open,
-                    )
-                }
-                padded<ShowsRoute> {
-                    CardGridScreen(
-                        title = context.getString(R.string.nav_tv_shows),
-                        viewModel = viewModel { CardGridViewModel(client, GridSource.Items(Kind.SERIES)) },
-                        onOpen = open,
-                    )
-                }
-                padded<MusicRoute> {
-                    MusicScreen(
-                        viewModel = viewModel {
-                            LoadViewModel {
-                                // Two independent requests: asked for together.
-                                coroutineScope {
-                                    val shelves = async { client.musicHome().shelves }
-                                    val genres = async { client.genres().genres }
-                                    MusicHome(shelves.await(), genres.await())
-                                }
-                            }
-                        },
-                        onOpen = open,
-                        onGrid = openGrid,
-                        onSongs = { title -> navController.navigate(SongsRoute(title)) },
-                        shuffleAll = viewModel { ShuffleAllViewModel(client) },
-                        onPlayTracks = { tracks -> playback.playTracks(tracks) },
-                    )
-                }
-                padded<BooksRoute> {
-                    BooksScreen(
-                        viewModel = viewModel { LoadViewModel { client.booksHome().shelves } },
-                        onOpen = open,
-                        onGrid = openGrid,
-                    )
-                }
-                padded<SearchRoute> {
-                    SearchScreen(
-                        viewModel = viewModel { SearchViewModel(client, app.ways) },
-                        playback = playback,
-                        onOpen = open,
-                        onTab = selectTab,
-                        onGrid = openGrid,
-                        onNowPlaying = { showNowPlaying = true },
-                    )
-                }
-                padded<GridRoute> { entry ->
-                    val route = entry.toRoute<GridRoute>()
-                    CardGridScreen(
-                        title = route.title,
-                        viewModel = viewModel { CardGridViewModel(client, GridSource.decode(route.source)) },
-                        onOpen = open,
-                        onBack = back,
-                    )
-                }
-                composable<DetailRoute> { entry ->
-                    val route = entry.toRoute<DetailRoute>()
-                    if (route.kind in Kind.VIDEO) {
-                        VideoDetailScreen(
-                            viewModel = viewModel { ItemDetailViewModel(client, route.id, app.pendingWrites, waysSource = app.ways, maxHeight = wayMaxHeight) },
-                            onOpen = open,
-                            onBack = back,
-                            onPlay = playVideo,
-                            onPlayWay = playWay,
-                        )
-                    } else {
-                        MediaDetailScreen(
-                            viewModel = viewModel { MediaDetailViewModel(client, route.kind, route.id, app.pendingWrites) },
-                            playback = playback,
-                            onOpen = open,
-                            onBack = back,
-                            onRead = read,
+                        }
+                    }
+                    padded<ChannelsRoute> {
+                        ChannelsScreen(
+                            viewModel = channels,
+                            onWatch = watchChannel,
                         )
                     }
-                }
-                composable<TitleRoute> { entry ->
-                    val route = entry.toRoute<TitleRoute>()
-                    VideoDetailScreen(
-                        viewModel = viewModel {
-                            ItemDetailViewModel(client, 0, app.pendingWrites, title = TitleRef(route.kind, route.tmdbId), waysSource = app.ways, maxHeight = wayMaxHeight)
-                        },
-                        onOpen = open,
-                        onBack = back,
-                        onPlay = playVideo,
-                        onPlayWay = playWay,
-                        // The library has it after all: its own page replaces this one.
-                        onOpenLibraryItem = { card ->
-                            navController.navigate(DetailRoute(card)) { popUpTo<TitleRoute> { inclusive = true } }
-                        },
-                    )
-                }
-                padded<SongsRoute> { entry ->
-                    SongsScreen(
-                        viewModel = viewModel { SongsViewModel(client, starred = false) },
-                        title = entry.toRoute<SongsRoute>().title,
-                        playback = playback,
-                        onBack = back,
-                    )
-                }
-                padded<ComicReaderRoute> { entry ->
-                    val route = entry.toRoute<ComicReaderRoute>()
-                    ComicReaderScreen(
-                        viewModel = viewModel {
-                            ComicReaderViewModel(client.pinned(), app.appScope, app.pendingWrites, route.volumeId, route.fromStart)
-                        },
-                        onBack = back,
-                        onOpenVolume = { next ->
-                            navController.navigate(ComicReaderRoute(next)) {
-                                popUpTo<ComicReaderRoute> { inclusive = true }
+                    padded<MoviesRoute> {
+                        CardGridScreen(
+                            title = context.getString(R.string.nav_movies),
+                            viewModel = viewModel { CardGridViewModel(client, GridSource.Items(Kind.MOVIE)) },
+                            onOpen = open,
+                        )
+                    }
+                    padded<ShowsRoute> {
+                        CardGridScreen(
+                            title = context.getString(R.string.nav_tv_shows),
+                            viewModel = viewModel { CardGridViewModel(client, GridSource.Items(Kind.SERIES)) },
+                            onOpen = open,
+                        )
+                    }
+                    padded<MusicRoute> {
+                        MusicScreen(
+                            viewModel = viewModel {
+                                LoadViewModel {
+                                    // Two independent requests: asked for together.
+                                    coroutineScope {
+                                        val shelves = async { client.musicHome().shelves }
+                                        val genres = async { client.genres().genres }
+                                        MusicHome(shelves.await(), genres.await())
+                                    }
+                                }
+                            },
+                            onOpen = open,
+                            onGrid = openGrid,
+                            onSongs = { title -> navController.navigate(SongsRoute(title)) },
+                            shuffleAll = viewModel { ShuffleAllViewModel(client) },
+                            onPlayTracks = { tracks -> playback.playTracks(tracks) },
+                        )
+                    }
+                    padded<BooksRoute> {
+                        BooksScreen(
+                            viewModel = viewModel { LoadViewModel { client.booksHome().shelves } },
+                            onOpen = open,
+                            onGrid = openGrid,
+                        )
+                    }
+                    padded<SearchRoute> {
+                        SearchScreen(
+                            viewModel = viewModel { SearchViewModel(client, app.ways) },
+                            playback = playback,
+                            onOpen = open,
+                            onTab = selectTab,
+                            onGrid = openGrid,
+                            onNowPlaying = { showNowPlaying = true },
+                        )
+                    }
+                    padded<GridRoute> { entry ->
+                        val route = entry.toRoute<GridRoute>()
+                        CardGridScreen(
+                            title = route.title,
+                            viewModel = viewModel { CardGridViewModel(client, GridSource.decode(route.source)) },
+                            onOpen = open,
+                            onBack = back,
+                        )
+                    }
+                    composable<DetailRoute> { entry ->
+                        ProvidePosterTransition {
+                            val route = entry.toRoute<DetailRoute>()
+                            if (route.kind in Kind.VIDEO) {
+                                VideoDetailScreen(
+                                    viewModel = viewModel { ItemDetailViewModel(client, route.id, app.pendingWrites, waysSource = app.ways, maxHeight = wayMaxHeight) },
+                                    onOpen = open,
+                                    onBack = back,
+                                    onPlay = playVideo,
+                                    onPlayWay = playWay,
+                                )
+                            } else {
+                                MediaDetailScreen(
+                                    viewModel = viewModel { MediaDetailViewModel(client, route.kind, route.id, app.pendingWrites) },
+                                    playback = playback,
+                                    onOpen = open,
+                                    onBack = back,
+                                    onRead = read,
+                                )
                             }
-                        },
-                    )
-                }
-                padded<PdfReaderRoute> { entry ->
-                    val route = entry.toRoute<PdfReaderRoute>()
-                    PdfReaderScreen(
-                        viewModel = viewModel {
-                            PdfReaderViewModel(client.pinned(), app.appScope, app.pendingWrites, context.cacheDir, route.bookId, route.fromStart)
-                        },
-                        onBack = back,
-                    )
-                }
-                padded<SettingsRoute> {
-                    val activity = LocalContext.current as? ComponentActivity
-                    SettingsScreen(
-                        viewModel = viewModel { SettingsViewModel(client) },
-                        settings = app.settings,
-                        session = state.session,
-                        user = user,
-                        onBack = back,
-                        onSwitchProfile = switchProfile,
-                        onSignOut = { confirm = SessionAction.SignOut },
-                        onChangeServer = { confirm = SessionAction.ChangeServer },
-                        onPairTv = { navController.navigate(PairTvRoute) },
-                        language = uiLanguage,
-                        // A new order: the shell's channel list (Home's shelf, the «ТВ» tab) is read again.
-                        channelPrefs = viewModel { ChannelPrefsModel(client.channelPrefsApi(), onChanged = channels::reload) },
-                    )
-                }
-                padded<PairTvRoute> {
-                    PairTvScreen(
-                        viewModel = viewModel {
-                            PairTvViewModel(
-                                api = client.pairApprover(),
-                                ownServerId = state.session.serverId,
-                                ownUserId = state.session.userId,
-                                isAdmin = user?.isAdmin == true,
-                                ownServerUrl = state.session.serverUrl,
+                        }
+                    }
+                    composable<TitleRoute> { entry ->
+                        ProvidePosterTransition {
+                            val route = entry.toRoute<TitleRoute>()
+                            VideoDetailScreen(
+                                viewModel = viewModel {
+                                    ItemDetailViewModel(client, 0, app.pendingWrites, title = TitleRef(route.kind, route.tmdbId), waysSource = app.ways, maxHeight = wayMaxHeight)
+                                },
+                                onOpen = open,
+                                onBack = back,
+                                onPlay = playVideo,
+                                onPlayWay = playWay,
+                                // The library has it after all: its own page replaces this one.
+                                onOpenLibraryItem = { card ->
+                                    navController.navigate(DetailRoute(card)) { popUpTo<TitleRoute> { inclusive = true } }
+                                },
                             )
-                        },
-                        ownName = user?.name ?: state.session.userName,
-                        ownAvatar = user?.avatar ?: state.session.avatar,
-                        ownPhoto = user?.photo ?: state.session.photo,
-                        onBack = back,
-                    )
+                        }
+                    }
+                    padded<SongsRoute> { entry ->
+                        SongsScreen(
+                            viewModel = viewModel { SongsViewModel(client, starred = false) },
+                            title = entry.toRoute<SongsRoute>().title,
+                            playback = playback,
+                            onBack = back,
+                        )
+                    }
+                    padded<ComicReaderRoute> { entry ->
+                        val route = entry.toRoute<ComicReaderRoute>()
+                        ComicReaderScreen(
+                            viewModel = viewModel {
+                                ComicReaderViewModel(client.pinned(), app.appScope, app.pendingWrites, route.volumeId, route.fromStart)
+                            },
+                            onBack = back,
+                            onOpenVolume = { next ->
+                                navController.navigate(ComicReaderRoute(next)) {
+                                    popUpTo<ComicReaderRoute> { inclusive = true }
+                                }
+                            },
+                        )
+                    }
+                    padded<PdfReaderRoute> { entry ->
+                        val route = entry.toRoute<PdfReaderRoute>()
+                        PdfReaderScreen(
+                            viewModel = viewModel {
+                                PdfReaderViewModel(client.pinned(), app.appScope, app.pendingWrites, context.cacheDir, route.bookId, route.fromStart)
+                            },
+                            onBack = back,
+                        )
+                    }
+                    padded<SettingsRoute> {
+                        val activity = LocalContext.current as? ComponentActivity
+                        SettingsScreen(
+                            viewModel = viewModel { SettingsViewModel(client) },
+                            settings = app.settings,
+                            session = state.session,
+                            user = user,
+                            onBack = back,
+                            onSwitchProfile = switchProfile,
+                            onSignOut = { confirm = SessionAction.SignOut },
+                            onChangeServer = { confirm = SessionAction.ChangeServer },
+                            onPairTv = { navController.navigate(PairTvRoute) },
+                            language = uiLanguage,
+                            // A new order: the shell's channel list (Home's shelf, the «ТВ» tab) is read again.
+                            channelPrefs = viewModel { ChannelPrefsModel(client.channelPrefsApi(), onChanged = channels::reload) },
+                        )
+                    }
+                    padded<PairTvRoute> {
+                        PairTvScreen(
+                            viewModel = viewModel {
+                                PairTvViewModel(
+                                    api = client.pairApprover(),
+                                    ownServerId = state.session.serverId,
+                                    ownUserId = state.session.userId,
+                                    isAdmin = user?.isAdmin == true,
+                                    ownServerUrl = state.session.serverUrl,
+                                )
+                            },
+                            ownName = user?.name ?: state.session.userName,
+                            ownAvatar = user?.avatar ?: state.session.avatar,
+                            ownPhoto = user?.photo ?: state.session.photo,
+                            onBack = back,
+                        )
+                    }
                 }
             }
             if (!fullScreen) {
@@ -562,6 +575,15 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     }
 }
 
+/**
+ * The fade of a page change: short, but as long as the poster's zoom when a detail page is one of the two
+ * (the zoom and the fade then end together).
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.pageFadeMs(): Int {
+    val zoom = listOf(initialState, targetState).any { it.destination.hasRoute(DetailRoute::class) || it.destination.hasRoute(TitleRoute::class) }
+    return if (zoom) POSTER_ZOOM_MS else 200
+}
+
 /** Confirms Sign Out or Change Server; Cancel is the safe default. */
 /**
  * A page that keeps clear of a camera cutout or a side navigation bar in landscape (nothing in
@@ -570,7 +592,9 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
  */
 private inline fun <reified T : Any> NavGraphBuilder.padded(noinline content: @Composable (NavBackStackEntry) -> Unit) {
     composable<T> { entry ->
-        Box(Modifier.fillMaxSize().windowInsetsPadding(PageSideInsets)) { content(entry) }
+        ProvidePosterTransition {
+            Box(Modifier.fillMaxSize().windowInsetsPadding(PageSideInsets)) { content(entry) }
+        }
     }
 }
 

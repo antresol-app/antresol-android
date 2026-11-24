@@ -466,7 +466,7 @@ def addon_answer(command, path, query, body):
         ref = body.get("ref")
         if ref is None:
             return 200, {"title": "Source", "note": "Pick a source", "rows": [
-                {"ref": "src-1", "label": "Source One", "detail": "Fast", "badges": ["HD"], "current": True, "final": False},
+                {"ref": "src-1", "label": "Source One", "detail": "Fast", "badges": ["HD", "Audio RU EN", "Subtitles"], "current": True, "final": False},
                 {"ref": "src-2", "label": "Source Two", "final": False}]}
         return 200, {"title": "Quality", "rows": [
             {"ref": "q-1080", "label": "1080p", "detail": "12.3 GB", "badges": ["4K"], "final": True},

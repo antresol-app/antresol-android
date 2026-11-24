@@ -212,7 +212,7 @@ class FakeServer {
             path == "/api/addons/alpha/x/app/step" -> when (bodyOf("ref")) {
                 null -> json(
                     """{"title":"Source","note":"Pick a source","rows":[
-                        {"ref":"src-1","label":"Source One","detail":"Fast","badges":["HD"],"current":true,"final":false},
+                        {"ref":"src-1","label":"Source One","detail":"Fast","badges":["HD","Audio RU EN","Subtitles"],"current":true,"final":false},
                         {"ref":"src-2","label":"Source Two","final":false}]}""",
                 )
                 "src-1", "src-2" -> json(

@@ -49,6 +49,7 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.ui.components.AntresolIcons
+import app.antresol.ui.components.opticalOffset
 import app.antresol.ui.playback.MenuOption
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
@@ -289,7 +290,8 @@ fun RoundIconButton(
                 tint = LocalContentColor.current,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .size(size * 0.44f),
+                    .size(size * 0.44f)
+                    .opticalOffset(icon),
             )
         }
         Box(

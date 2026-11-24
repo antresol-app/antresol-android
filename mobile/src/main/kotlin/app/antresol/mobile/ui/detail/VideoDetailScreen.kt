@@ -66,12 +66,16 @@ import app.antresol.mobile.R
 import app.antresol.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.LocalMediaUrls
+import app.antresol.mobile.ui.components.ActionFlow
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.GlassPillButton
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
+import app.antresol.mobile.ui.components.OpenedPoster
 import app.antresol.mobile.ui.components.PageGutter
+import app.antresol.mobile.ui.components.posterBounds
+import app.antresol.mobile.ui.components.rememberOpenedPoster
 import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.RefreshBox
 import app.antresol.mobile.ui.components.SectionTitle
@@ -143,11 +147,13 @@ fun VideoDetailScreen(
     loaded?.libraryItemId?.let { libraryId ->
         LaunchedEffect(libraryId) { onOpenLibraryItem(Card(id = libraryId, kind = loaded.item.kind, title = loaded.item.title)) }
     }
+    // The tile this page was opened from: its picture grows into the page's artwork, and back on Back.
+    val poster = rememberOpenedPoster()
     RefreshBox(viewModel.refreshing, onRefresh = viewModel::pullToRefresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
         when (val state = viewModel.state) {
-            LoadState.Loading -> DetailStateBox(onBack) { LoadingView() }
+            LoadState.Loading -> DetailStateBox(onBack, art = poster?.let { { PosterLoadingArt(it) } }) { LoadingView() }
             is LoadState.Failed -> DetailStateBox(onBack) { ErrorView(state.error, onRetry = viewModel::reload) }
-            is LoadState.Ready -> VideoDetailContent(state.value, viewModel, onOpen, onBack, onPlay)
+            is LoadState.Ready -> VideoDetailContent(state.value, viewModel, onOpen, onBack, onPlay, poster)
         }
         SnackbarHost(
             snackbar,
@@ -167,6 +173,7 @@ private fun VideoDetailContent(
     onOpen: (Card) -> Unit,
     onBack: () -> Unit,
     onPlay: (itemId: Long, mode: ResumeMode) -> Unit,
+    poster: OpenedPoster?,
 ) {
     val item = detail.item
     val urls = LocalMediaUrls.current
@@ -266,7 +273,7 @@ private fun VideoDetailContent(
         contentPadding = pageListPadding(bottom.calculateBottomPadding() + 24.dp),
     ) {
         item("header") {
-            val artHeight = min(configuration.screenWidthDp.dp * 0.9f, configuration.screenHeightDp.dp * 0.5f)
+            val artHeight = videoArtHeight(configuration)
             DetailHeader(
                 tintUrl = urls?.image(item.poster.ifBlank { item.backdrop }),
                 onBack = onBack,
@@ -277,7 +284,7 @@ private fun VideoDetailContent(
                             model = art,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxWidth().height(artHeight + 60.dp).alpha(0.85f),
+                            modifier = Modifier.posterBounds(poster?.key, AntresolShapes.card).fillMaxWidth().height(artHeight + 60.dp).alpha(0.85f),
                         )
                     }
                     Box(Modifier.matchParentSize().background(AntresolGradients.heroFade))
@@ -329,11 +336,9 @@ private fun VideoDetailContent(
         }
         // A title off the library has no watchlist, watched state or trailers: nothing to put in this row.
         if (!detail.outsideLibrary) item("actions") {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                val buttonModifier = if (configuration.screenWidthDp >= 600) Modifier else Modifier.weight(1f)
+            // Each pill keeps its whole label on one line: one that does not fit beside the others goes below them.
+            ActionFlow(modifier = Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 16.dp)) {
+                val buttonModifier = if (configuration.screenWidthDp >= 600) Modifier else Modifier.grow()
                 if (detail.canWatchlist) {
                     GlassPillButton(
                         text = stringResource(R.string.detail_watchlist),
@@ -451,11 +456,8 @@ private fun PlayRow(
     val wide = LocalConfiguration.current.screenWidthDp >= 600
     val primary = ways?.primary
     Column(Modifier.fillMaxWidth().padding(start = PageGutter, end = PageGutter, top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        // The main button keeps its whole label on one line: when the buttons beside it do not fit, they go below it.
+        ActionFlow(modifier = Modifier.fillMaxWidth(), firstAlone = true) {
             if (target != null) {
                 val episode = target.episode
                 val label = when {
@@ -468,7 +470,7 @@ private fun PlayRow(
                     text = label,
                     icon = AntresolIcons.Play,
                     onClick = { onPlay(target.itemId, ResumeMode.Resume) },
-                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.weight(1f)).testTag("detail-play"),
+                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.grow()).testTag("detail-play"),
                 )
                 if (target.resume) {
                     GlassIconButton(
@@ -488,7 +490,7 @@ private fun PlayRow(
                     enabled = ways.busy == null,
                     onClick = { ways.onRun(primary) },
                     onLongClick = { ways.onChoose(primary) },
-                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.weight(1f)).testTag("way-primary"),
+                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.grow()).testTag("way-primary"),
                 )
             }
             if (onTrailer != null) {

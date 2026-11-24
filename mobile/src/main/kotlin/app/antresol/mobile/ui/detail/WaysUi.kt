@@ -47,6 +47,7 @@ import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.Badge
 import app.antresol.ui.components.WayRing
+import app.antresol.ui.components.opticalOffset
 import app.antresol.ui.components.wayIcon
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
@@ -244,7 +245,8 @@ fun KeepWayButton(
                 .semantics { contentDescription = description },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(wayIcon(way.icon), contentDescription = null, tint = AntresolColors.Label, modifier = Modifier.size(22.dp))
+            val icon = wayIcon(way.icon)
+            Icon(icon, contentDescription = null, tint = AntresolColors.Label, modifier = Modifier.size(22.dp).opticalOffset(icon))
         }
         if (active || working) WayRing(fraction = state?.fraction?.toFloat().takeIf { active }, modifier = Modifier.size(50.dp))
     }

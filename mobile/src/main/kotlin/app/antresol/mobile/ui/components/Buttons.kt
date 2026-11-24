@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.antresol.ui.components.opticalOffset
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
@@ -100,6 +101,6 @@ fun GlassIconButton(
             .focusClickable(CircleShape, onLongClick = onLongClick, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(22.dp).opticalOffset(icon))
     }
 }

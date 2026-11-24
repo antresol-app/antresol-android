@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
@@ -33,6 +34,7 @@ import app.antresol.core.ways.WayTicket
 import app.antresol.core.ways.WayPlayback
 import app.antresol.fixtures.FakeServer
 import app.antresol.mobile.player.VideoPlayerActivity
+import app.antresol.mobile.ui.components.LocalPosterZoom
 import app.antresol.mobile.ui.shell.MainShell
 import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.theme.AntresolTheme
@@ -82,7 +84,8 @@ class PhoneWaysUiTest {
         }
         val state = session.state.value as AuthState.SignedIn
         coil.Coil.setImageLoader(app.newImageLoader().newBuilder().crossfade(false).build())
-        compose.setContent { AntresolTheme { MainShell(session, state) } }
+        // Screenshots draw the view on a software canvas, which the poster zoom's hardware layers cannot be drawn on.
+        compose.setContent { CompositionLocalProvider(LocalPosterZoom provides false) { AntresolTheme { MainShell(session, state) } } }
         waitFor(hasText("Continue Watching"))
     }
 

@@ -1,8 +1,10 @@
 package app.antresol.ui.trailers
 
 import android.os.Looper
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebView
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -114,5 +116,46 @@ class TrailerEmbedStateTest {
         state.bridge.onError(state.loads, 150)
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(false, view.keepScreenOn)
+    }
+
+    private val gone = object : RenderProcessGoneDetail() {
+        override fun didCrash() = false
+        override fun rendererPriorityAtExit() = 0
+    }
+
+    @Test
+    fun aDeadRendererIsAnErrorTheAppSurvivesAndTryAgainLoadsInANewView() {
+        val client = EmbedClient(state)
+        report(1)
+        // True is what keeps the app alive (the system kills it otherwise).
+        assertTrue(client.onRenderProcessGone(view, gone))
+        assertEquals(EmbedPhase.Failed(-3), state.phase)
+        assertNull(state.webView)
+        assertEquals(1, state.generation)
+        assertEquals(false, view.keepScreenOn)
+        // The screen builds a new view for the new generation; «Try again» loads the player there.
+        val next = WebView(RuntimeEnvironment.getApplication()).also { state.webView = it }
+        state.reload()
+        assertEquals(EmbedPhase.Loading, state.phase)
+        assertNotNull(shadowOf(next).lastLoadDataWithBaseURL)
+        report(1, load = 2)
+        assertEquals(EmbedPhase.Playing, state.phase)
+        // The dead view's late report changes nothing.
+        assertTrue(client.onRenderProcessGone(view, gone))
+        assertEquals(EmbedPhase.Playing, state.phase)
+        assertEquals(1, state.generation)
+    }
+
+    @Test
+    fun aRendererThatDiesInTheBackgroundDoesNotBlockTheRetry() {
+        state.onStop() // still loading: the page is dropped
+        assertTrue(EmbedClient(state).onRenderProcessGone(view, gone))
+        val next = WebView(RuntimeEnvironment.getApplication()).also { state.webView = it }
+        state.onStart()
+        assertEquals(EmbedPhase.Failed(-3), state.phase)
+        state.reload()
+        report(1, load = 2)
+        assertEquals(EmbedPhase.Playing, state.phase)
+        assertNotNull(shadowOf(next).lastLoadDataWithBaseURL)
     }
 }

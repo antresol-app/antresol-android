@@ -56,8 +56,21 @@ object Trailers {
      * Opens [trailer] in the YouTube app (`vnd.youtube:<key>`), else its https page in whatever
      * handles it. Returns false when nothing on the device can open either.
      */
-    fun open(context: Context, trailer: Trailer): Boolean =
-        start(context, trailer.appUrl) || start(context, trailer.webUrl)
+    fun open(context: Context, trailer: Trailer): Boolean = outsideLinks(trailer).any { start(context, it) }
+
+    /** An https link to YouTube's own hosts; the path has no backslash or `@`, which parsers read differently. */
+    private val YOUTUBE_PAGE = Regex("""https://(?:www\.youtube\.com|youtube\.com|youtu\.be)/[!-~&&[^\\@]]*""")
+
+    /**
+     * What [open] tries, in order: the YouTube app, then a YouTube page. The server's data is not
+     * trusted to name anything else (`tel:`, `market:`, another site): a key that is not a video id
+     * gives none, and a page link that is not YouTube's is replaced by the one built from the key.
+     */
+    internal fun outsideLinks(trailer: Trailer): List<String> {
+        if (!TrailerEmbed.isValidKey(trailer.key)) return emptyList()
+        val page = trailer.webUrl.takeIf { YOUTUBE_PAGE.matches(it) } ?: "https://www.youtube.com/watch?v=${trailer.key}"
+        return listOf(trailer.appUrl, page)
+    }
 
     private fun start(context: Context, uri: String): Boolean {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))

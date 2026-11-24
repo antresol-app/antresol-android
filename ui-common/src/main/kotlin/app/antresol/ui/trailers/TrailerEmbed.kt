@@ -7,11 +7,16 @@ import android.os.Looper
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -126,6 +131,10 @@ class TrailerEmbedState(val key: String) {
     internal var webView: WebView? = null
     private val main = Handler(Looper.getMainLooper())
 
+    /** Changes when the WebView died: [TrailerEmbedView] builds a new one, which «Try again» loads. */
+    internal var generation by mutableIntStateOf(0)
+        private set
+
     /** Play/pause through the IFrame API (TV: OK on the remote). */
     fun toggle() {
         webView?.evaluateJavascript(TrailerEmbed.TOGGLE_JS, null)
@@ -192,6 +201,20 @@ class TrailerEmbedState(val key: String) {
         phase = EmbedPhase.Failed(NETWORK_ERROR)
     }
 
+    /**
+     * The WebView's renderer process is gone (the system killed it for memory, or it crashed). The
+     * WebView cannot be used any more; the screen drops it for a new one and shows the error, so the
+     * app lives on and «Try again» works. A report of an earlier, already replaced view changes nothing.
+     */
+    internal fun onRendererGone(view: WebView) {
+        if (webView !== view) return
+        webView = null
+        dropped = false
+        view.keepScreenOn = false
+        phase = EmbedPhase.Failed(RENDERER_GONE)
+        generation++
+    }
+
     /** The page's bridge; WebView calls it on a background thread. */
     internal val bridge = Bridge()
 
@@ -232,6 +255,7 @@ class TrailerEmbedState(val key: String) {
         const val STATE_BUFFERING = 3
         const val INVALID_KEY = -1
         const val NETWORK_ERROR = -2
+        const val RENDERER_GONE = -3
     }
 }
 
@@ -248,42 +272,53 @@ fun TrailerEmbedView(state: TrailerEmbedState, modifier: Modifier = Modifier) {
         state.onStart()
         onStopOrDispose { state.onStop() }
     }
-    AndroidView(
-        factory = { context ->
-            WebView(context).apply {
-                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                setBackgroundColor(Color.BLACK)
-                isFocusable = false
-                isFocusableInTouchMode = false
-                // On while the player loads; then it follows the player's state (see the bridge).
-                keepScreenOn = true
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.mediaPlaybackRequiresUserGesture = false
-                webChromeClient = WebChromeClient()
-                webViewClient = object : WebViewClient() {
-                    // The page is the player and nothing else: a link tapped in it (the video's title, the
-                    // YouTube logo) would replace the player with a web site that has no way back. The
-                    // player's own frame still loads.
-                    override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean =
-                        request.isForMainFrame
-
-                    override fun onReceivedError(view: WebView, request: android.webkit.WebResourceRequest, error: android.webkit.WebResourceError) {
-                        // Only the page itself failing counts (no network); a failed ad or image does not.
-                        if (request.isForMainFrame || request.url.toString().endsWith("/iframe_api")) state.onPageFailed()
-                    }
+    key(state.generation) {
+        AndroidView(
+            factory = { context ->
+                WebView(context).apply {
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    setBackgroundColor(Color.BLACK)
+                    isFocusable = false
+                    isFocusableInTouchMode = false
+                    // On while the player loads; then it follows the player's state (see the bridge).
+                    keepScreenOn = true
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.mediaPlaybackRequiresUserGesture = false
+                    webChromeClient = WebChromeClient()
+                    webViewClient = EmbedClient(state)
+                    addJavascriptInterface(state.bridge, TrailerEmbed.BRIDGE)
+                    state.webView = this
+                    if (state.phase == EmbedPhase.Loading) state.load(this)
                 }
-                addJavascriptInterface(state.bridge, TrailerEmbed.BRIDGE)
-                state.webView = this
-                if (state.phase == EmbedPhase.Loading) state.load(this)
-            }
-        },
-        onRelease = { view ->
-            if (state.webView === view) state.webView = null
-            view.stopLoading()
-            view.removeJavascriptInterface(TrailerEmbed.BRIDGE)
-            view.destroy()
-        },
-        modifier = modifier,
-    )
+            },
+            onRelease = { view ->
+                if (state.webView === view) state.webView = null
+                view.stopLoading()
+                view.removeJavascriptInterface(TrailerEmbed.BRIDGE)
+                view.destroy()
+            },
+            modifier = modifier,
+        )
+    }
+}
+
+internal class EmbedClient(private val state: TrailerEmbedState) : WebViewClient() {
+    // The page is the player and nothing else: a link tapped in it (the video's title, the
+    // YouTube logo) would replace the player with a web site that has no way back. The
+    // player's own frame still loads.
+    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+        request.isForMainFrame
+
+    override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+        // Only the page itself failing counts (no network); a failed ad or image does not.
+        if (request.isForMainFrame || request.url.toString().endsWith("/iframe_api")) state.onPageFailed()
+    }
+
+    // Without this answer the system kills the whole app along with the WebView's renderer (on a
+    // TV box that is short of memory it happens while the video buffer is large).
+    override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+        view?.let(state::onRendererGone)
+        return true
+    }
 }

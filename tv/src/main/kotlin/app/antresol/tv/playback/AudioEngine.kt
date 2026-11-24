@@ -18,6 +18,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.api.MediaUrls
 import app.antresol.core.api.attempt
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Chapter
@@ -293,14 +294,7 @@ class AudioEngine(
     /** The same item streaming from [positionMs] (server-side `t`), for transcoded streams. */
     private fun startingAt(item: MediaItem, positionMs: Long): MediaItem {
         val urls = clientProvider()?.urls ?: return item
-        val seconds = positionMs / 1000.0
-        val uri = when {
-            item.mediaId.startsWith(TRACK_PREFIX) -> urls.track(item.mediaId.removePrefix(TRACK_PREFIX).substringBefore(':').toLong(), startSec = seconds)
-            item.mediaId.startsWith(PART_PREFIX) ->
-                urls.audio(item.mediaId.removePrefix(PART_PREFIX).substringBefore(':').toLong(), startSec = seconds)
-            else -> return item
-        }
-        return item.buildUpon().setUri(uri).build()
+        return withUri(item, urls, positionMs / 1000.0) ?: item
     }
 
     // endregion
@@ -583,6 +577,22 @@ class AudioEngine(
 
         /** Speeds offered for audiobooks, as on the web app (0.75–3×). */
         val SPEEDS = listOf(0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
+
+        /**
+         * [item] with its stream URI built from its media id (`track:<id>:<position>`, `part:<fileId>:<part>`),
+         * from [startSec] for a transcoded stream; null for an id this app never made.
+         */
+        internal fun withUri(item: MediaItem, urls: MediaUrls, startSec: Double? = null): MediaItem? {
+            val id = item.mediaId
+            val uri = when {
+                id.startsWith(TRACK_PREFIX) -> idAfter(id, TRACK_PREFIX)?.let { urls.track(it, startSec = startSec) }
+                id.startsWith(PART_PREFIX) -> idAfter(id, PART_PREFIX)?.let { urls.audio(it, startSec = startSec) }
+                else -> null
+            } ?: return null
+            return item.buildUpon().setUri(uri).build()
+        }
+
+        private fun idAfter(mediaId: String, prefix: String): Long? = mediaId.removePrefix(prefix).substringBefore(':').toLongOrNull()
 
         private const val TRACK_PREFIX = "track:"
         private const val PART_PREFIX = "part:"

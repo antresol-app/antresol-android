@@ -101,6 +101,7 @@
     <string name="server_connecting">Connecting…</string>
     <string name="server_invalid_address">That doesn’t look like a server address.</string>
     <string name="server_not_antresol">This address answers, but it isn’t an Antresol server.</string>
+    <string name="server_clear_text_warning">This server isn’t on your home network. Without https:// your password would travel unencrypted.</string>
     <string name="server_needs_setup">The server isn’t set up yet. Open it in a browser to create the first account, then try again.</string>
     <string name="server_change">Change Server</string>
     <string name="server_connected_to">Connected to %1$s</string>
@@ -194,17 +195,13 @@
     <string name="tv_failed_external">This channel won’t open right now</string>
     <string name="tv_failed_external_hint">The provider isn’t sending the stream. Try again later or switch to another channel.</string>
     <string name="tv_track_n">Track %1$d</string>
-    <string name="tv_channel_up">Next Channel</string>
-    <string name="tv_channel_down">Previous Channel</string>
     <string name="tv_watch">Watch “%1$s”</string>
-    <string name="tv_back">Back to Channels</string>
     <string name="tv_empty">No channels yet</string>
     <string name="tv_empty_hint">Channels appear by themselves once the library has at least six movies of a genre or a series with eight episodes.</string>
     <string name="tv_all_channels">All Channels</string>
     <string name="tv_ok_actions">Audio, subtitles, favourite</string>
     <string name="ui_language">Interface Language</string>
     <string name="ui_language_profile">Same as profile</string>
-    <string name="action_more">More</string>
     <string name="tv_favorites">Favourites</string>
     <string name="tv_view_channels">Channels</string>
     <string name="tv_view_guide">Guide</string>
@@ -288,12 +285,10 @@
     <string name="way_busy">Opening…</string>
     <string name="way_cancel">Cancel</string>
     <string name="way_empty_step">Nothing to choose from</string>
-    <string name="way_not_available">This is not available anymore. Try again.</string>
     <string name="way_menu_audio_quality">Audio &amp; quality…</string>
     <string name="way_hint_globe">Streams from the internet</string>
     <string name="way_hint_play">Plays in the app</string>
     <string name="player_way_source">Audio &amp; source…</string>
     <string name="error_input_not_ready">The video is not ready yet. Try again in a moment.</string>
     <string name="episode_open_page">Open Episode Page</string>
-    <string name="title_page_in_library">This title is in your library</string>
 </resources>

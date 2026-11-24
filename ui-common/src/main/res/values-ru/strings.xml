@@ -99,6 +99,7 @@
     <string name="server_connecting">Подключение…</string>
     <string name="server_invalid_address">Это не похоже на адрес сервера.</string>
     <string name="server_not_antresol">По этому адресу отвечает не сервер Antresol.</string>
+    <string name="server_clear_text_warning">Этот сервер не в домашней сети. Без https:// пароль пойдёт по сети в открытом виде.</string>
     <string name="server_needs_setup">Сервер ещё не настроен. Откройте его в браузере, создайте первую учётную запись и попробуйте снова.</string>
     <string name="server_change">Сменить сервер</string>
     <string name="server_connected_to">Подключено к %1$s</string>
@@ -194,17 +195,13 @@
     <string name="tv_failed_external">Канал сейчас не открывается</string>
     <string name="tv_failed_external_hint">Провайдер не отдаёт поток. Попробуйте позже или переключите канал.</string>
     <string name="tv_track_n">Дорожка %1$d</string>
-    <string name="tv_channel_up">Следующий канал</string>
-    <string name="tv_channel_down">Предыдущий канал</string>
     <string name="tv_watch">Смотреть «%1$s»</string>
-    <string name="tv_back">К каналам</string>
     <string name="tv_empty">Каналов пока нет</string>
     <string name="tv_empty_hint">Каналы появятся сами, когда в медиатеке наберётся хотя бы шесть фильмов одного жанра или сериал от восьми серий.</string>
     <string name="tv_all_channels">Все каналы</string>
     <string name="tv_ok_actions">Звук, субтитры, избранное</string>
     <string name="ui_language">Язык интерфейса</string>
     <string name="ui_language_profile">Как у профиля</string>
-    <string name="action_more">Ещё</string>
     <string name="tv_favorites">Избранное</string>
     <string name="tv_view_channels">Каналы</string>
     <string name="tv_view_guide">Телегид</string>
@@ -288,12 +285,10 @@
     <string name="way_busy">Открываем…</string>
     <string name="way_cancel">Отмена</string>
     <string name="way_empty_step">Выбирать не из чего</string>
-    <string name="way_not_available">Это больше недоступно. Попробуйте ещё раз.</string>
     <string name="way_menu_audio_quality">Озвучка и качество…</string>
     <string name="way_hint_globe">Идёт из интернета</string>
     <string name="way_hint_play">Играет в приложении</string>
     <string name="player_way_source">Озвучка и источник…</string>
     <string name="error_input_not_ready">Видео ещё не готово. Попробуйте через минуту.</string>
     <string name="episode_open_page">Открыть страницу серии</string>
-    <string name="title_page_in_library">Этот фильм или сериал есть в вашей медиатеке</string>
 </resources>

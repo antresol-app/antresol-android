@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Text
+import app.antresol.core.api.HostKind
 import app.antresol.core.discovery.DiscoveredServer
 import app.antresol.core.discovery.DiscoveryState
 import app.antresol.core.discovery.ServerFinder
@@ -162,10 +163,20 @@ fun ServerScreen(session: SessionManager, finder: ServerFinder, onBack: (() -> U
                     .fillMaxWidth()
                     .focusRequester(fieldFocus),
             )
+            // Over the Internet without https the password would cross it in clear text: said before connecting.
+            val clearText = remember(address) { HostKind.isClearOverInternet(address) }
             Text(
-                text = error ?: if (connecting) stringResource(R.string.server_connecting) else "",
+                text = error ?: when {
+                    connecting -> stringResource(R.string.server_connecting)
+                    clearText -> stringResource(R.string.server_clear_text_warning)
+                    else -> ""
+                },
                 style = Antresol.typography.caption,
-                color = if (error != null) AntresolColors.Red else AntresolColors.LabelSecondary,
+                color = when {
+                    error != null -> AntresolColors.Red
+                    clearText && !connecting -> AntresolColors.Orange
+                    else -> AntresolColors.LabelSecondary
+                },
                 textAlign = TextAlign.Center,
                 minLines = if (found) 1 else 2,
                 maxLines = 2,

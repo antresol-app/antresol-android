@@ -2,12 +2,14 @@ package app.antresol.core.session
 
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.ApiException
+import app.antresol.core.api.HostKind
 import app.antresol.core.api.MediaUrls
 import app.antresol.core.model.DeviceInfo
 import app.antresol.core.model.Health
 import app.antresol.core.model.Me
 import app.antresol.core.model.HistoryRef
 import app.antresol.core.model.Profile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +19,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 /** Where the app is in the connect → pick profile → signed in flow. */
 sealed interface AuthState {
@@ -55,6 +58,9 @@ class ServerNeedsSetupException : IOException("The server is not set up yet")
 
 /** Something answered at the address, but not with Antresol's `/api/health`. */
 class NotAntresolServerException(cause: Throwable? = null) : IOException("Not an Antresol server", cause)
+
+/** How long the `https://` try of a bare public host may take before the plain `http://` address is used. */
+private const val HTTPS_PROBE_SECONDS = 8L
 
 /**
  * Owns the [AntresolClient] and the sign-in state shared by the TV and phone apps.
@@ -127,11 +133,29 @@ class SessionManager(
 
     /**
      * The checks of [connect] without switching servers: normalises [address] (bare host gets
-     * `http://` and port 8420), asks `/api/health` and `/api/setup`. Same exceptions as [connect].
+     * `http://` and port 8420), asks `/api/health` and `/api/setup`. A bare host outside the local
+     * network is tried over `https://` first and falls back to the `http://` form when it does not
+     * answer there (the password should not cross the Internet in clear text if it need not). Same
+     * exceptions as [connect].
      */
     suspend fun check(address: String): CheckedServer {
         val baseUrl = MediaUrls.normalizeBaseUrl(address)
-        val probe = AntresolClient(baseUrl, httpClient, language)
+        HostKind.httpsFirst(address)?.let { secure ->
+            try {
+                return checkAt(secure, httpClient.newBuilder().callTimeout(HTTPS_PROBE_SECONDS, TimeUnit.SECONDS).build())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ServerNeedsSetupException) {
+                throw e // it is an Antresol server: say so, do not look for another
+            } catch (e: Exception) {
+                // Nothing (or nothing of ours) over https: the plain address below.
+            }
+        }
+        return checkAt(baseUrl, httpClient)
+    }
+
+    private suspend fun checkAt(baseUrl: String, client: OkHttpClient): CheckedServer {
+        val probe = AntresolClient(baseUrl, client, language)
         val health = try {
             probe.health()
         } catch (e: ApiException) {

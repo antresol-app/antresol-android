@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.antresol.core.api.HostKind
 import app.antresol.core.discovery.DiscoveredServer
 import app.antresol.core.discovery.DiscoveryState
 import app.antresol.core.discovery.ServerFinder
@@ -99,6 +100,14 @@ fun ServerScreen(session: SessionManager, finder: ServerFinder) {
             keyboardActions = KeyboardActions(onGo = { connect() }),
             modifier = Modifier.testTag("server-address"),
         )
+        if (remember(address) { HostKind.isClearOverInternet(address) }) {
+            Text(
+                stringResource(R.string.server_clear_text_warning),
+                style = Antresol.typography.caption.copy(color = AntresolColors.Orange),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.testTag("server-clear-text-warning"),
+            )
+        }
         error?.let {
             FormError(it)
         }

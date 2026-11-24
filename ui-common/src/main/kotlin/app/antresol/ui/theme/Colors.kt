@@ -17,7 +17,6 @@ object AntresolColors {
     val LabelInverse = Color(0xFF000000)
 
     val Accent = Color(0xFF0A84FF)
-    val AccentPressed = Color(0xFF0071E3)
     val Green = Color(0xFF30D158)
     val Orange = Color(0xFFFF9F0A)
     val Red = Color(0xFFFF453A)

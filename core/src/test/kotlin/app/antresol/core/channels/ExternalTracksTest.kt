@@ -90,3 +90,13 @@ class ExternalTracksTest {
         assertFalse(epg.channels.single().programs.single().isLibraryItem)
     }
 }
+
+private class InMemoryExternalTrackMemory : ExternalTrackMemory {
+    private val choices = mutableMapOf<Long, LiveTrackChoice>()
+
+    override fun get(channelId: Long): LiveTrackChoice? = choices[channelId]
+
+    override fun put(channelId: Long, choice: LiveTrackChoice) {
+        choices[channelId] = choice
+    }
+}

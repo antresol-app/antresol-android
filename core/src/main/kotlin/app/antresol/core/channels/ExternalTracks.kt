@@ -70,17 +70,6 @@ interface ExternalTrackMemory {
     fun put(channelId: Long, choice: LiveTrackChoice)
 }
 
-/** [ExternalTrackMemory] for tests and previews. */
-class InMemoryExternalTrackMemory : ExternalTrackMemory {
-    private val choices = mutableMapOf<Long, LiveTrackChoice>()
-
-    override fun get(channelId: Long): LiveTrackChoice? = choices[channelId]
-
-    override fun put(channelId: Long, choice: LiveTrackChoice) {
-        choices[channelId] = choice
-    }
-}
-
 /** Only what identifies a choice across sessions: language + label (no group index, it may move). */
 fun LiveTrackChoice.forMemory(): LiveTrackChoice = LiveTrackChoice(
     audio = audio?.let { ProgramTrack(name = it.name, label = it.label, lang = it.lang) },

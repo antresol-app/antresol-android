@@ -168,7 +168,7 @@ fun DetailScreen(
                     model = state.value,
                     viewModel = viewModel,
                     audio = audio,
-                    actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead, onClose, onTrailer, onPlayWay, onOpenLibraryItem),
+                    actions = DetailActions(onOpen, onPlay, onNowPlaying, onRead, onClose, onTrailer, onPlayWay),
                     onScrolledToTop = onScrolledToTop,
                     canTakeFocus = canTakeFocus,
                     onPanelOpenChanged = onPanelOpenChanged,
@@ -187,7 +187,6 @@ private class DetailActions(
     val close: () -> Unit,
     val trailer: (Trailer, String) -> Unit,
     val playWay: (WayPlayback) -> Unit,
-    val openLibraryItem: (Card) -> Unit,
 )
 
 /**

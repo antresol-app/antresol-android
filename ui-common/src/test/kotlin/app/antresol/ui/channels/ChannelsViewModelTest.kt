@@ -390,14 +390,10 @@ class ChannelsViewModelTest {
     }
 
     @Test
-    fun theLastChannelComesFromTheServerAndFollowsTuneIn() = runTest(dispatcher) {
+    fun theLastChannelComesFromTheServer() = runTest(dispatcher) {
         val vm = viewModel()
         runCurrent()
         assertEquals("Comedy", vm.lastChannel?.name)
-        vm.tunedIn(3)
-        assertEquals("Family", vm.lastChannel?.name)
-        vm.tunedIn(42)
-        assertNull(vm.lastChannel)
     }
 
     @Test

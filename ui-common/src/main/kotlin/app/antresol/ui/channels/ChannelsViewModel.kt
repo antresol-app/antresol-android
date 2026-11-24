@@ -183,11 +183,6 @@ class ChannelsViewModel(
         }
     }
 
-    /** The player tuned in [channelId] (it also wrote it on the server): highlight it on return. */
-    fun tunedIn(channelId: Long) {
-        lastChannelId = channelId
-    }
-
     private fun setFavoriteLocally(channelId: Long, favorite: Boolean) {
         val next = channels?.map { if (it.id == channelId) it.copy(favorite = favorite) else it } ?: return
         // With «favourites first» the star moves the channel where the server will put it next time.

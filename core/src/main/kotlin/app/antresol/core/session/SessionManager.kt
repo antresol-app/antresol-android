@@ -19,6 +19,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import java.io.IOException
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
 /** Where the app is in the connect → pick profile → signed in flow. */
@@ -147,6 +148,8 @@ class SessionManager(
                 throw e
             } catch (e: ServerNeedsSetupException) {
                 throw e // it is an Antresol server: say so, do not look for another
+            } catch (e: UnknownHostException) {
+                throw e // the name does not resolve: http would wait for DNS once more for nothing
             } catch (e: Exception) {
                 // Nothing (or nothing of ours) over https: the plain address below.
             }

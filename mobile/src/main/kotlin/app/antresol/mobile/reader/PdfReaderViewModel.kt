@@ -128,6 +128,27 @@ internal fun pdfRenderSize(pageWidth: Int, pageHeight: Int, widthPx: Int, maxPix
     return width to (width * aspect).toInt().coerceAtLeast(1)
 }
 
+/** The most the cached PDFs of all servers take together; the least recently opened go first. */
+internal const val MAX_CACHED_PDF_BYTES = 500L * 1024 * 1024
+
+/**
+ * Deletes the least recently opened PDFs under [books] (a folder per server) until the rest take at most
+ * [maxBytes]. A copy counts as opened when its modified time was set (on download and on every open). [keep],
+ * the book being opened, is never deleted. A file that cannot be deleted is left; nothing here may fail the reader.
+ */
+internal fun prunePdfCache(books: File, keep: File, maxBytes: Long = MAX_CACHED_PDF_BYTES) {
+    runCatching {
+        val pdfs = books.walkTopDown().filter { it.isFile && it.extension == "pdf" }.sortedBy { it.lastModified() }.toList()
+        var total = pdfs.sumOf { it.length() }
+        for (file in pdfs) {
+            if (total <= maxBytes) break
+            if (file == keep) continue
+            val size = file.length()
+            if (file.delete()) total -= size
+        }
+    }
+}
+
 /** A book ready to read in the PDF reader. */
 data class PdfBook(val bookId: Long, val title: String, val document: PdfDocument, val startPage: Int)
 
@@ -160,7 +181,9 @@ class PdfReaderViewModel(
         private suspend fun open(client: AntresolClient, dir: File, bookId: Long, fromStart: Boolean): PdfBook {
             val book = client.book(bookId)
             val pdf = book.files.firstOrNull { it.format.equals("PDF", ignoreCase = true) } ?: throw NothingToReadException()
-            val document = openCached(client, File(dir, serverFolder(client.baseUrl)), pdf.id, pdf.size)
+            val serverDir = File(dir, serverFolder(client.baseUrl))
+            val document = openCached(client, serverDir, pdf.id, pdf.size)
+            withContext(Dispatchers.IO) { prunePdfCache(dir, keep = File(serverDir, "${pdf.id}.pdf")) }
             val progress = book.progress
             return PdfBook(
                 bookId = bookId,
@@ -185,7 +208,7 @@ class PdfReaderViewModel(
                     runCatching { PdfDocument(file) }.getOrElse {
                         file.delete()
                         null
-                    }
+                    }?.also { file.setLastModified(System.currentTimeMillis()) } // opened now: the last to be pruned
                 }
             }
             if (cached != null) return cached

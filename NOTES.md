@@ -1687,3 +1687,43 @@ The apps show what the server's addons offer, by the protocol in docs/API.md sec
   screenshots to `$DENSITY_SHOTS_DIR`).
 - Not verified on a real TV: the density a given box reports, and the page on a real remote (the tests drive D-pad
   key events in Robolectric).
+
+## Owner list 2026-11-23: badges, action rows, icons, poster zoom
+
+The owner found these on the iPhone app; the Android phone and TV apps were checked for the same defects.
+
+- **Badges** (`ui-common/.../Badge.kt`): every badge has the height of one line of its text plus the padding, with or without an
+  icon (an icon-only chip was a little shorter). A subtitles or audio badge with no languages ("Subtitles", «Субтитры») shows the
+  icon and the word; with languages the icon stands for the word as before (`BadgeLabel.shown`). Applies to the phone and the TV
+  (cards, detail pages) and to the badges of the choice step by step (phone); the TV lists a way's badges as one line of text.
+- **Action rows** (phone, `ActionFlow`): the buttons of a title page's play row and of its watchlist/watched row keep their whole
+  label on one line. `ActionFlow` measures each child's natural width and moves a child that does not fit to the next line; the
+  children marked `grow()` share what is left of their line, and in the play row (`firstAlone`) the main button («Продолжить
+  S1 E2») takes a line to itself when the buttons beside it do not fit at 360 dp. Before, the label had about 84 dp between
+  the 50 dp icon buttons and was cut to an ellipsis. TV (`VideoActions`): the same row is a `FlowRow`: in Russian «Трейлер» ran off the right edge
+  of the screen, now it goes to a second line.
+- **Optical centring** (`IconOptics`, `opticalOffset`): a glyph centred in its 24-unit grid can still look off when its ink is
+  lopsided. The shifts (grid units) are measured by `IconOpticsTest`, which draws the icons of the round buttons and compares
+  them with 0.6 of the distance from the centre of their ink to the middle; an axis moves only where the icon's frame is centred
+  (the play triangle and the chevrons are drawn toward their tip by hand). Moved: picture-in-picture (up and left), the audio
+  bubble, subtitles, skip ahead, next, the channel list, the favourite star. Used by every round button of the phone
+  (`GlassIconButton`, `RoundIconButton`, `KeepWayButton`) and the TV (`RoundIconButton`, `PlayerIconButton`). There is no
+  cast/AirPlay button on Android.
+- **Poster zoom** (phone, `PosterTransition.kt`): a tapped poster grows from its tile into the detail page's artwork and shrinks
+  back on Back (Apple TV's open and close). Compose shared bounds (`SharedTransitionLayout` around the navigation host,
+  `sharedBounds` on the tile's artwork and on the page's: the video page's backdrop, the cover of an album, book or playlist).
+  The key is `poster/<shelf title>/<kind>:<id>:<tmdb id>`, so the same card in two shelves of a page has two keys; the tapped tile
+  tells the page which one (`PosterTransitions.opened` / `take`, valid for a second). While a video page loads it draws the
+  tile's picture in the artwork's place, so the zoom has something to land on. A detail page's fade is as long as the zoom
+  (`POSTER_ZOOM_MS`). The artwork is drawn through a hardware layer: a test that draws the view on a software canvas turns the
+  zoom off with `LocalPosterZoom provides false`. TV: a detail page zooms in from 0.9 with a fade and out again (no shared
+  element: the TV's focus scaling and focus memory do not mix with it).
+- **Not changed, checked**: Settings is already one screen on both apps with About last (phone: profile, server, playback,
+  language, devices, About; TV: the same, About at the foot of the profile column); the choice of a way's quality is a wrap-height
+  sheet with its note under the title (phone) and a side panel (TV); no page title stays on screen over scrolling content (the
+  phone's tab headers, titles and back bars scroll away with their page and a scrim keeps the status bar clear; the TV's grid
+  scrolls below the navigation and never under it).
+- Tests: `BadgeLabelTest`, `IconOpticsTest`, `PhoneOwnerNov23UiTest` (labels on one line at 360 dp in English and Russian, badges of
+  one size, the zoom's shared key and the artwork growing and shrinking; screenshots, the zoom's frames drawn through a hardware
+  renderer (`RenderNode` + `HardwareRenderer`, which Robolectric's native graphics supports), to `mobile/build/screenshots/nov23-*.png`), `TvOwnerNov23UiTest` (the Russian row,
+  the zoom frames; `tv/build/screenshots/nov23-tv-*.png`).

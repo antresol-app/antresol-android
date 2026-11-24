@@ -42,6 +42,7 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.antresol.tv.ui.components.OptionsPanel
+import app.antresol.ui.components.opticalOffset
 import app.antresol.ui.format.Durations
 import app.antresol.ui.playback.PlayerMenu
 import app.antresol.ui.playback.VideoPlayerViewModel
@@ -161,7 +162,8 @@ internal fun PlayerIconButton(icon: ImageVector, label: String, onClick: () -> U
                 tint = LocalContentColor.current,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .size(22.dp),
+                    .size(22.dp)
+                    .opticalOffset(icon),
             )
         }
         Box(Modifier.height(16.dp)) {

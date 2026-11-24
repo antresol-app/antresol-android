@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.antresol.mobile.R
+import app.antresol.ui.components.opticalOffset
 import app.antresol.ui.format.Durations
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
@@ -131,7 +132,7 @@ fun RoundIconButton(
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = if (enabled) tint else tint.copy(alpha = 0.35f), modifier = Modifier.size(iconSize))
+        Icon(icon, contentDescription = null, tint = if (enabled) tint else tint.copy(alpha = 0.35f), modifier = Modifier.size(iconSize).opticalOffset(icon))
     }
 }
 

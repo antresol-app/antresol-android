@@ -1,9 +1,5 @@
 package app.antresol.mobile
 
-import android.content.Context
-import app.antresol.ui.language.ProfileLocaleKeeper
-import android.content.res.Resources
-import android.content.res.Configuration
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -13,28 +9,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
-import app.antresol.mobile.settings.AppSettings
 import app.antresol.mobile.ui.root.AntresolMobileRoot
 import app.antresol.ui.theme.AntresolTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : MobileActivity() {
     private val app get() = application as AntresolMobileApp
-
-    // The profile's language survives configuration changes the activity handles (see the keeper).
-    private val locale = ProfileLocaleKeeper()
-
-    override fun attachBaseContext(newBase: Context) {
-        val settings = AppSettings(newBase)
-        locale.language = settings.profileLanguage
-        super.attachBaseContext(settings.wrap(newBase))
-    }
-
-    override fun getResources(): Resources = locale.resources(this, super.getResources())
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        locale.onConfigurationChanged()
-        super.onConfigurationChanged(newConfig)
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Dark only: light system bar icons on transparent bars, content draws edge to edge.

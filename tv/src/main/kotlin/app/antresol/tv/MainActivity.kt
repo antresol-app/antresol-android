@@ -1,13 +1,10 @@
 package app.antresol.tv
 
 import android.content.Context
-import app.antresol.ui.language.ProfileLocaleKeeper
-import android.content.res.Resources
-import android.content.res.Configuration
+import app.antresol.ui.language.LocalizedActivity
 import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -30,21 +27,10 @@ import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolTheme
 import app.antresol.ui.theme.AntresolTypography
 
-class MainActivity : ComponentActivity() {
-    // The profile's language survives configuration changes the activity handles (see the keeper).
-    private val locale = ProfileLocaleKeeper()
+class MainActivity : LocalizedActivity() {
+    override fun profileLanguage(base: Context): String = TvSettings(base).current.profileLanguage
 
-    override fun attachBaseContext(newBase: Context) {
-        locale.language = TvSettings(newBase).current.profileLanguage
-        super.attachBaseContext(TvSettings.wrap(newBase))
-    }
-
-    override fun getResources(): Resources = locale.resources(this, super.getResources())
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        locale.onConfigurationChanged()
-        super.onConfigurationChanged(newConfig)
-    }
+    override fun wrap(base: Context): Context = TvSettings.wrap(base)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

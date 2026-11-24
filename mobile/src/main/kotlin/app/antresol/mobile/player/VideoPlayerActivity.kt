@@ -1,9 +1,8 @@
 package app.antresol.mobile.player
 
+import app.antresol.mobile.MobileActivity
 import android.app.PictureInPictureParams
 import android.content.Context
-import app.antresol.ui.language.ProfileLocaleKeeper
-import android.content.res.Resources
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -12,7 +11,6 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Rational
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -32,7 +30,6 @@ import androidx.media3.session.MediaSession
 import app.antresol.core.session.AuthState
 import app.antresol.core.ways.WayTicket
 import app.antresol.mobile.AntresolMobileApp
-import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.playback.VideoPlayerOptions
 import app.antresol.ui.playback.VideoPlayerViewModel
@@ -47,7 +44,7 @@ import kotlinx.coroutines.launch
  * picture-in-picture while the rest of the app stays where it was. One instance at a time:
  * starting another video closes the previous player (and its server session).
  */
-class VideoPlayerActivity : ComponentActivity() {
+class VideoPlayerActivity : MobileActivity() {
     private val app get() = application as AntresolMobileApp
     private lateinit var viewModel: VideoPlayerViewModel
     private var mediaSession: MediaSession? = null
@@ -61,22 +58,6 @@ class VideoPlayerActivity : ComponentActivity() {
     private val pipUpdater = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) = updatePictureInPictureParams()
         override fun onVideoSizeChanged(videoSize: VideoSize) = updatePictureInPictureParams()
-    }
-
-    // The profile's language survives configuration changes the activity handles (see the keeper).
-    private val locale = ProfileLocaleKeeper()
-
-    override fun attachBaseContext(newBase: Context) {
-        val settings = AppSettings(newBase)
-        locale.language = settings.profileLanguage
-        super.attachBaseContext(settings.wrap(newBase))
-    }
-
-    override fun getResources(): Resources = locale.resources(this, super.getResources())
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        locale.onConfigurationChanged()
-        super.onConfigurationChanged(newConfig)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

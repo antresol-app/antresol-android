@@ -1,15 +1,12 @@
 package app.antresol.mobile.player
 
+import app.antresol.mobile.MobileActivity
 import android.content.Context
-import app.antresol.ui.language.ProfileLocaleKeeper
-import android.content.res.Resources
-import android.content.res.Configuration
 import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,7 +17,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.antresol.mobile.AntresolMobileApp
-import app.antresol.mobile.settings.AppSettings
 import app.antresol.ui.theme.AntresolTheme
 import app.antresol.ui.trailers.TrailerPlayerViewModel
 
@@ -29,28 +25,12 @@ import app.antresol.ui.trailers.TrailerPlayerViewModel
  * path in the app's own player, else in the embedded player for its key. No picture-in-picture,
  * no progress, no media session: Back closes it.
  */
-class TrailerPlayerActivity : ComponentActivity() {
+class TrailerPlayerActivity : MobileActivity() {
     private val app get() = application as AntresolMobileApp
 
     /** The own player's model; null for an embedded trailer. */
     internal var viewModel: TrailerPlayerViewModel? = null
         private set
-
-    // The profile's language survives configuration changes the activity handles (see the keeper).
-    private val locale = ProfileLocaleKeeper()
-
-    override fun attachBaseContext(newBase: Context) {
-        val settings = AppSettings(newBase)
-        locale.language = settings.profileLanguage
-        super.attachBaseContext(settings.wrap(newBase))
-    }
-
-    override fun getResources(): Resources = locale.resources(this, super.getResources())
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        locale.onConfigurationChanged()
-        super.onConfigurationChanged(newConfig)
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(

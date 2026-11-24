@@ -1,9 +1,8 @@
 package app.antresol.mobile.player
 
+import app.antresol.mobile.MobileActivity
 import android.app.PictureInPictureParams
 import android.content.Context
-import app.antresol.ui.language.ProfileLocaleKeeper
-import android.content.res.Resources
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -15,7 +14,6 @@ import android.view.OrientationEventListener
 import android.content.pm.ActivityInfo
 import android.util.Rational
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -35,7 +33,6 @@ import androidx.media3.session.MediaSession
 import app.antresol.core.channels.ChannelFilter
 import app.antresol.core.session.AuthState
 import app.antresol.mobile.AntresolMobileApp
-import app.antresol.mobile.settings.AppSettings
 import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.ui.playback.LiveMediaSession
 import app.antresol.ui.playback.LivePlayerViewModel
@@ -51,7 +48,7 @@ import kotlinx.coroutines.launch
  * Leaving the app while the channel plays shrinks it to picture-in-picture; closing that window
  * ends it. One at a time: opening another channel or a video closes this one.
  */
-class LivePlayerActivity : ComponentActivity() {
+class LivePlayerActivity : MobileActivity() {
     private val app get() = application as AntresolMobileApp
     private lateinit var viewModel: LivePlayerViewModel
     private var mediaSession: MediaSession? = null
@@ -90,19 +87,7 @@ class LivePlayerActivity : ComponentActivity() {
         override fun onIsPlayingChanged(isPlaying: Boolean) = updatePictureInPictureParams()
     }
 
-    // The profile's language survives configuration changes the activity handles (see the keeper).
-    private val locale = ProfileLocaleKeeper()
-
-    override fun attachBaseContext(newBase: Context) {
-        val settings = AppSettings(newBase)
-        locale.language = settings.profileLanguage
-        super.attachBaseContext(settings.wrap(newBase))
-    }
-
-    override fun getResources(): Resources = locale.resources(this, super.getResources())
-
     override fun onConfigurationChanged(newConfig: Configuration) {
-        locale.onConfigurationChanged()
         super.onConfigurationChanged(newConfig)
         readConfiguration(newConfig)
     }

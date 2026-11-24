@@ -60,6 +60,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -220,6 +221,10 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val audio = app.audio
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
+    // The shell's store, for what a tab root loads: a tab left for TAB_RESET_MS is cleared back to its root (scroll and
+    // focus start over), but its data stays, so coming back shows it at once and refreshes it in place instead of
+    // reloading it from the server behind a spinner.
+    val tabData = checkNotNull(LocalViewModelStoreOwner.current)
     // The interface follows the profile's language: a different one restarts the screens in it.
     val hostActivity = LocalContext.current.findActivity()
     val uiLanguage: UiLanguageModel = viewModel(key = "ui-language") {
@@ -473,7 +478,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 composable<ShellRootRoute> { Box(Modifier.fillMaxSize()) }
                 page<HomeRoute>(contentFocus) {
                     HomeScreen(
-                        viewModel = viewModel { HomeViewModel(client, app.pendingWrites) },
+                        viewModel = viewModel(tabData, key = "tab/home") { HomeViewModel(client, app.pendingWrites) },
                         onOpen = open,
                         onPlay = playCard,
                         onScrolledToTop = onScrolledToTop,
@@ -482,13 +487,13 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                     )
                 }
                 page<MoviesRoute>(contentFocus) {
-                    LibraryGrid(GridSource(GridKind.Movies), stringResource(R.string.nav_movies), open, onScrolledToTop, LocalPageCanTakeFocus.current)
+                    LibraryGrid(GridSource(GridKind.Movies), stringResource(R.string.nav_movies), open, onScrolledToTop, LocalPageCanTakeFocus.current, store = tabData)
                 }
                 page<ShowsRoute>(contentFocus) {
-                    LibraryGrid(GridSource(GridKind.Shows), stringResource(R.string.nav_tv_shows), open, onScrolledToTop, LocalPageCanTakeFocus.current)
+                    LibraryGrid(GridSource(GridKind.Shows), stringResource(R.string.nav_tv_shows), open, onScrolledToTop, LocalPageCanTakeFocus.current, store = tabData)
                 }
                 page<ChannelsRoute>(contentFocus) {
-                    val channelsViewModel = viewModel { ChannelsViewModel(client.channelsApi()) }
+                    val channelsViewModel = viewModel(tabData, key = "tab/tv") { ChannelsViewModel(client.channelsApi()) }
                     LaunchedEffect(channelsViewModel) {
                         guideRequests.collect { requested ->
                             if (requested) {
@@ -512,7 +517,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 page<MusicRoute>(contentFocus) {
                     ShelvesScreen(
                         title = stringResource(R.string.nav_music),
-                        viewModel = viewModel { ShelvesViewModel({ client.musicHome().shelves }, { client.genres().genres }) },
+                        viewModel = viewModel(tabData, key = "tab/music") { ShelvesViewModel({ client.musicHome().shelves }, { client.genres().genres }) },
                         onOpen = open,
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = LocalPageCanTakeFocus.current,
@@ -890,14 +895,23 @@ private fun LibraryGrid(
     onScrolledToTop: (Boolean) -> Unit,
     canTakeFocus: () -> Boolean,
     onShuffle: (() -> Unit)? = null,
+    /** A tab root's grid keeps its cards in the shell's store (see `tabData`); a pushed grid in its own entry. */
+    store: ViewModelStoreOwner? = null,
 ) {
     val client = (LocalContext.current.applicationContext as AntresolTvApp).session.requireClient()
     val resources = LocalContext.current.resources
+    val owner = store ?: checkNotNull(LocalViewModelStoreOwner.current)
+    val viewModel = viewModel(owner, key = if (store != null) "tab/$source" else source.toString()) {
+        CardGridViewModel(client, source) { count -> resources.getQuantityString(R.plurals.song_count, count, count) }
+    }
+    // Shown again (a tab come back to, Back from a page): what is older than a little while is read again in place.
+    LifecycleResumeEffect(viewModel) {
+        viewModel.refreshIfStale()
+        onPauseOrDispose { }
+    }
     CardGridScreen(
         title = title,
-        viewModel = viewModel(key = source.toString()) {
-            CardGridViewModel(client, source) { count -> resources.getQuantityString(R.plurals.song_count, count, count) }
-        },
+        viewModel = viewModel,
         onOpen = open,
         onScrolledToTop = onScrolledToTop,
         canTakeFocus = canTakeFocus,

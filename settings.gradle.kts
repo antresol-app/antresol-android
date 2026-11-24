@@ -17,3 +17,5 @@ dependencyResolutionManagement {
 rootProject.name = "antresol-android"
 
 include(":core", ":ui-common", ":tv", ":mobile")
+// Baseline Profile generators and Macrobenchmarks of the two apps (run on an emulator, see NOTES.md).
+include(":mobile-baselineprofile", ":tv-baselineprofile")

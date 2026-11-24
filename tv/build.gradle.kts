@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -49,6 +50,13 @@ kotlin {
     }
 }
 
+baselineProfile {
+    // The profile is made on an emulator against scripts/fake-server.py and checked in
+    // (src/release/generated/baselineProfiles, see NOTES.md); a normal build never runs a device.
+    automaticGenerationDuringBuild = false
+    saveInSrc = true
+}
+
 composeCompiler {
     // The :core models are immutable; see the file.
     stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file("compose_stability.conf"))
@@ -56,6 +64,9 @@ composeCompiler {
 
 dependencies {
     implementation(project(":ui-common"))
+    // Installs the app's Baseline Profile on devices that do not get it from Play (sideloads, other stores).
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":tv-baselineprofile"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

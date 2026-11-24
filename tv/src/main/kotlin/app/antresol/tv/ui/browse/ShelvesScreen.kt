@@ -1,6 +1,7 @@
 package app.antresol.tv.ui.browse
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -80,6 +81,11 @@ fun ShelvesScreen(
     /** The full list behind a shelf id, or null when there is none. */
     seeAll: (shelfId: String) -> (() -> Unit)? = { null },
 ) {
+    // Shown again (the tab come back to, Back from a page): read again in place when no longer fresh.
+    LifecycleResumeEffect(viewModel) {
+        viewModel.refresh()
+        onPauseOrDispose { }
+    }
     val focus = rememberFocusMemory()
     val listState = rememberLazyListState()
     val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 40 } }

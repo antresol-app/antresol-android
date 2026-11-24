@@ -68,6 +68,7 @@ data class GridSource(val kind: GridKind, val genre: String? = null) {
 class CardGridViewModel(
     private val client: AntresolClient,
     val source: GridSource,
+    private val clock: () -> Long = System::currentTimeMillis,
     private val songCount: (Int) -> String,
 ) : ViewModel() {
     /** [nextOffset] counts what the server returned (before de-duplication), as spec 4.2 pages. */
@@ -94,11 +95,46 @@ class CardGridViewModel(
         reload()
     }
 
+    /** When the shown cards were read (a tab's grid is kept while the tab is away, see the shell's `tabData`). */
+    private var loadedAt = 0L
+
     fun reload() {
         job?.cancel()
         state = LoadState.Loading
         job = viewModelScope.launch {
             state = load { source.page(client, sort, 0, songCount).let { Grid(it.items, it.total, it.items.size, it.items.isEmpty()) } }
+            loadedAt = clock()
+        }
+    }
+
+    /**
+     * The grid is shown again: when what it shows is older than [staleAfterMs] (a film watched since, a new one
+     * added), the pages shown are read again and replace the cards in place, without the spinner; a failure keeps them.
+     */
+    fun refreshIfStale(staleAfterMs: Long = STALE_AFTER_MS) {
+        val shown = (state as? LoadState.Ready)?.value ?: return
+        if (job?.isActive == true || clock() - loadedAt < staleAfterMs) return
+        val wanted = shown.nextOffset.coerceAtMost(MAX_REFRESH_ITEMS)
+        job = viewModelScope.launch {
+            val fresh = load {
+                val cards = ArrayList<Card>()
+                val seen = HashSet<Long>()
+                var offset = 0
+                var total: Int
+                var exhausted = false
+                do {
+                    val page = source.page(client, sort, offset, songCount)
+                    total = page.total
+                    offset += page.items.size
+                    page.items.filterTo(cards) { seen.add(it.id) }
+                    if (page.items.isEmpty()) exhausted = true
+                } while (!exhausted && offset < wanted && offset < total)
+                Grid(cards, total, offset, exhausted)
+            }
+            if (fresh is LoadState.Ready) {
+                state = fresh
+                loadedAt = clock()
+            }
         }
     }
 
@@ -121,5 +157,12 @@ class CardGridViewModel(
                 )
             }
         }
+    }
+
+    private companion object {
+        const val STALE_AFTER_MS = 30_000L
+
+        /** A refresh reads at most this many cards again (the rest load as the grid is scrolled). */
+        const val MAX_REFRESH_ITEMS = 480
     }
 }

@@ -10,11 +10,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,9 +94,17 @@ fun MediaCard(
     val circle = style == CardStyle.Circle
     val artShape = if (circle) CircleShape else AntresolShapes.card
     // The artwork zooms into the page the tile opens and back (see PosterTransition); the page asks for the tile's key.
+    // Only a tile that was tapped takes part: a shared element in every tile of every shelf made each tab switch cost
+    // about twice the work on the main thread. Saved with the page, so Back still finds the tile to shrink into.
     val transitions = LocalPosterTransition.current?.transitions
     val posterKey = posterKey(LocalPosterOrigin.current, card)
-    val tapped = { transitions?.opened(OpenedPoster(posterKey, urls?.image(if (style == CardStyle.Wide) card.wideImage else card.poster))) }
+    var zooms by rememberSaveable(posterKey) { mutableStateOf(false) }
+    val tapped = {
+        if (transitions != null) {
+            zooms = true
+            transitions.opened(OpenedPoster(posterKey, urls?.image(if (style == CardStyle.Wide) card.wideImage else card.poster)))
+        }
+    }
     Column(
         modifier = sized
             .clip(AntresolShapes.smallCard)
@@ -124,9 +137,11 @@ fun MediaCard(
                 title = card.title,
                 shape = artShape,
                 modifier = Modifier
-                    .posterBounds(posterKey, artShape)
+                    .posterBounds(posterKey.takeIf { zooms }, artShape)
+                    .then(if (transitions != null && !zooms) Modifier.testTag(posterKey) else Modifier)
                     .matchParentSize()
-                    .alpha(WatchedStyle.artworkAlpha(card.watched)),
+                    // No layer for the artwork of a card that is not dimmed.
+                    .then(if (card.watched) Modifier.alpha(WatchedStyle.ARTWORK_ALPHA) else Modifier),
             )
             if (card.watched) {
                 WatchedMarkOverlay()

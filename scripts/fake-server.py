@@ -513,6 +513,9 @@ def addon_answer(command, path, query, body):
     return None
 
 
+IMAGE_CACHE = [("Cache-Control", "private, max-age=604800")]
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     embed_key = "aqz-KE-bpKQ"
@@ -573,10 +576,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"items": [{"id": 1, "kind": "native", "name": "Android TV", "model": "Emulator", "version": "1.0",
                                               "createdAt": "2026-11-01T10:00:00Z", "lastSeen": "2026-11-19T10:00:00Z", "current": True,
                                               "userId": ME["id"], "userName": ME["name"], "userAvatar": ME["avatar"], "history": history_ref()}]})
+        # Artwork is cached for a week, as the server sends it (the apps' image loader honours it).
         if path == "/api/profiles/1/photo":
-            return self.send(200, profile_photo(), "image/png")
+            return self.send(200, profile_photo(), "image/png", headers=IMAGE_CACHE)
         if path.startswith("/api/images/") or path.endswith("/logo.png"):
-            return self.send(200, png(path, sized="w" in query), "image/png")
+            return self.send(200, png(path, sized="w" in query), "image/png", headers=IMAGE_CACHE)
         if path.endswith(".mp4"):
             return self.send(200, CLIP.read_bytes(), "video/mp4")
         if re.fullmatch(r"/api/trailers/movieTrailer1/play", path):

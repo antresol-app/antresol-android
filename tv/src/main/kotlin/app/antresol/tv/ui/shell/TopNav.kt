@@ -216,6 +216,13 @@ private fun NowPlayingChip(title: String, active: Boolean, onClick: () -> Unit) 
 /** Three bars that bounce while audio plays and rest at fixed, uneven heights when paused (flat bars read as "…"). */
 @Composable
 private fun EqualizerBars(active: Boolean, color: Color) {
+    // Paused, the bars are still: no infinite animation then, which would ask for a frame 60 times a second for as
+    // long as the chip shows (the whole time music is paused).
+    if (active) BouncingBars(color) else Bars(color) { index -> PausedBars[index] }
+}
+
+@Composable
+private fun BouncingBars(color: Color) {
     val transition = rememberInfiniteTransition(label = "equalizer")
     // Uneven lows and fast-forwarded start offsets keep the bars at different heights from the first frame.
     val phases = listOf(0, 180, 360).mapIndexed { index, offsetMs ->
@@ -230,14 +237,19 @@ private fun EqualizerBars(active: Boolean, color: Color) {
             label = "bar",
         )
     }
+    Bars(color) { index -> phases[index].value }
+}
+
+@Composable
+private fun Bars(color: Color, height: (Int) -> Float) {
     Canvas(Modifier.size(width = 12.dp, height = 12.dp)) {
         val barWidth = size.width / 5
-        phases.forEachIndexed { index, phase ->
-            val height = size.height * if (active) phase.value else PausedBars[index]
+        for (index in 0..2) {
+            val barHeight = size.height * height(index)
             drawRect(
                 color = color,
-                topLeft = Offset(index * 2 * barWidth, size.height - height),
-                size = Size(barWidth, height),
+                topLeft = Offset(index * 2 * barWidth, size.height - barHeight),
+                size = Size(barWidth, barHeight),
             )
         }
     }

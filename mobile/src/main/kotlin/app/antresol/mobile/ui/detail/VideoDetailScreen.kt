@@ -72,7 +72,10 @@ import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.GlassPillButton
 import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
+import app.antresol.mobile.ui.components.OpenedPoster
 import app.antresol.mobile.ui.components.PageGutter
+import app.antresol.mobile.ui.components.posterBounds
+import app.antresol.mobile.ui.components.rememberOpenedPoster
 import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.RefreshBox
 import app.antresol.mobile.ui.components.SectionTitle
@@ -144,11 +147,13 @@ fun VideoDetailScreen(
     loaded?.libraryItemId?.let { libraryId ->
         LaunchedEffect(libraryId) { onOpenLibraryItem(Card(id = libraryId, kind = loaded.item.kind, title = loaded.item.title)) }
     }
+    // The tile this page was opened from: its picture grows into the page's artwork, and back on Back.
+    val poster = rememberOpenedPoster()
     RefreshBox(viewModel.refreshing, onRefresh = viewModel::pullToRefresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
         when (val state = viewModel.state) {
-            LoadState.Loading -> DetailStateBox(onBack) { LoadingView() }
+            LoadState.Loading -> DetailStateBox(onBack, art = poster?.let { { PosterLoadingArt(it) } }) { LoadingView() }
             is LoadState.Failed -> DetailStateBox(onBack) { ErrorView(state.error, onRetry = viewModel::reload) }
-            is LoadState.Ready -> VideoDetailContent(state.value, viewModel, onOpen, onBack, onPlay)
+            is LoadState.Ready -> VideoDetailContent(state.value, viewModel, onOpen, onBack, onPlay, poster)
         }
         SnackbarHost(
             snackbar,
@@ -168,6 +173,7 @@ private fun VideoDetailContent(
     onOpen: (Card) -> Unit,
     onBack: () -> Unit,
     onPlay: (itemId: Long, mode: ResumeMode) -> Unit,
+    poster: OpenedPoster?,
 ) {
     val item = detail.item
     val urls = LocalMediaUrls.current
@@ -267,7 +273,7 @@ private fun VideoDetailContent(
         contentPadding = pageListPadding(bottom.calculateBottomPadding() + 24.dp),
     ) {
         item("header") {
-            val artHeight = min(configuration.screenWidthDp.dp * 0.9f, configuration.screenHeightDp.dp * 0.5f)
+            val artHeight = videoArtHeight(configuration)
             DetailHeader(
                 tintUrl = urls?.image(item.poster.ifBlank { item.backdrop }),
                 onBack = onBack,
@@ -278,7 +284,7 @@ private fun VideoDetailContent(
                             model = art,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxWidth().height(artHeight + 60.dp).alpha(0.85f),
+                            modifier = Modifier.posterBounds(poster?.key, AntresolShapes.card).fillMaxWidth().height(artHeight + 60.dp).alpha(0.85f),
                         )
                     }
                     Box(Modifier.matchParentSize().background(AntresolGradients.heroFade))

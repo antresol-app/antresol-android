@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
@@ -22,6 +23,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.antresol.core.model.Profile
 import app.antresol.core.session.AuthState
 import app.antresol.mobile.ui.root.AntresolMobileRoot
+import app.antresol.mobile.ui.components.LocalPosterZoom
 import app.antresol.ui.theme.AntresolTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
@@ -67,7 +69,7 @@ class MobileLiveUiTest {
             if (session.state.value is AuthState.SignedIn) session.switchProfile()
             if (session.state.value !is AuthState.NoServer) session.changeServer()
         }
-        compose.setContent { AntresolTheme { AntresolMobileRoot(session) } }
+        compose.setContent { CompositionLocalProvider(LocalPosterZoom provides false) { AntresolTheme { AntresolMobileRoot(session) } } }
 
         // Server address: a bad address shows an error, the real one opens the profile picker.
         waitFor(hasText("Connect to your server"))
@@ -167,7 +169,7 @@ class MobileLiveUiTest {
             if (session.state.value is AuthState.SignedIn) session.switchProfile()
             session.connect(serverUrl!!)
         }
-        compose.setContent { AntresolTheme { AntresolMobileRoot(session) } }
+        compose.setContent { CompositionLocalProvider(LocalPosterZoom provides false) { AntresolTheme { AntresolMobileRoot(session) } } }
         waitFor(hasText("Who’s watching?"))
         shot("tablet-00-profiles")
         compose.onNode(hasTestTag("profile-1")).performClick()
@@ -239,7 +241,7 @@ class MobileLiveUiTest {
         }
         fun created() = runBlocking { client.playlists().items.filter { it.name == name || it.name == "$name 2" } }
         try {
-            compose.setContent { AntresolTheme { AntresolMobileRoot(session) } }
+            compose.setContent { CompositionLocalProvider(LocalPosterZoom provides false) { AntresolTheme { AntresolMobileRoot(session) } } }
             waitFor(hasText("Details"))
             tab("Music")
             waitFor(hasText("Playlists"))

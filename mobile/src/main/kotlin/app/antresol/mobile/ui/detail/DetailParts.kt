@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -23,17 +25,26 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.antresol.mobile.R
 import app.antresol.mobile.ui.components.BackBar
+import app.antresol.mobile.ui.components.OpenedPoster
 import app.antresol.mobile.ui.components.PageGutter
+import app.antresol.mobile.ui.components.posterBounds
 import app.antresol.mobile.ui.components.PageSideInsets
 import app.antresol.mobile.ui.components.focusClickable
 import app.antresol.mobile.ui.components.fullBleed
+import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.image.rememberArtworkTint
+import app.antresol.ui.theme.AntresolGradients
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
@@ -144,11 +155,35 @@ class NoticeSnackbars(private val scope: CoroutineScope, private val host: Snack
     }
 }
 
-/** A full-size centred box for loading and error states under the back button. */
+/** A full-size centred box for loading and error states under the back button; [art] is drawn behind them. */
 @Composable
-fun DetailStateBox(onBack: () -> Unit, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxSize().background(AntresolColors.Background).windowInsetsPadding(PageSideInsets)) {
-        BackBar(onBack)
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { content() }
+fun DetailStateBox(onBack: () -> Unit, art: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().background(AntresolColors.Background)) {
+        art?.invoke()
+        Column(Modifier.fillMaxSize().windowInsetsPadding(PageSideInsets)) {
+            BackBar(onBack)
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { content() }
+        }
+    }
+}
+
+/** The height of a video page's artwork (the page draws it 60 dp taller, under the title block). */
+fun videoArtHeight(configuration: Configuration): Dp = min(configuration.screenWidthDp.dp * 0.9f, configuration.screenHeightDp.dp * 0.5f)
+
+/**
+ * The tile's picture in the place of the page's artwork, while the page loads: the zoom out of the tile
+ * lands on it, and the artwork takes over the same shared key once it has loaded.
+ */
+@Composable
+fun PosterLoadingArt(poster: OpenedPoster) {
+    val artHeight = videoArtHeight(LocalConfiguration.current)
+    Box(Modifier.fillMaxWidth().height(artHeight + 60.dp)) {
+        ArtworkImage(
+            url = poster.imageUrl,
+            title = "",
+            shape = RectangleShape,
+            modifier = Modifier.posterBounds(poster.key, AntresolShapes.card).fillMaxSize().alpha(0.85f),
+        )
+        Box(Modifier.matchParentSize().background(AntresolGradients.heroFade))
     }
 }

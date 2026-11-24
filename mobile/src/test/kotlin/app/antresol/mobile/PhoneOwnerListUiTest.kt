@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasTestTag
@@ -21,6 +22,7 @@ import app.antresol.fixtures.FakeServer
 import app.antresol.mobile.player.TrailerPlayerActivity
 import app.antresol.ui.trailers.TrailerPhase
 import org.robolectric.Robolectric
+import app.antresol.mobile.ui.components.LocalPosterZoom
 import app.antresol.mobile.ui.shell.MainShell
 import app.antresol.ui.theme.AntresolTheme
 import kotlinx.coroutines.runBlocking
@@ -69,7 +71,8 @@ class PhoneOwnerListUiTest {
         // the crossfade: Robolectric draws no animation frames, so a first (not memory-cached) load
         // would stay at the crossfade's start, an empty frame, in the screenshots.
         coil.Coil.setImageLoader(app.newImageLoader().newBuilder().crossfade(false).build())
-        compose.setContent { AntresolTheme { MainShell(session, state) } }
+        // Screenshots draw the view on a software canvas, which the poster zoom's hardware layers cannot be drawn on.
+        compose.setContent { CompositionLocalProvider(LocalPosterZoom provides false) { AntresolTheme { MainShell(session, state) } } }
         waitFor(hasText("Continue Watching"))
     }
 

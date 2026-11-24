@@ -87,15 +87,20 @@ fun MediaCard(
     val urls = LocalMediaUrls.current
     val sized = if (width != null) modifier.width(width) else modifier.fillMaxWidth()
     val circle = style == CardStyle.Circle
+    val artShape = if (circle) CircleShape else AntresolShapes.card
+    // The artwork zooms into the page the tile opens and back (see PosterTransition); the page asks for the tile's key.
+    val transitions = LocalPosterTransition.current?.transitions
+    val posterKey = posterKey(LocalPosterOrigin.current, card)
+    val tapped = { transitions?.opened(OpenedPoster(posterKey, urls?.image(if (style == CardStyle.Wide) card.wideImage else card.poster))) }
     Column(
         modifier = sized
             .clip(AntresolShapes.smallCard)
             .focusClickable(
                 AntresolShapes.smallCard,
                 role = null,
-                onLongClick = onLongClick,
+                onLongClick = onLongClick?.let { longClick -> { tapped(); longClick() } },
                 onLongClickLabel = if (onLongClick != null) stringResource(R.string.card_open_page) else null,
-                onClick = onClick,
+                onClick = { tapped(); onClick() },
             ),
         horizontalAlignment = if (circle) Alignment.CenterHorizontally else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -117,8 +122,9 @@ fun MediaCard(
                 fallbackUrl = if (style == CardStyle.Wide) urls?.image(card.wideFallback) else null,
                 fitsBox = MediaUrls.artworkFitsTile(card.kind, wideTile = style == CardStyle.Wide),
                 title = card.title,
-                shape = if (circle) CircleShape else AntresolShapes.card,
+                shape = artShape,
                 modifier = Modifier
+                    .posterBounds(posterKey, artShape)
                     .matchParentSize()
                     .alpha(WatchedStyle.artworkAlpha(card.watched)),
             )

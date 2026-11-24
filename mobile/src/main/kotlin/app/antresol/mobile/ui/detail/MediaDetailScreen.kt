@@ -47,6 +47,9 @@ import app.antresol.ui.LoadState
 import app.antresol.mobile.ui.LocalBottomBarPadding
 import app.antresol.mobile.ui.LocalMediaUrls
 import app.antresol.mobile.ui.components.EmptyView
+import app.antresol.mobile.ui.components.OpenedPoster
+import app.antresol.mobile.ui.components.posterBounds
+import app.antresol.mobile.ui.components.rememberOpenedPoster
 import app.antresol.mobile.ui.components.ErrorView
 import app.antresol.mobile.ui.components.GlassIconButton
 import app.antresol.mobile.ui.components.GlassPillButton
@@ -98,11 +101,13 @@ fun MediaDetailScreen(
     NoticeSnackbar(viewModel.notice, snackbar, viewModel::consumeNotice)
     PlaylistPickerHost(viewModel.playlistPicker, snackbar)
     var dialog by rememberSaveable { mutableStateOf<PlaylistDialog?>(null) }
+    // The tile this page was opened from: its cover grows into the page's and back on Back.
+    val poster = rememberOpenedPoster()
     RefreshBox(viewModel.refreshing, onRefresh = viewModel::pullToRefresh, Modifier.fillMaxSize().background(AntresolColors.Background)) {
         when (val state = viewModel.state) {
             LoadState.Loading -> DetailStateBox(onBack) { LoadingView() }
             is LoadState.Failed -> DetailStateBox(onBack) { ErrorView(state.error, onRetry = viewModel::reload) }
-            is LoadState.Ready -> MediaDetailContent(state.value, viewModel, playback, onOpen, onBack, onRead, onPlaylistDialog = { dialog = it })
+            is LoadState.Ready -> MediaDetailContent(state.value, viewModel, playback, onOpen, onBack, onRead, poster, onPlaylistDialog = { dialog = it })
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).windowInsetsPadding(PageSideInsets).padding(LocalBottomBarPadding.current))
     }
@@ -144,6 +149,7 @@ private fun MediaDetailContent(
     onOpen: (Card) -> Unit,
     onBack: () -> Unit,
     onRead: (BookAction) -> Unit,
+    poster: OpenedPoster?,
     onPlaylistDialog: (PlaylistDialog) -> Unit,
 ) {
     val urls = LocalMediaUrls.current
@@ -170,6 +176,7 @@ private fun MediaDetailContent(
                     title = card.title,
                     shape = shape,
                     modifier = Modifier
+                        .posterBounds(poster?.key, shape)
                         .align(Alignment.CenterHorizontally)
                         .widthIn(max = 240.dp)
                         .fillMaxWidth(if (aspect < 1f) 0.5f else 0.62f)

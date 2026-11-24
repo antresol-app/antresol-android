@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.os.Looper
 import android.view.View
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -29,6 +30,7 @@ import app.antresol.mobile.playback.PlaybackService
 import app.antresol.mobile.player.VideoPlayerActivity
 import app.antresol.mobile.ui.root.AntresolMobileRoot
 import app.antresol.ui.playback.ResumeMode
+import app.antresol.mobile.ui.components.LocalPosterZoom
 import app.antresol.ui.theme.AntresolTheme
 import java.io.File
 import java.time.Duration
@@ -132,7 +134,7 @@ class MobilePlaybackLiveUiTest {
     fun musicAudiobookComicAndSettings() {
         bindPlaybackService()
         val client = app.session.requireClient()
-        compose.setContent { AntresolTheme { AntresolMobileRoot(app.session) } }
+        compose.setContent { CompositionLocalProvider(LocalPosterZoom provides false) { AntresolTheme { AntresolMobileRoot(app.session) } } }
         waitFor(hasText("Details"))
 
         // Album → tap the first track → the mini-player appears.
@@ -224,7 +226,7 @@ class MobilePlaybackLiveUiTest {
     @Config(sdk = [34], qualifiers = "en-w1024dp-h768dp-land-xhdpi")
     fun tabletNowPlayingAudiobookAndSettings() {
         bindPlaybackService()
-        compose.setContent { AntresolTheme { AntresolMobileRoot(app.session) } }
+        compose.setContent { CompositionLocalProvider(LocalPosterZoom provides false) { AntresolTheme { AntresolMobileRoot(app.session) } } }
         waitFor(hasText("Details"))
         tab("Music")
         waitFor(hasText("Songs"))

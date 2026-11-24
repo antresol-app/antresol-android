@@ -1,5 +1,6 @@
 package app.antresol.ui.playback
 
+import androidx.media3.common.Player
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -53,5 +54,17 @@ class TickerTest {
         assertEquals(2, ticks)
         advanceTimeBy(501)
         assertEquals(3, ticks)
+    }
+
+    @Test
+    fun theVideoClockRunsWhilePlayingBufferingOrLoading() {
+        assertTrue(videoClockRuns(playWhenReady = true, playbackState = Player.STATE_READY, isLoading = false))
+        assertTrue(videoClockRuns(playWhenReady = true, playbackState = Player.STATE_BUFFERING, isLoading = true))
+        // Paused but still loading: the buffered bar grows.
+        assertTrue(videoClockRuns(playWhenReady = false, playbackState = Player.STATE_READY, isLoading = true))
+        // Paused with a full buffer, ended or idle: no wake-ups.
+        assertFalse(videoClockRuns(playWhenReady = false, playbackState = Player.STATE_READY, isLoading = false))
+        assertFalse(videoClockRuns(playWhenReady = true, playbackState = Player.STATE_ENDED, isLoading = false))
+        assertFalse(videoClockRuns(playWhenReady = false, playbackState = Player.STATE_IDLE, isLoading = false))
     }
 }

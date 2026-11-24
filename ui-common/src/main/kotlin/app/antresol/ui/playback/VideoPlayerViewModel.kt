@@ -1471,12 +1471,12 @@ open class VideoPlayerViewModel(
     private fun reportedPositionMs(): Long = pendingSeekMs ?: currentFileMs()
 
     /**
-     * The clock ticks while the video plays or buffers to play and the app is in front. Otherwise
-     * (paused, ended, in the background, closing) it sleeps and any change reads the position once,
+     * The clock ticks while the video plays, buffers to play or loads, and the app is in front. Otherwise
+     * (paused with a full buffer, ended, in the background, closing) it sleeps and any change reads the position once,
      * so a paused seek or the final position of a pause is still shown.
      */
     private fun syncTicker() {
-        ticker.set(!backgrounded && !released && !closed && keepsScreenOn(player.playWhenReady, player.playbackState))
+        ticker.set(!backgrounded && !released && !closed && videoClockRuns(player.playWhenReady, player.playbackState, player.isLoading))
         if (!ticker.running) tick()
     }
 

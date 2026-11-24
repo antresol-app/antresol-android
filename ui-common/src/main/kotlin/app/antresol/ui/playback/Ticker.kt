@@ -36,3 +36,10 @@ internal class Ticker(
         }
     }
 }
+
+/**
+ * Whether the video player's position clock runs: while the video plays or buffers to play, and while it
+ * [isLoading] (a paused video keeps loading: the buffered bar grows until the buffer is full, then no wake-ups).
+ */
+internal fun videoClockRuns(playWhenReady: Boolean, playbackState: Int, isLoading: Boolean): Boolean =
+    keepsScreenOn(playWhenReady, playbackState) || isLoading

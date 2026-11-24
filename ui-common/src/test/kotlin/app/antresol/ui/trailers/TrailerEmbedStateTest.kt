@@ -134,7 +134,10 @@ class TrailerEmbedStateTest {
         assertEquals(1, state.generation)
         assertEquals(false, view.keepScreenOn)
         // The screen builds a new view for the new generation; «Try again» loads the player there.
-        val next = WebView(RuntimeEnvironment.getApplication()).also { state.webView = it }
+        val next = WebView(RuntimeEnvironment.getApplication()).also(state::attach)
+        // The error card is up: nothing loads in it yet, and the screen may sleep.
+        assertNull(shadowOf(next).lastLoadDataWithBaseURL)
+        assertEquals(false, next.keepScreenOn)
         state.reload()
         assertEquals(EmbedPhase.Loading, state.phase)
         assertNotNull(shadowOf(next).lastLoadDataWithBaseURL)
@@ -150,12 +153,25 @@ class TrailerEmbedStateTest {
     fun aRendererThatDiesInTheBackgroundDoesNotBlockTheRetry() {
         state.onStop() // still loading: the page is dropped
         assertTrue(EmbedClient(state).onRenderProcessGone(view, gone))
-        val next = WebView(RuntimeEnvironment.getApplication()).also { state.webView = it }
+        val next = WebView(RuntimeEnvironment.getApplication()).also(state::attach)
         state.onStart()
         assertEquals(EmbedPhase.Failed(-3), state.phase)
         state.reload()
         report(1, load = 2)
         assertEquals(EmbedPhase.Playing, state.phase)
         assertNotNull(shadowOf(next).lastLoadDataWithBaseURL)
+    }
+
+    @Test
+    fun aNewViewKeepsTheScreenOnOnlyWhileThePlayerLoads() {
+        val loading = WebView(RuntimeEnvironment.getApplication())
+        state.attach(loading)
+        assertTrue(loading.keepScreenOn)
+        assertNotNull(shadowOf(loading).lastLoadDataWithBaseURL)
+        val invalid = TrailerEmbedState("not a key!")
+        val card = WebView(RuntimeEnvironment.getApplication())
+        invalid.attach(card)
+        assertEquals(false, card.keepScreenOn)
+        assertNull(shadowOf(card).lastLoadDataWithBaseURL)
     }
 }

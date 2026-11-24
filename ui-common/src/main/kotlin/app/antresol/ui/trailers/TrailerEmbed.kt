@@ -202,6 +202,16 @@ class TrailerEmbedState(val key: String) {
     }
 
     /**
+     * [view] is the WebView of this state now. The screen stays on while the player loads (then the
+     * bridge follows the player's state); a view built for the error card (after a dead renderer) lets it sleep.
+     */
+    internal fun attach(view: WebView) {
+        webView = view
+        view.keepScreenOn = phase == EmbedPhase.Loading
+        if (phase == EmbedPhase.Loading) load(view)
+    }
+
+    /**
      * The WebView's renderer process is gone (the system killed it for memory, or it crashed). The
      * WebView cannot be used any more; the screen drops it for a new one and shows the error, so the
      * app lives on and «Try again» works. A report of an earlier, already replaced view changes nothing.
@@ -280,16 +290,13 @@ fun TrailerEmbedView(state: TrailerEmbedState, modifier: Modifier = Modifier) {
                     setBackgroundColor(Color.BLACK)
                     isFocusable = false
                     isFocusableInTouchMode = false
-                    // On while the player loads; then it follows the player's state (see the bridge).
-                    keepScreenOn = true
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.mediaPlaybackRequiresUserGesture = false
                     webChromeClient = WebChromeClient()
                     webViewClient = EmbedClient(state)
                     addJavascriptInterface(state.bridge, TrailerEmbed.BRIDGE)
-                    state.webView = this
-                    if (state.phase == EmbedPhase.Loading) state.load(this)
+                    state.attach(this)
                 }
             },
             onRelease = { view ->

@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -29,6 +30,7 @@ import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.util.EventLogger
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.ApiException
 import app.antresol.core.api.attempt
@@ -1129,6 +1131,7 @@ open class VideoPlayerViewModel(
     fun onBackground() {
         backgrounded = true
         if (released || closed) return
+        Log.i(PLAYER_LOG, "background at ${currentFileMs()} ms, phase $phase")
         player.pause()
         if (source == null || isSwitching) return
         if (phase is PlayerPhase.UpNext) {
@@ -1145,6 +1148,7 @@ open class VideoPlayerViewModel(
         (phase as? PlayerPhase.UpNext)?.let { if (it.secondsLeft != null && upNextJob?.isActive != true) startUpNext(it.episode) }
         val at = suspendedAtMs ?: return
         suspendedAtMs = null
+        Log.i(PLAYER_LOG, "foreground: reopening at $at ms")
         reopen(at, playWhenReady = false)
     }
 
@@ -1554,8 +1558,15 @@ private fun PlaybackDisplay.toItem(context: Context): ItemDetail {
 }
 
 /**
- * The ExoPlayer of the app's video players (films, episodes, trailers): media through [client]'s
- * HTTP client, decoder fallback, movie audio focus, paused when headphones are unplugged.
+ * The logcat tag of the video players: their lifecycle and ExoPlayer's [EventLogger] (decoders,
+ * surface sizes, first frames, errors), so `adb logcat -s AntresolPlayer` tells what a device did.
+ */
+const val PLAYER_LOG = "AntresolPlayer"
+
+/**
+ * The ExoPlayer of the app's video players (films, episodes, trailers, live): media through [client]'s
+ * HTTP client, decoder fallback, movie audio focus, paused when headphones are unplugged, logged
+ * under [PLAYER_LOG].
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
@@ -1572,6 +1583,7 @@ fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
         )
         .setHandleAudioBecomingNoisy(true)
         .build()
+        .also { it.addAnalyticsListener(EventLogger(PLAYER_LOG)) }
 }
 
 /**

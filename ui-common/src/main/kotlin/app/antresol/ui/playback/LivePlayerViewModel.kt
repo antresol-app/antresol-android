@@ -1,6 +1,7 @@
 package app.antresol.ui.playback
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -462,6 +463,7 @@ class LivePlayerViewModel(
     fun onBackground() {
         if (backgrounded || released) return
         backgrounded = true
+        Log.i(PLAYER_LOG, "live: background")
         edgeTicker.set(false)
         behindLive = false
         session.stop()
@@ -473,6 +475,7 @@ class LivePlayerViewModel(
     fun onForeground() {
         if (!backgrounded || released) return
         backgrounded = false
+        Log.i(PLAYER_LOG, "live: foreground")
         edgeTicker.set(true)
         session.start()
     }

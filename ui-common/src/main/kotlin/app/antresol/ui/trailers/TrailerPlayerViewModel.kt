@@ -1,6 +1,7 @@
 package app.antresol.ui.trailers
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -14,6 +15,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.playback.TrailerPlayback
+import app.antresol.ui.playback.PLAYER_LOG
 import app.antresol.ui.playback.PlaybackUnavailableException
 import app.antresol.ui.playback.buildVideoPlayer
 import kotlinx.coroutines.CancellationException
@@ -159,12 +161,14 @@ class TrailerPlayerViewModel(
     /** The screen went to the background: pause (a trailer has no session to stop). */
     fun onBackground() {
         backgrounded = true
+        Log.i(PLAYER_LOG, "trailer: background at ${player.currentPosition} ms")
         player.pause()
     }
 
     /** Back in front: stays paused where it was, like the film player. */
     fun onForeground() {
         backgrounded = false
+        Log.i(PLAYER_LOG, "trailer: foreground")
     }
 
     private fun tick() {

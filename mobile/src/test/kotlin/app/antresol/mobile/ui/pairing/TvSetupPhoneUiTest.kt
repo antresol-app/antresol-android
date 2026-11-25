@@ -123,7 +123,7 @@ class TvSetupPhoneUiTest {
         compose.onNodeWithTag("pair-profile-2").performScrollTo().performClick()
         shot("phone-setup-confirm")
         compose.onNodeWithTag("pair-setup").performScrollTo().performClick()
-        waitFor(hasText("Done. The TV is connecting and signing in."))
+        waitFor(hasText("The TV is connecting."))
         shot("phone-setup-done")
         assertEquals(listOf("192.168.1.50:41234 AAAAAAAAAAAAAAAAAAAAAA $serverUrl $serverId"), tv.posts)
         assertEquals(listOf("lookup ABC234", "approve ABC234 2"), api.calls)
@@ -150,7 +150,7 @@ class TvSetupPhoneUiTest {
         compose.onNodeWithTag("pair-profile-2").assertDoesNotExist()
         compose.onNodeWithTag("pair-profile-7").assertExists()
         compose.onNodeWithTag("pair-setup").performScrollTo().performClick()
-        waitFor(hasText("Done. The TV is connecting and signing in."))
+        waitFor(hasText("The TV is connecting."))
         assertEquals(listOf("lookup ABC234", "approve ABC234 0"), api.calls)
     }
 
@@ -182,7 +182,7 @@ class TvSetupPhoneUiTest {
         waitFor(hasText("The TV is connected to the server, but the sign-in didn’t go through", substring = true))
         assertEquals(1, tv.posts.size)
         compose.onNodeWithTag("pair-setup").performScrollTo().performClick()
-        waitFor(hasText("Done. The TV is connecting and signing in."))
+        waitFor(hasText("The TV is connecting."))
         assertEquals(1, tv.posts.size)
         assertEquals(listOf("lookup ABC234", "lookup ABC234", "approve ABC234 0"), api.calls)
     }

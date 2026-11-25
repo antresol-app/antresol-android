@@ -29,6 +29,15 @@ fun requestStatusLabel(status: String, admin: Boolean = false): Int = when (stat
 @Composable
 fun requestKindLabel(kind: String): String? = kindLabel(if (kind == RequestSearchKind.MUSIC) Kind.ALBUM else kind)
 
+/** A short word for a request's [status] on a card's badge («Waiting», «Approved», «In library», «Declined»). */
+@StringRes
+fun requestBadgeLabel(status: String): Int = when (status) {
+    RequestStatus.PENDING -> R.string.request_badge_pending
+    RequestStatus.DECLINED -> R.string.request_badge_declined
+    RequestStatus.IN_LIBRARY -> R.string.request_badge_in_library
+    else -> R.string.request_badge_approved
+}
+
 /** The icon a request's [status] shows beside its words. */
 fun requestStatusIcon(status: String): ImageVector = when (status) {
     RequestStatus.PENDING -> AntresolIcons.Clock

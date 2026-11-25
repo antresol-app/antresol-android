@@ -301,6 +301,10 @@
     <string name="request_in_library">Already in the library</string>
     <string name="request_declined">A parent said no</string>
     <string name="request_reason_line">“%1$s”</string>
+    <string name="request_badge_pending">Waiting</string>
+    <string name="request_badge_approved">Approved</string>
+    <string name="request_badge_in_library">In library</string>
+    <string name="request_badge_declined">Declined</string>
     <string name="request_ask_failed">Couldn’t send the request. Try again.</string>
     <string name="request_search_failed">Search isn’t available right now</string>
     <string name="request_hidden">Not available for this profile</string>

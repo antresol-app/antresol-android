@@ -117,7 +117,7 @@ class PhoneRequestsUiTest {
         // Back on the results the card says so, with no new search typed.
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         waitFor(hasText("Find and Ask"))
-        waitFor(hasText("Waiting for an answer"))
+        waitFor(hasText("Waiting")) // the card's badge
         settle()
         shot("requests-phone-search-asked")
         assertEquals(1, fake.requests.count { it == "POST /api/requests" })

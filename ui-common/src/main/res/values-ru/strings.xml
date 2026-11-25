@@ -301,6 +301,10 @@
     <string name="request_in_library">Уже в медиатеке</string>
     <string name="request_declined">Родитель отказал</string>
     <string name="request_reason_line">«%1$s»</string>
+    <string name="request_badge_pending">Ждёт ответа</string>
+    <string name="request_badge_approved">Одобрено</string>
+    <string name="request_badge_in_library">В медиатеке</string>
+    <string name="request_badge_declined">Отказ</string>
     <string name="request_ask_failed">Не получилось попросить. Попробуй ещё раз.</string>
     <string name="request_search_failed">Поиск сейчас недоступен</string>
     <string name="request_hidden">Недоступно для этого профиля</string>

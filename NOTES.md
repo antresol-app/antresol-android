@@ -1842,3 +1842,26 @@ A kid profile asks a parent for a title the library does not have, as the web do
 - Tests: `RequestsClientTest`, `AskCardsTest`, `SampleDecodingTest` (core); `KidAskSearchTest`, `TitleRequestTest`, `RequestListsTest`
   (ui-common); `TvRequestsUiTest`, `PhoneRequestsUiTest` (`FakeServer.requestsOpen`, `addRequest`; `scripts/fake-server.py --kid --requests` for a
   kid, `--requests` alone for an administrator).
+
+## Family («Семья», TV and phone)
+The web's `FamilyProgress` on the title pages (docs/API.md section 15): who else of the household is where in a title, and a jump to their place.
+
+- `:core`: `model/Family.kt` (`FamilyMember`), `AntresolClient.family` and `adoptProgress`, `family/FamilyApi` (what the screens call; a fake in tests),
+  `FamilyKind` (movie, episode, series, book, audiobook, comic: the words and the way to continue depend on it) and `Family` (the ring, `adopts`: whether
+  continuing copies a position, `canContinue`: the web's `jumpLabel() !== ''`).
+- `:ui-common` (`ui/family`): `FamilyModel` (a page's view model owns one: `load`, `refresh`, `jump` = adopt, then the page's `open`; one jump at a time, a
+  failure says so and reads the family again), `FamilyTexts` (`placeOf`, `jumpLabel`, `summary`: the web's strings «С2 Э5 · 34 мин», «стр. 120 из 300»,
+  «Глава 7 · 42 %» in ru and en), `RingAvatar`, `FamilyFaces`, `FamilyLineContent` (the line's content; the app draws its own button around it) and
+  `familyMenuOptions` (the list's rows as `MenuOption`s, which now may carry a `leading` picture and an `action` line).
+- TV (`ui/detail/FamilyLine.kt`): the line is a white-on-focus pill under the buttons (and under Listen/Read of an audiobook or comic); OK opens `FamilyPanel`, an
+  `OptionsPanel` on the right whose rows are the family (focus on the first row there is somewhere to continue from; Back closes it and focus returns to the line).
+  A row without somewhere to continue (everything done) only closes the panel. `DetailViewModel.family` reads when the page (re)loads, so it is current after the player.
+  The player's control row has a «Family» button (`PlayerMenu.Family`) when `VideoPlayerViewModel.familyHere` is not empty: the profiles somewhere in the item that plays;
+  a jump there copies their position and seeks (the same item) or starts the item (an episode).
+- Phone (`ui/detail/FamilyUi.kt`): the line under the Watchlist/Watched pills (video) or under Listen/Read (audiobook, comic, PDF); a tap opens `FamilySheet` (a bottom sheet
+  with a button per row). The page reads the family on every resume (the player moves the places). The phone's player has no «Family» button (the web's timeline faces
+  are not ported).
+- Not shown: for a kid (the server lists nobody), a title off the library, music, an EPUB (no reader in the apps), when nobody else has progress, and when the call fails.
+- Not ported: the faces on the episode tiles and the faces on the player's timeline with «Back to 12:40».
+- Tests: `FamilyClientTest`, `FamilyRulesTest`, `SampleDecodingTest.family` (core); `FamilyModelTest`, `FamilyTextsTest` (ui-common; needs `isIncludeAndroidResources`);
+  `TvFamilyUiTest`, `PlayerFamilyMenuTest`, `PhoneFamilyUiTest` (`FakeServer.family`, `adopted`, `progress`; `scripts/fake-server.py --family` for an emulator).

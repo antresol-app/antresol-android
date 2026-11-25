@@ -1321,3 +1321,29 @@ page (with «Ask a Parent», or the state of the request and a parent's reason),
 page, an album or book opens a sheet to ask from. «My Requests» is the kid's list; an administrator's «Requests» has
 Approve and Decline (with an optional reason) and opens a video's title page, where the title is brought onto the
 server. The state is read again when a screen comes back; there is no live update.
+
+
+---
+
+## 15. Family («Семья»)
+
+Where the other profiles of the household are in a title, and «continue from their place». Sample: `family.json`.
+
+| Call | Answer |
+|---|---|
+| `GET /api/items/{id}/family` | `{members: [FamilyMember]}`, most recent first. Empty for a kid profile, for a profile that hides its progress (never listed), and when nobody else has started the item. 400 for an item without progress (music). `Cache-Control: no-store`. |
+| `POST /api/progress/{itemId}/adopt {userId}` | `{userId}`'s unfinished position in the item becomes **this** profile's own (theirs is never written); answers this profile's new progress like `GET /api/progress/{itemId}`. 404 when `userId` is not in this profile's family view, or has no unfinished position there. Only for a movie, episode, book, audiobook or comic volume. |
+
+`FamilyMember`: `{userId, name, ownerName?, avatar, photo?, isKid, itemId, positionMs, durationMs, fraction, finished, locator?,
+updatedAt, season?, episode?, volume?, title?, page?, pages?, next?, done?, total?}`. `itemId` is where the place is: the movie,
+book or audiobook itself, the **episode** of a series, the **volume** of a comic. A series or comic page lists each profile at its newest
+item, with `done` and `total` counting its finished (regular) episodes or volumes; `next` says `itemId` is the one after the last finished
+(not started: `positionMs` 0), and `finished` that everything is done. `ownerName` is set for a device's managed account («Living Room · Sam»).
+`page`/`pages` come from a `page:N` locator; an EPUB's locator has no page, only `fraction`.
+
+The apps show a quiet line under the buttons of a library movie, episode, series, season, audiobook or comic page (PDF books on the phone): the
+faces of up to four profiles, each in a ring of how far they are (a check once everything is done), and who is where («Sam · S1 E2 · 20 min ·
+2 more»). OK / a tap opens the list: each profile's place and when, and (when there is somewhere to continue) what continuing says («Play from
+34:00», «S1 E2 from 20:00», «Play S1 E3»). Continuing calls `adopt` first when the place is a position (not a `next`, not finished), then starts the
+player or reader there: a video with `ResumeMode.Resume` (a `next` episode `FromStart`), an audiobook from `positionMs`, a comic volume or PDF in
+its reader. The TV player's control row has a «Family» button with the same list for the profiles that are in the item that plays.

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.Resources
 import app.antresol.ui.language.ProfileLocaleKeeper
 import android.os.Build
+import android.os.StrictMode
 import android.provider.Settings
 import app.antresol.core.api.ServerLanguage
 import app.antresol.core.discovery.ServerFinder
@@ -17,6 +18,7 @@ import app.antresol.tv.autostart.AppVisibility
 import app.antresol.tv.autostart.AutostartRequest
 import app.antresol.tv.autostart.LastChannelStore
 import app.antresol.tv.autostart.PrefsLastChannelStore
+import app.antresol.tv.diagnostics.Diagnostics
 import app.antresol.tv.homechannels.DeepLinkRequest
 import app.antresol.tv.homechannels.HomeChannels
 import app.antresol.tv.playback.AudioEngine
@@ -88,6 +90,10 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
     /** Set when a tile of the TV home screen (Watch Next, the «Antresol» channel) or a deep link opened the app: what the shell opens (once). */
     val deepLinkRequested = MutableStateFlow<DeepLinkRequest?>(null)
 
+    /** The log kept for the next time the box hangs (Settings → Diagnostics). */
+    lateinit var diagnostics: Diagnostics
+        private set
+
     /** Watch Next and the «Antresol» channel on the TV home screen, and the sync that keeps them current. */
     val homeChannels: HomeChannels by lazy { HomeChannels(this) }
 
@@ -108,7 +114,13 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // Debug builds name the disk and network work done on the main thread (a frozen box starts with a slow main thread).
+        if (BuildConfig.DEBUG) {
+            StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder().detectAll().penaltyLog().build())
+            StrictMode.setVmPolicy(StrictMode.VmPolicy.Builder().detectLeakedClosableObjects().detectActivityLeaks().penaltyLog().build())
+        }
         registerActivityLifecycleCallbacks(visibility)
+        diagnostics = Diagnostics(this) { visibility.isVisible }.also { it.start(appScope) }
         settings = TvSettings(this)
         serverFinder = LanDiscovery(this, unicastHosts = ::lastServerHost)
         session = SessionManager(
@@ -134,6 +146,11 @@ class AntresolTvApp : Application(), ImageLoaderFactory {
                 .drop(1)
                 .collect { if (audioEngine.isInitialized()) audio.stop() }
         }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (::diagnostics.isInitialized) diagnostics.onTrimMemory(level)
     }
 
     override fun newImageLoader(): ImageLoader = AntresolImageLoader.create(

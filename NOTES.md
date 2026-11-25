@@ -1865,3 +1865,18 @@ The web's `FamilyProgress` on the title pages (docs/API.md section 15): who else
 - Not ported: the faces on the episode tiles and the faces on the player's timeline with «Back to 12:40».
 - Tests: `FamilyClientTest`, `FamilyRulesTest`, `SampleDecodingTest.family` (core); `FamilyModelTest`, `FamilyTextsTest` (ui-common; needs `isIncludeAndroidResources`);
   `TvFamilyUiTest`, `PlayerFamilyMenuTest`, `PhoneFamilyUiTest` (`FakeServer.family`, `adopted`, `progress`; `scripts/fake-server.py --family` for an emulator).
+
+## A new surface, a new decoder (video players, TV and phone)
+Owner's projector: pause a film, the system screensaver starts, resume: sound and subtitles play, the picture stays black.
+- The picture's `SurfaceView` surface goes with the window (screensaver, Home) and a new one comes back. ExoPlayer keeps the paused decoder and moves it
+  onto a placeholder surface and then the new surface (`MediaCodec.setOutputSurface`); the film player's reopen on return even reuses that decoder
+  (renderers are disabled, not reset, by `setMediaItem`). Some TV chips take the new surface without an error and show nothing; ExoPlayer starts a new
+  decoder instead only on the devices it lists (`codecNeedsSetOutputSurfaceWorkaround`).
+- `VideoRenderersFactory` / `FreshCodecVideoRenderer` (`ui/playback/VideoRenderers.kt`, used by `buildVideoPlayer`: film, episode, way, trailer, live) say
+  yes for every decoder, and no detached (decoder-without-surface) mode either: a surface change always releases the decoder and starts a new one on the new
+  surface; without a surface no decoder runs (audio plays on, as it did with the placeholder).
+- Diagnostics: the players log their lifecycle and ExoPlayer's `EventLogger` under the tag `AntresolPlayer` (`adb logcat -s AntresolPlayer`): a return shows
+  `videoDisabled`/`videoDecoderInitialized`, `surfaceSize`, `renderedFirstFrame`.
+- The screen-on flag is off while paused (`rememberKeepScreenOn`), so the screensaver may start then; it never starts while a video plays.
+- Tests: `VideoRenderersTest` (Robolectric with Media3's `ShadowMediaCodecConfig`: a paused video whose surface changes gets a second decoder; ExoPlayer's own
+  renderers keep one).

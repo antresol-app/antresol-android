@@ -370,9 +370,10 @@ internal fun LyricsList(lyrics: Lyrics, positionMs: () -> Long, modifier: Modifi
         // start of the content sits at the end of the top padding.
         // The first time (the panel opened in the middle of the song) the list jumps there, then it follows smoothly.
         var placed by remember { mutableStateOf(false) }
+        // Before the first line (the song restarted, or a seek back to its start) the list goes back to the top.
         LaunchedEffect(active) {
-            if (active < 0) return@LaunchedEffect
-            if (placed) listState.animateScrollToItem(active) else listState.scrollToItem(active)
+            val target = active.coerceAtLeast(0)
+            if (placed) listState.animateScrollToItem(target) else listState.scrollToItem(target)
             placed = true
         }
         LazyColumn(

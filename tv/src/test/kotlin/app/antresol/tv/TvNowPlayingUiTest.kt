@@ -337,6 +337,10 @@ class TvNowPlayingUiTest {
         settle()
         assertNear("last line at the third", panel.h / 3, lineTop(30), 14.dp)
         shot("now-playing-lyrics-last-line")
+        // The song starts again: the list is back where it was before the first line.
+        position = 0L
+        settle()
+        assertNear("line 1 waits at the third again", panel.h / 3, lineTop(1), 14.dp)
     }
 
     // region helpers

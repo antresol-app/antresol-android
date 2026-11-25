@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A small fake Antresol server for driving the apps by hand (an emulator or a device).
 
-    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>] [--addons] [--kid] [--requests]
+    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>] [--addons] [--kid] [--requests] [--family]
 
 It answers what test-fixtures' FakeServer answers (passwordless profiles, one with a photo, home, grids, a film and
 a series page, trailers) with the same JSON, plus live channels and the programme guide. In an
@@ -48,6 +48,13 @@ With --requests the server has kids' requests open («Попросить»): a k
 (`kidRequest` of `GET /api/title`); an administrator (no --kid) gets the list to answer (`GET /api/requests`,
 `/count`, `POST /{id}/approve`, `/{id}/decline`). Three requests of the kid «Sam» are there to start with (waiting,
 approved, declined with a reason); what is asked or answered is kept for the run.
+
+With --family other profiles have places in the library's titles («Семья»): `GET /api/items/{id}/family` lists them for
+«The Test Show» (Sam in the middle of S1 E2, Robin at the start of S1 E3, Kim with everything seen), for one of its episodes
+(who is in that one) and for «Movie 1» (Sam and Robin at different minutes); a kid gets nobody. `POST /api/progress/{id}/adopt`
+copies one profile's unfinished place into this profile's own, which `GET /api/progress/{id}` then answers (kept for the run).
+Nothing of the library plays (see above), so continuing opens the player at its error page: what shows is the line, the list
+and the requests the app makes.
 """
 import argparse
 import json
@@ -73,6 +80,8 @@ SERIES, MOVIE, EPISODES = 500, 100, list(range(601, 607))
 SERIES_TMDB, MOVIE_TMDB, OUTSIDE_TMDB = 1399, 603, 9001
 # --addons: the protocol of one addon, "alpha"; what its ways remember and do is kept for the run.
 addon = {"on": False, "remembered": False, "keep": {"since": None}}
+# --family: the other profiles' places in the library's titles, and the places this profile took from them (item id -> (position, duration)).
+family_state = {"on": False, "taken": {}}
 # --lang: the profile's interface language (the apps show their words in it).
 ui_language = [""]
 # --requests: kids' requests, by kind|key (see kid_requests_answer).
@@ -192,6 +201,54 @@ def item(i):
     return {**movie_card(i), "overview": "A test movie.", "genres": ["Adventure"], "runtime": 104, "cast": CAST,
             "files": [{"id": i + 1000, "durationMs": 6240000, "audio": [], "subs": []}], "actions": {"play": True},
             **({"tmdbId": MOVIE_TMDB + (i - MOVIE)} if addon["on"] else {})}
+
+
+def family_places():
+    """The other profiles' places by the item they are in: (user id, name, avatar, item, position ms, duration ms, finished, next, season,
+    episode, how many episodes done, minutes ago)."""
+    return [
+        (2, "Sam", "grad-5", EPISODES[1], 20 * MIN, 45 * MIN, False, False, 1, 2, 1, 120),
+        (3, "Robin", "grad-2", EPISODES[2], 0, 0, False, True, 1, 3, 2, 26 * 60),
+        (4, "Kim", "grad-6", EPISODES[5], 40 * MIN, 45 * MIN, True, False, 2, 4, 6, 5 * 24 * 60),
+        (2, "Sam", "grad-5", MOVIE, 34 * MIN, 104 * MIN, False, False, 0, 0, 0, 120),
+        (3, "Robin", "grad-2", MOVIE, 71 * MIN, 104 * MIN, False, False, 0, 0, 0, 26 * 60),
+    ]
+
+
+def family_json(item_id, kid):
+    """`GET /api/items/{id}/family`: nobody for a kid; the series lists everyone at their episode, an episode or a film who is in it."""
+    members = []
+    for user, name, avatar, at, position, duration, finished, nxt, season, episode, done, ago in family_places():
+        if kid or not (item_id == SERIES and at in EPISODES or item_id == at):
+            continue
+        stamp = (datetime.now(timezone.utc) - timedelta(minutes=ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        member = {"userId": user, "name": name, "avatar": avatar, "isKid": False, "itemId": at, "positionMs": position, "durationMs": duration,
+                  "fraction": 1.0 if finished else (position / duration if duration else 0), "finished": finished, "updatedAt": stamp}
+        if season:
+            member.update({"season": season, "episode": episode, "title": f"Episode {episode}"})
+        if at in EPISODES:
+            member.update({"done": done, "total": 6} if item_id == SERIES else {})
+        if nxt:
+            member["next"] = True
+        members.append(member)
+    return {"members": sorted(members, key=lambda m: m["updatedAt"], reverse=True)}
+
+
+def progress_json(item_id):
+    position, duration = family_state["taken"].get(item_id, (0, 0))
+    if not position:
+        return {"positionMs": 0, "durationMs": 0, "finished": False}
+    return {"positionMs": position, "durationMs": duration, "finished": False, "locator": "", "fraction": position / duration,
+            "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+
+def adopt_answer(item_id, body, kid):
+    """`POST /api/progress/{id}/adopt`: the profile's unfinished place in the item becomes this profile's own (404 when there is none)."""
+    for user, _name, _avatar, at, position, duration, finished, nxt, *_rest in family_places():
+        if at == item_id and user == body.get("userId") and not (kid or finished or nxt or position <= 0):
+            family_state["taken"][item_id] = (position, duration)
+            return 200, progress_json(item_id)
+    return 404, {"error": "Not found"}
 
 
 def trailers(i, embed_key):
@@ -712,6 +769,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, file.read_bytes(), kind)
         if match := re.fullmatch(r"/api/items/(\d+)/trailers", path):
             return self.send(200, trailers(int(match[1]), self.embed_key))
+        if family_state["on"] and (match := re.fullmatch(r"/api/items/(\d+)/family", path)):
+            return self.send(200, family_json(int(match[1]), kid))
+        if family_state["on"] and self.command == "POST" and (match := re.fullmatch(r"/api/progress/(\d+)/adopt", path)):
+            return self.send(*adopt_answer(int(match[1]), body, kid))
         if match := re.fullmatch(r"/api/items/(\d+)", path):
             return self.send(200, item(int(match[1])))
         if path == "/api/items":
@@ -739,7 +800,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/channels/epg":
             return self.send(200, epg(query, now_ms))
         if path.startswith("/api/progress/") and self.command == "GET":
-            return self.send(200, {"positionMs": 0, "durationMs": 0, "finished": False})
+            return self.send(200, progress_json(int(path.rsplit("/", 1)[1]) if path.rsplit("/", 1)[1].isdigit() else 0))
         self.send(404, {"error": "not found"})
 
     do_GET = do_POST = do_PUT = do_DELETE = do_HEAD = answer
@@ -759,11 +820,13 @@ if __name__ == "__main__":
     args.add_argument("--addons", action="store_true", help="the server has one addon, \"alpha\", speaking the `x/app` protocol (ways to watch and to keep, a title search)")
     args.add_argument("--kid", action="store_true", help="the profile is a kid's (no «Отдельная история»; its writes answer 403)")
     args.add_argument("--requests", action="store_true", help="kids' requests are open (see above): with --kid the profile asks, without it answers")
+    args.add_argument("--family", action="store_true", help="other profiles have places in the library's titles («Семья»; see above)")
     args.add_argument("--lang", choices=["ru", "en"], default="", help="the profile's interface language (default: none chosen, English)")
     options = args.parse_args()
     ui_language[0] = options.lang
     ME["isKid"] = options.kid
     requests_state["on"] = options.requests
+    family_state["on"] = options.family
     if options.requests:
         sample_requests()
     addon["on"] = options.addons

@@ -129,6 +129,36 @@ class FakeServer {
         return request
     }
 
+    /**
+     * «Семья»: the other profiles' places by item id (`GET /api/items/{id}/family` answers the list under that id, an empty
+     * one for a kid or an item without any).
+     */
+    val family: MutableMap<Long, List<FakeFamilyMember>> = ConcurrentHashMap()
+
+    /** What this profile has in each item (`GET /api/progress/{id}`), as `positionMs to durationMs`; an adopted place lands here. */
+    val progress: MutableMap<Long, Pair<Long, Long>> = ConcurrentHashMap()
+
+    /** `POST /api/progress/{id}/adopt` bodies that were taken, as `itemId userId`. */
+    val adopted = CopyOnWriteArrayList<String>()
+
+    /** One other profile's place in an item, as the server lists it. [agoMinutes] is how long ago they were there. */
+    data class FakeFamilyMember(
+        val userId: Long,
+        val name: String,
+        val itemId: Long,
+        val positionMs: Long = 0,
+        val durationMs: Long = 0,
+        val finished: Boolean = false,
+        val next: Boolean = false,
+        val season: Int = 0,
+        val episode: Int = 0,
+        val ownerName: String = "",
+        val avatar: String = "grad-2",
+        val done: Int = 0,
+        val total: Int = 0,
+        val agoMinutes: Long = 120,
+    )
+
     /** «Отдельная история на этом устройстве»: the person's histories (id → name) and the one this device writes into. */
     val histories: MutableMap<Long, String> = java.util.Collections.synchronizedMap(linkedMapOf(20L to "Living Room"))
 
@@ -149,6 +179,7 @@ class FakeServer {
                     return history(request.method.orEmpty(), path, request.body.readUtf8())
                 }
                 if (path.startsWith("/api/requests")) return requests(request.method.orEmpty(), path, request.body.readUtf8())
+                if (request.method == "POST" && path.matches(Regex("/api/progress/\\d+/adopt"))) return adopt(path, request.body.readUtf8())
                 // A kid has no addons; the title page is the one thing it gets of them (with its `kidRequest`).
                 if (kid && path.startsWith("/api/title/")) return addon(request.method.orEmpty(), path, "")
                 if (kid && path == "/api/addons/web") {
@@ -187,9 +218,10 @@ class FakeServer {
             path == "/api/search" -> json("""{"library":[${if (searchLibraryEmpty) "" else movieCard(MOVIE_ID)}],"albums":[],"artists":[],"songs":[]}""")
             path == "/api/items" -> json(if ("kind=series" in query) shows() else movies())
             path.matches(Regex("/api/items/\\d+/trailers")) -> json(trailers(path.split('/')[3].toLong()))
+            path.matches(Regex("/api/items/\\d+/family")) -> json(familyJson(path.split('/')[3].toLong()))
             path.matches(Regex("/api/items/\\d+")) -> json(item(path.substringAfterLast('/').toLong()))
                 .setBodyDelay(itemDelayMs, TimeUnit.MILLISECONDS)
-            path.startsWith("/api/progress/") && method == "GET" -> json("""{"positionMs":0,"durationMs":0,"finished":false}""")
+            path.startsWith("/api/progress/") && method == "GET" -> json(progressJson(path.substringAfterLast('/').toLongOrNull() ?: 0))
             path.startsWith("/api/music/home") || path.startsWith("/api/books/home") -> json("""{"shelves":[]}""")
             path == "/api/music/genres" -> json("""{"genres":[]}""")
             path == "/api/channels" -> json("""{"channels":[]}""")
@@ -203,6 +235,38 @@ class FakeServer {
     )
 
     private fun historyRef(): String = deviceHistory?.let { id -> """{"id":$id,"name":"${histories[id]}"}""" } ?: "null"
+
+    private fun progressJson(itemId: Long): String {
+        val (position, duration) = progress[itemId] ?: return """{"positionMs":0,"durationMs":0,"finished":false}"""
+        val fraction = if (duration > 0) position.toDouble() / duration else 0.0
+        return """{"positionMs":$position,"durationMs":$duration,"finished":false,"locator":"","fraction":$fraction,"updatedAt":"2026-11-25T19:00:00Z"}"""
+    }
+
+    /** `GET /api/items/{id}/family`: nobody for a kid; else the profiles set in [family] for the item, most recent first. */
+    private fun familyJson(itemId: Long): String {
+        val members = if (kid) emptyList() else family[itemId].orEmpty().sortedBy { it.agoMinutes }
+        return """{"members":[${members.joinToString(",") { m ->
+            val at = java.time.Instant.now().minusSeconds(m.agoMinutes * 60).toString()
+            val fraction = if (m.durationMs > 0) m.positionMs.toDouble() / m.durationMs else 0.0
+            val owner = if (m.ownerName.isEmpty()) "" else ""","ownerName":"${m.ownerName}""""
+            val series = if (m.season > 0) ""","season":${m.season},"episode":${m.episode},"title":"Episode ${m.episode}"""" else ""
+            val counts = if (m.total > 0) ""","done":${m.done},"total":${m.total}""" else ""
+            """{"userId":${m.userId},"name":"${m.name}"$owner,"avatar":"${m.avatar}","isKid":false,"itemId":${m.itemId},"positionMs":${m.positionMs},
+                "durationMs":${m.durationMs},"fraction":${if (m.finished) 1.0 else fraction},"finished":${m.finished},"updatedAt":"$at"
+                ${if (m.next) ""","next":true""" else ""}$series$counts}"""
+        }}]}"""
+    }
+
+    /** `POST /api/progress/{id}/adopt`: the other profile's unfinished position in the item becomes this profile's own (404 when there is none). */
+    private fun adopt(path: String, body: String): MockResponse {
+        val itemId = path.split('/')[3].toLong()
+        val userId = Regex(""""userId"\s*:\s*(\d+)""").find(body)?.groupValues?.get(1)?.toLong() ?: 0L
+        val theirs = family.values.flatten().firstOrNull { it.itemId == itemId && it.userId == userId && !it.finished && !it.next && it.positionMs > 0 }
+            ?: return MockResponse().setResponseCode(404).setBody("""{"error":"Not found"}""")
+        adopted += "$itemId $userId"
+        progress[itemId] = theirs.positionMs to theirs.durationMs
+        return json(progressJson(itemId))
+    }
 
     /** The separate-history endpoints, as `managed_handlers.go` answers them (no merge bookkeeping: a merge drops the history). */
     private fun history(method: String, path: String, body: String): MockResponse {

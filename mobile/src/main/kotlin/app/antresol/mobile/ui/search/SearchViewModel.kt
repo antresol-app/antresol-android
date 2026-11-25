@@ -11,11 +11,12 @@ import app.antresol.core.model.Kind
 import app.antresol.core.model.SearchResults
 import app.antresol.core.model.Track
 import app.antresol.core.model.toCard
-import app.antresol.core.ways.waysApi
 import app.antresol.core.ways.AddonSection
 import app.antresol.core.ways.WaysSource
+import app.antresol.core.ways.waysApi
 import app.antresol.ui.LoadState
 import app.antresol.ui.load
+import app.antresol.ui.ways.AddonTitleSearch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -82,7 +83,7 @@ const val SECTION_BOOKS = "books"
 const val SECTION_COMICS = "comics"
 
 /** Search-as-you-type over `/api/search`, debounced; the filter only regroups the last answer. */
-class SearchViewModel(private val client: AntresolClient, private val waysSource: WaysSource? = null) : ViewModel() {
+class SearchViewModel(private val client: AntresolClient, waysSource: WaysSource? = null) : ViewModel() {
     var query: String by mutableStateOf("")
         private set
 
@@ -92,20 +93,22 @@ class SearchViewModel(private val client: AntresolClient, private val waysSource
     var results: LoadState<SearchResults>? by mutableStateOf(null)
         private set
 
+    private val addons = AddonTitleSearch(client.waysApi(), waysSource, viewModelScope)
+
     /** What the addons' searches found, after the library's results; they arrive one addon at a time, and never fail the page. */
-    var addonSections: List<AddonSection> by mutableStateOf(emptyList())
-        private set
+    val addonSections: List<AddonSection> get() = addons.sections
+
+    /** An addon's search is still running: an empty page is not «no results» yet. */
+    val addonsSearching: Boolean get() = addons.searching
 
     private var job: Job? = null
-    private var addonJob: Job? = null
 
     fun onQueryChange(text: String) {
         query = text
         job?.cancel()
-        addonJob?.cancel()
         if (text.isBlank()) {
             results = null
-            addonSections = emptyList()
+            addons.clear()
             return
         }
         job = viewModelScope.launch {
@@ -113,12 +116,7 @@ class SearchViewModel(private val client: AntresolClient, private val waysSource
             if (results == null) results = LoadState.Loading
             results = load { client.search(text.trim()) }
         }
-        val source = waysSource ?: return
-        addonJob = viewModelScope.launch {
-            delay(DEBOUNCE_MS)
-            addonSections = emptyList()
-            source.get().search(client.waysApi(), text.trim()).collect { addonSections = it }
-        }
+        addons.start(text.trim(), DEBOUNCE_MS)
     }
 
     fun retry() = onQueryChange(query)

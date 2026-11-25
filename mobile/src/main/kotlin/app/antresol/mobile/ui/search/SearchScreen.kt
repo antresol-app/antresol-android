@@ -141,7 +141,10 @@ fun SearchScreen(
                 // The addons' sections follow the library's, as they arrive.
                 val sections = results.value.sections(viewModel.filter) + viewModel.addonSections.sections(viewModel.filter)
                 if (sections.isEmpty()) {
-                    item("empty") { EmptyView(stringResource(UiR.string.search_no_results, viewModel.query.trim())) }
+                    // An addon may still be looking: that is not «no results» yet.
+                    item("empty") {
+                        if (viewModel.addonsSearching) LoadingView() else EmptyView(stringResource(UiR.string.search_no_results, viewModel.query.trim()))
+                    }
                 }
                 items(sections, key = { it.id }) { section ->
                     if (section.songs.isNotEmpty()) {

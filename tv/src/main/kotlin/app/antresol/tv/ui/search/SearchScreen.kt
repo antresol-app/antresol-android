@@ -142,7 +142,12 @@ fun SearchScreen(
                     // The addons' rows follow the library's, as they arrive.
                     val rows = viewModel.scope.filter(results.value) + viewModel.scope.filterAddons(viewModel.addonRows)
                     if (rows.isEmpty()) {
-                        item(key = "empty") { Placeholder { MessageView(stringResource(R.string.search_no_results, viewModel.query)) } }
+                        // An addon may still be looking: that is not «no results» yet.
+                        item(key = "empty") {
+                            Placeholder {
+                                if (viewModel.addonsSearching) LoadingView() else MessageView(stringResource(R.string.search_no_results, viewModel.query))
+                            }
+                        }
                     } else {
                         items(rows, key = { it.id }) { row ->
                             val songs = row.id == SONGS_ROW

@@ -19,6 +19,7 @@ import app.antresol.ui.LoadState
 import app.antresol.tv.ui.detail.DetailRow
 import app.antresol.ui.load
 import app.antresol.ui.R
+import app.antresol.ui.ways.AddonTitleSearch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -31,7 +32,7 @@ class SearchViewModel(
     private val client: AntresolClient,
     private val audio: AudioEngine,
     /** The addons' ways of the session: their title searches add rows after the library's. */
-    private val waysSource: WaysSource? = null,
+    waysSource: WaysSource? = null,
 ) : ViewModel() {
     var query: String by mutableStateOf("")
         private set
@@ -51,20 +52,22 @@ class SearchViewModel(
     /** The songs of the shown results, in row order (the songs row's card ids are track ids). */
     private var songs: List<Track> = emptyList()
 
+    private val addons = AddonTitleSearch(client.waysApi(), waysSource, viewModelScope)
+
     /** What the addons' searches found (a row each, titled by the addon's own words), as they answer; never an error. */
-    var addonRows: List<DetailRow> by mutableStateOf(emptyList())
-        private set
+    val addonRows: List<DetailRow> get() = addons.sections.map { it.toRow() }
+
+    /** An addon's search is still running: an empty page is not «no results» yet. */
+    val addonsSearching: Boolean get() = addons.searching
 
     private var job: Job? = null
-    private var addonJob: Job? = null
 
     fun onQueryChange(text: String) {
         query = text
         job?.cancel()
-        addonJob?.cancel()
         if (text.isBlank()) {
             results = null
-            addonRows = emptyList()
+            addons.clear()
             return
         }
         job = viewModelScope.launch {
@@ -74,12 +77,7 @@ class SearchViewModel(
                 client.search(text.trim()).also { songs = it.songs }.toRows()
             }
         }
-        val source = waysSource ?: return
-        addonJob = viewModelScope.launch {
-            delay(DEBOUNCE_MS)
-            addonRows = emptyList()
-            source.get().search(client.waysApi(), text.trim()).collect { sections -> addonRows = sections.map { it.toRow() } }
-        }
+        addons.start(text.trim(), DEBOUNCE_MS)
     }
 
     /** Plays the found songs starting at [card]'s track. */

@@ -215,13 +215,12 @@ fun SettingsScreen(
             group {
                 ValueRow(stringResource(R.string.settings_video_quality), qualityLabel(settings.videoQuality), onClick = { qualitySheet = true }, tag = "settings-quality")
                 Divider()
-                SwitchRow(stringResource(R.string.settings_autoplay), stringResource(R.string.settings_autoplay_detail), settings.autoplayNext, settings::updateAutoplayNext, "settings-autoplay")
+                SwitchRow(stringResource(R.string.settings_autoplay), settings.autoplayNext, settings::updateAutoplayNext, "settings-autoplay")
                 // The profile's, on the server (absent on an older server that has no such choice).
                 channelPrefs?.favoritesFirst?.let { on ->
                     Divider()
                     SwitchRow(
                         stringResource(UiR.string.settings_favorites_first),
-                        stringResource(UiR.string.settings_favorites_first_detail),
                         on,
                         channelPrefs::setFavoritesFirst,
                         "settings-favorites-first",
@@ -355,7 +354,7 @@ private fun ValueRow(label: String, value: String, onClick: (() -> Unit)? = null
 }
 
 @Composable
-private fun SwitchRow(label: String, detail: String, checked: Boolean, onChange: (Boolean) -> Unit, tag: String) {
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, tag: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -367,10 +366,7 @@ private fun SwitchRow(label: String, detail: String, checked: Boolean, onChange:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = Antresol.typography.body)
-            Text(detail, style = Antresol.typography.caption)
-        }
+        Text(label, style = Antresol.typography.body, modifier = Modifier.weight(1f))
         Switch(
             checked = checked,
             onCheckedChange = null,
@@ -443,11 +439,6 @@ private fun QualityDialog(selected: String, onSelect: (String) -> Unit, onDismis
                         Text(qualityLabel(value), style = Antresol.typography.body)
                     }
                 }
-                Text(
-                    stringResource(R.string.settings_video_quality_detail),
-                    style = Antresol.typography.caption,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(UiR.string.action_cancel)) } },

@@ -76,9 +76,7 @@
     <string name="settings_server_address">Адрес</string>
     <string name="settings_server_version">Версия сервера</string>
     <string name="settings_video_quality">Качество видео</string>
-    <string name="settings_video_quality_detail">Применяется при запуске видео. В плеере его можно сменить.</string>
     <string name="settings_autoplay">Автозапуск следующей серии</string>
-    <string name="settings_autoplay_detail">Через 10 секунд после конца серии</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_app_version">Версия приложения</string>
     <string name="account_open">Аккаунт: %1$s</string>

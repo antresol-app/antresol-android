@@ -20,11 +20,12 @@ object PlayerCensus {
 
     private val lock = Any()
     private var players = 0
+    private var videoPlayers = 0
     private var videoDecoders = 0
     private var audioDecoders = 0
 
-    /** «players=1 video=1 audio=1»: what is alive now. */
-    fun summary(): String = synchronized(lock) { "players=$players video=$videoDecoders audio=$audioDecoders" }
+    /** «players=2 videoPlayers=1 video=1 audio=1»: what is alive now (players of every kind, video players, decoders). */
+    fun summary(): String = synchronized(lock) { "players=$players videoPlayers=$videoPlayers video=$videoDecoders audio=$audioDecoders" }
 
     val livePlayers: Int get() = synchronized(lock) { players }
     val liveVideoDecoders: Int get() = synchronized(lock) { videoDecoders }
@@ -32,10 +33,18 @@ object PlayerCensus {
     /** Counts [player] (named [kind] in the log) until it is released. */
     @OptIn(UnstableApi::class)
     fun attach(player: ExoPlayer, kind: String) {
-        val alive = synchronized(lock) { ++players }
-        if (alive > 1) log?.invoke("player+ $kind: $alive players alive (${summary()})")
+        val video = kind == VIDEO
+        val videoAlive = synchronized(lock) {
+            players++
+            if (video) ++videoPlayers else videoPlayers
+        }
+        // The music engine's player idles beside a video one; two video players at once hold two decoders' worth.
+        if (video && videoAlive > 1) log?.invoke("player+ $kind: $videoAlive video players alive (${summary()})")
         player.addAnalyticsListener(Tracker(kind))
     }
+
+    const val VIDEO = "video"
+    const val AUDIO = "audio"
 
     /** One player's decoders, so a release that skips the decoders' own callbacks still balances. */
     @OptIn(UnstableApi::class)
@@ -78,6 +87,7 @@ object PlayerCensus {
             released = true
             synchronized(lock) {
                 players--
+                if (kind == VIDEO) videoPlayers--
                 videoDecoders -= video
                 audioDecoders -= audio
             }

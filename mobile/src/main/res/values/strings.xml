@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Antresol</string>
+    <!-- Each language is named in itself, so it can be found whatever the current one is. -->
+    <string name="language_english" translatable="false">English</string>
+    <string name="language_russian" translatable="false">Русский</string>
 
     <!-- Shell -->
     <string name="card_open_page">Open page</string>

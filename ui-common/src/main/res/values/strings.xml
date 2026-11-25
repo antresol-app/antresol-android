@@ -251,7 +251,7 @@
     <string name="now_playing_next">Next</string>
     <string name="sleep_off">Off</string>
     <string name="settings_playback">Playback</string>
-    <string name="settings_favorites_first">Favourite Channels First</string>
+    <string name="settings_favorites_first">Favorite Channels First</string>
     <string name="settings_favorites_first_detail">Starred channels at the top of the TV list, on every device of the profile</string>
     <string name="settings_language">Language</string>
     <string name="search_browse">Browse</string>

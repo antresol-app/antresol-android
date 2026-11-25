@@ -7,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
@@ -278,8 +282,8 @@ fun SettingsScreen(
 @Composable
 private fun languageLabel(language: String): String = when (language) {
     // Each language is named in itself so it can be found whatever the current one is.
-    UiLanguages.ENGLISH -> "English"
-    UiLanguages.RUSSIAN -> "Русский"
+    UiLanguages.ENGLISH -> stringResource(R.string.language_english)
+    UiLanguages.RUSSIAN -> stringResource(R.string.language_russian)
     else -> stringResource(UiR.string.ui_language_profile)
 }
 
@@ -325,6 +329,8 @@ private fun ActionRow(icon: ImageVector, label: String, onClick: () -> Unit, tag
     }
 }
 
+/** A label and its value on one line while they fit; when they do not, the value goes under the label (they never overlap). */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ValueRow(label: String, value: String, onClick: (() -> Unit)? = null, tag: String? = null) {
     Row(
@@ -336,8 +342,14 @@ private fun ValueRow(label: String, value: String, onClick: (() -> Unit)? = null
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(label, style = Antresol.typography.body, modifier = Modifier.weight(1f))
-        Text(value, style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        FlowRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(label, style = Antresol.typography.body)
+            Text(value, style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
         if (onClick != null) Icon(AntresolIcons.ChevronRight, contentDescription = null, tint = AntresolColors.LabelTertiary, modifier = Modifier.size(18.dp))
     }
 }
@@ -382,7 +394,7 @@ private fun DeviceRow(device: DeviceSession, onRevoke: () -> Unit) {
                 device.version.takeIf { it.isNotBlank() }?.let { "v$it" },
                 lastSeenDate(LocalContext.current, device.lastSeen),
             ).joinToString(" · ")
-            if (detail.isNotBlank()) Text(detail, style = Antresol.typography.caption, maxLines = 1)
+            if (detail.isNotBlank()) Text(detail, style = Antresol.typography.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         if (device.current) {
             Text(stringResource(UiR.string.settings_this_device), style = Antresol.typography.caption.copy(color = AntresolColors.Green))
@@ -414,7 +426,7 @@ private fun QualityDialog(selected: String, onSelect: (String) -> Unit, onDismis
         containerColor = AntresolColors.BackgroundElevated,
         title = { Text(stringResource(R.string.settings_video_quality)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Quality.ALL.forEach { value ->
                     Row(
                         modifier = Modifier

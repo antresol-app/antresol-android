@@ -817,6 +817,8 @@ if __name__ == "__main__":
     args.add_argument("--old-categories", action="store_true", help="answer as a server without `categories` (the apps use each channel's `category` text)")
     args.add_argument("--live-hls", type=Path, metavar="DIR", help="an HLS stream (index.m3u8 and segments) every channel plays, e.g. made with "
                       "ffmpeg -i test-fixtures/resources/trailer-sample.mp4 -c copy -hls_list_size 0 -f hls DIR/index.m3u8")
+    args.add_argument("--clip", type=Path, metavar="MP4", help="the video the trailers and the addon's way play (default: the tiny test clip), "
+                      "e.g. a long 1080p file for a memory or decoder soak on an emulator")
     args.add_argument("--addons", action="store_true", help="the server has one addon, \"alpha\", speaking the `x/app` protocol (ways to watch and to keep, a title search)")
     args.add_argument("--kid", action="store_true", help="the profile is a kid's (no «Отдельная история»; its writes answer 403)")
     args.add_argument("--requests", action="store_true", help="kids' requests are open (see above): with --kid the profile asks, without it answers")
@@ -831,6 +833,8 @@ if __name__ == "__main__":
         sample_requests()
     addon["on"] = options.addons
     live_hls[0] = options.live_hls
+    if options.clip:
+        CLIP = options.clip
     big["legacy"] = options.old_categories
     if options.channels:
         big["channels"] = options.channels

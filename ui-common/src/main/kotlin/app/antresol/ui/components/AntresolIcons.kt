@@ -173,6 +173,28 @@ object AntresolIcons {
         lineTo(16f, 9.3f)
     }
 
+    /** A paper plane: «ask a parent». */
+    val Send: ImageVector = lineIcon("Send") {
+        moveTo(20.5f, 3.5f)
+        lineTo(10.5f, 13.5f)
+        moveTo(20.5f, 3.5f)
+        lineTo(14f, 20.5f)
+        lineTo(10.5f, 13.5f)
+        lineTo(3.5f, 10f)
+        close()
+    }
+
+    /** A clock: a request that waits for an answer. */
+    val Clock: ImageVector = lineIcon("Clock") {
+        moveTo(12f, 3f)
+        arcToRelative(9f, 9f, 0f, true, true, 0f, 18f)
+        arcToRelative(9f, 9f, 0f, true, true, 0f, -18f)
+        close()
+        moveTo(12f, 7.5f)
+        lineTo(12f, 12f)
+        lineTo(15.5f, 14f)
+    }
+
     /** An open eye: "watched" on cards. */
     val Eye: ImageVector = lineIcon("Eye") {
         moveTo(2.5f, 12f)

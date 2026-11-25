@@ -291,4 +291,41 @@
     <string name="player_way_source">Озвучка и источник…</string>
     <string name="error_input_not_ready">Видео ещё не готово. Попробуйте через минуту.</string>
     <string name="episode_open_page">Открыть страницу серии</string>
+    <!-- «Попросить»: a kid profile asks a parent for a title the library does not have -->
+    <string name="request_find_title">Найти и попросить</string>
+    <string name="request_ask">Попросить у родителя</string>
+    <string name="request_asking">Просим…</string>
+    <string name="request_ask_for">Попросить у родителя «%1$s»</string>
+    <string name="request_pending">Ждёт ответа</string>
+    <string name="request_approved">Одобрено — скоро появится</string>
+    <string name="request_in_library">Уже в медиатеке</string>
+    <string name="request_declined">Родитель отказал</string>
+    <string name="request_reason_line">«%1$s»</string>
+    <string name="request_ask_failed">Не получилось попросить. Попробуй ещё раз.</string>
+    <string name="request_search_failed">Поиск сейчас недоступен</string>
+    <string name="request_hidden">Недоступно для этого профиля</string>
+    <string name="request_sheet_hint">Родитель увидит запрос и ответит на него.</string>
+    <string name="requests_mine">Мои запросы</string>
+    <string name="requests_mine_empty">Здесь будет то, что ты попросишь. Найди фильм, сериал, музыку или книгу в поиске и попроси.</string>
+    <string name="requests_title">Запросы</string>
+    <string name="requests_lead">Что дети просят добавить в медиатеку. «Одобрить» подтверждает запрос, а когда название появится в медиатеке, ребёнок увидит это сам. Чтобы название оказалось на сервере, откройте его страницу.</string>
+    <string name="requests_waiting">Ждут ответа</string>
+    <string name="requests_decided">Отвеченные за 30 дней</string>
+    <string name="requests_empty">Новых запросов нет.</string>
+    <string name="requests_from">%1$s · %2$s</string>
+    <string name="requests_approve">Одобрить</string>
+    <string name="requests_decline">Отказать</string>
+    <string name="requests_open_title">Открыть страницу</string>
+    <string name="requests_answered_approved">Одобрено</string>
+    <string name="requests_answered_declined">Отказано</string>
+    <string name="requests_decline_title">Отказать: «%1$s»?</string>
+    <string name="requests_decline_message">%1$s увидит, что вы отказали. Можно коротко объяснить почему.</string>
+    <string name="requests_reason">Причина (необязательно)</string>
+    <string name="requests_answer_failed">Не получилось ответить. Попробуйте ещё раз.</string>
+    <plurals name="requests_waiting_count">
+        <item quantity="one">%1$d запрос ждёт ответа</item>
+        <item quantity="few">%1$d запроса ждут ответа</item>
+        <item quantity="many">%1$d запросов ждут ответа</item>
+        <item quantity="other">%1$d запроса ждут ответа</item>
+    </plurals>
 </resources>

@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -24,17 +25,19 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.util.EventLogger
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.ApiException
 import app.antresol.core.api.attempt
+import app.antresol.core.family.familyApi
 import app.antresol.core.model.AudioTrack
 import app.antresol.core.model.AutoSkip
 import app.antresol.core.model.AutoSkipRequest
+import app.antresol.core.model.FamilyMember
 import app.antresol.core.playback.AudioMenu
 import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.FileInfo
@@ -74,6 +77,7 @@ import app.antresol.core.ways.inputVideoApi
 import app.antresol.core.ways.waysApi
 import app.antresol.core.ways.wayPlaybackApi
 import app.antresol.ui.R
+import app.antresol.ui.family.FamilyModel
 import app.antresol.ui.userMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -303,6 +307,28 @@ open class VideoPlayerViewModel(
     var noticeText: String? by mutableStateOf(null)
 
     private var currentItemId = itemId
+
+    /** «Семья»: where the other profiles are in the item that plays (a library item; an addon's stream is none). */
+    val family = FamilyModel(client.familyApi(), viewModelScope)
+
+    /** The profiles that are somewhere in the item that plays (not finished, with a position): the «Семья» menu lists them. */
+    val familyHere: List<FamilyMember> get() = family.members.filter { it.itemId == currentItemId && !it.finished && it.positionMs > 0 }
+
+    fun familyPhoto(m: FamilyMember): String? = client.urls.image(m.photo)
+
+    /**
+     * Continues from [m]'s place: their position becomes this profile's own first (never the other way round), then the
+     * player goes there: a seek in this item, or the next episode / another episode from its start / its saved place.
+     */
+    fun jumpToFamily(m: FamilyMember) = family.jump(m) { place ->
+        if (place.itemId == currentItemId && !place.next) {
+            seekTo(place.positionMs)
+        } else {
+            finishCurrent()
+            start(place.itemId, if (place.next) ResumeMode.FromStart else ResumeMode.Resume)
+        }
+    }
+
     private var wayDirect: WayPlayback.Direct? by mutableStateOf(null)
 
     /** The quality picked in the menu of an addon's stream: kept when its link is made again (a stale one). */
@@ -427,6 +453,7 @@ open class VideoPlayerViewModel(
                 val file = detail.files.firstOrNull() ?: throw PlaybackUnavailableException()
                 item = detail
                 currentItemId = detail.id
+                family.load(detail.id)
                 findNextEpisode(detail)
                 // A series or season plays one of its episodes: the early answer is not that episode's.
                 val asked = early?.takeIf { detail.id == itemId }
@@ -1103,6 +1130,7 @@ open class VideoPlayerViewModel(
     fun onBackground() {
         backgrounded = true
         if (released || closed) return
+        Log.i(PLAYER_LOG, "background at ${currentFileMs()} ms, phase $phase")
         player.pause()
         if (source == null || isSwitching) return
         if (phase is PlayerPhase.UpNext) {
@@ -1119,6 +1147,7 @@ open class VideoPlayerViewModel(
         (phase as? PlayerPhase.UpNext)?.let { if (it.secondsLeft != null && upNextJob?.isActive != true) startUpNext(it.episode) }
         val at = suspendedAtMs ?: return
         suspendedAtMs = null
+        Log.i(PLAYER_LOG, "foreground: reopening at $at ms")
         reopen(at, playWhenReady = false)
     }
 
@@ -1528,8 +1557,15 @@ private fun PlaybackDisplay.toItem(context: Context): ItemDetail {
 }
 
 /**
- * The ExoPlayer of the app's video players (films, episodes, trailers): media through [client]'s
- * HTTP client, decoder fallback, movie audio focus, paused when headphones are unplugged.
+ * The logcat tag of the video players: their lifecycle and ExoPlayer's [EventLogger] (decoders,
+ * surface sizes, first frames, errors), so `adb logcat -s AntresolPlayer` tells what a device did.
+ */
+const val PLAYER_LOG = "AntresolPlayer"
+
+/**
+ * The ExoPlayer of the app's video players (films, episodes, trailers, live): media through [client]'s
+ * HTTP client, decoder fallback, a new decoder for a new surface ([FreshCodecVideoRenderer]), movie
+ * audio focus, paused when headphones are unplugged, logged under [PLAYER_LOG].
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
@@ -1537,7 +1573,7 @@ fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
     val http = OkHttpDataSource.Factory(client.httpClient)
     val dataSources = DefaultDataSource.Factory(context, http)
     return ExoPlayer.Builder(context)
-        .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(true))
+        .setRenderersFactory(VideoRenderersFactory(context))
         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
         .setLoadControl(videoLoadControl(context))
         .setAudioAttributes(
@@ -1546,6 +1582,8 @@ fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
         )
         .setHandleAudioBecomingNoisy(true)
         .build()
+        .also { it.addAnalyticsListener(EventLogger(PLAYER_LOG)) }
+        .also { PlayerCensus.attach(it, PlayerCensus.VIDEO) }
 }
 
 /**

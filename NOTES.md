@@ -1012,6 +1012,18 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
 - Audio/subtitles of an external channel: the stream's own track groups with their labels
   (`ExternalTracks`, duplicates get «(CC)»/«5.1»/a number); the choice is kept per channel in the
   device's preferences (`live_external_tracks`, language + label); default = the profile's language.
+- Silent channels (audio the device cannot decode: MP2, AC-3, E-AC-3 on some boxes): the server marks
+  such a stream `remuxAudio: true` (primary and each fallback) and gives it `relay`, a path of its own
+  that converts the audio to AAC. `StreamSource.viaRelay` (= flag and a relay) makes the session hand
+  the player `LiveApi.relayUrl(relay)` (absolute, no `?mk=`) with `LiveStream.Ready.relayed` and
+  `viaServer` set and no provider headers (the relay sends them itself). The player opens a relayed
+  stream with its own authorised client (`player.setMediaItem`, not the plain data source): the relay's
+  playlists link to relay paths without a media key, so the Bearer must go with every request. The
+  source's identity (device memory of bad sources, the banner) stays the provider's URL. A server that
+  does not send the flag, or a flag without a relay, plays the provider's URL as before. The server
+  decides per stream after its first look at the audio (about a second after tune-in): the very first
+  play of a never-seen channel can still be silent, a retune after the list reloads takes the relay.
+  Tests: `ExternalAudioRelayTest` (JSON fixture `core/src/test/resources/channels/external-audio.json`).
 - «ТВ» calls `POST /api/channels/opened` when it opens (at most every 10 minutes) and reloads the list.
 - Verified on emulators (phone 360 dp and Pixel 9 Pro XL on API 36, Android TV API 34 image): the three
   demo HLS streams, alternate audio and subtitles, the per-channel memory, a failing channel and
@@ -1665,6 +1677,12 @@ The apps show what the server's addons offer, by the protocol in docs/API.md sec
   `searchSeries`, `runDelayMs` and `wayQualities` shape it), `core/.../ways/*`, `OwnTracksTest`, `DeviceWayDefaultsTest`. `scripts/fake-server.py --addons` is the same for a device.
 - Trailers: the web lists at most three per item and plays one without `play` in the embedded player; the apps did the
   latter already and now cap the list at three too (`Trailers.MAX_TRAILERS`).
+- Search (phone and TV): the addons' title searches run beside `/api/search` and add one section each after the library's
+  (a title that is not in the library opens its page, `TitleRoute`; one that is, its own page). `ui-common/.../ways/AddonTitleSearch`
+  is the part both apps share (debounce, the sections as the addons answer, `searching`); while it is true and nothing is found
+  yet the page shows its spinner instead of «No results». A kid's profile has no addon search (the server answers it 403); it has the server's own catalogue search instead (see
+  «Kid requests»).
+  A title off the library has no trailers: the server lists them per library item (`/api/items/{id}/trailers`), as on the web.
 
 ## TV density and the channels page
 
@@ -1796,3 +1814,69 @@ How to make the profiles again (after big UI changes):
    Not run this round: the gfxinfo numbers above were taken with the same builds instead.
 
 Profiles: lines naming kotlinx CoroutineScheduler idle-worker stack methods (their names hold a word) are dropped after generation, as the public gate refuses that word; they only cover a coroutine idle path.
+
+## Kid requests («Попросить», TV and phone)
+
+A kid profile asks a parent for a title the library does not have, as the web does (docs/API.md section 14).
+
+- `:core`: models (`model/Requests.kt`: `KidRequest`, `KidCandidate`, `KidRequestState`, `RequestStatus`), the calls on `AntresolClient`
+  (`requestSearch`, `askRequest`, `myRequests`, `allRequests`, `requestCount`, `approveRequest`, `declineRequest`), `requests/RequestsApi`
+  (what the screens call; a fake in tests) and `requests/AskCards` (a search result as a `Card`; an album or book, which has no page, gets a
+  negative id so its card is unique, and `candidateOf` finds it back). `Me.canRequest` (a kid with requests open) and `Me.requests` (an
+  administrator) decide what the apps show; `TitleInfo.kidRequest` is the kid's request of the title page.
+- `:ui-common` (`ui/requests`): `KidAskSearch` (one call per kind a page shows: video, music, the books' three; the page's filter asks for a
+  kind the first time it shows it; `refresh` reads again in place when the page comes back), `TitleRequest` (the page's «Ask a Parent»: the
+  state as the server sent it, busy, a refused age limit with the server's words), `MyRequests`, `RequestsToAnswer`, `PendingRequests`,
+  `RequestStatusPill` and the words (strings `request_*`, `requests_*`, ru and en).
+- Search (phone and TV): after the library's rows a «Find and Ask» row (kid only) of the catalogue's titles; the card's badge is the state of
+  its request. Movies and shows open the title page (`TitleRoute`): «Ask a Parent» (white), then the state («Waiting for an answer»,
+  «Approved — coming soon», «Already in the library», «A parent said no» and the reason); a title above the profile's age limit has the
+  button greyed and the server's reason under it; a kid's page has no ways, trailers or watched state. Albums and books open a sheet
+  (phone) or side panel (TV) with the same button. TV Music and phone Music/Books filters ask the music and books catalogues.
+- «My Requests» (kid) and «Requests» (administrator): the TV puts them in Settings, the phone in the avatar's sheet (with the number waiting).
+  The administrator's rows offer Approve and Decline (phone: a reason field; TV: no reason, a remote cannot type one) and open the title page of
+  a video, where a keep way brings the title onto the server (which approves the request on the server too). Plain Approve confirms without a
+  download, as the web does when no addon sheet wants the request.
+- The server pushes `request.changed`; the apps have no event stream, so each screen reads again when it comes back (search results, title page,
+  both lists) and the badge count when the sheet opens.
+- Tests: `RequestsClientTest`, `AskCardsTest`, `SampleDecodingTest` (core); `KidAskSearchTest`, `TitleRequestTest`, `RequestListsTest`
+  (ui-common); `TvRequestsUiTest`, `PhoneRequestsUiTest` (`FakeServer.requestsOpen`, `addRequest`; `scripts/fake-server.py --kid --requests` for a
+  kid, `--requests` alone for an administrator).
+
+## Family («Семья», TV and phone)
+The web's `FamilyProgress` on the title pages (docs/API.md section 15): who else of the household is where in a title, and a jump to their place.
+
+- `:core`: `model/Family.kt` (`FamilyMember`), `AntresolClient.family` and `adoptProgress`, `family/FamilyApi` (what the screens call; a fake in tests),
+  `FamilyKind` (movie, episode, series, book, audiobook, comic: the words and the way to continue depend on it) and `Family` (the ring, `adopts`: whether
+  continuing copies a position, `canContinue`: the web's `jumpLabel() !== ''`).
+- `:ui-common` (`ui/family`): `FamilyModel` (a page's view model owns one: `load`, `refresh`, `jump` = adopt, then the page's `open`; one jump at a time, a
+  failure says so and reads the family again), `FamilyTexts` (`placeOf`, `jumpLabel`, `summary`: the web's strings «С2 Э5 · 34 мин», «стр. 120 из 300»,
+  «Глава 7 · 42 %» in ru and en), `RingAvatar`, `FamilyFaces`, `FamilyLineContent` (the line's content; the app draws its own button around it) and
+  `familyMenuOptions` (the list's rows as `MenuOption`s, which now may carry a `leading` picture and an `action` line).
+- TV (`ui/detail/FamilyLine.kt`): the line is a white-on-focus pill under the buttons (and under Listen/Read of an audiobook or comic); OK opens `FamilyPanel`, an
+  `OptionsPanel` on the right whose rows are the family (focus on the first row there is somewhere to continue from; Back closes it, and on a real TV focus then lands on the first action, as after the trailer chooser: the page's Back handling, not this panel).
+  A row without somewhere to continue (everything done) only closes the panel. `DetailViewModel.family` reads when the page (re)loads, so it is current after the player.
+  The player's control row has a «Family» button (`PlayerMenu.Family`) when `VideoPlayerViewModel.familyHere` is not empty: the profiles somewhere in the item that plays;
+  a jump there copies their position and seeks (the same item) or starts the item (an episode).
+- Phone (`ui/detail/FamilyUi.kt`): the line under the Watchlist/Watched pills (video) or under Listen/Read (audiobook, comic, PDF); a tap opens `FamilySheet` (a bottom sheet
+  with a button per row). The page reads the family on every resume (the player moves the places). The phone's player has no «Family» button (the web's timeline faces
+  are not ported).
+- Not shown: for a kid (the server lists nobody), a title off the library, music, an EPUB (no reader in the apps), when nobody else has progress, and when the call fails.
+- Not ported: the faces on the episode tiles and the faces on the player's timeline with «Back to 12:40».
+- Tests: `FamilyClientTest`, `FamilyRulesTest`, `SampleDecodingTest.family` (core); `FamilyModelTest`, `FamilyTextsTest` (ui-common; needs `isIncludeAndroidResources`);
+  `TvFamilyUiTest`, `PlayerFamilyMenuTest`, `PhoneFamilyUiTest` (`FakeServer.family`, `adopted`, `progress`; `scripts/fake-server.py --family` for an emulator).
+
+## A new surface, a new decoder (video players, TV and phone)
+Owner's projector: pause a film, the system screensaver starts, resume: sound and subtitles play, the picture stays black.
+- The picture's `SurfaceView` surface goes with the window (screensaver, Home) and a new one comes back. ExoPlayer keeps the paused decoder and moves it
+  onto a placeholder surface and then the new surface (`MediaCodec.setOutputSurface`); the film player's reopen on return even reuses that decoder
+  (renderers are disabled, not reset, by `setMediaItem`). Some TV chips take the new surface without an error and show nothing; ExoPlayer starts a new
+  decoder instead only on the devices it lists (`codecNeedsSetOutputSurfaceWorkaround`).
+- `VideoRenderersFactory` / `FreshCodecVideoRenderer` (`ui/playback/VideoRenderers.kt`, used by `buildVideoPlayer`: film, episode, way, trailer, live) say
+  yes for every decoder, and no detached (decoder-without-surface) mode either: a surface change always releases the decoder and starts a new one on the new
+  surface; without a surface no decoder runs (audio plays on, as it did with the placeholder).
+- Diagnostics: the players log their lifecycle and ExoPlayer's `EventLogger` under the tag `AntresolPlayer` (`adb logcat -s AntresolPlayer`): a return shows
+  `videoDisabled`/`videoDecoderInitialized`, `surfaceSize`, `renderedFirstFrame`.
+- The screen-on flag is off while paused (`rememberKeepScreenOn`), so the screensaver may start then; it never starts while a video plays.
+- Tests: `VideoRenderersTest` (Robolectric with Media3's `ShadowMediaCodecConfig`: a paused video whose surface changes gets a second decoder; ExoPlayer's own
+  renderers keep one).

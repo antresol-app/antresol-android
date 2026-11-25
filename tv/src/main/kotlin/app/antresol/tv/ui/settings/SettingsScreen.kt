@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,10 +54,12 @@ import app.antresol.tv.autostart.AutostartTarget
 import app.antresol.tv.autostart.OverlayPermission
 import app.antresol.tv.R as TvR
 import app.antresol.ui.language.UiLanguageModel
+import app.antresol.ui.requests.PendingRequests
 import app.antresol.ui.language.UiLanguages
 import app.antresol.tv.settings.TvSettings
 import app.antresol.ui.playback.MenuOption
 import app.antresol.tv.ui.components.OptionsPanel
+import app.antresol.tv.ui.requests.waitingRequestsText
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.listRowColors
@@ -71,7 +74,7 @@ import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
 
 private enum class SettingsMenu {
-    Quality, Subtitles, Language, AutostartTarget, OverlayGuide, OverlayManual, ConfirmSignOut, History, HistoryNew, HistoryOff;
+    Quality, Subtitles, Language, AutostartTarget, OverlayGuide, OverlayManual, ConfirmSignOut, History, HistoryNew, HistoryOff, Diagnostics;
 
     /** The control that gets focus back when this panel closes: a history panel opened from the picker returns to its row. */
     val opener: SettingsMenu get() = if (this == HistoryNew || this == HistoryOff) History else this
@@ -101,8 +104,16 @@ fun SettingsScreen(
     language: UiLanguageModel,
     deviceHistory: DeviceHistoryModel? = null,
     channelPrefs: ChannelPrefsModel? = null,
+    /** A kid profile that may ask for titles: the page of what it asked for. */
+    onMyRequests: (() -> Unit)? = null,
+    /** An administrator with kids' requests to answer: their page, and how many wait. */
+    onRequests: (() -> Unit)? = null,
+    pendingRequests: PendingRequests? = null,
+    /** The diagnostics report (at most the given length) for an administrator; null: no such row. */
+    diagnostics: (suspend (maxChars: Int) -> String)? = null,
 ) {
     LaunchedEffect(channelPrefs) { channelPrefs?.refresh() }
+    LaunchedEffect(pendingRequests) { pendingRequests?.refresh() }
     val preferences by settings.preferences.collectAsStateWithLifecycle()
     LaunchedEffect(language) { language.refresh() }
     var menu by remember { mutableStateOf<SettingsMenu?>(null) }
@@ -160,6 +171,24 @@ fun SettingsScreen(
                     .weight(1f)
                     .fillMaxHeight(),
             ) {
+                if (onMyRequests != null || onRequests != null) {
+                    item { Section(stringResource(R.string.requests_title)) }
+                    onMyRequests?.let { open ->
+                        item {
+                            SettingRow(label = stringResource(R.string.requests_mine), value = "", onClick = open, modifier = Modifier.testTag("settings-my-requests"))
+                        }
+                    }
+                    onRequests?.let { open ->
+                        item {
+                            SettingRow(
+                                label = stringResource(R.string.requests_title),
+                                value = waitingRequestsText(pendingRequests?.count ?: 0).orEmpty(),
+                                onClick = open,
+                                modifier = Modifier.testTag("settings-requests"),
+                            )
+                        }
+                    }
+                }
                 item { Section(stringResource(R.string.settings_playback)) }
                 item {
                     SettingRow(
@@ -261,6 +290,17 @@ fun SettingsScreen(
                         onClick = { menu = SettingsMenu.Language },
                         modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Language)),
                     )
+                }
+                // What the TV kept about its freezes and restarts, for the administrator to read.
+                if (diagnostics != null && state.user?.isAdmin == true) {
+                    item {
+                        SettingRow(
+                            label = stringResource(TvR.string.settings_diagnostics),
+                            value = "",
+                            onClick = { menu = SettingsMenu.Diagnostics },
+                            modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Diagnostics)).testTag("settings-diagnostics"),
+                        )
+                    }
                 }
             }
         }
@@ -380,6 +420,7 @@ fun SettingsScreen(
                     focusIndex = 0,
                 )
             }
+            SettingsMenu.Diagnostics -> if (diagnostics != null) DiagnosticsPanel(report = diagnostics, onDismiss = { menu = null })
             SettingsMenu.ConfirmSignOut -> ConfirmPanel(
                 title = stringResource(TvR.string.settings_sign_out_confirm, state.session.userName),
                 confirmLabel = stringResource(R.string.profile_sign_out),

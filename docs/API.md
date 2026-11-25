@@ -265,6 +265,8 @@ Returns the Me object for the authenticated user:
 | maxRating | string \| null | For example `"6+"` or `"12+"`. Values used by the web UI: `0+`, `6+`, `12+`, `16+`, `18+`. |
 | remote | bool | The request comes from outside the home network, so remote quality caps apply. |
 | libraryOnly | bool | `true` in this build: there is no discovery of other sources. |
+| canRequest | bool | A kid profile may ask a parent for titles (section 14); false while the server has requests closed. |
+| requests | bool | An administrator has kids' requests to answer (section 14). |
 
 Use this call to validate a stored token at app start: `401` means sign in again.
 
@@ -1289,3 +1291,59 @@ the page made from `GET /api/title/{kind}/{tmdbId}`, which shows the ways whose 
 `GET /api/items/{id}/trailers` lists at most the best three the apps offer (as the web does). A trailer with `play`
 plays in the app's own player; one without it in the embedded YouTube player (the YouTube app or the browser only on
 a device without a WebView), exactly as the web's trailer sheet does without an addon.
+
+---
+
+## 14. Kid requests («Попросить»)
+
+A kid profile gets nothing from outside the library, so it asks a parent for a title it finds in the server's catalogue
+search; a parent answers in the apps or the web. Only while the server has requests open (`canRequest` of the kid's
+`/api/me`, `requests` of an administrator's): otherwise every call below answers 403 `{error}`. Samples:
+`requests-search.json`, `requests-mine.json`, `requests-all.json`, `requests-count.json`, `title-kid.json`.
+
+| Call | Who | Answer |
+|---|---|---|
+| `GET /api/requests/search?q=&kind=video\|music\|book\|audiobook\|comic` | kid | `[{kind, tmdbId, extId, title, subtitle, year, poster, explicit, aliases, kidRequest}]`: `video` is TMDB's movies and series (`kind` movie or series, `tmdbId`, an absolute `poster`), the rest the catalogues' albums (`music`), books and manga (`extId`, no cover). Only what the profile may see. |
+| `POST /api/requests` | kid | `{kind, tmdbId}` for a movie or series, `{kind, extId, title, subtitle, year, aliases}` for the rest: the kid's `KidRequest` of the title, made if it has none (asking again returns it). 403 `{error, code: "rating"}`: above the age limit. 429: too soon after the last one. |
+| `GET /api/requests/mine` | kid | `[KidRequest]`, newest first. |
+| `GET /api/requests`, `GET /api/requests/count` | admin | the waiting requests, then those answered in the last 30 days, each with `user`; `{pending}`. |
+| `POST /api/requests/{id}/approve`, `POST /api/requests/{id}/decline {reason}` | admin | the `KidRequest` answered; 409 when it was answered already. Approving confirms the request without a download: a download of the title (a keep way of its page) approves its request as well. |
+
+`KidRequest`: `{id, key, kind, tmdbId, extId, title, subtitle, year, poster, aliases, rating, status, reason,
+libraryItemId, createdAt, decidedAt?, user?, hidden?}`. `status` is `pending`, `approved`, `declined` or `in_library`
+(not stored: the library has the title now; `libraryItemId` is its page). `reason` is what a parent said on declining.
+`hidden`: a kid's own request of a title above its limit now, with no title or cover. `kidRequest` of a search result
+and of `GET /api/title/{kind}/{tmdbId}` (kids only) is `{key, allowed, blocked?, request}`: `request` is the kid's
+`KidRequest` of the title or null, `blocked` the reason in the profile's language when `allowed` is false.
+
+The apps show a search result as a card with the state of its request as its badge: a movie or series opens its title
+page (with «Ask a Parent», or the state of the request and a parent's reason), a title the library has opens its own
+page, an album or book opens a sheet to ask from. «My Requests» is the kid's list; an administrator's «Requests» has
+Approve and Decline (with an optional reason) and opens a video's title page, where the title is brought onto the
+server. The state is read again when a screen comes back; there is no live update.
+
+
+---
+
+## 15. Family («Семья»)
+
+Where the other profiles of the household are in a title, and «continue from their place». Sample: `family.json`.
+
+| Call | Answer |
+|---|---|
+| `GET /api/items/{id}/family` | `{members: [FamilyMember]}`, most recent first. Empty for a kid profile, for a profile that hides its progress (never listed), and when nobody else has started the item. 400 for an item without progress (music). `Cache-Control: no-store`. |
+| `POST /api/progress/{itemId}/adopt {userId}` | `{userId}`'s unfinished position in the item becomes **this** profile's own (theirs is never written); answers this profile's new progress like `GET /api/progress/{itemId}`. 404 when `userId` is not in this profile's family view, or has no unfinished position there. Only for a movie, episode, book, audiobook or comic volume. |
+
+`FamilyMember`: `{userId, name, ownerName?, avatar, photo?, isKid, itemId, positionMs, durationMs, fraction, finished, locator?,
+updatedAt, season?, episode?, volume?, title?, page?, pages?, next?, done?, total?}`. `itemId` is where the place is: the movie,
+book or audiobook itself, the **episode** of a series, the **volume** of a comic. A series or comic page lists each profile at its newest
+item, with `done` and `total` counting its finished (regular) episodes or volumes; `next` says `itemId` is the one after the last finished
+(not started: `positionMs` 0), and `finished` that everything is done. `ownerName` is set for a device's managed account («Living Room · Sam»).
+`page`/`pages` come from a `page:N` locator; an EPUB's locator has no page, only `fraction`.
+
+The apps show a quiet line under the buttons of a library movie, episode, series, season, audiobook or comic page (PDF books on the phone): the
+faces of up to four profiles, each in a ring of how far they are (a check once everything is done), and who is where («Sam · S1 E2 · 20 min ·
+2 more»). OK / a tap opens the list: each profile's place and when, and (when there is somewhere to continue) what continuing says («Play from
+34:00», «S1 E2 from 20:00», «Play S1 E3»). Continuing calls `adopt` first when the place is a position (not a `next`, not finished), then starts the
+player or reader there: a video with `ResumeMode.Resume` (a `next` episode `FromStart`), an audiobook from `positionMs`, a comic volume or PDF in
+its reader. The TV player's control row has a «Family» button with the same list for the profiles that are in the item that plays.

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.antresol.core.api.MediaUrls
@@ -48,6 +49,11 @@ fun AccountSheet(
     onSignOut: () -> Unit,
     onChangeServer: () -> Unit,
     onSettings: () -> Unit,
+    /** A kid profile that may ask for titles: the page of what it asked for. */
+    onMyRequests: (() -> Unit)? = null,
+    /** An administrator with kids' requests to answer: their page, and how many wait. */
+    onRequests: (() -> Unit)? = null,
+    pendingRequests: Int = 0,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -76,6 +82,17 @@ fun AccountSheet(
                 }
             }
             HorizontalDivider(color = AntresolColors.Hairline, modifier = Modifier.padding(vertical = 8.dp))
+            onMyRequests?.let { SheetAction(AntresolIcons.Send, stringResource(UiR.string.requests_mine), AntresolColors.Label, it, "account-my-requests") }
+            onRequests?.let {
+                val label = stringResource(UiR.string.requests_title)
+                SheetAction(
+                    AntresolIcons.Send,
+                    if (pendingRequests > 0) "$label · ${pluralStringResource(UiR.plurals.requests_waiting_count, pendingRequests, pendingRequests)}" else label,
+                    AntresolColors.Label,
+                    it,
+                    "account-requests",
+                )
+            }
             SheetAction(MobileIcons.Gear, stringResource(UiR.string.nav_settings), AntresolColors.Label, onSettings, "account-settings")
             SheetAction(AntresolIcons.SwitchProfile, stringResource(UiR.string.profile_switch), AntresolColors.Label, onSwitchProfile, "account-switch")
             SheetAction(AntresolIcons.Server, stringResource(UiR.string.server_change), AntresolColors.Label, onChangeServer, "account-server")

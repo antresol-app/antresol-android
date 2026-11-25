@@ -186,14 +186,47 @@ class TvWaysUiTest {
         assertTrue(fake.requests.none { it.contains("/x/app") })
     }
 
-    /** Search for "far" and open the title that is not in the library: its page. */
-    private fun openTitleOffTheLibrary() {
+    /** Opens Search from Home and types [query] into its field. */
+    private fun searchFor(query: String) {
         key(KeyEvent.KEYCODE_DPAD_UP) // the nav, on Home
         key(KeyEvent.KEYCODE_DPAD_LEFT) // the search pill
         runFor(900)
         key(KeyEvent.KEYCODE_DPAD_DOWN) // into the page: the field
         waitFor(hasSetTextAction())
-        compose.onNode(hasSetTextAction()).performTextInput("far")
+        compose.onNode(hasSetTextAction()).performTextInput(query)
+    }
+
+    private val noResults = hasText("No results", substring = true)
+
+    /** The library finds nothing and the addon is still looking: the page waits (no «no results»), then the addon's row comes in. */
+    @Test
+    fun anEmptyPageWaitsForAnAddonThatStillSearches() {
+        fake.searchLibraryEmpty = true
+        fake.addonSearchDelayMs = 3_000
+        start()
+        searchFor("far")
+        waitUntil { fake.requests.any { it.startsWith("GET /api/search") } }
+        waitUntil { fake.addonCalls.any { it.startsWith("GET app/search?q=far") } }
+        settle() // the library's empty answer is in, the addon's is not
+        assertTrue(compose.onAllNodes(noResults, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        shot("search-tv-waiting")
+        waitFor(hasText("Find and watch"))
+        assertTrue(compose.onAllNodes(noResults, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        shot("search-tv-addon-only")
+    }
+
+    /** Nothing in the library and no addons to ask: «no results» at once. */
+    @Test
+    fun withoutAddonsAnEmptyPageSaysNoResults() {
+        fake.searchLibraryEmpty = true
+        start(addons = false)
+        searchFor("far")
+        waitFor(noResults)
+    }
+
+    /** Search for "far" and open the title that is not in the library: its page. */
+    private fun openTitleOffTheLibrary() {
+        searchFor("far")
         // The library's row first; the addon's row, titled by the addon's own words, below it.
         waitFor(hasText("Movies & Shows"))
         settle()

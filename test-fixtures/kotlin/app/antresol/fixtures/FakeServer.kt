@@ -70,6 +70,12 @@ class FakeServer {
     /** The addon's search also finds a series that is not in the library («Far Away Show»). */
     @Volatile var searchSeries: Boolean = false
 
+    /** The addon's title search answers after this many ms (a search that is still looking). */
+    @Volatile var addonSearchDelayMs: Long = 0
+
+    /** `GET /api/search` finds nothing in the library. */
+    @Volatile var searchLibraryEmpty: Boolean = false
+
     /** The addon's `run` answers after this many ms (a run that is still waiting). */
     @Volatile var runDelayMs: Long = 0
 
@@ -89,6 +95,70 @@ class FakeServer {
     /** The profile is a kid's: the separate-history writes answer 403, as the server's `noKids`. */
     @Volatile var kid: Boolean = false
 
+    /** Kids' requests are open on the server: a kid's `/api/me` has `canRequest`, an administrator's `requests`. */
+    @Volatile var requestsOpen: Boolean = false
+
+    /** A kid's catalogue search (`/api/requests/search`) answers after this many ms. */
+    @Volatile var requestSearchDelayMs: Long = 0
+
+    /** The requests the kids made, by `kind|key` (a kid's search, an administrator's list). */
+    val kidRequests: MutableMap<String, FakeRequest> = java.util.Collections.synchronizedMap(linkedMapOf())
+
+    private val nextRequest = java.util.concurrent.atomic.AtomicLong(1)
+
+    /** A kid's request as the server keeps it. [status] is `pending`, `approved`, `in_library` or `declined`. */
+    data class FakeRequest(
+        val id: Long,
+        val kind: String,
+        val key: String,
+        val title: String,
+        val tmdbId: Long = 0,
+        val extId: String = "",
+        val subtitle: String = "",
+        val year: Int = 0,
+        var status: String = "pending",
+        var reason: String = "",
+        val createdAt: String = "2026-11-24T10:00:00Z",
+    )
+
+    /** Makes a request of the kid as if it had asked (a title already asked for, answered or in the library). */
+    fun addRequest(kind: String, tmdbId: Long, title: String, status: String = "pending", reason: String = ""): FakeRequest {
+        val key = "tmdb:$tmdbId"
+        val request = FakeRequest(nextRequest.getAndIncrement(), kind, key, title, tmdbId = tmdbId, year = 2020, status = status, reason = reason)
+        kidRequests["$kind|$key"] = request
+        return request
+    }
+
+    /**
+     * «Семья»: the other profiles' places by item id (`GET /api/items/{id}/family` answers the list under that id, an empty
+     * one for a kid or an item without any).
+     */
+    val family: MutableMap<Long, List<FakeFamilyMember>> = ConcurrentHashMap()
+
+    /** What this profile has in each item (`GET /api/progress/{id}`), as `positionMs to durationMs`; an adopted place lands here. */
+    val progress: MutableMap<Long, Pair<Long, Long>> = ConcurrentHashMap()
+
+    /** `POST /api/progress/{id}/adopt` bodies that were taken, as `itemId userId`. */
+    val adopted = CopyOnWriteArrayList<String>()
+
+    /** One other profile's place in an item, as the server lists it. [agoMinutes] is how long ago they were there. */
+    data class FakeFamilyMember(
+        val userId: Long,
+        val name: String,
+        val itemId: Long,
+        val positionMs: Long = 0,
+        val durationMs: Long = 0,
+        val finished: Boolean = false,
+        val next: Boolean = false,
+        val season: Int = 0,
+        val episode: Int = 0,
+        val ownerName: String = "",
+        val avatar: String = "grad-2",
+        val done: Int = 0,
+        val total: Int = 0,
+        val agoMinutes: Long = 120,
+    )
+
     /** «Отдельная история на этом устройстве»: the person's histories (id → name) and the one this device writes into. */
     val histories: MutableMap<Long, String> = java.util.Collections.synchronizedMap(linkedMapOf(20L to "Living Room"))
 
@@ -107,6 +177,13 @@ class FakeServer {
                 if (path.startsWith("/api/images/")) imageAuth[path.substringBefore('?')] = request.getHeader("Authorization").orEmpty()
                 if (path.startsWith("/api/me/managed") || path.startsWith("/api/me/devices/")) {
                     return history(request.method.orEmpty(), path, request.body.readUtf8())
+                }
+                if (path.startsWith("/api/requests")) return requests(request.method.orEmpty(), path, request.body.readUtf8())
+                if (request.method == "POST" && path.matches(Regex("/api/progress/\\d+/adopt"))) return adopt(path, request.body.readUtf8())
+                // A kid has no addons; the title page is the one thing it gets of them (with its `kidRequest`).
+                if (kid && path.startsWith("/api/title/")) return addon(request.method.orEmpty(), path, "")
+                if (kid && path == "/api/addons/web") {
+                    return MockResponse().setResponseCode(403).setBody("""{"error":"Not available in a kid profile"}""")
                 }
                 if (addons && (path.startsWith("/api/addons/") || path.startsWith("/api/title/") || path.startsWith("/api/play/input/"))) {
                     return addon(request.method.orEmpty(), path, request.body.readUtf8())
@@ -138,12 +215,13 @@ class FakeServer {
             path == "/api/me/ui-language" -> json("""{"language":"","effective":"en"}""")
             path == "/api/me/playback-prefs" -> json("""{"audioLangs":[],"subMode":"off","subLangs":[]}""")
             path == "/api/home" -> json(home())
-            path == "/api/search" -> json("""{"library":[${movieCard(MOVIE_ID)}],"albums":[],"artists":[],"songs":[]}""")
+            path == "/api/search" -> json("""{"library":[${if (searchLibraryEmpty) "" else movieCard(MOVIE_ID)}],"albums":[],"artists":[],"songs":[]}""")
             path == "/api/items" -> json(if ("kind=series" in query) shows() else movies())
             path.matches(Regex("/api/items/\\d+/trailers")) -> json(trailers(path.split('/')[3].toLong()))
+            path.matches(Regex("/api/items/\\d+/family")) -> json(familyJson(path.split('/')[3].toLong()))
             path.matches(Regex("/api/items/\\d+")) -> json(item(path.substringAfterLast('/').toLong()))
                 .setBodyDelay(itemDelayMs, TimeUnit.MILLISECONDS)
-            path.startsWith("/api/progress/") && method == "GET" -> json("""{"positionMs":0,"durationMs":0,"finished":false}""")
+            path.startsWith("/api/progress/") && method == "GET" -> json(progressJson(path.substringAfterLast('/').toLongOrNull() ?: 0))
             path.startsWith("/api/music/home") || path.startsWith("/api/books/home") -> json("""{"shelves":[]}""")
             path == "/api/music/genres" -> json("""{"genres":[]}""")
             path == "/api/channels" -> json("""{"channels":[]}""")
@@ -151,9 +229,44 @@ class FakeServer {
         }
     }
 
-    private fun me(): String = ME.replace(""""isKid":false""", """"isKid":$kid,"deviceHistory":${historyRef()}""")
+    private fun me(): String = ME.replace(
+        """"isKid":false""",
+        """"isKid":$kid,"canRequest":${kid && requestsOpen},"requests":${!kid && requestsOpen},"deviceHistory":${historyRef()}""",
+    )
 
     private fun historyRef(): String = deviceHistory?.let { id -> """{"id":$id,"name":"${histories[id]}"}""" } ?: "null"
+
+    private fun progressJson(itemId: Long): String {
+        val (position, duration) = progress[itemId] ?: return """{"positionMs":0,"durationMs":0,"finished":false}"""
+        val fraction = if (duration > 0) position.toDouble() / duration else 0.0
+        return """{"positionMs":$position,"durationMs":$duration,"finished":false,"locator":"","fraction":$fraction,"updatedAt":"2026-11-25T19:00:00Z"}"""
+    }
+
+    /** `GET /api/items/{id}/family`: nobody for a kid; else the profiles set in [family] for the item, most recent first. */
+    private fun familyJson(itemId: Long): String {
+        val members = if (kid) emptyList() else family[itemId].orEmpty().sortedBy { it.agoMinutes }
+        return """{"members":[${members.joinToString(",") { m ->
+            val at = java.time.Instant.now().minusSeconds(m.agoMinutes * 60).toString()
+            val fraction = if (m.durationMs > 0) m.positionMs.toDouble() / m.durationMs else 0.0
+            val owner = if (m.ownerName.isEmpty()) "" else ""","ownerName":"${m.ownerName}""""
+            val series = if (m.season > 0) ""","season":${m.season},"episode":${m.episode},"title":"Episode ${m.episode}"""" else ""
+            val counts = if (m.total > 0) ""","done":${m.done},"total":${m.total}""" else ""
+            """{"userId":${m.userId},"name":"${m.name}"$owner,"avatar":"${m.avatar}","isKid":false,"itemId":${m.itemId},"positionMs":${m.positionMs},
+                "durationMs":${m.durationMs},"fraction":${if (m.finished) 1.0 else fraction},"finished":${m.finished},"updatedAt":"$at"
+                ${if (m.next) ""","next":true""" else ""}$series$counts}"""
+        }}]}"""
+    }
+
+    /** `POST /api/progress/{id}/adopt`: the other profile's unfinished position in the item becomes this profile's own (404 when there is none). */
+    private fun adopt(path: String, body: String): MockResponse {
+        val itemId = path.split('/')[3].toLong()
+        val userId = Regex(""""userId"\s*:\s*(\d+)""").find(body)?.groupValues?.get(1)?.toLong() ?: 0L
+        val theirs = family.values.flatten().firstOrNull { it.itemId == itemId && it.userId == userId && !it.finished && !it.next && it.positionMs > 0 }
+            ?: return MockResponse().setResponseCode(404).setBody("""{"error":"Not found"}""")
+        adopted += "$itemId $userId"
+        progress[itemId] = theirs.positionMs to theirs.durationMs
+        return json(progressJson(itemId))
+    }
 
     /** The separate-history endpoints, as `managed_handlers.go` answers them (no merge bookkeeping: a merge drops the history). */
     private fun history(method: String, path: String, body: String): MockResponse {
@@ -185,6 +298,94 @@ class FakeServer {
         }
     }
 
+    /**
+     * The kid-request endpoints, as `kid_requests.go` answers them: search (a movie and a series from the catalogue, an
+     * album), ask, the kid's own list, and the administrator's list, count, approve and decline.
+     */
+    private fun requests(method: String, fullPath: String, body: String): MockResponse {
+        val path = fullPath.substringBefore('?')
+        val query = fullPath.substringAfter('?', "")
+        fun param(name: String) = query.split('&').firstOrNull { it.startsWith("$name=") }?.substringAfter('=').orEmpty()
+        fun bodyOf(name: String) = Regex("\"$name\"\\s*:\\s*\"([^\"]*)\"").find(body)?.groupValues?.get(1).orEmpty()
+        fun forbidden(why: String) = MockResponse().setResponseCode(403).setHeader("Content-Type", "application/json").setBody("""{"error":"$why"}""")
+        if (!requestsOpen) return forbidden("Requests are not taken here")
+        return when {
+            path == "/api/requests/search" && method == "GET" -> {
+                if (!kid) return forbidden("Only kid profiles can ask")
+                when (param("kind")) {
+                    "video" -> json("[${candidates().joinToString(",")}]")
+                    "music" -> json("[${candidateJson("music", 0, "Test Album", "Test Artist", "mb-1")}]")
+                    else -> json("[]")
+                }.setBodyDelay(requestSearchDelayMs, TimeUnit.MILLISECONDS)
+            }
+            path == "/api/requests/mine" && method == "GET" ->
+                json("[${kidRequests.values.sortedByDescending { it.id }.joinToString(",") { requestJson(it, admin = false) }}]")
+            path == "/api/requests" && method == "POST" -> {
+                if (!kid) return forbidden("Only kid profiles can ask")
+                val kind = bodyOf("kind")
+                val tmdb = Regex(""""tmdbId"\s*:\s*(\d+)""").find(body)?.groupValues?.get(1)?.toLong() ?: 0L
+                if (tmdb == BLOCKED_TMDB) {
+                    return MockResponse().setResponseCode(403).setHeader("Content-Type", "application/json")
+                        .setBody("""{"error":"This is 16+, and this profile allows up to 6+","code":"rating"}""")
+                }
+                val extId = bodyOf("extId")
+                val key = if (kind == "movie" || kind == "series") "tmdb:$tmdb" else "ext:$extId"
+                val made = kidRequests.getOrPut("$kind|$key") {
+                    FakeRequest(nextRequest.getAndIncrement(), kind, key, bodyOf("title"), tmdbId = tmdb, extId = extId, subtitle = bodyOf("subtitle"))
+                }
+                json(requestJson(made, admin = false))
+            }
+            path == "/api/requests" && method == "GET" ->
+                json("[${kidRequests.values.sortedWith(compareBy({ it.status != "pending" }, { -it.id })).joinToString(",") { requestJson(it, admin = true) }}]")
+            path == "/api/requests/count" -> json("""{"pending":${kidRequests.values.count { it.status == "pending" }}}""")
+            Regex("/api/requests/\\d+/(approve|decline)").matches(path) -> {
+                val id = path.split('/')[3].toLong()
+                val found = kidRequests.values.firstOrNull { it.id == id }
+                    ?: return MockResponse().setResponseCode(404).setBody("""{"error":"Request not found"}""")
+                if (found.status != "pending") return MockResponse().setResponseCode(409).setBody("""{"error":"Already answered"}""")
+                if (path.endsWith("/approve")) {
+                    found.status = "approved"
+                } else {
+                    found.status = "declined"
+                    found.reason = bodyOf("reason")
+                }
+                json(requestJson(found, admin = true))
+            }
+            else -> MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
+        }
+    }
+
+    /** The catalogue's answer to a kid's video search: a movie and a series off the library, one the profile may not ask for. */
+    private fun candidates(): List<String> = listOf(
+        candidateJson("movie", OUTSIDE_TMDB, "Far Away Film"),
+        candidateJson("series", OUTSIDE_SERIES_TMDB, "Far Away Show"),
+        candidateJson("movie", BLOCKED_TMDB, "Grown-up Film"),
+    )
+
+    private fun candidateJson(kind: String, tmdb: Long, title: String, subtitle: String = "", extId: String = ""): String {
+        val key = if (kind == "movie" || kind == "series") "tmdb:$tmdb" else "ext:$extId"
+        val made = kidRequests["$kind|$key"]
+        val poster = if (kind == "movie" || kind == "series") "/api/images/local/outside/poster" else ""
+        return """{"kind":"$kind","tmdbId":$tmdb,"extId":"$extId","title":"$title","subtitle":"$subtitle","year":2020,"poster":"$poster","explicit":false,"aliases":[],
+            "kidRequest":{"key":"$key","allowed":true,"request":${made?.let { requestJson(it, admin = false) } ?: "null"}}}"""
+    }
+
+    private fun requestJson(r: FakeRequest, admin: Boolean): String {
+        val video = r.kind == "movie" || r.kind == "series"
+        val user = if (admin) ""","user":{"id":2,"name":"Kiddo","avatar":"grad-2"}""" else ""
+        return """{"id":${r.id},"key":"${r.key}","kind":"${r.kind}","tmdbId":${r.tmdbId},"extId":"${r.extId}","title":"${r.title}","subtitle":"${r.subtitle}",
+            "year":${r.year},"poster":"${if (video) "/api/images/local/outside/poster" else ""}","aliases":[],"rating":"${if (video) "6+" else ""}","status":"${r.status}",
+            "reason":"${r.reason}","libraryItemId":null,"createdAt":"${r.createdAt}"$user}"""
+    }
+
+    /** The `kidRequest` field of a title page: asked for already (the request), allowed, or above the profile's limit. */
+    private fun kidRequestOf(kind: String, tmdb: Long): String {
+        val blocked = tmdb == BLOCKED_TMDB
+        val made = kidRequests["$kind|tmdb:$tmdb"]?.let { requestJson(it, admin = false) } ?: "null"
+        val why = if (blocked) "\"This is 16+, and this profile allows up to 6+\"" else "null"
+        return """"kidRequest":{"key":"tmdb:$tmdb","allowed":${!blocked},"blocked":$why,"request":$made}"""
+    }
+
     /** The `x/app` protocol of "alpha", `GET /api/title`, and the core's input player for what the way plays. */
     private fun addon(method: String, fullPath: String, body: String): MockResponse {
         val path = fullPath.substringBefore('?')
@@ -208,7 +409,7 @@ class FakeServer {
                     {"kind":"movie","tmdbId":$OUTSIDE_TMDB,"title":"Far Away Film","year":2020,"poster":"/api/images/local/outside/poster","inLibrary":false}
                     ${if (searchSeries) """,{"kind":"series","tmdbId":$OUTSIDE_SERIES_TMDB,"title":"Far Away Show","year":2021,"poster":"/api/images/local/outside/poster","inLibrary":false}""" else ""}
                    ]}""",
-            )
+            ).setBodyDelay(addonSearchDelayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
             path == "/api/addons/alpha/x/app/step" -> when (bodyOf("ref")) {
                 null -> json(
                     """{"title":"Source","note":"Pick a source","rows":[
@@ -271,7 +472,7 @@ class FakeServer {
                     """{"tmdbId":$tmdb,"extId":"","kind":"$kind","title":"Far Away ${if (kind == "movie") "Film" else "Show"}","year":2020,
                         "poster":"/api/images/local/outside/poster","overview":"A title the library does not have.","inLibrary":$inLibrary,
                         "libraryItemId":${if (inLibrary) MOVIE_ID.toString() else "null"},"backdrop":"/api/images/local/outside/backdrop",
-                        "genres":["Drama"],"runtime":95,"cast":[],"seasons":[{"number":1,"episodes":3}]}""",
+                        "genres":["Drama"],"runtime":95,"cast":[],"seasons":[{"number":1,"episodes":3}]${if (kid) ",${kidRequestOf(kind, tmdb)}" else ""}}""",
                 )
             }
             path == "/api/play/input/in-1" && method == "GET" ->
@@ -453,6 +654,9 @@ class FakeServer {
 
         /** A series the addon's search finds that is not in the library. */
         const val OUTSIDE_SERIES_TMDB = 9002L
+
+        /** A movie a kid profile may not ask for (above its age limit). */
+        const val BLOCKED_TMDB = 9009L
         const val MOVIE_COUNT = 23
         const val SHOW_COUNT = 30
         val EPISODE_IDS = (601L..606L).toList()

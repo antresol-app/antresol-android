@@ -35,6 +35,14 @@ data object SearchRoute
 @Serializable
 data object SettingsRoute
 
+/** «My Requests» of a kid profile (from Settings). */
+@Serializable
+data object MyRequestsRoute
+
+/** «Requests» of an administrator: the kids' requests to answer (from Settings). */
+@Serializable
+data object RequestsRoute
+
 /** A library grid; [kind] is a [app.antresol.tv.ui.browse.GridKind] name, [genre] narrows albums. */
 @Serializable
 data class GridRoute(val kind: String, val genre: String = "")

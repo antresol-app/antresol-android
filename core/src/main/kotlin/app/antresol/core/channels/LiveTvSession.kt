@@ -26,8 +26,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * Every server call the live player may make; [AntresolClient.liveApi] is the real one. TV is TV:
  * the only writes are [setLast] and [setFavorite]; nothing here touches progress, «Continue
  * Watching», watched flags, track memory or scrobbles (see LiveTvNoHistoryTest). An external
- * channel's video comes from its provider, not from these calls (only [externalUrl] may ask the
- * server for a media key).
+ * channel's video comes from its provider, or from the server's audio relay, not from these calls
+ * (only [externalUrl] may ask the server for a media key).
  */
 interface LiveApi {
     suspend fun channels(): List<Channel>
@@ -63,6 +63,12 @@ interface LiveApi {
      * form signed with the media key.
      */
     suspend fun externalUrl(url: String): String = url
+
+    /**
+     * The URL to hand the player for an external stream's relay [path] (`stream.relay`, see
+     * [AntresolClient.relayStreamUrl]): the server's own address, played with the app's credentials.
+     */
+    suspend fun relayUrl(path: String): String = path
 }
 
 fun AntresolClient.liveApi(): LiveApi {
@@ -95,6 +101,8 @@ fun AntresolClient.liveApi(): LiveApi {
         override suspend fun prefs(): PlaybackPrefs = client.playbackPrefs()
 
         override suspend fun externalUrl(url: String): String = client.externalStreamUrl(url)
+
+        override suspend fun relayUrl(path: String): String = client.relayStreamUrl(path)
     }
 }
 
@@ -119,8 +127,13 @@ sealed interface LiveStream {
         val format: String? = null,
         /** How many sources the external channel has (the banner's «Источник n из m»). */
         val sourceCount: Int = 1,
-        /** The external source's own URL is the server's hidden-address redirect («Через Antresol»). */
+        /** The external stream reaches the device through the server («Через Antresol»): its hidden-address redirect, or its relay. */
         val viaServer: Boolean = false,
+        /**
+         * The URL is the server's relay of the stream, which converts audio the device cannot decode:
+         * the player opens it with the app's credentials, and the provider's headers do not apply.
+         */
+        val relayed: Boolean = false,
     ) : LiveStream
 
     /**
@@ -190,6 +203,9 @@ fun liveMiniGuide(state: LiveTvState, nowMs: Long): MiniGuide {
  * An external channel is played straight from its provider: its stream, then its fallbacks in
  * order (skipping the ones marked unsupported on [platform]); a source that fails before playing
  * hands over to the next one at once, a source that broke while playing is reopened once or twice.
+ * A source the server marks `remuxAudio` (its audio is MP2, AC-3...: silent on many devices) is
+ * played through the server's relay, which converts it ([StreamSource.viaRelay]); every other one,
+ * and every source of a server that does not say, is played from the provider as given.
  * When none plays the stream is [LiveStream.Failed] with `external` and stays so until the viewer
  * retries or switches channel — no endless retrying of a dead provider.
  */
@@ -462,14 +478,20 @@ class LiveTvSession(
     private suspend fun openExternal(channelId: Long) {
         while (externalIndex < externalSources.size) {
             val source = externalSources[externalIndex]
-            val url = attempt { api.externalUrl(source.url) }
+            val relayed = source.viaRelay
+            val url = attempt { if (relayed) api.relayUrl(source.relay.orEmpty()) else api.externalUrl(source.url) }
             if (url != null) {
                 _state.update {
                     if (it.channelId != channelId) it
                     else it.copy(
                         stream = LiveStream.Ready(
-                            url, ++generation, true, source.userAgent, source.referrer, externalIndex, source.format,
-                            sourceCount = externalSources.size, viaServer = source.url.startsWith("/"),
+                            url, ++generation, true,
+                            // the relay fetches from the provider with its headers itself
+                            userAgent = source.userAgent.takeUnless { relayed },
+                            referrer = source.referrer.takeUnless { relayed },
+                            source = externalIndex, format = source.format,
+                            sourceCount = externalSources.size, viaServer = relayed || source.url.startsWith("/"),
+                            relayed = relayed,
                         ),
                     )
                 }

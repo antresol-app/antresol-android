@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import app.antresol.core.family.FamilyKind
 import app.antresol.core.model.Card
 import app.antresol.core.model.CastMember
 import app.antresol.core.model.EpisodeCard
@@ -57,6 +58,7 @@ import app.antresol.core.model.FileInfo
 import app.antresol.core.model.Kind
 import app.antresol.core.model.AddonWay
 import app.antresol.core.model.Trailer
+import app.antresol.core.model.KidAsk
 import app.antresol.core.ways.WayCall
 import app.antresol.core.ways.WayPlayback
 import app.antresol.core.ways.WaysController
@@ -103,6 +105,8 @@ import app.antresol.ui.format.TrackLabels
 import app.antresol.ui.format.spokenDuration
 import app.antresol.ui.playback.ResumeMode
 import app.antresol.ui.components.wayIcon
+import app.antresol.ui.requests.RequestStatusPill
+import app.antresol.ui.requests.TitleRequest
 import app.antresol.ui.ways.Attach
 import app.antresol.ui.ways.busyState
 import app.antresol.ui.ways.offerState
@@ -144,6 +148,9 @@ fun VideoDetailScreen(
     val notices = remember(scope, snackbar) { NoticeSnackbars(scope, snackbar) }
     val loaded = (viewModel.state as? LoadState.Ready)?.value
     viewModel.ways.Attach(loaded?.wayTarget, LocalContext.current.resources, onPlay = onPlayWay, onText = notices::show)
+    // A kid's «Ask a Parent»: the request state of the title as the server said it with the page.
+    val kidRequest = loaded?.title?.kidRequest
+    LaunchedEffect(kidRequest) { viewModel.request?.load(kidRequest) }
     loaded?.libraryItemId?.let { libraryId ->
         LaunchedEffect(libraryId) { onOpenLibraryItem(Card(id = libraryId, kind = loaded.item.kind, title = loaded.item.title)) }
     }
@@ -179,6 +186,16 @@ private fun VideoDetailContent(
     val urls = LocalMediaUrls.current
     val configuration = LocalConfiguration.current
     val bottom = LocalBottomBarPadding.current
+    // «Семья»: where the other profiles are in this page's item (a title off the library has no progress); read when the
+    // page is shown and again when it is back in front, since the player moves the places.
+    val familyKind = if (detail.outsideLibrary) null else FamilyKind.of(item.kind)
+    if (familyKind != null) {
+        LifecycleResumeEffect(item.id) {
+            viewModel.family.load(item.id)
+            onPauseOrDispose { }
+        }
+    }
+    var familySheet by remember { mutableStateOf(false) }
     val librarySeasons = item.seasons.filter { it.episodes.isNotEmpty() }
     // Every episode of the guide (or the library's when the server has none); recomputed after
     // each watched toggle, which changes the item.
@@ -245,6 +262,19 @@ private fun VideoDetailContent(
     }
     val onTrailer: () -> Unit = { if (trailers.size == 1) openTrailer(trailers.single()) else trailerSheet = true }
     if (trailerSheet) TrailerSheet(trailers, onDismiss = { trailerSheet = false }, onOpen = openTrailer)
+    if (familySheet && familyKind != null) {
+        FamilySheet(
+            members = viewModel.family.members,
+            kind = familyKind,
+            chapters = emptyList(),
+            // Their position becomes this profile's own, then the player starts from it (a next episode from its start).
+            onJump = { member ->
+                familySheet = false
+                viewModel.family.jump(member) { place -> onPlay(place.itemId, if (place.next) ResumeMode.FromStart else ResumeMode.Resume) }
+            },
+            onDismiss = { familySheet = false },
+        )
+    }
     waysSheet?.let { choice ->
         WaysSheet(
             ways = choice.ways,
@@ -334,6 +364,12 @@ private fun VideoDetailContent(
                 )
             }
         }
+        // A kid's page of a title the library does not have: «Ask a Parent», then the state of the request.
+        viewModel.request?.takeIf { detail.outsideLibrary && detail.title?.kidRequest != null }?.let { request ->
+            item("request") {
+                RequestBlock(request, onAsk = { viewModel.request?.ask(KidAsk(kind = item.kind, tmdbId = item.tmdbId ?: 0, title = item.title)) })
+            }
+        }
         // A title off the library has no watchlist, watched state or trailers: nothing to put in this row.
         if (!detail.outsideLibrary) item("actions") {
             // Each pill keeps its whole label on one line: one that does not fit beside the others goes below them.
@@ -364,6 +400,12 @@ private fun VideoDetailContent(
                         modifier = buttonModifier.testTag("detail-trailer"),
                     )
                 }
+            }
+        }
+        // «Семья»: one quiet line under the buttons, only when somebody else has progress here.
+        if (familyKind != null && viewModel.family.members.isNotEmpty()) {
+            item("family") {
+                FamilyLine(viewModel.family.members, familyKind, emptyList(), viewModel.family.failed, onClick = { familySheet = true })
             }
         }
         if (item.overview.isNotBlank()) item("overview") { ExpandableText(item.overview) }
@@ -443,6 +485,40 @@ private fun SeasonWatchedToggle(episodes: List<EpisodeCard>, onToggle: () -> Uni
             .focusClickable(AntresolShapes.pill, onClick = onToggle)
             .padding(horizontal = 8.dp, vertical = 8.dp),
     )
+}
+
+/** «Ask a Parent» (white pill) or, once asked, the state of the request; under it why not, and what went wrong. */
+@Composable
+private fun RequestBlock(request: TitleRequest, onAsk: () -> Unit) {
+    val made = request.request
+    Column(Modifier.fillMaxWidth().padding(horizontal = PageGutter, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (made != null) {
+            RequestStatusPill(made)
+        } else {
+            val wide = LocalConfiguration.current.screenWidthDp >= 600
+            val label = stringResource(if (request.busy) UiR.string.request_asking else UiR.string.request_ask)
+            if (request.canAsk) {
+                PrimaryPillButton(
+                    text = label,
+                    icon = AntresolIcons.Send,
+                    enabled = !request.busy,
+                    onClick = onAsk,
+                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.fillMaxWidth()).testTag("request-ask"),
+                )
+            } else {
+                // Above the profile's limit: the pill stays, greyed, with the server's reason beneath.
+                GlassPillButton(
+                    text = label,
+                    icon = AntresolIcons.Send,
+                    enabled = false,
+                    onClick = {},
+                    modifier = (if (wide) Modifier.widthIn(min = 220.dp) else Modifier.fillMaxWidth()).testTag("request-ask"),
+                )
+            }
+            request.why?.let { Text(it, style = Antresol.typography.caption, modifier = Modifier.testTag("request-note")) }
+            if (request.failed) Text(stringResource(UiR.string.request_ask_failed), style = Antresol.typography.caption.copy(color = AntresolColors.Red))
+        }
+    }
 }
 
 /** The white Play/Resume pill ("Resume S1 E3" for a series) and, when resuming, Play from Beginning. */

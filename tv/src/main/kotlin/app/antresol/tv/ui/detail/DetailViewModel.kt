@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.family.FamilyKind
+import app.antresol.core.family.familyApi
 import app.antresol.core.library.EpisodeGuide
 import app.antresol.core.library.GuideSeason
 import app.antresol.core.playback.PendingWrites
@@ -19,6 +21,7 @@ import app.antresol.core.model.CastMember
 import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
+import app.antresol.core.model.KidRequestState
 import app.antresol.core.model.Playlist
 import app.antresol.core.model.PlaylistDetail
 import app.antresol.core.model.Progress
@@ -27,12 +30,15 @@ import app.antresol.core.model.SubTrack
 import app.antresol.core.model.Track
 import app.antresol.core.model.TitleInfo
 import app.antresol.core.model.Trailer
+import app.antresol.core.requests.requestsApi
 import app.antresol.core.ways.MemoryWayDefaults
 import app.antresol.core.ways.WayDefaults
 import app.antresol.core.ways.WayTarget
 import app.antresol.core.ways.WaysController
 import app.antresol.core.ways.WaysSource
 import app.antresol.core.ways.waysApi
+import app.antresol.ui.family.FamilyModel
+import app.antresol.ui.requests.TitleRequest
 import app.antresol.ui.trailers.Trailers
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.Resume
@@ -130,6 +136,8 @@ data class VideoInfo(
     val outsideLibrary: Boolean = false,
     /** A title page opened for something the library has: the library's item, to open instead. */
     val libraryItemId: Long? = null,
+    /** A kid profile's «Попросить» of the title (a title page only; null for anyone else). */
+    val kidRequest: KidRequestState? = null,
 ) {
     val seasons: List<GuideSeason> get() = guide.seasons
 }
@@ -168,6 +176,12 @@ class DetailViewModel(
     /** The addons' ways for this page (buttons, the choice panel, state rings); null without a source of them. */
     val ways: WaysController? = waysSource?.let { WaysController(client.waysApi(), it, viewModelScope, maxHeight, defaults = wayDefaults) }
 
+    /** A kid profile's «Попросить у родителя» on the page of a title off the library; null on any other page. */
+    val request: TitleRequest? = if (tmdbId > 0) TitleRequest(client.requestsApi(), viewModelScope) else null
+
+    /** «Семья»: where the other profiles are in what this page shows (nobody for a kid, a title off the library or music). */
+    val family = FamilyModel(client.familyApi(), viewModelScope)
+
     private var job: Job? = null
 
     /**
@@ -193,7 +207,15 @@ class DetailViewModel(
     fun reload() {
         job?.cancel()
         state = LoadState.Loading
-        job = viewModelScope.launch { state = load { fetch() } }
+        job = viewModelScope.launch { show(load { fetch() }) }
+    }
+
+    /** Shows what was loaded; the title's request state and the family's places are the server's as of now. */
+    private fun show(loaded: LoadState<DetailModel>) {
+        state = loaded
+        val model = (loaded as? LoadState.Ready)?.value ?: return
+        model.video?.let { request?.load(it.kidRequest) }
+        if (model.familyKind() != null) family.load(model.card.id)
     }
 
     /** Re-reads the page in place (back from the player); failures keep what is shown. */
@@ -202,7 +224,7 @@ class DetailViewModel(
         job = viewModelScope.launch {
             pendingWrites.await()
             val fresh = load { fetch() }
-            if (fresh is LoadState.Ready) state = fresh
+            if (fresh is LoadState.Ready) show(fresh)
         }
     }
 
@@ -366,6 +388,15 @@ class DetailViewModel(
     }
 }
 
+/**
+ * What «Семья» is on this page: a library movie, episode, series or season, an audiobook or a comic (its volume). A title off the
+ * library has no progress, music none to share, and a book of this TV (no reader) none to continue.
+ */
+internal fun DetailModel.familyKind(): FamilyKind? = when {
+    video?.outsideLibrary == true || card.kind == Kind.BOOK -> null
+    else -> FamilyKind.of(card.kind)
+}
+
 /** A movie or series by its TMDB id, as the page of a title that may not be in the library. */
 private suspend fun fetchTitleModel(client: AntresolClient, kind: String, tmdbId: Long): DetailModel = coroutineScope {
     val info = client.title(kind, tmdbId)
@@ -392,6 +423,7 @@ internal fun ItemDetail.titleVideoInfo(info: TitleInfo, guide: EpisodeGuideRespo
     tmdbId = tmdbId,
     outsideLibrary = true,
     libraryItemId = info.libraryItemId?.takeIf { info.inLibrary && it > 0 },
+    kidRequest = info.kidRequest,
 )
 
 private fun ItemDetail.toModel(progress: Progress?, guide: EpisodeGuideResponse?): DetailModel {

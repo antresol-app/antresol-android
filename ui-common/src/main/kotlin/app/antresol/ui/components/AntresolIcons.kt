@@ -123,6 +123,21 @@ object AntresolIcons {
         quadTo(18.5f, 14.5f, 19.2f, 20f)
     }
 
+    /** Two profiles side by side: the family (the player's «Семья» menu). */
+    val People: ImageVector = lineIcon("People") {
+        moveTo(9.4f, 5.2f)
+        arcToRelative(3.3f, 3.3f, 0f, true, true, 0f, 6.6f)
+        arcToRelative(3.3f, 3.3f, 0f, true, true, 0f, -6.6f)
+        close()
+        moveTo(3.2f, 19.6f)
+        quadTo(3.8f, 14.6f, 9.4f, 14.6f)
+        quadTo(15f, 14.6f, 15.6f, 19.6f)
+        moveTo(15.6f, 5.7f)
+        arcToRelative(2.9f, 2.9f, 0f, true, true, 0f, 5.8f)
+        moveTo(17.4f, 14.7f)
+        quadTo(20.3f, 15f, 20.8f, 19.6f)
+    }
+
     /** Filled play triangle with rounded corners (the white "Play" pill). */
     val Play: ImageVector = ImageVector.Builder("Play", 24.dp, 24.dp, 24f, 24f).apply {
         path(fill = SolidColor(Color.Black), stroke = SolidColor(Color.Black), strokeLineWidth = 2f, strokeLineJoin = StrokeJoin.Round) {
@@ -171,6 +186,28 @@ object AntresolIcons {
         moveTo(8f, 12.3f)
         lineTo(10.8f, 15f)
         lineTo(16f, 9.3f)
+    }
+
+    /** A paper plane: «ask a parent». */
+    val Send: ImageVector = lineIcon("Send") {
+        moveTo(20.5f, 3.5f)
+        lineTo(10.5f, 13.5f)
+        moveTo(20.5f, 3.5f)
+        lineTo(14f, 20.5f)
+        lineTo(10.5f, 13.5f)
+        lineTo(3.5f, 10f)
+        close()
+    }
+
+    /** A clock: a request that waits for an answer. */
+    val Clock: ImageVector = lineIcon("Clock") {
+        moveTo(12f, 3f)
+        arcToRelative(9f, 9f, 0f, true, true, 0f, 18f)
+        arcToRelative(9f, 9f, 0f, true, true, 0f, -18f)
+        close()
+        moveTo(12f, 7.5f)
+        lineTo(12f, 12f)
+        lineTo(15.5f, 14f)
     }
 
     /** An open eye: "watched" on cards. */

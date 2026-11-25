@@ -7,6 +7,11 @@ import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.core.model.FamilyResponse
+import app.antresol.core.model.KidCandidate
+import app.antresol.core.model.KidRequest
+import app.antresol.core.model.RequestCount
+import app.antresol.core.model.RequestStatus
 import app.antresol.core.model.TrailerList
 import app.antresol.core.model.Trailer
 import app.antresol.core.model.ChannelEpg
@@ -75,6 +80,7 @@ class SampleDecodingTest {
         "app-state" to serializer<WayStateResponse>(),
         "app-step" to serializer<WayStep>(),
         "input-info" to serializer<InputInfo>(),
+        "title-kid" to serializer<TitleInfo>(),
         "title-series" to serializer<TitleInfo>(),
         "auth-media-key" to serializer<MediaKey>(),
         "auth-token" to serializer<TokenResponse>(),
@@ -125,6 +131,11 @@ class SampleDecodingTest {
         "playlists" to serializer<PlaylistList>(),
         "profiles" to ListSerializer(serializer<Profile>()),
         "progress-get" to serializer<Progress>(),
+        "family" to serializer<FamilyResponse>(),
+        "requests-all" to ListSerializer(serializer<KidRequest>()),
+        "requests-count" to serializer<RequestCount>(),
+        "requests-mine" to ListSerializer(serializer<KidRequest>()),
+        "requests-search" to ListSerializer(serializer<KidCandidate>()),
         "search-music" to serializer<SearchResults>(),
         "search" to serializer<SearchResults>(),
         "setup-get" to serializer<SetupStatus>(),
@@ -231,6 +242,61 @@ class SampleDecodingTest {
         assertEquals(1399L, item.tmdbId)
         assertEquals(57, item.runtime)
         assertEquals("Emilia Clarke", item.cast.single().name)
+    }
+
+    @Test
+    fun kidRequests() {
+        val found = sample<List<KidCandidate>>("requests-search")
+        assertEquals(listOf("movie", "series", "music"), found.map { it.kind })
+        assertNull(found[0].kidRequest?.request)
+        assertEquals("tmdb:603", found[0].kidRequest?.key)
+        assertEquals(RequestStatus.PENDING, found[1].kidRequest?.request?.status)
+        assertEquals("ext:mb-1", found[2].kidRequest?.key)
+        assertEquals(listOf("The Blue Album"), found[2].aliases)
+
+        val mine = sample<List<KidRequest>>("requests-mine")
+        assertEquals(listOf(RequestStatus.DECLINED, RequestStatus.IN_LIBRARY, RequestStatus.PENDING), mine.map { it.status })
+        assertEquals("Not yet", mine[0].reason)
+        assertEquals(42L, mine[1].libraryItemId)
+        assertTrue(mine[2].hidden)
+        assertFalse(mine[2].hasTitlePage)
+        assertTrue(mine[0].hasTitlePage)
+        assertNull(mine[0].user)
+
+        val all = sample<List<KidRequest>>("requests-all")
+        assertEquals("Sam", all[0].user?.name)
+        assertEquals(2, sample<RequestCount>("requests-count").pending)
+
+        // A kid's title page: a title above the age limit comes with the server's reason, and nothing asked yet.
+        val state = sample<TitleInfo>("title-kid").kidRequest!!
+        assertFalse(state.allowed)
+        assertEquals("This is 16+, and this profile allows up to 6+", state.blocked)
+        assertNull(state.request)
+    }
+
+    @Test
+    fun family() {
+        val members = sample<FamilyResponse>("family").members
+        assertEquals(listOf("Sam", "Robin", "Living Room", "Kim"), members.map { it.name })
+        // An episode in progress, with how much of the series is done.
+        assertEquals(601L, members[0].itemId)
+        assertEquals(2040_000L, members[0].positionMs)
+        assertEquals(1 to 2, members[0].season to members[0].episode)
+        assertEquals(1 to 6, members[0].done to members[0].total)
+        // The episode after the last finished one: not started.
+        assertTrue(members[1].next)
+        assertTrue(members[1].isKid)
+        assertEquals("/api/images/profile/3?v=2", members[1].photo)
+        // A device's account names its person; everything done.
+        assertEquals("Living Room · Sam", members[2].displayName)
+        assertTrue(members[2].finished)
+        assertEquals("Sam", members[0].displayName)
+        // A reader's place.
+        assertEquals("page:120", members[3].locator)
+        assertEquals(120 to 300, members[3].page to members[3].pages)
+        // Fields the server omits come out as their empty values.
+        assertEquals("", members[0].locator)
+        assertEquals(0.0, members[0].volume, 0.0)
     }
 
     @Test

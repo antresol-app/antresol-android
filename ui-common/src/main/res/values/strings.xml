@@ -291,4 +291,72 @@
     <string name="player_way_source">Audio &amp; source…</string>
     <string name="error_input_not_ready">The video is not ready yet. Try again in a moment.</string>
     <string name="episode_open_page">Open Episode Page</string>
+    <!-- «Попросить»: a kid profile asks a parent for a title the library does not have -->
+    <string name="request_find_title">Find and Ask</string>
+    <string name="request_ask">Ask a Parent</string>
+    <string name="request_asking">Asking…</string>
+    <string name="request_ask_for">Ask a parent for “%1$s”</string>
+    <string name="request_pending">Waiting for an answer</string>
+    <string name="request_approved">Approved — coming soon</string>
+    <string name="request_in_library">Already in the library</string>
+    <string name="request_declined">A parent said no</string>
+    <string name="request_reason_line">“%1$s”</string>
+    <string name="request_badge_pending">Waiting</string>
+    <string name="request_badge_approved">Approved</string>
+    <string name="request_badge_in_library">In library</string>
+    <string name="request_badge_declined">Declined</string>
+    <string name="request_ask_failed">Couldn’t send the request. Try again.</string>
+    <string name="request_search_failed">Search isn’t available right now</string>
+    <string name="request_hidden">Not available for this profile</string>
+    <string name="request_sheet_hint">A parent will see your request and answer it.</string>
+    <string name="requests_mine">My Requests</string>
+    <string name="requests_mine_empty">What you ask for will show up here. Find a movie, show, music or a book in Search and ask.</string>
+    <string name="requests_title">Requests</string>
+    <string name="requests_lead">What the kids ask to add to the library. Approve confirms the request; the kid sees the title when it arrives in the library. To get a title onto the server, open its page.</string>
+    <string name="requests_waiting">Waiting for an answer</string>
+    <string name="requests_decided">Answered in the last 30 days</string>
+    <string name="requests_empty">No new requests.</string>
+    <string name="requests_from">%1$s · %2$s</string>
+    <string name="requests_approve">Approve</string>
+    <string name="requests_decline">Decline</string>
+    <string name="requests_open_title">Open Title Page</string>
+    <string name="requests_answered_approved">Approved</string>
+    <string name="requests_answered_declined">Declined</string>
+    <string name="requests_decline_message">%1$s will see that you declined. You can briefly say why.</string>
+    <string name="requests_reason">Reason (optional)</string>
+    <string name="requests_answer_failed">Couldn’t answer. Try again.</string>
+    <plurals name="requests_waiting_count">
+        <item quantity="one">%1$d request waiting</item>
+        <item quantity="other">%1$d requests waiting</item>
+    </plurals>
+
+    <!-- Family: where the other profiles are in a title (page line, list, player menu) -->
+    <string name="family_title">Family</string>
+    <plurals name="family_and_more">
+        <item quantity="one">%1$d more</item>
+        <item quantity="other">%1$d more</item>
+    </plurals>
+    <string name="family_all_watched">All watched</string>
+    <string name="family_watched">Watched</string>
+    <string name="family_read">Finished</string>
+    <string name="family_heard">Finished</string>
+    <string name="family_next">Up next: %1$s</string>
+    <string name="family_time_of">%1$s of %2$s</string>
+    <string name="family_page">p. %1$d</string>
+    <string name="family_page_of">p. %1$d of %2$d</string>
+    <string name="family_percent">%1$d%%</string>
+    <string name="family_chapter">Chapter %1$d</string>
+    <string name="family_volume">Vol. %1$s</string>
+    <string name="family_episode_code">S%1$d E%2$d</string>
+    <string name="family_episode_special">Special %1$d</string>
+    <string name="family_watch_at">Play from %1$s</string>
+    <string name="family_watch_episode">Play %1$s</string>
+    <string name="family_watch_episode_at">%1$s from %2$s</string>
+    <string name="family_listen_at">Listen from %1$s</string>
+    <string name="family_read_page">Read from p. %1$d</string>
+    <string name="family_read_at">Read from %1$d%%</string>
+    <string name="family_read_volume">Read %1$s</string>
+    <string name="family_jump_description">%1$s — from %2$s’s place</string>
+    <string name="family_note">Pick up where they are — the progress is saved to your profile.</string>
+    <string name="family_jump_failed">Couldn’t continue from there. Try again.</string>
 </resources>

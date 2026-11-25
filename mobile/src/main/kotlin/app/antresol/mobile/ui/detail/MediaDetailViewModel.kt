@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.family.familyApi
 import app.antresol.core.model.AlbumDetail
 import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.BookDetail
@@ -20,6 +21,7 @@ import app.antresol.core.playback.PendingWrites
 import app.antresol.mobile.R
 import app.antresol.ui.LoadState
 import app.antresol.ui.LoadViewModel
+import app.antresol.ui.family.FamilyModel
 import app.antresol.mobile.ui.playlists.PlaylistPicker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -53,6 +55,9 @@ data class MediaDetail(
 /** Loads the detail of a music or book card through the matching endpoint. */
 class MediaDetailViewModel(private val client: AntresolClient, kind: String, private val id: Long, pendingWrites: PendingWrites) :
     LoadViewModel<MediaDetail>(pendingWrites = pendingWrites, fetch = { fetchDetail(client, kind, id) }) {
+
+    /** «Семья»: where the other profiles are in the audiobook, comic or PDF this page shows. */
+    val family = FamilyModel(client.familyApi(), viewModelScope)
 
     /** "Add to Playlist" for the album or a song on this page. */
     val playlistPicker = PlaylistPicker(client, viewModelScope)

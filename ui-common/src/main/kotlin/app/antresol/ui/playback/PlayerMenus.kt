@@ -1,18 +1,22 @@
 package app.antresol.ui.playback
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import app.antresol.core.family.FamilyKind
 import app.antresol.core.model.PlayMode
 import app.antresol.core.model.Quality
 import app.antresol.ui.R
+import app.antresol.ui.family.familyMenuOptions
 import app.antresol.ui.format.TrackLabels
 
 /**
  * One choice of a menu: its label, whether it is the current one, and a small badge after the label.
  * A [section] is a heading the menu draws above this choice (the first of a group), a [divider] a thin line.
  * A [detail] is a second line under the label, [more] says the choice leads on to another list, and
- * [onLongSelect] is what a long press does (hold OK) when that is something else.
+ * [onLongSelect] is what a long press does (hold OK) when that is something else. A [leading] picture (given the row's
+ * content colour) takes the place of the tick, and an [action] is a line of its own under the [detail] (what choosing does).
  */
 data class MenuOption(
     val label: String,
@@ -22,12 +26,14 @@ data class MenuOption(
     val detail: String? = null,
     val more: Boolean = false,
     val divider: Boolean = false,
+    val leading: (@Composable (tint: Color) -> Unit)? = null,
+    val action: String? = null,
     val onLongSelect: (() -> Unit)? = null,
     val onSelect: () -> Unit,
 )
 
 /** The menus of the video player. */
-enum class PlayerMenu { Audio, Subtitles, Quality, AutoSkip }
+enum class PlayerMenu { Audio, Subtitles, Quality, AutoSkip, Family }
 
 /** What a [PlayerMenu] shows: its title, the choices and, for the quality, how the stream is delivered. */
 class PlayerMenuContent(val title: String, val options: List<MenuOption>, val note: String?)
@@ -42,6 +48,7 @@ fun playerMenu(menu: PlayerMenu, viewModel: VideoPlayerViewModel): PlayerMenuCon
             PlayerMenu.Subtitles -> R.string.detail_subtitles
             PlayerMenu.Quality -> R.string.detail_quality
             PlayerMenu.AutoSkip -> R.string.player_auto_skip
+            PlayerMenu.Family -> R.string.family_title
         },
     )
     val options = when (menu) {
@@ -96,6 +103,15 @@ fun playerMenu(menu: PlayerMenu, viewModel: VideoPlayerViewModel): PlayerMenuCon
         } ?: Quality.ALL.map { value ->
             MenuOption(qualityLabel(value), value == viewModel.quality) { viewModel.selectQuality(value) }
         }
+        // «Семья»: the profiles that are in this item; choosing one continues from their place
+        PlayerMenu.Family -> familyMenuOptions(
+            resources,
+            FamilyKind.of(viewModel.item?.kind.orEmpty()) ?: FamilyKind.Movie,
+            viewModel.familyHere,
+            emptyList(),
+            viewModel::familyPhoto,
+            viewModel::jumpToFamily,
+        )
         // «Пропускать сам»: each row turns its kind on or off (the profile's, on every device)
         PlayerMenu.AutoSkip -> viewModel.autoSkip.let { a ->
             listOf(
@@ -105,7 +121,12 @@ fun playerMenu(menu: PlayerMenu, viewModel: VideoPlayerViewModel): PlayerMenuCon
             )
         }
     }
-    return PlayerMenuContent(title, options, note = if (menu == PlayerMenu.Quality) streamNote(viewModel) else null)
+    val note = when (menu) {
+        PlayerMenu.Quality -> streamNote(viewModel)
+        PlayerMenu.Family -> stringResource(R.string.family_note)
+        else -> null
+    }
+    return PlayerMenuContent(title, options, note)
 }
 
 /**

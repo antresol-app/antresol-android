@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import app.antresol.core.family.FamilyKind
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
 import app.antresol.core.model.Chapter
@@ -155,6 +156,42 @@ private fun MediaDetailContent(
     val urls = LocalMediaUrls.current
     val card = detail.card
     val bottom = LocalBottomBarPadding.current
+    // «Семья»: where the other profiles are in what this page can play or read; read when the page is shown and again
+    // when it is back in front, since the player and the readers move the places.
+    val book = detail.book
+    val familyAction = book?.let { BookAction.of(it) }
+    val familyKind = when (familyAction) {
+        is BookAction.Listen -> FamilyKind.Audiobook
+        is BookAction.ReadComic -> FamilyKind.Comic
+        is BookAction.ReadPdf -> FamilyKind.Book
+        is BookAction.Unsupported, null -> null
+    }
+    if (familyKind != null) {
+        LifecycleResumeEffect(card.id) {
+            viewModel.family.load(card.id)
+            onPauseOrDispose { }
+        }
+    }
+    var familySheet by remember { mutableStateOf(false) }
+    if (familySheet && familyKind != null && book != null) {
+        FamilySheet(
+            members = viewModel.family.members,
+            kind = familyKind,
+            chapters = detail.chapters,
+            // Their position becomes this profile's own, then it plays or opens from there (a next volume from its start).
+            onJump = { member ->
+                familySheet = false
+                viewModel.family.jump(member) { place ->
+                    when (familyKind) {
+                        FamilyKind.Audiobook -> playback.playAudiobook(book, place.positionMs)
+                        FamilyKind.Comic -> onRead(BookAction.ReadComic(place.itemId, resume = !place.next, fromStart = place.next))
+                        else -> onRead(BookAction.ReadPdf(place.itemId, resume = true))
+                    }
+                }
+            },
+            onDismiss = { familySheet = false },
+        )
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = pageListPadding(bottom.calculateBottomPadding() + 24.dp),
@@ -207,6 +244,12 @@ private fun MediaDetailContent(
             }
         }
         item("actions") { MediaActions(detail, viewModel, playback, onRead) }
+        // «Семья»: one quiet line under the buttons, only when somebody else has progress here.
+        if (familyKind != null && viewModel.family.members.isNotEmpty()) {
+            item("family") {
+                FamilyLine(viewModel.family.members, familyKind, detail.chapters, viewModel.family.failed, onClick = { familySheet = true })
+            }
+        }
         if (card.kind == Kind.PLAYLIST) {
             item("playlist-actions") { PlaylistActions(viewModel, onPlaylistDialog) }
             if (detail.tracks.isEmpty()) item("playlist-empty") { EmptyView(stringResource(R.string.playlist_empty)) }

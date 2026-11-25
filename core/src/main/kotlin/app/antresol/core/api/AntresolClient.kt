@@ -66,6 +66,14 @@ import app.antresol.core.model.SearchResults
 import app.antresol.core.model.SetupStatus
 import app.antresol.core.model.StepRequest
 import app.antresol.core.model.TitleInfo
+import app.antresol.core.model.AdoptBody
+import app.antresol.core.model.FamilyMember
+import app.antresol.core.model.FamilyResponse
+import app.antresol.core.model.KidAsk
+import app.antresol.core.model.KidCandidate
+import app.antresol.core.model.KidRequest
+import app.antresol.core.model.RequestCount
+import app.antresol.core.model.DeclineBody
 import app.antresol.core.model.ShelvesResponse
 import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.TokenRequest
@@ -280,6 +288,15 @@ class AntresolClient(
 
     suspend fun saveProgress(itemId: Long, update: ProgressUpdate) =
         sendNoContent("PUT", url("api/progress/$itemId"), jsonBody(update))
+
+    /** `GET /api/items/{id}/family`: the other profiles' places in [itemId] (most recent first; none for a kid). */
+    suspend fun family(itemId: Long): List<FamilyMember> = get<FamilyResponse>("api/items/$itemId/family").members
+
+    /**
+     * `POST /api/progress/{itemId}/adopt`: [userId]'s unfinished position in [itemId] becomes this profile's own; answers this
+     * profile's new progress. 404 when they are not in this profile's family view or have no unfinished position there.
+     */
+    suspend fun adoptProgress(itemId: Long, userId: Long): Progress = post("api/progress/$itemId/adopt", jsonBody(AdoptBody(userId)))
 
     suspend fun setWatched(itemId: Long, watched: Boolean) =
         sendNoContent("POST", url("api/items/$itemId/watched"), jsonBody(WatchedRequest(watched)))
@@ -496,6 +513,13 @@ class AntresolClient(
     }
 
     /**
+     * The URL the player opens for an external channel's relay [path] (`stream.relay`, a path of
+     * this server): absolute and without a media key. The relay's playlists link to relay paths
+     * that carry none, so the player sends the app's Bearer with every request (same origin only).
+     */
+    fun relayStreamUrl(path: String): String = requireNotNull(urls.resolve(path)) { "Empty relay path" }
+
+    /**
      * `POST /api/channels/opened`: «ТВ» opened, so the server refreshes the external sources marked
      * «при открытии» (when their last refresh is older than an hour). Writes nothing of the profile.
      */
@@ -568,6 +592,40 @@ class AntresolClient(
 
     /** `GET /api/title/{kind}/{tmdbId}`: a movie or series by its TMDB id, in the library or not. */
     suspend fun title(kind: String, tmdbId: Long): TitleInfo = send("GET", url(listOf("api", "title", kind, tmdbId.toString())), null)
+
+    // endregion
+
+    // region Kid requests («Попросить», see the model in Requests.kt)
+
+    /** `GET /api/requests/search?q=&kind=`: what a kid may ask for, of one [RequestSearchKind]; 403 for anyone else or while requests are closed. */
+    suspend fun requestSearch(query: String, kind: String): List<KidCandidate> =
+        send(
+            "GET",
+            url("api/requests/search") {
+                addQueryParameter("q", query)
+                addQueryParameter("kind", kind)
+            },
+            null,
+        )
+
+    /** `POST /api/requests`: the kid's request of the title, made if it has none (asking again returns it); 403 code `rating` above the age limit. */
+    suspend fun askRequest(ask: KidAsk): KidRequest = post("api/requests", jsonBody(ask))
+
+    /** `GET /api/requests/mine`: the profile's requests, newest first. */
+    suspend fun myRequests(): List<KidRequest> = get("api/requests/mine")
+
+    /** `GET /api/requests` (admins): the pending requests, then those answered in the last 30 days, each with who asked. */
+    suspend fun allRequests(): List<KidRequest> = get("api/requests")
+
+    /** `GET /api/requests/count` (admins): how many wait for an answer. */
+    suspend fun requestCount(): RequestCount = get("api/requests/count")
+
+    /** `POST /api/requests/{id}/approve` (admins): approved without a download (a download of the title approves it too). */
+    suspend fun approveRequest(id: Long): KidRequest = send("POST", url(listOf("api", "requests", id.toString(), "approve")), null)
+
+    /** `POST /api/requests/{id}/decline` (admins): [reason] is what the kid sees (may be empty); 409 when it was answered already. */
+    suspend fun declineRequest(id: Long, reason: String): KidRequest =
+        send("POST", url(listOf("api", "requests", id.toString(), "decline")), jsonBody(DeclineBody(reason)))
 
     // endregion
 

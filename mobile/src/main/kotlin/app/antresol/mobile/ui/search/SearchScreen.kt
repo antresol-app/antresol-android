@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,8 +22,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -39,9 +45,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.core.model.KidCandidate
+import app.antresol.core.model.KidRequest
+import app.antresol.core.model.RequestStatus
 import app.antresol.core.model.Track
+import app.antresol.core.requests.AskCards
 import app.antresol.mobile.R
 import app.antresol.mobile.playback.PlaybackConnection
 import app.antresol.ui.LoadState
@@ -56,6 +67,7 @@ import app.antresol.mobile.ui.components.LoadingView
 import app.antresol.mobile.ui.components.MobileIcons
 import app.antresol.mobile.ui.components.PageGutter
 import app.antresol.mobile.ui.components.PageTitle
+import app.antresol.mobile.ui.components.PrimaryPillButton
 import app.antresol.mobile.ui.components.SectionTitle
 import app.antresol.mobile.ui.components.SegmentedPills
 import app.antresol.mobile.ui.components.Shelf
@@ -66,6 +78,10 @@ import app.antresol.ui.R as UiR
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ArtworkImage
 import app.antresol.ui.format.Durations
+import app.antresol.ui.requests.RequestStatusPill
+import app.antresol.ui.requests.TitleRequest
+import app.antresol.ui.requests.requestKindLabel
+import app.antresol.ui.requests.requestBadgeLabel
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolGradients
@@ -89,6 +105,12 @@ fun SearchScreen(
     val bottom = LocalBottomBarPadding.current
     val listState = rememberLazyListState()
     val fieldFocus = remember { FocusRequester() }
+    val badge = askBadge()
+    // Back from a title page: what the kid asked there shows on the results.
+    LifecycleResumeEffect(viewModel) {
+        viewModel.refreshAsks()
+        onPauseOrDispose { }
+    }
     LaunchedEffect(Unit) {
         if (viewModel.query.isEmpty()) {
             runCatching { fieldFocus.requestFocus() }
@@ -129,7 +151,7 @@ fun SearchScreen(
                 options = SearchFilter.entries,
                 selected = viewModel.filter,
                 label = { stringResource(it.label) },
-                onSelect = { viewModel.filter = it },
+                onSelect = viewModel::selectFilter,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         }
@@ -140,8 +162,17 @@ fun SearchScreen(
             is LoadState.Ready -> {
                 // The addons' sections follow the library's, as they arrive.
                 val sections = results.value.sections(viewModel.filter) + viewModel.addonSections.sections(viewModel.filter)
-                if (sections.isEmpty()) {
-                    item("empty") { EmptyView(stringResource(UiR.string.search_no_results, viewModel.query.trim())) }
+                // A kid's titles to ask a parent for come last: «Find and Ask».
+                val asks = AskCards.of(viewModel.askCandidates, badge)
+                if (sections.isEmpty() && asks.isEmpty()) {
+                    // An addon or the kid's catalogue may still be looking: that is not «no results» yet.
+                    item("empty") {
+                        when {
+                            viewModel.addonsSearching || viewModel.asksSearching -> LoadingView()
+                            viewModel.asksFailed -> EmptyView(stringResource(UiR.string.request_search_failed))
+                            else -> EmptyView(stringResource(UiR.string.search_no_results, viewModel.query.trim()))
+                        }
+                    }
                 }
                 items(sections, key = { it.id }) { section ->
                     if (section.songs.isNotEmpty()) {
@@ -156,7 +187,68 @@ fun SearchScreen(
                         Shelf(title = section.label ?: stringResource(section.titleRes()), cards = section.cards, onOpen = onOpen)
                     }
                 }
+                if (asks.isNotEmpty()) {
+                    item("ask") {
+                        Shelf(
+                            title = stringResource(UiR.string.request_find_title),
+                            cards = asks.map { it.card },
+                            // A movie or series opens its title page, the rest a sheet to ask from.
+                            onOpen = { card ->
+                                val candidate = AskCards.candidateOf(asks, card)
+                                if (candidate == null || candidate.isVideo) onOpen(card) else viewModel.openSheet(candidate)
+                            },
+                        )
+                    }
+                }
             }
+        }
+    }
+    viewModel.sheetOf?.let { candidate -> AskSheet(candidate, viewModel.sheet, onDismiss = viewModel::closeSheet) }
+}
+
+/** The badge a title of the «Find and Ask» section carries: its request's state (none while it was not asked for). */
+@Composable
+private fun askBadge(): (KidRequest?) -> String? {
+    val labels = listOf(
+        RequestStatus.PENDING, RequestStatus.APPROVED, RequestStatus.IN_LIBRARY, RequestStatus.DECLINED,
+    ).associateWith { stringResource(requestBadgeLabel(it)) }
+    return { request -> request?.let { labels[it.status] } }
+}
+
+/**
+ * The sheet of a result with no page of its own (an album, a book): what it is, and «Ask a Parent» or the state of
+ * the request the kid made.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AskSheet(candidate: KidCandidate, request: TitleRequest?, onDismiss: () -> Unit) {
+    val made = request?.request
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AntresolColors.BackgroundElevated,
+        shape = AntresolShapes.sheet,
+    ) {
+        Column(
+            Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(horizontal = 20.dp).padding(bottom = 20.dp).testTag("ask-sheet"),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(candidate.title, style = Antresol.typography.sectionTitle)
+            val line = listOfNotNull(requestKindLabel(candidate.kind), candidate.subtitle.takeIf { it.isNotBlank() }, candidate.year.takeIf { it > 0 }?.toString()).joinToString(" · ")
+            if (line.isNotBlank()) Text(line, style = Antresol.typography.caption)
+            when {
+                made != null -> RequestStatusPill(made)
+                request?.canAsk == true -> PrimaryPillButton(
+                    text = stringResource(if (request.busy) UiR.string.request_asking else UiR.string.request_ask),
+                    icon = AntresolIcons.Send,
+                    enabled = !request.busy,
+                    onClick = { request.ask(candidate.ask()) },
+                    modifier = Modifier.fillMaxWidth().testTag("request-ask"),
+                )
+                else -> request?.why?.let { Text(it, style = Antresol.typography.caption, modifier = Modifier.testTag("request-note")) }
+            }
+            if (made == null && request?.why == null) Text(stringResource(UiR.string.request_sheet_hint), style = Antresol.typography.caption)
+            if (request?.failed == true) Text(stringResource(UiR.string.request_ask_failed), style = Antresol.typography.caption.copy(color = AntresolColors.Red))
         }
     }
 }

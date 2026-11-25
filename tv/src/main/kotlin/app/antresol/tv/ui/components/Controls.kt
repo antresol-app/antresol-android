@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -190,8 +191,13 @@ private fun MenuRow(option: MenuOption, onClick: () -> Unit, modifier: Modifier 
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Box(Modifier.size(20.dp)) {
-                if (option.selected) Icon(AntresolIcons.Check, contentDescription = null, tint = LocalContentColor.current)
+            val leading = option.leading
+            if (leading != null) {
+                leading(LocalContentColor.current)
+            } else {
+                Box(Modifier.size(20.dp)) {
+                    if (option.selected) Icon(AntresolIcons.Check, contentDescription = null, tint = LocalContentColor.current)
+                }
             }
             Column(Modifier.weight(1f, fill = false)) {
                 Text(
@@ -203,6 +209,10 @@ private fun MenuRow(option: MenuOption, onClick: () -> Unit, modifier: Modifier 
                 )
                 option.detail?.takeIf { it.isNotBlank() }?.let { detail ->
                     Text(detail, style = Antresol.typography.caption, color = LocalContentColor.current.copy(alpha = 0.7f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                // What choosing the row does («Смотреть с 17:00»), in the row's own colour.
+                option.action?.let { action ->
+                    Text(action, style = Antresol.typography.caption.copy(fontWeight = FontWeight.SemiBold), color = LocalContentColor.current, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             option.badge?.let { badge ->

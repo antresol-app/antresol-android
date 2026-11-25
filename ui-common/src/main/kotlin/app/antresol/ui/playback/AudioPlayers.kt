@@ -34,4 +34,5 @@ fun buildAudioPlayer(context: Context, seekBackMs: Long, seekForwardMs: Long, ht
         .setSeekBackIncrementMs(seekBackMs)
         .setSeekForwardIncrementMs(seekForwardMs)
         .build()
+        .also { PlayerCensus.attach(it, PlayerCensus.AUDIO) }
 }

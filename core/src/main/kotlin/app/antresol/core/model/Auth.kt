@@ -42,6 +42,10 @@ data class Me(
     val maxRating: String? = null,
     val remote: Boolean = false,
     val libraryOnly: Boolean = true,
+    /** A kid profile may ask a parent for titles («Попросить»): the server has requests open. */
+    val canRequest: Boolean = false,
+    /** An administrator has kids' requests to answer. */
+    val requests: Boolean = false,
     /**
      * The separate history this device writes into («Отдельная история на этом устройстве»), null for
      * the profile's own. The person stays the one signed in; only progress, watched marks, «Продолжить»

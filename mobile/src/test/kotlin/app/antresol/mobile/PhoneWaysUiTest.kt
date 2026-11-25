@@ -161,6 +161,40 @@ class PhoneWaysUiTest {
         assertTrue("no step was asked for", fake.addonCalls.none { it.startsWith("POST app/step") })
     }
 
+    private val noResults = hasText("No results", substring = true)
+
+    private fun searchFor(query: String) {
+        compose.onNode(hasTestTag("tab-Search")).performClick()
+        waitFor(hasTestTag("search-field"))
+        compose.onNode(hasTestTag("search-field")).performTextInput(query)
+    }
+
+    /** The library finds nothing and the addon is still looking: the page waits (no «no results»), then the addon's section comes in. */
+    @Test
+    fun anEmptyPageWaitsForAnAddonThatStillSearches() {
+        fake.searchLibraryEmpty = true
+        fake.addonSearchDelayMs = 3_000
+        start()
+        searchFor("far")
+        waitUntil { fake.requests.any { it.startsWith("GET /api/search") } }
+        waitUntil { fake.addonCalls.any { it.startsWith("GET app/search?q=far") } }
+        settle() // the library's empty answer is in, the addon's is not
+        assertTrue(compose.onAllNodes(noResults).fetchSemanticsNodes().isEmpty())
+        shot("search-phone-waiting")
+        waitFor(hasText("Find and watch"))
+        assertTrue(compose.onAllNodes(noResults).fetchSemanticsNodes().isEmpty())
+        shot("search-phone-addon-only")
+    }
+
+    /** Nothing in the library and no addons to ask: «no results» at once. */
+    @Test
+    fun withoutAddonsAnEmptyPageSaysNoResults() {
+        fake.searchLibraryEmpty = true
+        start(addons = false)
+        searchFor("far")
+        waitFor(noResults)
+    }
+
     @Test
     fun searchAddsTheAddonSectionAndATitleOffTheLibraryOpensItsPage() {
         fake.keepActive = true

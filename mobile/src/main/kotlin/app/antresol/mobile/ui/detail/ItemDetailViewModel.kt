@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.family.familyApi
 import app.antresol.core.library.EpisodeGuide
 import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.EpisodeGuideResponse
@@ -13,11 +14,14 @@ import app.antresol.core.model.Kind
 import app.antresol.core.model.TitleInfo
 import app.antresol.core.model.TitleRef
 import app.antresol.core.model.Trailer
+import app.antresol.core.requests.requestsApi
 import app.antresol.core.ways.WayTarget
 import app.antresol.core.ways.WaysController
 import app.antresol.core.ways.WaysSource
 import app.antresol.core.ways.waysApi
 import app.antresol.ui.LoadState
+import app.antresol.ui.family.FamilyModel
+import app.antresol.ui.requests.TitleRequest
 import app.antresol.ui.trailers.Trailers
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.PendingWrites
@@ -104,6 +108,12 @@ class ItemDetailViewModel(
 
     /** The addons' ways for this page (buttons, the choice sheet, state rings); null without a source of them. */
     val ways: WaysController? = waysSource?.let { WaysController(client.waysApi(), it, viewModelScope, maxHeight) }
+
+    /** A kid profile's «Попросить у родителя» on the page of a title off the library; null on any other page. */
+    val request: TitleRequest? = if (title != null) TitleRequest(client.requestsApi(), viewModelScope) else null
+
+    /** «Семья»: where the other profiles are in what this page shows (nobody for a kid, or for a title off the library). */
+    val family = FamilyModel(client.familyApi(), viewModelScope)
 
     init {
         // A title off the library has no item to ask trailers of.

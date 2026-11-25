@@ -44,6 +44,7 @@ import androidx.tv.material3.Text
 import app.antresol.tv.ui.components.OptionsPanel
 import app.antresol.ui.components.opticalOffset
 import app.antresol.ui.format.Durations
+import app.antresol.tv.ui.detail.FAMILY_PANEL_WIDTH
 import app.antresol.ui.playback.PlayerMenu
 import app.antresol.ui.playback.VideoPlayerViewModel
 import app.antresol.ui.playback.playerMenu
@@ -189,5 +190,17 @@ private val PlayerButtonSize = 48.dp
 @Composable
 fun TrackMenu(menu: PlayerMenu, viewModel: PlayerViewModel, onDismiss: () -> Unit) {
     val content = playerMenu(menu, viewModel)
-    OptionsPanel(title = content.title, options = content.options, onDismiss = onDismiss, note = content.note)
+    // «Семья» lists faces and a line of what continuing says: a wider panel, with focus on the first row there is somewhere to go.
+    if (menu == PlayerMenu.Family) {
+        OptionsPanel(
+            title = content.title,
+            options = content.options,
+            onDismiss = onDismiss,
+            note = content.note,
+            width = FAMILY_PANEL_WIDTH,
+            focusIndex = content.options.indexOfFirst { it.action != null }.coerceAtLeast(0),
+        )
+    } else {
+        OptionsPanel(title = content.title, options = content.options, onDismiss = onDismiss, note = content.note)
+    }
 }

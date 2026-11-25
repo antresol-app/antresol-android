@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A small fake Antresol server for driving the apps by hand (an emulator or a device).
 
-    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>] [--addons]
+    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>] [--addons] [--kid] [--requests] [--family]
 
 It answers what test-fixtures' FakeServer answers (passwordless profiles, one with a photo, home, grids, a film and
 a series page, trailers) with the same JSON, plus live channels and the programme guide. In an
@@ -41,6 +41,20 @@ time it opens a choice of a source and a quality, then it plays at once with wha
 chooses again), a way that keeps a copy on the server (a ring shows how far it is and «Cancel» stops it), a
 title search (one title of the library, one that is not: its page comes from `GET /api/title`) and the
 core's input player for what the way plays (the trailer clip). Without the flag the server has no addons.
+
+With --requests the server has kids' requests open («Попросить»): a kid profile (--kid) searches the catalogue
+(`GET /api/requests/search`: a film and a series off the library, a film above its age limit, one album), asks
+(`POST /api/requests`), and sees its own requests (`GET /api/requests/mine`) and the state of a title on its page
+(`kidRequest` of `GET /api/title`); an administrator (no --kid) gets the list to answer (`GET /api/requests`,
+`/count`, `POST /{id}/approve`, `/{id}/decline`). Three requests of the kid «Sam» are there to start with (waiting,
+approved, declined with a reason); what is asked or answered is kept for the run.
+
+With --family other profiles have places in the library's titles («Семья»): `GET /api/items/{id}/family` lists them for
+«The Test Show» (Sam in the middle of S1 E2, Robin at the start of S1 E3, Kim with everything seen), for one of its episodes
+(who is in that one) and for «Movie 1» (Sam and Robin at different minutes); a kid gets nobody. `POST /api/progress/{id}/adopt`
+copies one profile's unfinished place into this profile's own, which `GET /api/progress/{id}` then answers (kept for the run).
+Nothing of the library plays (see above), so continuing opens the player at its error page: what shows is the line, the list
+and the requests the app makes.
 """
 import argparse
 import json
@@ -66,6 +80,15 @@ SERIES, MOVIE, EPISODES = 500, 100, list(range(601, 607))
 SERIES_TMDB, MOVIE_TMDB, OUTSIDE_TMDB = 1399, 603, 9001
 # --addons: the protocol of one addon, "alpha"; what its ways remember and do is kept for the run.
 addon = {"on": False, "remembered": False, "keep": {"since": None}}
+# --family: the other profiles' places in the library's titles, and the places this profile took from them (item id -> (position, duration)).
+family_state = {"on": False, "taken": {}}
+# --lang: the profile's interface language (the apps show their words in it).
+ui_language = [""]
+# --requests: kids' requests, by kind|key (see kid_requests_answer).
+requests_state = {"on": False, "next": 4, "items": {}}
+BLOCKED_TMDB, OUTSIDE_SERIES_TMDB = 9009, 9002
+# The titles of the kid's catalogue by TMDB id (a title page names itself from here).
+CATALOGUE = {9001: "Far Away Film", 9002: "Far Away Show", 9003: "Another Far Film", 9004: "Brand New Film", BLOCKED_TMDB: "Grown-up Film"}
 CAST = [{"name": n, "character": c, "photo": "/api/images/cast/" + n.replace(" ", "%20")}
         for n, c in [("Ada Lovelace", "The Countess"), ("Alan Turing", "The Mathematician"), ("Grace Hopper", "The Admiral")]]
 CLIP = Path(__file__).resolve().parent.parent / "test-fixtures/resources/trailer-sample.mp4"
@@ -178,6 +201,54 @@ def item(i):
     return {**movie_card(i), "overview": "A test movie.", "genres": ["Adventure"], "runtime": 104, "cast": CAST,
             "files": [{"id": i + 1000, "durationMs": 6240000, "audio": [], "subs": []}], "actions": {"play": True},
             **({"tmdbId": MOVIE_TMDB + (i - MOVIE)} if addon["on"] else {})}
+
+
+def family_places():
+    """The other profiles' places by the item they are in: (user id, name, avatar, item, position ms, duration ms, finished, next, season,
+    episode, how many episodes done, minutes ago)."""
+    return [
+        (2, "Sam", "grad-5", EPISODES[1], 20 * MIN, 45 * MIN, False, False, 1, 2, 1, 120),
+        (3, "Robin", "grad-2", EPISODES[2], 0, 0, False, True, 1, 3, 2, 26 * 60),
+        (4, "Kim", "grad-6", EPISODES[5], 40 * MIN, 45 * MIN, True, False, 2, 4, 6, 5 * 24 * 60),
+        (2, "Sam", "grad-5", MOVIE, 34 * MIN, 104 * MIN, False, False, 0, 0, 0, 120),
+        (3, "Robin", "grad-2", MOVIE, 71 * MIN, 104 * MIN, False, False, 0, 0, 0, 26 * 60),
+    ]
+
+
+def family_json(item_id, kid):
+    """`GET /api/items/{id}/family`: nobody for a kid; the series lists everyone at their episode, an episode or a film who is in it."""
+    members = []
+    for user, name, avatar, at, position, duration, finished, nxt, season, episode, done, ago in family_places():
+        if kid or not (item_id == SERIES and at in EPISODES or item_id == at):
+            continue
+        stamp = (datetime.now(timezone.utc) - timedelta(minutes=ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        member = {"userId": user, "name": name, "avatar": avatar, "isKid": False, "itemId": at, "positionMs": position, "durationMs": duration,
+                  "fraction": 1.0 if finished else (position / duration if duration else 0), "finished": finished, "updatedAt": stamp}
+        if season:
+            member.update({"season": season, "episode": episode, "title": f"Episode {episode}"})
+        if at in EPISODES:
+            member.update({"done": done, "total": 6} if item_id == SERIES else {})
+        if nxt:
+            member["next"] = True
+        members.append(member)
+    return {"members": sorted(members, key=lambda m: m["updatedAt"], reverse=True)}
+
+
+def progress_json(item_id):
+    position, duration = family_state["taken"].get(item_id, (0, 0))
+    if not position:
+        return {"positionMs": 0, "durationMs": 0, "finished": False}
+    return {"positionMs": position, "durationMs": duration, "finished": False, "locator": "", "fraction": position / duration,
+            "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+
+def adopt_answer(item_id, body, kid):
+    """`POST /api/progress/{id}/adopt`: the profile's unfinished place in the item becomes this profile's own (404 when there is none)."""
+    for user, _name, _avatar, at, position, duration, finished, nxt, *_rest in family_places():
+        if at == item_id and user == body.get("userId") and not (kid or finished or nxt or position <= 0):
+            family_state["taken"][item_id] = (position, duration)
+            return 200, progress_json(item_id)
+    return 404, {"error": "Not found"}
 
 
 def trailers(i, embed_key):
@@ -513,6 +584,94 @@ def addon_answer(command, path, query, body):
     return None
 
 
+def request_json(r, admin=False):
+    video = r["kind"] in ("movie", "series")
+    return {"id": r["id"], "key": r["key"], "kind": r["kind"], "tmdbId": r.get("tmdbId", 0), "extId": r.get("extId", ""), "title": r["title"],
+            "subtitle": r.get("subtitle", ""), "year": 2020, "poster": "/api/images/local/outside/poster" if video else "", "aliases": [],
+            "rating": "6+" if video else "", "status": r["status"], "reason": r.get("reason", ""), "libraryItemId": None,
+            "createdAt": r["createdAt"], **({"user": {"id": 2, "name": "Sam", "avatar": "grad-5"}} if admin else {})}
+
+
+def sample_requests():
+    now = datetime.now(timezone.utc)
+    for i, (kind, tmdb, title, status, reason, ago) in enumerate([
+            ("movie", 9001, "Far Away Film", "pending", "", 12),
+            ("series", 9002, "Far Away Show", "approved", "", 300),
+            ("movie", 9003, "Another Far Film", "declined", "Too scary for now", 1500)], start=1):
+        requests_state["items"][f"{kind}|tmdb:{tmdb}"] = {
+            "id": i, "kind": kind, "key": f"tmdb:{tmdb}", "tmdbId": tmdb, "title": title, "status": status, "reason": reason,
+            "createdAt": (now - timedelta(minutes=ago)).strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+
+def candidate_json(kind, tmdb, title, subtitle="", ext_id=""):
+    key = f"tmdb:{tmdb}" if kind in ("movie", "series") else f"ext:{ext_id}"
+    made = requests_state["items"].get(f"{kind}|{key}")
+    return {"kind": kind, "tmdbId": tmdb, "extId": ext_id, "title": title, "subtitle": subtitle, "year": 2020,
+            "poster": "/api/images/local/outside/poster" if kind in ("movie", "series") else "", "explicit": False, "aliases": [],
+            "kidRequest": {"key": key, "allowed": True, "request": request_json(made) if made else None}}
+
+
+def kid_requests_answer(command, path, query, body, kid):
+    """The `/api/requests/*` endpoints and the kid's title page (`GET /api/title`): (status, body) or None for another path."""
+    if path.startswith("/api/title/") and kid:
+        match = re.fullmatch(r"/api/title/(movie|series)/(\d+)", path)
+        if not match:
+            return None
+        tmdb, blocked = int(match[2]), int(match[2]) == BLOCKED_TMDB
+        made = requests_state["items"].get(f"{match[1]}|tmdb:{tmdb}")
+        return 200, {"tmdbId": tmdb, "extId": "", "kind": match[1], "title": CATALOGUE.get(tmdb, "Far Away " + ("Film" if match[1] == "movie" else "Show")), "year": 2020,
+                     "poster": "/api/images/local/outside/poster", "overview": "A title the library does not have.", "inLibrary": False,
+                     "libraryItemId": None, "backdrop": "/api/images/local/outside/backdrop", "genres": ["Drama"], "runtime": 95, "cast": [],
+                     "seasons": [{"number": 1, "episodes": 3}] if match[1] == "series" else [],
+                     "kidRequest": {"key": f"tmdb:{tmdb}", "allowed": not blocked, "blocked": "This is 16+, and this profile allows up to 6+" if blocked else None,
+                                    "request": request_json(made) if made else None}}
+    if not path.startswith("/api/requests"):
+        return None
+    items = requests_state["items"]
+    if path == "/api/requests/search" and command == "GET":
+        if not kid:
+            return 403, {"error": "Only kid profiles can ask"}
+        kind = query.get("kind", [""])[0]
+        if kind == "video":
+            return 200, [candidate_json("movie", 9001, "Far Away Film"), candidate_json("series", OUTSIDE_SERIES_TMDB, "Far Away Show"),
+                         candidate_json("movie", 9003, "Another Far Film"), candidate_json("movie", BLOCKED_TMDB, "Grown-up Film"),
+                         candidate_json("movie", 9004, "Brand New Film")]
+        if kind == "music":
+            return 200, [candidate_json("music", 0, "Test Album", "Test Artist", "mb-1")]
+        return 200, []
+    if path == "/api/requests/mine" and command == "GET":
+        return 200, [request_json(r) for r in sorted(items.values(), key=lambda r: -r["id"])]
+    if path == "/api/requests" and command == "POST":
+        if not kid:
+            return 403, {"error": "Only kid profiles can ask"}
+        kind, tmdb = body.get("kind", ""), int(body.get("tmdbId") or 0)
+        if tmdb == BLOCKED_TMDB:
+            return 403, {"error": "This is 16+, and this profile allows up to 6+", "code": "rating"}
+        key = f"tmdb:{tmdb}" if kind in ("movie", "series") else f"ext:{body.get('extId', '')}"
+        if f"{kind}|{key}" not in items:
+            items[f"{kind}|{key}"] = {"id": requests_state["next"], "kind": kind, "key": key, "tmdbId": tmdb, "extId": body.get("extId", ""),
+                                      "title": body.get("title", ""), "subtitle": body.get("subtitle", ""), "status": "pending",
+                                      "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+            requests_state["next"] += 1
+        return 200, request_json(items[f"{kind}|{key}"])
+    if kid:
+        return 403, {"error": "Only an administrator can do this"}
+    if path == "/api/requests" and command == "GET":
+        return 200, [request_json(r, admin=True) for r in sorted(items.values(), key=lambda r: (r["status"] != "pending", -r["id"]))]
+    if path == "/api/requests/count":
+        return 200, {"pending": sum(r["status"] == "pending" for r in items.values())}
+    if match := re.fullmatch(r"/api/requests/(\d+)/(approve|decline)", path):
+        found = next((r for r in items.values() if r["id"] == int(match[1])), None)
+        if found is None:
+            return 404, {"error": "Request not found"}
+        if found["status"] != "pending":
+            return 409, {"error": "Already answered"}
+        found["status"] = "approved" if match[2] == "approve" else "declined"
+        found["reason"] = str(body.get("reason", "")) if match[2] == "decline" else ""
+        return 200, request_json(found, admin=True)
+    return None
+
+
 IMAGE_CACHE = [("Cache-Control", "private, max-age=604800")]
 
 
@@ -558,6 +717,8 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         body = json.loads(raw) if raw.strip() else {}
         kid = ME["isKid"]
+        if requests_state["on"] and (reply := kid_requests_answer(self.command, path, query, body, kid)) is not None:
+            return self.send(*reply)
         if addon["on"] and not kid and (reply := addon_answer(self.command, path, query, body)) is not None:
             status, answer = reply
             return self.send(status, answer, "video/mp4" if isinstance(answer, bytes) and status == 200 else "application/json")
@@ -608,6 +769,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, file.read_bytes(), kind)
         if match := re.fullmatch(r"/api/items/(\d+)/trailers", path):
             return self.send(200, trailers(int(match[1]), self.embed_key))
+        if family_state["on"] and (match := re.fullmatch(r"/api/items/(\d+)/family", path)):
+            return self.send(200, family_json(int(match[1]), kid))
+        if family_state["on"] and self.command == "POST" and (match := re.fullmatch(r"/api/progress/(\d+)/adopt", path)):
+            return self.send(*adopt_answer(int(match[1]), body, kid))
         if match := re.fullmatch(r"/api/items/(\d+)", path):
             return self.send(200, item(int(match[1])))
         if path == "/api/items":
@@ -618,10 +783,11 @@ class Handler(BaseHTTPRequestHandler):
             "/api/health": {"ok": True, "serverId": SERVER_ID, "version": "1.5.0"},
             "/api/setup": {"needsSetup": False},
             "/api/profiles": PROFILES,
-            "/api/auth/token": {"token": "test-device-token", "user": ME},
-            "/api/me": {**ME, "deviceHistory": history_ref()},
-            "/api/me/ui-language": {"language": "", "effective": "en"},
+            "/api/auth/token": {"token": "test-device-token", "user": {**ME, **({"canRequest": kid, "requests": not kid} if requests_state["on"] else {})}},
+            "/api/me": {**ME, "deviceHistory": history_ref(), **({"canRequest": kid, "requests": not kid} if requests_state["on"] else {})},
+            "/api/me/ui-language": {"language": ui_language[0], "effective": ui_language[0] or "en"},
             "/api/me/playback-prefs": {"audioLangs": [], "subMode": "off", "subLangs": []},
+            "/api/search": {"library": [movie_card(MOVIE)], "albums": [], "artists": [], "songs": []},
             "/api/home": home(),
             "/api/music/home": music_home(),
             "/api/books/home": {"shelves": []},
@@ -634,7 +800,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/channels/epg":
             return self.send(200, epg(query, now_ms))
         if path.startswith("/api/progress/") and self.command == "GET":
-            return self.send(200, {"positionMs": 0, "durationMs": 0, "finished": False})
+            return self.send(200, progress_json(int(path.rsplit("/", 1)[1]) if path.rsplit("/", 1)[1].isdigit() else 0))
         self.send(404, {"error": "not found"})
 
     do_GET = do_POST = do_PUT = do_DELETE = do_HEAD = answer
@@ -651,12 +817,24 @@ if __name__ == "__main__":
     args.add_argument("--old-categories", action="store_true", help="answer as a server without `categories` (the apps use each channel's `category` text)")
     args.add_argument("--live-hls", type=Path, metavar="DIR", help="an HLS stream (index.m3u8 and segments) every channel plays, e.g. made with "
                       "ffmpeg -i test-fixtures/resources/trailer-sample.mp4 -c copy -hls_list_size 0 -f hls DIR/index.m3u8")
+    args.add_argument("--clip", type=Path, metavar="MP4", help="the video the trailers and the addon's way play (default: the tiny test clip), "
+                      "e.g. a long 1080p file for a memory or decoder soak on an emulator")
     args.add_argument("--addons", action="store_true", help="the server has one addon, \"alpha\", speaking the `x/app` protocol (ways to watch and to keep, a title search)")
     args.add_argument("--kid", action="store_true", help="the profile is a kid's (no «Отдельная история»; its writes answer 403)")
+    args.add_argument("--requests", action="store_true", help="kids' requests are open (see above): with --kid the profile asks, without it answers")
+    args.add_argument("--family", action="store_true", help="other profiles have places in the library's titles («Семья»; see above)")
+    args.add_argument("--lang", choices=["ru", "en"], default="", help="the profile's interface language (default: none chosen, English)")
     options = args.parse_args()
+    ui_language[0] = options.lang
     ME["isKid"] = options.kid
+    requests_state["on"] = options.requests
+    family_state["on"] = options.family
+    if options.requests:
+        sample_requests()
     addon["on"] = options.addons
     live_hls[0] = options.live_hls
+    if options.clip:
+        CLIP = options.clip
     big["legacy"] = options.old_categories
     if options.channels:
         big["channels"] = options.channels

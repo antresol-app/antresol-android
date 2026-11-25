@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -123,6 +124,7 @@ fun OptionsPanel(
                 .width(width)
                 .background(AntresolColors.BackgroundElevated)
                 .padding(horizontal = 20.dp, vertical = 36.dp)
+                .testTag("options-panel")
                 .focusRequester(panelFocus)
                 .onFocusChanged { inPanel = it.hasFocus }
                 .focusProperties { exit = { FocusRequester.Cancel } }
@@ -380,6 +382,7 @@ fun TextFieldPanel(
                 .width(width)
                 .background(AntresolColors.BackgroundElevated)
                 .padding(horizontal = 20.dp, vertical = 36.dp)
+                .testTag("options-panel")
                 .onFocusChanged { inPanel = it.hasFocus }
                 .focusProperties { exit = { FocusRequester.Cancel } }
                 .focusGroup(),

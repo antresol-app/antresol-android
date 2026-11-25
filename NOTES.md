@@ -1814,3 +1814,16 @@ How to make the profiles again (after big UI changes):
    Not run this round: the gfxinfo numbers above were taken with the same builds instead.
 
 Profiles: lines naming kotlinx CoroutineScheduler idle-worker stack methods (their names hold a word) are dropped after generation, as the public gate refuses that word; they only cover a coroutine idle path.
+
+## Settings screens: texts, languages, sizes (round 25.11)
+
+- `StringCatalogTest` (in `test-fixtures`, runs in `:tv` and `:mobile` for the module and `:ui-common`): every translatable string is in `values/` and
+  `values-ru/` with the same placeholders, nothing is empty, no Cyrillic in English, no English copy in Russian, and no screen writes a literal
+  (`Text("…")`, `contentDescription = "…"`, `placeholder`, `note`, `detail`). A new text goes into both catalogs or the build's tests fail.
+- `TvSettingsAuditTest` / `PhoneSettingsAuditTest` draw every settings page, panel, sheet and dialog (TV 1920×1080; phone 360 dp, 412 dp and a tablet) in English and
+  Russian at font scales 1.0 and 1.3 (Robolectric, one window per scene, language and size from `@Config(qualifiers)`, text scale from `AuditActivity`).
+  Shots: `<module>/build/screenshots/settings-audit/<tv|phone>/<lang>[-width]-fs<scale>/<Scene>.png`; findings (a text cut with «…» or by its line limit, texts over
+  each other, outside the window, a key shown as text, Cyrillic in English, a Russian line without Cyrillic) in `findings-*.tsv`. A finding fails the test;
+  `SETTINGS_AUDIT_REPORT=1` only writes them. The TV test runs on a manual clock (a focus glow never ends); the phone test on the normal one (a scroll waits for frames).
+- The rule for these screens: no sentence that repeats the row it sits under; a note only for a consequence or a privacy fact; when a control is unclear the control is changed
+  (a device signs out with a «Sign Out» word, not a cross; Change Server no longer asks, since saved sign-ins stay).

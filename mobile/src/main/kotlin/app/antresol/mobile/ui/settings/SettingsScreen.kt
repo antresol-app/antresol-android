@@ -181,8 +181,8 @@ fun SettingsScreen(
                 ) {
                     val name = user?.name ?: session.userName
                     ProfileAvatar(name = name, avatar = user?.avatar ?: session.avatar, size = 56.dp, photoUrl = LocalMediaUrls.current?.image(user?.photo ?: session.photo))
-                    Column {
-                        Text(name, style = Antresol.typography.sectionTitle)
+                    Column(Modifier.weight(1f)) {
+                        Text(name, style = Antresol.typography.sectionTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         val role = when {
                             user?.isAdmin == true -> stringResource(UiR.string.account_admin)
                             user?.isKid == true -> stringResource(R.string.account_kid)

@@ -151,7 +151,7 @@ class PhoneSettingsAuditTest {
         val me = remember(scene) {
             Me(
                 id = 1,
-                name = if (scene == Scene.SettingsLongNames) "Alexandra Konstantinopolskaya-Smith" else "Alex",
+                name = if (scene == Scene.SettingsLongNames || scene == Scene.AccountSheetKid) "Alexandra Konstantinopolskaya-Smith" else "Alex",
                 avatar = "grad-3", isAdmin = !kid, isKid = kid,
             )
         }

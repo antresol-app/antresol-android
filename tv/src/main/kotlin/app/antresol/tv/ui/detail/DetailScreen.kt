@@ -46,6 +46,8 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.tv.material3.Text
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.core.model.KidAsk
+import app.antresol.core.model.RequestStatus
 import app.antresol.core.model.AddonWay
 import app.antresol.core.model.Trailer
 import app.antresol.core.library.EpisodeState
@@ -101,6 +103,9 @@ import app.antresol.ui.format.TrackLabels
 import app.antresol.ui.format.remainingDuration
 import app.antresol.ui.format.spokenDuration
 import app.antresol.ui.playback.ResumeMode
+import app.antresol.ui.requests.TitleRequest
+import app.antresol.ui.requests.requestStatusIcon
+import app.antresol.ui.requests.requestStatusLabel
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolMotion
@@ -115,6 +120,9 @@ private const val WATCHED_KEY = "action/watched"
 
 /** Focus key of Add to Playlist (albums) or Delete Playlist (playlists). */
 private const val PLAYLIST_KEY = "action/playlist"
+
+/** Focus key of «Ask a Parent» (or the state of the request) on a kid's title page. */
+private const val REQUEST_KEY = "action/request"
 
 /** Focus key of the Trailer button of a movie or series page. */
 private const val TRAILER_KEY = "action/trailer"
@@ -282,6 +290,7 @@ private fun DetailContent(
     val firstKey = when {
         video?.playTarget != null -> PLAY_KEY
         video != null && offer.watch.isNotEmpty() -> WAY_PRIMARY_KEY
+        video != null && video.outsideLibrary && video.kidRequest != null -> REQUEST_KEY
         video != null && video.outsideLibrary -> offer.keep.firstOrNull()?.let(::keepKey)
         !music?.tracks.isNullOrEmpty() -> PLAY_KEY
         model.card.kind == Kind.PLAYLIST -> PLAYLIST_KEY
@@ -324,6 +333,8 @@ private fun DetailContent(
                                     onPlay = onPlay,
                                     onToggleWatchlist = viewModel::toggleWatchlist,
                                     onToggleWatched = viewModel::toggleWatched,
+                                    request = viewModel.request?.takeIf { video.outsideLibrary && video.kidRequest != null },
+                                    onAsk = { viewModel.request?.ask(KidAsk(kind = model.card.kind, tmdbId = video.tmdbId ?: 0, title = model.card.title)) },
                                     hasTrailer = viewModel.trailers.isNotEmpty(),
                                     onTrailer = {
                                         val trailers = viewModel.trailers
@@ -671,6 +682,9 @@ private fun VideoActions(
     hasTrailer: Boolean,
     onTrailer: () -> Unit,
     ways: WaysRowState? = null,
+    /** A kid's «Ask a Parent» of this title off the library (null: not a kid's page). */
+    request: TitleRequest? = null,
+    onAsk: () -> Unit = {},
 ) {
     val target = video.playTarget
     // Nothing of the library plays: «Play» runs the way of the addons chosen for the title, else the first.
@@ -752,6 +766,7 @@ private fun VideoActions(
                 modifier = Modifier.remembersFocus(focus, WATCHED_KEY),
             )
         }
+        if (request != null) RequestPill(request, focus, onAsk)
         // Last, so the buttons do not shift when the trailers arrive after the page.
         if (hasTrailer) {
             PillButton(
@@ -762,6 +777,7 @@ private fun VideoActions(
             )
         }
     }
+    if (request != null) RequestNotes(request)
     // The buttons of the ways that keep a copy on the server (a ring shows how far each is).
     if (ways != null && ways.keep.isNotEmpty()) {
         Row(
@@ -788,6 +804,44 @@ private fun VideoActions(
             }
         }
     }
+}
+
+/**
+ * A kid's page of a title the library does not have: «Ask a Parent», then (once asked) the state of the request. The
+ * state is a button too, so focus has somewhere to rest; OK on it does nothing.
+ */
+@Composable
+private fun RequestPill(request: TitleRequest, focus: FocusMemory, onAsk: () -> Unit) {
+    val made = request.request
+    if (made != null) {
+        PillButton(
+            text = stringResource(requestStatusLabel(made.status)),
+            onClick = {},
+            icon = requestStatusIcon(made.status),
+            modifier = Modifier.remembersFocus(focus, REQUEST_KEY).testTag("request-status"),
+        )
+    } else {
+        PillButton(
+            text = stringResource(if (request.busy) R.string.request_asking else R.string.request_ask),
+            onClick = { if (request.canAsk) onAsk() },
+            icon = AntresolIcons.Send,
+            style = if (request.canAsk) PillStyle.Primary else PillStyle.Glass,
+            modifier = Modifier.remembersFocus(focus, REQUEST_KEY).testTag("request-ask"),
+        )
+    }
+}
+
+/** Under the buttons: why a title cannot be asked for, what went wrong asking, and the reason a parent gave. */
+@Composable
+private fun RequestNotes(request: TitleRequest) {
+    val made = request.request
+    val note = when {
+        made != null && made.status == RequestStatus.DECLINED && made.reason.isNotBlank() -> stringResource(R.string.request_reason_line, made.reason)
+        made != null -> null
+        else -> request.why
+    }
+    note?.let { Text(it, style = Antresol.typography.caption, color = AntresolColors.LabelSecondary, modifier = Modifier.testTag("request-note")) }
+    if (request.failed) Text(stringResource(R.string.request_ask_failed), style = Antresol.typography.caption, color = AntresolColors.Red)
 }
 
 @Composable

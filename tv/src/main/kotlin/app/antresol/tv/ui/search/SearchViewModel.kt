@@ -8,9 +8,12 @@ import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.core.model.KidCandidate
 import app.antresol.core.model.SearchResults
 import app.antresol.core.model.Track
 import app.antresol.core.model.toCard
+import app.antresol.core.requests.AskCards
+import app.antresol.core.requests.requestsApi
 import app.antresol.core.ways.AddonSection
 import app.antresol.core.ways.WaysSource
 import app.antresol.core.ways.waysApi
@@ -19,6 +22,8 @@ import app.antresol.ui.LoadState
 import app.antresol.tv.ui.detail.DetailRow
 import app.antresol.ui.load
 import app.antresol.ui.R
+import app.antresol.ui.requests.KidAskSearch
+import app.antresol.ui.requests.TitleRequest
 import app.antresol.ui.ways.AddonTitleSearch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,6 +38,8 @@ class SearchViewModel(
     private val audio: AudioEngine,
     /** The addons' ways of the session: their title searches add rows after the library's. */
     waysSource: WaysSource? = null,
+    /** A kid profile with requests open: the server's catalogue search adds a row of titles to ask a parent for. */
+    canAsk: Boolean = false,
 ) : ViewModel() {
     var query: String by mutableStateOf("")
         private set
@@ -47,6 +54,7 @@ class SearchViewModel(
 
     fun selectScope(value: SearchScope) {
         scope = value
+        asks?.want(value.askKinds)
     }
 
     /** The songs of the shown results, in row order (the songs row's card ids are track ids). */
@@ -60,6 +68,35 @@ class SearchViewModel(
     /** An addon's search is still running: an empty page is not «no results» yet. */
     val addonsSearching: Boolean get() = addons.searching
 
+    private val requests = client.requestsApi()
+    private val asks = if (canAsk) KidAskSearch(requests, viewModelScope) else null
+
+    /** The titles the kid may ask a parent for, for the page's scope; empty for anyone else. */
+    val askCandidates: List<KidCandidate> get() = asks?.let { scope.shows(it.candidates(scope.askKinds)) }.orEmpty()
+
+    /** The kid's search is still looking: an empty page is not «no results» yet. */
+    val asksSearching: Boolean get() = asks?.searching == true
+
+    /** The kid's search could not be made (requests closed, the catalogue down). */
+    val asksFailed: Boolean get() = asks?.failed == true
+
+    /** The sheet of a result that has no page (an album, a book): ask a parent from it. */
+    val sheet: TitleRequest? = asks?.let { found -> TitleRequest(requests, viewModelScope, onAsked = found::put) }
+    var sheetOf: KidCandidate? by mutableStateOf(null)
+        private set
+
+    fun openSheet(candidate: KidCandidate) {
+        sheetOf = candidate
+        sheet?.load(candidate.kidRequest)
+    }
+
+    fun closeSheet() {
+        sheetOf = null
+    }
+
+    /** Back on the page: the kid's requests may have changed (asked on a title page). */
+    fun refreshAsks() = asks?.refresh()
+
     private var job: Job? = null
 
     fun onQueryChange(text: String) {
@@ -68,6 +105,7 @@ class SearchViewModel(
         if (text.isBlank()) {
             results = null
             addons.clear()
+            asks?.clear()
             return
         }
         job = viewModelScope.launch {
@@ -78,6 +116,7 @@ class SearchViewModel(
             }
         }
         addons.start(text.trim(), DEBOUNCE_MS)
+        asks?.start(text.trim(), scope.askKinds, DEBOUNCE_MS)
     }
 
     /** Plays the found songs starting at [card]'s track. */
@@ -112,6 +151,16 @@ enum class SearchScope {
         Shows -> rows.map { row -> row.copy(cards = row.cards.filter { it.kind == Kind.SERIES }) }
         Music -> emptyList()
     }.filter { it.cards.isNotEmpty() }
+
+    /** The kinds of the kid's catalogue search this scope shows: movies and series, or music. */
+    val askKinds: List<String> get() = AskCards.searchKinds(video = this != Music, music = this == Music)
+
+    /** The titles of the kid's search this scope shows (Movies and Shows narrow the movies and series). */
+    fun shows(candidates: List<KidCandidate>): List<KidCandidate> = when (this) {
+        All, Music -> candidates
+        Movies -> candidates.filter { it.kind == Kind.MOVIE }
+        Shows -> candidates.filter { it.kind == Kind.SERIES }
+    }
 
     /** The rows (and, for Movies / Shows, the cards of the library row) this scope shows. */
     fun filter(rows: List<DetailRow>): List<DetailRow> = when (this) {

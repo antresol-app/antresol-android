@@ -122,6 +122,15 @@ import app.antresol.tv.ui.search.BrowseTarget
 import app.antresol.tv.ui.search.SearchScreen
 import app.antresol.tv.ui.search.SearchViewModel
 import app.antresol.tv.ui.settings.SettingsScreen
+import app.antresol.tv.ui.requests.MyRequestsScreen
+import app.antresol.tv.ui.requests.RequestsScreen
+import app.antresol.ui.requests.MyRequestsViewModel
+import app.antresol.ui.requests.PendingRequestsViewModel
+import app.antresol.ui.requests.RequestsViewModel
+import app.antresol.core.requests.requestsApi
+import app.antresol.core.model.KidRequest
+import app.antresol.core.model.RequestSearchKind
+import app.antresol.core.model.RequestStatus
 import app.antresol.ui.userMessage
 import app.antresol.ui.R
 import app.antresol.core.channels.ChannelFilter
@@ -238,7 +247,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     // The nearest tab below the current page in the back stack: the section a detail page belongs to.
     // Settings belongs to the profile avatar, not to the tab it was opened from.
     val stack by navController.currentBackStack.collectAsStateWithLifecycle()
-    val inSettings = backStack?.destination?.hasRoute(SettingsRoute::class) == true
+    val inSettings = backStack?.destination?.let { it.hasRoute(SettingsRoute::class) || it.hasRoute(MyRequestsRoute::class) || it.hasRoute(RequestsRoute::class) } == true
     val contextTab = if (inSettings) {
         null
     } else {
@@ -289,6 +298,14 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         if (card.kind in Kind.VIDEO) play(card.id, ResumeMode.Resume) else open(card)
     }
     val nowPlaying: () -> Unit = { navController.navigate(NowPlayingRoute) { launchSingleTop = true } }
+    // A request opens its title's page, or the library's own once the title has arrived.
+    val openRequest: (KidRequest) -> Unit = { request ->
+        val library = request.libraryItemId?.takeIf { request.status == RequestStatus.IN_LIBRARY && it > 0 }
+        when {
+            library != null -> navController.navigate(DetailRoute(if (request.kind == RequestSearchKind.MUSIC) Kind.ALBUM else request.kind, library))
+            request.hasTitlePage -> navController.navigate(TitleRoute(request.kind, request.tmdbId))
+        }
+    }
     val openGrid: (GridKind, String?) -> Unit = { kind, genre -> navController.navigate(GridRoute(kind.name, genre.orEmpty())) }
     // Shelf titles with a full list behind them link to it.
     val seeAll: (String) -> (() -> Unit)? = { shelfId -> SHELF_GRIDS[shelfId]?.let { kind -> { openGrid(kind, null) } } }
@@ -539,7 +556,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 }
                 page<SearchRoute>(contentFocus) {
                     SearchScreen(
-                        viewModel = viewModel { SearchViewModel(client, audio, app.ways) },
+                        viewModel = viewModel { SearchViewModel(client, audio, app.ways, canAsk = state.user?.canRequest == true) },
                         onOpen = open,
                         onNowPlaying = nowPlaying,
                         onBrowse = { target ->
@@ -551,6 +568,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         },
                         onScrolledToTop = onScrolledToTop,
                         canTakeFocus = LocalPageCanTakeFocus.current,
+                        onPanelOpenChanged = { panelOpen = it },
                     )
                 }
                 page<SettingsRoute>(contentFocus) {
@@ -564,12 +582,32 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         language = uiLanguage,
                         // The «ТВ» tab reads its list again when it is shown (the server orders it by the new choice).
                         channelPrefs = viewModel(key = "channel-prefs") { ChannelPrefsModel(client.channelPrefsApi()) },
+                        onMyRequests = if (state.user?.canRequest == true) ({ navController.navigate(MyRequestsRoute) }) else null,
+                        onRequests = if (state.user?.requests == true) ({ navController.navigate(RequestsRoute) }) else null,
+                        pendingRequests = if (state.user?.requests == true) viewModel<PendingRequestsViewModel>(key = "pending-requests") { PendingRequestsViewModel(client.requestsApi()) }.pending else null,
                         // A kid's device history is an administrator's to change (the server refuses it too).
                         deviceHistory = if (state.user?.isKid == false) {
                             viewModel(key = "device-history") { DeviceHistoryModel(client.deviceHistoryApi(), session::deviceHistoryChanged) }
                         } else {
                             null
                         },
+                    )
+                }
+                page<MyRequestsRoute>(contentFocus) {
+                    MyRequestsScreen(
+                        viewModel = viewModel { MyRequestsViewModel(client.requestsApi()) },
+                        onOpen = openRequest,
+                        onScrolledToTop = onScrolledToTop,
+                        canTakeFocus = LocalPageCanTakeFocus.current,
+                    )
+                }
+                page<RequestsRoute>(contentFocus) {
+                    RequestsScreen(
+                        viewModel = viewModel { RequestsViewModel(client.requestsApi()) },
+                        onOpen = openRequest,
+                        onScrolledToTop = onScrolledToTop,
+                        onPanelOpenChanged = { panelOpen = it },
+                        canTakeFocus = LocalPageCanTakeFocus.current,
                     )
                 }
                 page<GridRoute>(contentFocus) { entry ->

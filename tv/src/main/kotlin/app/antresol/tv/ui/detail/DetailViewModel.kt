@@ -19,6 +19,7 @@ import app.antresol.core.model.CastMember
 import app.antresol.core.model.EpisodeGuideResponse
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.model.Kind
+import app.antresol.core.model.KidRequestState
 import app.antresol.core.model.Playlist
 import app.antresol.core.model.PlaylistDetail
 import app.antresol.core.model.Progress
@@ -27,12 +28,14 @@ import app.antresol.core.model.SubTrack
 import app.antresol.core.model.Track
 import app.antresol.core.model.TitleInfo
 import app.antresol.core.model.Trailer
+import app.antresol.core.requests.requestsApi
 import app.antresol.core.ways.MemoryWayDefaults
 import app.antresol.core.ways.WayDefaults
 import app.antresol.core.ways.WayTarget
 import app.antresol.core.ways.WaysController
 import app.antresol.core.ways.WaysSource
 import app.antresol.core.ways.waysApi
+import app.antresol.ui.requests.TitleRequest
 import app.antresol.ui.trailers.Trailers
 import app.antresol.core.playback.Episodes
 import app.antresol.core.playback.Resume
@@ -130,6 +133,8 @@ data class VideoInfo(
     val outsideLibrary: Boolean = false,
     /** A title page opened for something the library has: the library's item, to open instead. */
     val libraryItemId: Long? = null,
+    /** A kid profile's «Попросить» of the title (a title page only; null for anyone else). */
+    val kidRequest: KidRequestState? = null,
 ) {
     val seasons: List<GuideSeason> get() = guide.seasons
 }
@@ -168,6 +173,9 @@ class DetailViewModel(
     /** The addons' ways for this page (buttons, the choice panel, state rings); null without a source of them. */
     val ways: WaysController? = waysSource?.let { WaysController(client.waysApi(), it, viewModelScope, maxHeight, defaults = wayDefaults) }
 
+    /** A kid profile's «Попросить у родителя» on the page of a title off the library; null on any other page. */
+    val request: TitleRequest? = if (tmdbId > 0) TitleRequest(client.requestsApi(), viewModelScope) else null
+
     private var job: Job? = null
 
     /**
@@ -193,7 +201,13 @@ class DetailViewModel(
     fun reload() {
         job?.cancel()
         state = LoadState.Loading
-        job = viewModelScope.launch { state = load { fetch() } }
+        job = viewModelScope.launch { show(load { fetch() }) }
+    }
+
+    /** Shows what was loaded; the title's request state is the server's as of now. */
+    private fun show(loaded: LoadState<DetailModel>) {
+        state = loaded
+        (loaded as? LoadState.Ready)?.value?.video?.let { request?.load(it.kidRequest) }
     }
 
     /** Re-reads the page in place (back from the player); failures keep what is shown. */
@@ -202,7 +216,7 @@ class DetailViewModel(
         job = viewModelScope.launch {
             pendingWrites.await()
             val fresh = load { fetch() }
-            if (fresh is LoadState.Ready) state = fresh
+            if (fresh is LoadState.Ready) show(fresh)
         }
     }
 
@@ -392,6 +406,7 @@ internal fun ItemDetail.titleVideoInfo(info: TitleInfo, guide: EpisodeGuideRespo
     tmdbId = tmdbId,
     outsideLibrary = true,
     libraryItemId = info.libraryItemId?.takeIf { info.inLibrary && it > 0 },
+    kidRequest = info.kidRequest,
 )
 
 private fun ItemDetail.toModel(progress: Progress?, guide: EpisodeGuideResponse?): DetailModel {

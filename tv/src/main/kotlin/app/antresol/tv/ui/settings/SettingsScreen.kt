@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,10 +54,12 @@ import app.antresol.tv.autostart.AutostartTarget
 import app.antresol.tv.autostart.OverlayPermission
 import app.antresol.tv.R as TvR
 import app.antresol.ui.language.UiLanguageModel
+import app.antresol.ui.requests.PendingRequests
 import app.antresol.ui.language.UiLanguages
 import app.antresol.tv.settings.TvSettings
 import app.antresol.ui.playback.MenuOption
 import app.antresol.tv.ui.components.OptionsPanel
+import app.antresol.tv.ui.requests.waitingRequestsText
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
 import app.antresol.tv.ui.components.listRowColors
@@ -101,8 +104,14 @@ fun SettingsScreen(
     language: UiLanguageModel,
     deviceHistory: DeviceHistoryModel? = null,
     channelPrefs: ChannelPrefsModel? = null,
+    /** A kid profile that may ask for titles: the page of what it asked for. */
+    onMyRequests: (() -> Unit)? = null,
+    /** An administrator with kids' requests to answer: their page, and how many wait. */
+    onRequests: (() -> Unit)? = null,
+    pendingRequests: PendingRequests? = null,
 ) {
     LaunchedEffect(channelPrefs) { channelPrefs?.refresh() }
+    LaunchedEffect(pendingRequests) { pendingRequests?.refresh() }
     val preferences by settings.preferences.collectAsStateWithLifecycle()
     LaunchedEffect(language) { language.refresh() }
     var menu by remember { mutableStateOf<SettingsMenu?>(null) }
@@ -160,6 +169,24 @@ fun SettingsScreen(
                     .weight(1f)
                     .fillMaxHeight(),
             ) {
+                if (onMyRequests != null || onRequests != null) {
+                    item { Section(stringResource(R.string.requests_title)) }
+                    onMyRequests?.let { open ->
+                        item {
+                            SettingRow(label = stringResource(R.string.requests_mine), value = "", onClick = open, modifier = Modifier.testTag("settings-my-requests"))
+                        }
+                    }
+                    onRequests?.let { open ->
+                        item {
+                            SettingRow(
+                                label = stringResource(R.string.requests_title),
+                                value = waitingRequestsText(pendingRequests?.count ?: 0).orEmpty(),
+                                onClick = open,
+                                modifier = Modifier.testTag("settings-requests"),
+                            )
+                        }
+                    }
+                }
                 item { Section(stringResource(R.string.settings_playback)) }
                 item {
                     SettingRow(

@@ -1583,6 +1583,7 @@ fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
         .setHandleAudioBecomingNoisy(true)
         .build()
         .also { it.addAnalyticsListener(EventLogger(PLAYER_LOG)) }
+        .also { PlayerCensus.attach(it, "video") }
 }
 
 /**

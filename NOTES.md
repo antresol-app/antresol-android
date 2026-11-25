@@ -1680,8 +1680,8 @@ The apps show what the server's addons offer, by the protocol in docs/API.md sec
 - Search (phone and TV): the addons' title searches run beside `/api/search` and add one section each after the library's
   (a title that is not in the library opens its page, `TitleRoute`; one that is, its own page). `ui-common/.../ways/AddonTitleSearch`
   is the part both apps share (debounce, the sections as the addons answer, `searching`); while it is true and nothing is found
-  yet the page shows its spinner instead of «No results». A kid's profile has no addon search (the server answers it 403), and
-  the server's own TMDB search (`/api/requests/search`, with the request buttons) is for kid profiles only: the apps do not have it.
+  yet the page shows its spinner instead of «No results». A kid's profile has no addon search (the server answers it 403); it has the server's own catalogue search instead (see
+  «Kid requests»).
   A title off the library has no trailers: the server lists them per library item (`/api/items/{id}/trailers`), as on the web.
 
 ## TV density and the channels page
@@ -1814,3 +1814,31 @@ How to make the profiles again (after big UI changes):
    Not run this round: the gfxinfo numbers above were taken with the same builds instead.
 
 Profiles: lines naming kotlinx CoroutineScheduler idle-worker stack methods (their names hold a word) are dropped after generation, as the public gate refuses that word; they only cover a coroutine idle path.
+
+## Kid requests («Попросить», TV and phone)
+
+A kid profile asks a parent for a title the library does not have, as the web does (docs/API.md section 14).
+
+- `:core`: models (`model/Requests.kt`: `KidRequest`, `KidCandidate`, `KidRequestState`, `RequestStatus`), the calls on `AntresolClient`
+  (`requestSearch`, `askRequest`, `myRequests`, `allRequests`, `requestCount`, `approveRequest`, `declineRequest`), `requests/RequestsApi`
+  (what the screens call; a fake in tests) and `requests/AskCards` (a search result as a `Card`; an album or book, which has no page, gets a
+  negative id so its card is unique, and `candidateOf` finds it back). `Me.canRequest` (a kid with requests open) and `Me.requests` (an
+  administrator) decide what the apps show; `TitleInfo.kidRequest` is the kid's request of the title page.
+- `:ui-common` (`ui/requests`): `KidAskSearch` (one call per kind a page shows: video, music, the books' three; the page's filter asks for a
+  kind the first time it shows it; `refresh` reads again in place when the page comes back), `TitleRequest` (the page's «Ask a Parent»: the
+  state as the server sent it, busy, a refused age limit with the server's words), `MyRequests`, `RequestsToAnswer`, `PendingRequests`,
+  `RequestStatusPill` and the words (strings `request_*`, `requests_*`, ru and en).
+- Search (phone and TV): after the library's rows a «Find and Ask» row (kid only) of the catalogue's titles; the card's badge is the state of
+  its request. Movies and shows open the title page (`TitleRoute`): «Ask a Parent» (white), then the state («Waiting for an answer»,
+  «Approved — coming soon», «Already in the library», «A parent said no» and the reason); a title above the profile's age limit has the
+  button greyed and the server's reason under it; a kid's page has no ways, trailers or watched state. Albums and books open a sheet
+  (phone) or side panel (TV) with the same button. TV Music and phone Music/Books filters ask the music and books catalogues.
+- «My Requests» (kid) and «Requests» (administrator): the TV puts them in Settings, the phone in the avatar's sheet (with the number waiting).
+  The administrator's rows offer Approve and Decline (phone: a reason field; TV: no reason, a remote cannot type one) and open the title page of
+  a video, where a keep way brings the title onto the server (which approves the request on the server too). Plain Approve confirms without a
+  download, as the web does when no addon sheet wants the request.
+- The server pushes `request.changed`; the apps have no event stream, so each screen reads again when it comes back (search results, title page,
+  both lists) and the badge count when the sheet opens.
+- Tests: `RequestsClientTest`, `AskCardsTest`, `SampleDecodingTest` (core); `KidAskSearchTest`, `TitleRequestTest`, `RequestListsTest`
+  (ui-common); `TvRequestsUiTest`, `PhoneRequestsUiTest` (`FakeServer.requestsOpen`, `addRequest`; `scripts/fake-server.py --kid --requests` for a
+  kid, `--requests` alone for an administrator).

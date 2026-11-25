@@ -410,7 +410,7 @@ class TvLiveUiTest {
         key(KeyEvent.KEYCODE_DPAD_RIGHT)
         moveUntilFocused(KeyEvent.KEYCODE_DPAD_UP, "Video Quality")
         key(KeyEvent.KEYCODE_DPAD_CENTER)
-        waitFor(hasText("Used when a video starts", substring = true))
+        waitFor(hasText("1080p"))
         shot("30-settings-quality")
         key(KeyEvent.KEYCODE_BACK)
         waitFor(isFocused() and hasAnyDescendant(hasText("Video Quality")))

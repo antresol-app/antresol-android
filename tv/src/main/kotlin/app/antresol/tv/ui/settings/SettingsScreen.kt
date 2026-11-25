@@ -183,7 +183,6 @@ fun SettingsScreen(
                     item {
                         SettingRow(
                             label = stringResource(R.string.settings_favorites_first),
-                            detail = stringResource(R.string.settings_favorites_first_detail),
                             value = onOffLabel(on),
                             chevron = false,
                             onClick = { channelPrefs.setFavoritesFirst(!on) },
@@ -194,7 +193,6 @@ fun SettingsScreen(
                 item {
                     SettingRow(
                         label = stringResource(TvR.string.settings_autostart),
-                        detail = stringResource(TvR.string.settings_autostart_hint),
                         value = onOffLabel(preferences.autostart),
                         chevron = false,
                         onClick = { setAutostart(!preferences.autostart) },
@@ -205,7 +203,6 @@ fun SettingsScreen(
                         item {
                             SettingRow(
                                 label = stringResource(TvR.string.settings_autostart_permission),
-                                detail = stringResource(TvR.string.settings_autostart_permission_hint).takeIf { !overlayGranted }.orEmpty(),
                                 value = stringResource(if (overlayGranted) TvR.string.settings_permission_allowed else TvR.string.settings_permission_not_allowed),
                                 onClick = { if (!overlayGranted) menu = SettingsMenu.OverlayGuide },
                                 modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.OverlayGuide)),
@@ -215,7 +212,6 @@ fun SettingsScreen(
                     item {
                         SettingRow(
                             label = stringResource(TvR.string.settings_autostart_wake),
-                            detail = stringResource(TvR.string.settings_autostart_wake_hint),
                             value = onOffLabel(preferences.autostartOnWake),
                             chevron = false,
                             onClick = {
@@ -239,11 +235,8 @@ fun SettingsScreen(
                         val failed = deviceHistory.error
                         SettingRow(
                             label = stringResource(R.string.history_separate),
-                            detail = when {
-                                failed != null -> failed.historyMessage()
-                                history != null -> stringResource(R.string.history_separate_on, history.name)
-                                else -> ""
-                            },
+                            // The value says which history; only a refused switch needs a line of its own.
+                            detail = failed?.historyMessage().orEmpty(),
                             value = history?.name ?: stringResource(TvR.string.settings_off),
                             onClick = {
                                 deviceHistory.clearError()
@@ -268,7 +261,6 @@ fun SettingsScreen(
         when (menu) {
             SettingsMenu.Quality -> OptionsPanel(
                 title = stringResource(TvR.string.settings_default_quality),
-                note = stringResource(TvR.string.settings_default_quality_hint),
                 options = Quality.ALL.map { value ->
                     MenuOption(qualityLabel(value), value == preferences.defaultQuality) { settings.update { it.copy(defaultQuality = value) } }
                 },
@@ -276,7 +268,6 @@ fun SettingsScreen(
             )
             SettingsMenu.Subtitles -> OptionsPanel(
                 title = stringResource(TvR.string.settings_subtitles),
-                note = stringResource(TvR.string.settings_subtitles_hint),
                 options = (listOf("") + TvSettings.SUBTITLE_LANGUAGES).map { code ->
                     MenuOption(subtitleLabel(code), code == preferences.subtitleLanguage) { settings.update { it.copy(subtitleLanguage = code) } }
                 },
@@ -431,10 +422,9 @@ private fun ProfileColumn(
         // About
         Text(
             stringResource(TvR.string.settings_app_version, BuildConfig.VERSION_NAME),
-            style = Antresol.typography.caption.copy(color = AntresolColors.Label),
+            style = Antresol.typography.caption,
             textAlign = TextAlign.Center,
         )
-        Text(stringResource(TvR.string.settings_about_text), style = Antresol.typography.caption, textAlign = TextAlign.Center)
     }
 }
 

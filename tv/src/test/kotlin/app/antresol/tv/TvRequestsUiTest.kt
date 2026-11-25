@@ -136,6 +136,8 @@ class TvRequestsUiTest {
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         waitFor(hasTestTag("request-status"))
         waitFor(hasText("Waiting for an answer"))
+        // The button that asked is the one that shows the state: focus stays on it.
+        waitFor(isFocused() and hasTestTag("request-status"))
         assertEquals("pending", fake.kidRequests.values.single().status)
         assertEquals("Far Away Film", fake.kidRequests.values.single().title)
         assertTrue("no second button to ask with", compose.onAllNodes(hasTestTag("request-ask"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
@@ -144,7 +146,9 @@ class TvRequestsUiTest {
         // Back on the results the row says so, with no new search typed.
         key(KeyEvent.KEYCODE_BACK)
         waitFor(hasText("Find and Ask"))
-        waitFor(hasText("Waiting for an answer"))
+        waitFor(hasText("Waiting")) // the card's badge
+        // …and Back lands on the card that was opened.
+        waitFor(isFocused() and hasAnyDescendant(hasText("Far Away Film") or hasContentDescription("Far Away Film")))
         settle()
         shot("requests-tv-search-asked")
         assertEquals(1, fake.requests.count { it == "POST /api/requests" })

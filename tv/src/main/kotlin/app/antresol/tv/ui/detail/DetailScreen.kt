@@ -813,22 +813,21 @@ private fun VideoActions(
 @Composable
 private fun RequestPill(request: TitleRequest, focus: FocusMemory, onAsk: () -> Unit) {
     val made = request.request
-    if (made != null) {
-        PillButton(
-            text = stringResource(requestStatusLabel(made.status)),
-            onClick = {},
-            icon = requestStatusIcon(made.status),
-            modifier = Modifier.remembersFocus(focus, REQUEST_KEY).testTag("request-status"),
-        )
-    } else {
-        PillButton(
-            text = stringResource(if (request.busy) R.string.request_asking else R.string.request_ask),
-            onClick = { if (request.canAsk) onAsk() },
-            icon = AntresolIcons.Send,
-            style = if (request.canAsk) PillStyle.Primary else PillStyle.Glass,
-            modifier = Modifier.remembersFocus(focus, REQUEST_KEY).testTag("request-ask"),
-        )
-    }
+    val asking = made == null && request.canAsk
+    // One button for both: when the answer arrives it is this very button that turns into the state, so focus stays on it.
+    PillButton(
+        text = stringResource(
+            when {
+                made != null -> requestStatusLabel(made.status)
+                request.busy -> R.string.request_asking
+                else -> R.string.request_ask
+            },
+        ),
+        onClick = { if (asking) onAsk() },
+        icon = if (made != null) requestStatusIcon(made.status) else AntresolIcons.Send,
+        style = if (asking) PillStyle.Primary else PillStyle.Glass,
+        modifier = Modifier.remembersFocus(focus, REQUEST_KEY).testTag(if (made != null) "request-status" else "request-ask"),
+    )
 }
 
 /** Under the buttons: why a title cannot be asked for, what went wrong asking, and the reason a parent gave. */

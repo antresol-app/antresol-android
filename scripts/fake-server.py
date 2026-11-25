@@ -76,6 +76,8 @@ addon = {"on": False, "remembered": False, "keep": {"since": None}}
 # --requests: kids' requests, by kind|key (see kid_requests_answer).
 requests_state = {"on": False, "next": 4, "items": {}}
 BLOCKED_TMDB, OUTSIDE_SERIES_TMDB = 9009, 9002
+# The titles of the kid's catalogue by TMDB id (a title page names itself from here).
+CATALOGUE = {9001: "Far Away Film", 9002: "Far Away Show", 9003: "Another Far Film", 9004: "Brand New Film", BLOCKED_TMDB: "Grown-up Film"}
 CAST = [{"name": n, "character": c, "photo": "/api/images/cast/" + n.replace(" ", "%20")}
         for n, c in [("Ada Lovelace", "The Countess"), ("Alan Turing", "The Mathematician"), ("Grace Hopper", "The Admiral")]]
 CLIP = Path(__file__).resolve().parent.parent / "test-fixtures/resources/trailer-sample.mp4"
@@ -558,10 +560,10 @@ def kid_requests_answer(command, path, query, body, kid):
             return None
         tmdb, blocked = int(match[2]), int(match[2]) == BLOCKED_TMDB
         made = requests_state["items"].get(f"{match[1]}|tmdb:{tmdb}")
-        return 200, {"tmdbId": tmdb, "extId": "", "kind": match[1], "title": "Far Away " + ("Film" if match[1] == "movie" else "Show"), "year": 2020,
+        return 200, {"tmdbId": tmdb, "extId": "", "kind": match[1], "title": CATALOGUE.get(tmdb, "Far Away " + ("Film" if match[1] == "movie" else "Show")), "year": 2020,
                      "poster": "/api/images/local/outside/poster", "overview": "A title the library does not have.", "inLibrary": False,
                      "libraryItemId": None, "backdrop": "/api/images/local/outside/backdrop", "genres": ["Drama"], "runtime": 95, "cast": [],
-                     "seasons": [{"number": 1, "episodes": 3}],
+                     "seasons": [{"number": 1, "episodes": 3}] if match[1] == "series" else [],
                      "kidRequest": {"key": f"tmdb:{tmdb}", "allowed": not blocked, "blocked": "This is 16+, and this profile allows up to 6+" if blocked else None,
                                     "request": request_json(made) if made else None}}
     if not path.startswith("/api/requests"):
@@ -573,7 +575,8 @@ def kid_requests_answer(command, path, query, body, kid):
         kind = query.get("kind", [""])[0]
         if kind == "video":
             return 200, [candidate_json("movie", 9001, "Far Away Film"), candidate_json("series", OUTSIDE_SERIES_TMDB, "Far Away Show"),
-                         candidate_json("movie", 9003, "Another Far Film"), candidate_json("movie", BLOCKED_TMDB, "Grown-up Film")]
+                         candidate_json("movie", 9003, "Another Far Film"), candidate_json("movie", BLOCKED_TMDB, "Grown-up Film"),
+                         candidate_json("movie", 9004, "Brand New Film")]
         if kind == "music":
             return 200, [candidate_json("music", 0, "Test Album", "Test Artist", "mb-1")]
         return 200, []
@@ -721,6 +724,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/me": {**ME, "deviceHistory": history_ref(), **({"canRequest": kid, "requests": not kid} if requests_state["on"] else {})},
             "/api/me/ui-language": {"language": "", "effective": "en"},
             "/api/me/playback-prefs": {"audioLangs": [], "subMode": "off", "subLangs": []},
+            "/api/search": {"library": [movie_card(MOVIE)], "albums": [], "artists": [], "songs": []},
             "/api/home": home(),
             "/api/music/home": music_home(),
             "/api/books/home": {"shelves": []},

@@ -395,15 +395,15 @@ private fun DeviceRow(device: DeviceSession, onRevoke: () -> Unit) {
         if (device.current) {
             Text(stringResource(UiR.string.settings_this_device), style = Antresol.typography.caption.copy(color = AntresolColors.Green))
         } else {
-            Box(
-                Modifier
-                    .size(36.dp)
-                    .focusClickable(CircleShape, onClick = onRevoke)
-                    .testTag("revoke-${device.id}"),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(MobileIcons.Close, contentDescription = stringResource(UiR.string.settings_revoke), tint = AntresolColors.LabelTertiary, modifier = Modifier.size(18.dp))
-            }
+            // The word, not a bare ✕: what it does is on the button, and the touch target is a full 48 dp.
+            Text(
+                stringResource(UiR.string.settings_revoke),
+                style = Antresol.typography.body.copy(color = AntresolColors.Red),
+                modifier = Modifier
+                    .focusClickable(AntresolShapes.control, role = Role.Button, onClick = onRevoke)
+                    .testTag("revoke-${device.id}")
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+            )
         }
     }
 }

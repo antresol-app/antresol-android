@@ -1012,6 +1012,18 @@ Every gallery shot was compared with the web/iOS reference shots and DESIGN.md; 
 - Audio/subtitles of an external channel: the stream's own track groups with their labels
   (`ExternalTracks`, duplicates get «(CC)»/«5.1»/a number); the choice is kept per channel in the
   device's preferences (`live_external_tracks`, language + label); default = the profile's language.
+- Silent channels (audio the device cannot decode: MP2, AC-3, E-AC-3 on some boxes): the server marks
+  such a stream `remuxAudio: true` (primary and each fallback) and gives it `relay`, a path of its own
+  that converts the audio to AAC. `StreamSource.viaRelay` (= flag and a relay) makes the session hand
+  the player `LiveApi.relayUrl(relay)` (absolute, no `?mk=`) with `LiveStream.Ready.relayed` and
+  `viaServer` set and no provider headers (the relay sends them itself). The player opens a relayed
+  stream with its own authorised client (`player.setMediaItem`, not the plain data source): the relay's
+  playlists link to relay paths without a media key, so the Bearer must go with every request. The
+  source's identity (device memory of bad sources, the banner) stays the provider's URL. A server that
+  does not send the flag, or a flag without a relay, plays the provider's URL as before. The server
+  decides per stream after its first look at the audio (about a second after tune-in): the very first
+  play of a never-seen channel can still be silent, a retune after the list reloads takes the relay.
+  Tests: `ExternalAudioRelayTest` (JSON fixture `core/src/test/resources/channels/external-audio.json`).
 - «ТВ» calls `POST /api/channels/opened` when it opens (at most every 10 minutes) and reloads the list.
 - Verified on emulators (phone 360 dp and Pixel 9 Pro XL on API 36, Android TV API 34 image): the three
   demo HLS streams, alternate audio and subtitles, the per-channel memory, a failing channel and

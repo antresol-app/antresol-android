@@ -1842,3 +1842,29 @@ A kid profile asks a parent for a title the library does not have, as the web do
 - Tests: `RequestsClientTest`, `AskCardsTest`, `SampleDecodingTest` (core); `KidAskSearchTest`, `TitleRequestTest`, `RequestListsTest`
   (ui-common); `TvRequestsUiTest`, `PhoneRequestsUiTest` (`FakeServer.requestsOpen`, `addRequest`; `scripts/fake-server.py --kid --requests` for a
   kid, `--requests` alone for an administrator).
+
+## TV Now Playing: layout, lyrics, focus (round 25.11)
+
+- Layout (music and audiobooks): the cover and the title block span the column; the title block takes the width the cover leaves and rests its
+  last line (the byline) on the cover's bottom edge, however long the title. The seek bar spans the column; the transport row and the pills
+  row are centred under it on the column's axis (Play/Pause on the axis, one 18 dp gap in the transport, one 12 dp gap between the pills), the
+  times stand at the bar's ends. A running sleep timer shows its state beside the moon («End of Song», the clock), not after «Sleep Timer»
+  (the long label made the music row wider than the column and cut the last pill); a screen reader still hears both.
+- Lyrics: `core/playback/LyricsSync.kt` turns the server's lines into the rows a screen draws (`Lyrics.rows()`, shared with the phone). A line
+  with no word in it (empty, «♪», «...») is an instrumental stretch; consecutive ones are one row (one «♪»); the intro before the first sung
+  line and the outro after the last are not rows. Plain lyrics keep their stanzas as extra space above a line (`startsStanza`), never as an
+  empty row. `Lyrics.rowIndexAt(rows, positionMs)` is the current row (-1 in the intro, the last row stays in the outro). The TV list
+  (`LyricsList`) puts the current row a third of the way down the panel (the top padding is a third of the panel, the bottom two thirds, so any
+  row can get there; the lines already sung rise into the padding and fade out at the top edge); it jumps there when the panel opens in the
+  middle of a song, then follows smoothly, and goes back to the top when the position goes back before the first line. The old list scrolled to
+  `current - 2` under a 12 dp top padding, so the line above showed as a stray sliver under the heading.
+- Focus: the shell tells a page that has focus from one that has none by the focus state of the group below the page's own (`page()` in
+  `MainShell`: `hasFocus && !isFocused`). A page whose first focusable elements are bare (a seek bar and buttons directly under the page) reads as
+  «no focus», and the shell's safety net (`ensureFocus`) then re-entered the page every 120 ms, putting focus on its first element, the seek
+  bar: Play/Pause never kept the initial focus and D-pad Up/Down could not leave the seek bar. The screen's root is now its own
+  `focusGroup()`. Any new page with bare focusables directly under it needs the same.
+- Tests: `LyricsRowsTest` (core); `TvNowPlayingUiTest` (axis, gaps and times under the seek bar, long title, sleep pill not cut, the D-pad walk on
+  the screen alone and inside `MainShell`, no empty lyric line and one note, plain lyrics, the current row at the third and back to the top).
+  `FakeServer.lyricsJson` answers every track's lyrics; `scripts/fake-server.py --lyrics --long-titles` gives the emulator two tracks with lyrics
+  (synced with an empty first line and two instrumental lines in a row; plain with blank lines between stanzas) and a long title.
+- Known gap: plain (unsynced) lyrics longer than the panel cannot be scrolled with the remote (the list is not focusable).

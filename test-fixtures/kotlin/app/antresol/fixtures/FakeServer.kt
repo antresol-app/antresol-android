@@ -162,6 +162,11 @@ class FakeServer {
         val agoMinutes: Long = 120,
     )
 
+    /** The body of `GET /api/me/devices` (the signed-in devices of the profile). */
+    @Volatile var devicesJson: String =
+        """{"items":[{"id":1,"name":"Pixel 8","model":"Pixel 8","version":"0.9.0","lastSeen":"2026-11-25T10:00:00Z","current":true},""" +
+            """{"id":2,"name":"Living room TV","model":"Android TV (BRAVIA)","version":"0.9.0","lastSeen":"2026-11-24T20:00:00Z","current":false}]}"""
+
     /** «Отдельная история на этом устройстве»: the person's histories (id → name) and the one this device writes into. */
     val histories: MutableMap<Long, String> = java.util.Collections.synchronizedMap(linkedMapOf(20L to "Living Room"))
 
@@ -215,6 +220,7 @@ class FakeServer {
             path == "/api/auth/token" -> json("""{"token":"test-device-token","user":${me()}}""")
             path == "/api/me" -> json(me())
             path == "/api/auth/media-key" -> json("""{"key":"test-mk","expiresAt":"2099-01-01T00:00:00Z"}""")
+            path == "/api/me/devices" -> json(devicesJson)
             path == "/api/me/ui-language" -> json("""{"language":"","effective":"en"}""")
             path == "/api/me/playback-prefs" -> json("""{"audioLangs":[],"subMode":"off","subLangs":[]}""")
             path == "/api/home" -> json(home())

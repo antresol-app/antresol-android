@@ -76,9 +76,7 @@
     <string name="settings_server_address">Адрес</string>
     <string name="settings_server_version">Версия сервера</string>
     <string name="settings_video_quality">Качество видео</string>
-    <string name="settings_video_quality_detail">Применяется при запуске видео. В плеере его можно сменить.</string>
     <string name="settings_autoplay">Автозапуск следующей серии</string>
-    <string name="settings_autoplay_detail">Через 10 секунд после конца серии</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_app_version">Версия приложения</string>
     <string name="account_open">Аккаунт: %1$s</string>
@@ -88,9 +86,7 @@
     <string name="detail_listen_from_start">Слушать с начала</string>
     <string name="detail_read_from_start">Читать с начала</string>
     <string name="confirm_sign_out_title">Выйти из профиля?</string>
-    <string name="confirm_sign_out_body">Устройство забудет профиль. Его придётся снова выбрать (и ввести пароль).</string>
-    <string name="confirm_change_server_title">Сменить сервер?</string>
-    <string name="confirm_change_server_body">Вы вернётесь к вводу адреса сервера. Вход в профили сохранится.</string>
+    <string name="confirm_sign_out_body">Профиль придётся выбрать и ввести пароль заново.</string>
     <string name="reader_page_failed">Не удалось загрузить страницу %1$d.</string>
     <string name="detail_go_to_series">К сериалу</string>
 
@@ -105,13 +101,13 @@
 
     <!-- Вход на телевизоре (QR-код) -->
     <string name="pair_settings_row">Войти на телевизоре</string>
-    <string name="pair_title">Вход на телевизоре</string>
-    <string name="pair_scan_hint">Наведите камеру на QR-код на экране телевизора.</string>
-    <string name="pair_camera_rationale">Камера нужна только чтобы прочитать QR-код телевизора. Ничего не записывается и никуда не отправляется.</string>
+    <string name="pair_title">Войти на телевизоре</string>
+    <string name="pair_scan_hint">Отсканируйте QR-код на телевизоре.</string>
+    <string name="pair_camera_rationale">Камера читает только QR-код телевизора. Ничего не записывается.</string>
     <string name="pair_camera_allow">Разрешить камеру</string>
     <string name="pair_camera_settings">Открыть настройки</string>
     <string name="pair_camera_denied">Доступ к камере выключен. Включите его в настройках приложения или введите код ниже.</string>
-    <string name="pair_code_title">Или введите код с экрана телевизора</string>
+    <string name="pair_code_title">Или введите код</string>
     <string name="pair_code_hint">Код, например ABC 234</string>
     <string name="pair_code_invalid">Это не код телевизора. В нём 6 букв и цифр.</string>
     <string name="pair_continue">Продолжить</string>
@@ -120,22 +116,21 @@
     <string name="pair_asks_to_sign_in">хочет войти</string>
     <string name="pair_remote_warning">Это устройство не в вашей домашней сети. Подтверждайте, только если настраиваете его сами.</string>
     <string name="pair_profile">Профиль на телевизоре</string>
-    <string name="pair_profile_hint">Телевизор войдёт в этот профиль. Там действуют его ограничения и история.</string>
     <string name="pair_approve">Подтвердить</string>
     <string name="pair_deny">Отклонить</string>
-    <string name="pair_done">Готово. Телевизор входит.</string>
-    <string name="pair_declined">Отклонено. Телевизор может показать новый код.</string>
+    <string name="pair_done">Телевизор входит.</string>
+    <string name="pair_declined">Отклонено.</string>
     <string name="pair_scan_again">Войти на другом телевизоре</string>
     <string name="pair_checking">Проверяем код…</string>
     <string name="pair_finish">Готово</string>
     <string name="pair_setup_title">Настроить телевизор</string>
-    <string name="pair_setup_text">Телевизор подключится к вашему серверу и войдёт в выбранный профиль. На телевизоре ничего вводить не нужно.</string>
+    <string name="pair_setup_text">Телевизор подключится к этому серверу и войдёт в выбранный профиль.</string>
     <string name="pair_setup_server">Сервер</string>
     <string name="pair_setup_button">Настроить</string>
     <string name="pair_setup_retry">Повторить</string>
     <string name="pair_setup_cancel">Отмена</string>
     <string name="pair_setup_sending">Настраиваем телевизор…</string>
-    <string name="pair_setup_done">Готово. Телевизор подключается и входит.</string>
+    <string name="pair_setup_done">Телевизор подключается.</string>
     <string name="pair_setup_expired">Код устарел — откройте настройку на телевизоре заново и отсканируйте новый код.</string>
     <string name="pair_setup_tv_unreachable">Не удаётся связаться с телевизором. Телефон и телевизор должны быть в одной сети Wi-Fi, а на телевизоре должен быть открыт код настройки.</string>
     <string name="pair_setup_server_unreachable">Телевизор не может связаться с вашим сервером по этому адресу. Проверьте, что сервер в одной сети с телевизором.</string>

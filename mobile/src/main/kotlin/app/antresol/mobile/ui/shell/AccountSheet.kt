@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.antresol.core.api.MediaUrls
 import app.antresol.core.model.Me
@@ -69,8 +70,8 @@ fun AccountSheet(
             ) {
                 val name = user?.name ?: session.userName
                 ProfileAvatar(name = name, avatar = user?.avatar ?: session.avatar, size = 56.dp, photoUrl = LocalMediaUrls.current?.image(user?.photo ?: session.photo))
-                Column {
-                    Text(name, style = Antresol.typography.sectionTitle)
+                Column(Modifier.weight(1f)) {
+                    Text(name, style = Antresol.typography.sectionTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     val role = when {
                         user?.isAdmin == true -> stringResource(UiR.string.account_admin)
                         user?.isKid == true -> stringResource(R.string.account_kid)
@@ -78,7 +79,7 @@ fun AccountSheet(
                     }
                     Text(role, style = Antresol.typography.caption)
                     val host = MediaUrls.hostPort(session.serverUrl)
-                    Text(stringResource(UiR.string.server_connected_to, host), style = Antresol.typography.caption)
+                    Text(stringResource(UiR.string.server_connected_to, host), style = Antresol.typography.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
             HorizontalDivider(color = AntresolColors.Hairline, modifier = Modifier.padding(vertical = 8.dp))

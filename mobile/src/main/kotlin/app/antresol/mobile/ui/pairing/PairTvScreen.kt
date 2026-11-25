@@ -301,8 +301,6 @@ private fun ConfirmStep(step: PairStep.Confirm, viewModel: PairTvViewModel, ownN
             )
         }
     }
-    Text(stringResource(R.string.pair_profile_hint), style = Antresol.typography.caption, modifier = Modifier.padding(horizontal = 4.dp))
-
     step.error?.let {
         Text(
             it.userMessage(LocalContext.current.resources),
@@ -412,8 +410,6 @@ private fun SetupConfirmStep(step: PairStep.SetupConfirm, viewModel: PairTvViewM
             )
         }
     }
-    Text(stringResource(R.string.pair_profile_hint), style = Antresol.typography.caption, modifier = Modifier.padding(horizontal = 4.dp))
-
     if (step.sending) {
         Text(
             stringResource(R.string.pair_setup_sending),

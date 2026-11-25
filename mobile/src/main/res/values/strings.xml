@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Antresol</string>
+    <!-- Each language is named in itself, so it can be found whatever the current one is. -->
+    <string name="language_english" translatable="false">English</string>
+    <string name="language_russian" translatable="false">Русский</string>
 
     <!-- Shell -->
     <string name="card_open_page">Open page</string>
@@ -78,9 +81,7 @@
     <string name="settings_server_address">Address</string>
     <string name="settings_server_version">Server Version</string>
     <string name="settings_video_quality">Video Quality</string>
-    <string name="settings_video_quality_detail">Used when a video starts. You can still change it in the player.</string>
     <string name="settings_autoplay">Autoplay Next Episode</string>
-    <string name="settings_autoplay_detail">Starts after a 10-second countdown</string>
     <string name="settings_about">About</string>
     <string name="settings_app_version">App Version</string>
     <string name="account_open">Account: %1$s</string>
@@ -90,9 +91,7 @@
     <string name="detail_listen_from_start">Listen from Beginning</string>
     <string name="detail_read_from_start">Read from Beginning</string>
     <string name="confirm_sign_out_title">Sign out of this profile?</string>
-    <string name="confirm_sign_out_body">This device forgets the profile. You will have to choose it (and enter its password) again.</string>
-    <string name="confirm_change_server_title">Change server?</string>
-    <string name="confirm_change_server_body">You will go back to entering a server address. Your profiles stay signed in.</string>
+    <string name="confirm_sign_out_body">You will have to choose the profile and enter its password again.</string>
     <string name="reader_page_failed">Page %1$d couldn’t be loaded.</string>
     <string name="detail_go_to_series">Go to Series</string>
 
@@ -108,12 +107,12 @@
     <!-- Sign in a TV (scan its QR code) -->
     <string name="pair_settings_row">Sign In a TV</string>
     <string name="pair_title">Sign In a TV</string>
-    <string name="pair_scan_hint">Point the camera at the QR code on the TV.</string>
-    <string name="pair_camera_rationale">The camera is used only to read the TV’s QR code. Nothing is recorded or sent anywhere.</string>
+    <string name="pair_scan_hint">Scan the QR code on the TV.</string>
+    <string name="pair_camera_rationale">The camera only reads the TV’s QR code. Nothing is recorded.</string>
     <string name="pair_camera_allow">Allow Camera</string>
     <string name="pair_camera_settings">Open Settings</string>
     <string name="pair_camera_denied">Camera access is off. Turn it on in the app’s settings, or type the code below.</string>
-    <string name="pair_code_title">Or type the code shown on the TV</string>
+    <string name="pair_code_title">Or enter the code</string>
     <string name="pair_code_hint">Code, e.g. ABC 234</string>
     <string name="pair_code_invalid">That isn’t a TV code. It has 6 letters and digits.</string>
     <string name="pair_continue">Continue</string>
@@ -122,22 +121,21 @@
     <string name="pair_asks_to_sign_in">wants to sign in</string>
     <string name="pair_remote_warning">This device is not on your home network. Approve only if you are setting it up yourself.</string>
     <string name="pair_profile">Profile on the TV</string>
-    <string name="pair_profile_hint">The TV will be signed in to this profile. Its limits and history apply there.</string>
     <string name="pair_approve">Approve</string>
     <string name="pair_deny">Decline</string>
-    <string name="pair_done">Done. The TV is signing in.</string>
-    <string name="pair_declined">Declined. The TV can show a new code.</string>
+    <string name="pair_done">The TV is signing in.</string>
+    <string name="pair_declined">Declined.</string>
     <string name="pair_scan_again">Sign In Another TV</string>
     <string name="pair_checking">Checking the code…</string>
     <string name="pair_finish">Done</string>
     <string name="pair_setup_title">Set Up a TV</string>
-    <string name="pair_setup_text">The TV will connect to your server and sign in to the profile below. Nothing to type on the TV.</string>
+    <string name="pair_setup_text">The TV will connect to this server and sign in to the profile below.</string>
     <string name="pair_setup_server">Server</string>
     <string name="pair_setup_button">Set Up</string>
     <string name="pair_setup_retry">Try Again</string>
     <string name="pair_setup_cancel">Cancel</string>
     <string name="pair_setup_sending">Setting up the TV…</string>
-    <string name="pair_setup_done">Done. The TV is connecting and signing in.</string>
+    <string name="pair_setup_done">The TV is connecting.</string>
     <string name="pair_setup_expired">The code has expired. Open the setup on the TV again and scan the new code.</string>
     <string name="pair_setup_tv_unreachable">Can’t reach the TV. The phone and the TV must be on the same Wi-Fi network, and the TV must still show the setup code.</string>
     <string name="pair_setup_server_unreachable">The TV can’t reach your server at this address. Make sure the server is on the same network as the TV.</string>

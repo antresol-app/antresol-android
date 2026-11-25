@@ -178,7 +178,7 @@ class LanPairingPhoneUiTest {
         shot("lan-phone-pair-confirm")
         compose.onNodeWithTag("pair-profile-2").performScrollTo().performClick()
         compose.onNodeWithTag("pair-approve").performScrollTo().performClick()
-        waitFor(hasText("Done. The TV is signing in."))
+        waitFor(hasText("The TV is signing in."))
         shot("lan-phone-pair-done")
         assertEquals(listOf("lookup ABC234", "approve ABC234 2"), api.calls)
     }
@@ -211,7 +211,7 @@ class LanPairingPhoneUiTest {
         compose.onNodeWithTag("pair-profile-2").assertDoesNotExist()
         compose.onNodeWithTag("pair-profile-7").assertExists()
         compose.onNodeWithTag("pair-approve").performScrollTo().performClick()
-        waitFor(hasText("Done. The TV is signing in."))
+        waitFor(hasText("The TV is signing in."))
         assertEquals(listOf("lookup ABC234", "approve ABC234 0"), api.calls)
     }
 
@@ -223,7 +223,7 @@ class LanPairingPhoneUiTest {
             AntresolTheme { PairTvScreen(viewModel, ownName = "Alex", ownAvatar = "grad-1", onBack = {}, cameraAllowed = false) }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("only to read the TV’s QR code", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("only reads the TV’s QR code", substring = true).assertIsDisplayed()
         compose.onNodeWithTag("pair-allow-camera").assertIsDisplayed()
         shot("lan-phone-pair-permission")
         compose.onNodeWithTag("pair-code-field").performTextInput("ABC1")
@@ -235,7 +235,7 @@ class LanPairingPhoneUiTest {
         viewModel.onCodeEntered("ABC 234")
         waitFor(hasText("Living Room"))
         compose.onNodeWithTag("pair-deny").performScrollTo().performClick()
-        waitFor(hasText("Declined. The TV can show a new code."))
+        waitFor(hasText("Declined."))
         assertEquals(listOf("lookup ABC234", "deny ABC234"), api.calls)
     }
 

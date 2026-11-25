@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -211,7 +212,6 @@ fun SettingsScreen(
                     item {
                         SettingRow(
                             label = stringResource(R.string.settings_favorites_first),
-                            detail = stringResource(R.string.settings_favorites_first_detail),
                             value = onOffLabel(on),
                             chevron = false,
                             onClick = { channelPrefs.setFavoritesFirst(!on) },
@@ -222,7 +222,6 @@ fun SettingsScreen(
                 item {
                     SettingRow(
                         label = stringResource(TvR.string.settings_autostart),
-                        detail = stringResource(TvR.string.settings_autostart_hint),
                         value = onOffLabel(preferences.autostart),
                         chevron = false,
                         onClick = { setAutostart(!preferences.autostart) },
@@ -233,7 +232,6 @@ fun SettingsScreen(
                         item {
                             SettingRow(
                                 label = stringResource(TvR.string.settings_autostart_permission),
-                                detail = stringResource(TvR.string.settings_autostart_permission_hint).takeIf { !overlayGranted }.orEmpty(),
                                 value = stringResource(if (overlayGranted) TvR.string.settings_permission_allowed else TvR.string.settings_permission_not_allowed),
                                 onClick = { if (!overlayGranted) menu = SettingsMenu.OverlayGuide },
                                 modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.OverlayGuide)),
@@ -243,7 +241,6 @@ fun SettingsScreen(
                     item {
                         SettingRow(
                             label = stringResource(TvR.string.settings_autostart_wake),
-                            detail = stringResource(TvR.string.settings_autostart_wake_hint),
                             value = onOffLabel(preferences.autostartOnWake),
                             chevron = false,
                             onClick = {
@@ -267,11 +264,8 @@ fun SettingsScreen(
                         val failed = deviceHistory.error
                         SettingRow(
                             label = stringResource(R.string.history_separate),
-                            detail = when {
-                                failed != null -> failed.historyMessage()
-                                history != null -> stringResource(R.string.history_separate_on, history.name)
-                                else -> ""
-                            },
+                            // The value says which history; only a refused switch needs a line of its own.
+                            detail = failed?.historyMessage().orEmpty(),
                             value = history?.name ?: stringResource(TvR.string.settings_off),
                             onClick = {
                                 deviceHistory.clearError()
@@ -307,7 +301,6 @@ fun SettingsScreen(
         when (menu) {
             SettingsMenu.Quality -> OptionsPanel(
                 title = stringResource(TvR.string.settings_default_quality),
-                note = stringResource(TvR.string.settings_default_quality_hint),
                 options = Quality.ALL.map { value ->
                     MenuOption(qualityLabel(value), value == preferences.defaultQuality) { settings.update { it.copy(defaultQuality = value) } }
                 },
@@ -315,7 +308,6 @@ fun SettingsScreen(
             )
             SettingsMenu.Subtitles -> OptionsPanel(
                 title = stringResource(TvR.string.settings_subtitles),
-                note = stringResource(TvR.string.settings_subtitles_hint),
                 options = (listOf("") + TvSettings.SUBTITLE_LANGUAGES).map { code ->
                     MenuOption(subtitleLabel(code), code == preferences.subtitleLanguage) { settings.update { it.copy(subtitleLanguage = code) } }
                 },
@@ -471,10 +463,9 @@ private fun ProfileColumn(
         // About
         Text(
             stringResource(TvR.string.settings_app_version, BuildConfig.VERSION_NAME),
-            style = Antresol.typography.caption.copy(color = AntresolColors.Label),
+            style = Antresol.typography.caption,
             textAlign = TextAlign.Center,
         )
-        Text(stringResource(TvR.string.settings_about_text), style = Antresol.typography.caption, textAlign = TextAlign.Center)
     }
 }
 
@@ -517,12 +508,20 @@ private fun SettingRow(label: String, value: String, onClick: () -> Unit, modifi
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Column(Modifier.weight(1f)) {
-                Text(label, style = Antresol.typography.bodyEmphasis, color = LocalContentColor.current, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(label, style = Antresol.typography.bodyEmphasis, color = LocalContentColor.current, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (detail.isNotBlank()) {
-                    Text(detail, style = Antresol.typography.caption, color = LocalContentColor.current.copy(alpha = 0.65f), maxLines = 1)
+                    Text(detail, style = Antresol.typography.caption, color = LocalContentColor.current.copy(alpha = 0.65f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Text(value, style = Antresol.typography.body, color = LocalContentColor.current.copy(alpha = 0.7f), maxLines = 1)
+            // A long value (a history's name) shortens; it never takes the label's room.
+            Text(
+                value,
+                style = Antresol.typography.body,
+                color = LocalContentColor.current.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 240.dp),
+            )
             if (chevron) {
                 Icon(AntresolIcons.ChevronRight, contentDescription = null, tint = LocalContentColor.current.copy(alpha = 0.7f), modifier = Modifier.width(16.dp))
             } else {

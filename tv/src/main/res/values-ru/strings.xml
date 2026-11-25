@@ -45,12 +45,9 @@
 
     <!-- Settings -->
     <string name="settings_default_quality">Качество видео</string>
-    <string name="settings_default_quality_hint">Применяется при запуске видео. В плеере его по-прежнему можно изменить.</string>
     <string name="settings_subtitles">Субтитры</string>
-    <string name="settings_subtitles_hint">Включаются автоматически, если у видео есть субтитры на этом языке.</string>
     <string name="settings_off">Выкл.</string>
     <string name="settings_app_version">Antresol для Android TV %1$s</string>
-    <string name="settings_about_text">Клиент для вашего медиасервера Antresol.</string>
 
     <!-- Review fixes -->
     <string name="music_nothing_to_shuffle">Нет песен для перемешивания</string>
@@ -85,19 +82,16 @@
     <string name="settings_on">Вкл.</string>
     <string name="settings_autostart_section">Автозапуск</string>
     <string name="settings_autostart">Открывать Antresol при включении</string>
-    <string name="settings_autostart_hint">Когда телевизор или приставка включаются.</string>
     <string name="settings_autostart_wake">И после режима ожидания</string>
-    <string name="settings_autostart_wake_hint">Когда экран снова включается.</string>
     <string name="settings_autostart_target">Что открывать</string>
     <string name="settings_autostart_target_last">Где остановились</string>
     <string name="settings_autostart_target_tv">ТВ</string>
     <string name="settings_autostart_target_channel">Последний канал</string>
     <string name="settings_autostart_permission">Поверх других приложений</string>
-    <string name="settings_autostart_permission_hint">Нужно, чтобы Antresol открывался сам. Нажмите OK, чтобы разрешить.</string>
     <string name="settings_permission_allowed">Разрешено</string>
     <string name="settings_permission_not_allowed">Не разрешено</string>
     <string name="settings_overlay_title">Разрешите Antresol открываться самому</string>
-    <string name="settings_overlay_note">Android позволяет приложению открывать свой экран в фоне, только если ему разрешено отображаться поверх других приложений. Antresol ничего не рисует поверх других приложений. Откройте страницу настроек, включите Antresol и нажмите «Назад».</string>
+    <string name="settings_overlay_note">Android разрешает приложению открываться само только с этим разрешением. Antresol ничего не рисует поверх других приложений. Включите его и нажмите «Назад».</string>
     <string name="settings_overlay_open">Открыть настройки</string>
     <string name="settings_overlay_later">Не сейчас</string>
     <string name="settings_overlay_manual">На этом телевизоре нет такой страницы настроек. На компьютере, подключённом к телевизору по adb, выполните:\n%1$s</string>

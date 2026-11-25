@@ -464,7 +464,7 @@ class TvShellUiTest {
         openSettings()
         historyRow()
         assertFocusedText("Living Room")
-        waitFor(hasText("History: “Living Room”"))
+        waitFor(hasText("Living Room"))
         shot("shell-history-on")
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         waitFor(isFocused() and hasAnyDescendant(hasText("Living Room")))

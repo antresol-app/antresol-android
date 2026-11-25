@@ -7,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
@@ -177,8 +181,8 @@ fun SettingsScreen(
                 ) {
                     val name = user?.name ?: session.userName
                     ProfileAvatar(name = name, avatar = user?.avatar ?: session.avatar, size = 56.dp, photoUrl = LocalMediaUrls.current?.image(user?.photo ?: session.photo))
-                    Column {
-                        Text(name, style = Antresol.typography.sectionTitle)
+                    Column(Modifier.weight(1f)) {
+                        Text(name, style = Antresol.typography.sectionTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         val role = when {
                             user?.isAdmin == true -> stringResource(UiR.string.account_admin)
                             user?.isKid == true -> stringResource(R.string.account_kid)
@@ -211,13 +215,12 @@ fun SettingsScreen(
             group {
                 ValueRow(stringResource(R.string.settings_video_quality), qualityLabel(settings.videoQuality), onClick = { qualitySheet = true }, tag = "settings-quality")
                 Divider()
-                SwitchRow(stringResource(R.string.settings_autoplay), stringResource(R.string.settings_autoplay_detail), settings.autoplayNext, settings::updateAutoplayNext, "settings-autoplay")
+                SwitchRow(stringResource(R.string.settings_autoplay), settings.autoplayNext, settings::updateAutoplayNext, "settings-autoplay")
                 // The profile's, on the server (absent on an older server that has no such choice).
                 channelPrefs?.favoritesFirst?.let { on ->
                     Divider()
                     SwitchRow(
                         stringResource(UiR.string.settings_favorites_first),
-                        stringResource(UiR.string.settings_favorites_first_detail),
                         on,
                         channelPrefs::setFavoritesFirst,
                         "settings-favorites-first",
@@ -278,8 +281,8 @@ fun SettingsScreen(
 @Composable
 private fun languageLabel(language: String): String = when (language) {
     // Each language is named in itself so it can be found whatever the current one is.
-    UiLanguages.ENGLISH -> "English"
-    UiLanguages.RUSSIAN -> "Русский"
+    UiLanguages.ENGLISH -> stringResource(R.string.language_english)
+    UiLanguages.RUSSIAN -> stringResource(R.string.language_russian)
     else -> stringResource(UiR.string.ui_language_profile)
 }
 
@@ -325,6 +328,8 @@ private fun ActionRow(icon: ImageVector, label: String, onClick: () -> Unit, tag
     }
 }
 
+/** A label and its value on one line while they fit; when they do not, the value goes under the label (they never overlap). */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ValueRow(label: String, value: String, onClick: (() -> Unit)? = null, tag: String? = null) {
     Row(
@@ -336,14 +341,20 @@ private fun ValueRow(label: String, value: String, onClick: (() -> Unit)? = null
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(label, style = Antresol.typography.body, modifier = Modifier.weight(1f))
-        Text(value, style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        FlowRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(label, style = Antresol.typography.body)
+            Text(value, style = Antresol.typography.body.copy(color = AntresolColors.LabelSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
         if (onClick != null) Icon(AntresolIcons.ChevronRight, contentDescription = null, tint = AntresolColors.LabelTertiary, modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
-private fun SwitchRow(label: String, detail: String, checked: Boolean, onChange: (Boolean) -> Unit, tag: String) {
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, tag: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -355,10 +366,7 @@ private fun SwitchRow(label: String, detail: String, checked: Boolean, onChange:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = Antresol.typography.body)
-            Text(detail, style = Antresol.typography.caption)
-        }
+        Text(label, style = Antresol.typography.body, modifier = Modifier.weight(1f))
         Switch(
             checked = checked,
             onCheckedChange = null,
@@ -382,20 +390,20 @@ private fun DeviceRow(device: DeviceSession, onRevoke: () -> Unit) {
                 device.version.takeIf { it.isNotBlank() }?.let { "v$it" },
                 lastSeenDate(LocalContext.current, device.lastSeen),
             ).joinToString(" · ")
-            if (detail.isNotBlank()) Text(detail, style = Antresol.typography.caption, maxLines = 1)
+            if (detail.isNotBlank()) Text(detail, style = Antresol.typography.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         if (device.current) {
             Text(stringResource(UiR.string.settings_this_device), style = Antresol.typography.caption.copy(color = AntresolColors.Green))
         } else {
-            Box(
-                Modifier
-                    .size(36.dp)
-                    .focusClickable(CircleShape, onClick = onRevoke)
-                    .testTag("revoke-${device.id}"),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(MobileIcons.Close, contentDescription = stringResource(UiR.string.settings_revoke), tint = AntresolColors.LabelTertiary, modifier = Modifier.size(18.dp))
-            }
+            // The word, not a bare ✕: what it does is on the button, and the touch target is a full 48 dp.
+            Text(
+                stringResource(UiR.string.settings_revoke),
+                style = Antresol.typography.body.copy(color = AntresolColors.Red),
+                modifier = Modifier
+                    .focusClickable(AntresolShapes.control, role = Role.Button, onClick = onRevoke)
+                    .testTag("revoke-${device.id}")
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+            )
         }
     }
 }
@@ -414,7 +422,7 @@ private fun QualityDialog(selected: String, onSelect: (String) -> Unit, onDismis
         containerColor = AntresolColors.BackgroundElevated,
         title = { Text(stringResource(R.string.settings_video_quality)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Quality.ALL.forEach { value ->
                     Row(
                         modifier = Modifier
@@ -431,11 +439,6 @@ private fun QualityDialog(selected: String, onSelect: (String) -> Unit, onDismis
                         Text(qualityLabel(value), style = Antresol.typography.body)
                     }
                 }
-                Text(
-                    stringResource(R.string.settings_video_quality_detail),
-                    style = Antresol.typography.caption,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(UiR.string.action_cancel)) } },

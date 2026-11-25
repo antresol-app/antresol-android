@@ -117,13 +117,13 @@ class TvSetupPhoneUiTest {
         compose.onNodeWithText("camera").performClick()
         waitFor(hasText("Set Up a TV"))
         compose.onNodeWithText("192.168.1.10:8420").assertExists()
-        compose.onNodeWithText("The TV will connect to your server", substring = true).assertExists()
+        compose.onNodeWithText("The TV will connect to this server", substring = true).assertExists()
         // Nothing went to the TV yet: the card asks first.
         assertTrue(tv.posts.isEmpty())
         compose.onNodeWithTag("pair-profile-2").performScrollTo().performClick()
         shot("phone-setup-confirm")
         compose.onNodeWithTag("pair-setup").performScrollTo().performClick()
-        waitFor(hasText("Done. The TV is connecting and signing in."))
+        waitFor(hasText("The TV is connecting."))
         shot("phone-setup-done")
         assertEquals(listOf("192.168.1.50:41234 AAAAAAAAAAAAAAAAAAAAAA $serverUrl $serverId"), tv.posts)
         assertEquals(listOf("lookup ABC234", "approve ABC234 2"), api.calls)
@@ -150,7 +150,7 @@ class TvSetupPhoneUiTest {
         compose.onNodeWithTag("pair-profile-2").assertDoesNotExist()
         compose.onNodeWithTag("pair-profile-7").assertExists()
         compose.onNodeWithTag("pair-setup").performScrollTo().performClick()
-        waitFor(hasText("Done. The TV is connecting and signing in."))
+        waitFor(hasText("The TV is connecting."))
         assertEquals(listOf("lookup ABC234", "approve ABC234 0"), api.calls)
     }
 
@@ -182,7 +182,7 @@ class TvSetupPhoneUiTest {
         waitFor(hasText("The TV is connected to the server, but the sign-in didn’t go through", substring = true))
         assertEquals(1, tv.posts.size)
         compose.onNodeWithTag("pair-setup").performScrollTo().performClick()
-        waitFor(hasText("Done. The TV is connecting and signing in."))
+        waitFor(hasText("The TV is connecting."))
         assertEquals(1, tv.posts.size)
         assertEquals(listOf("lookup ABC234", "lookup ABC234", "approve ABC234 0"), api.calls)
     }
@@ -198,7 +198,7 @@ class TvSetupPhoneUiTest {
         waitFor(hasText("different Antresol server", substring = true))
         assertTrue(api.calls.isEmpty())
         compose.onNodeWithTag("pair-setup-cancel").performScrollTo().performClick()
-        waitFor(hasText("Point the camera at the QR code on the TV."))
+        waitFor(hasText("Scan the QR code on the TV."))
     }
 
     private fun waitFor(matcher: SemanticsMatcher, timeoutMs: Long = 10_000) {

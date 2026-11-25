@@ -59,8 +59,9 @@ import androidx.media3.common.Player
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.Lyrics
 import app.antresol.core.playback.Chapters
-import app.antresol.core.playback.lineIndexAt
 import app.antresol.core.playback.plainText
+import app.antresol.core.playback.rowIndexAt
+import app.antresol.core.playback.rows
 import app.antresol.mobile.R
 import app.antresol.mobile.playback.NowPlaying
 import app.antresol.mobile.playback.PlaybackConnection
@@ -389,7 +390,8 @@ private fun LyricsPanel(trackId: Long, playback: PlaybackConnection, client: Ant
         return ErrorView(error, onRetry = { attempt++ })
     }
     val loaded = result.getOrNull()
-    if (loaded == null || (loaded.lines.isEmpty() && loaded.lyrics.isBlank())) {
+    val rows = remember(loaded) { loaded?.rows().orEmpty() }
+    if (loaded == null || rows.isEmpty()) {
         return EmptyView(stringResource(R.string.now_playing_no_lyrics))
     }
     if (!loaded.synced || loaded.lines.isEmpty()) {
@@ -400,22 +402,21 @@ private fun LyricsPanel(trackId: Long, playback: PlaybackConnection, client: Ant
         )
         return
     }
-    val lines = loaded.lines
-    val currentLine = loaded.lineIndexAt(playback.positionMs).coerceAtLeast(0)
+    val currentLine = loaded.rowIndexAt(rows, playback.positionMs).coerceAtLeast(0)
     val listState = rememberLazyListState()
     LaunchedEffect(currentLine) { listState.animateScrollToItem((currentLine - 2).coerceAtLeast(0)) }
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("lyrics"), contentPadding = PaddingValues(vertical = 24.dp)) {
-        itemsIndexed(lines) { index, line ->
+        itemsIndexed(rows) { index, row ->
             val active = index == currentLine
             Text(
-                line.text.ifBlank { "♪" },
+                if (row.instrumental) "♪" else row.text,
                 style = Antresol.typography.sectionTitle.copy(
                     color = if (active) AntresolColors.Label else AntresolColors.LabelTertiary,
                     fontWeight = if (active) FontWeight.Bold else FontWeight.SemiBold,
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { playback.seekTo((line.t * 1000).toLong()) }
+                    .clickable { playback.seekTo((row.startSec * 1000).toLong()) }
                     .padding(vertical = 8.dp),
             )
         }

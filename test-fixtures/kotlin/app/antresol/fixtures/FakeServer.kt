@@ -92,6 +92,9 @@ class FakeServer {
 
     private val images = ConcurrentHashMap<String, ByteArray>()
 
+    /** The JSON `GET /api/music/tracks/{id}/lyrics` answers for every track; null: the track has none (404). */
+    @Volatile var lyricsJson: String? = null
+
     /** The profile is a kid's: the separate-history writes answer 403, as the server's `noKids`. */
     @Volatile var kid: Boolean = false
 
@@ -224,6 +227,8 @@ class FakeServer {
             path.startsWith("/api/progress/") && method == "GET" -> json(progressJson(path.substringAfterLast('/').toLongOrNull() ?: 0))
             path.startsWith("/api/music/home") || path.startsWith("/api/books/home") -> json("""{"shelves":[]}""")
             path == "/api/music/genres" -> json("""{"genres":[]}""")
+            path.matches(Regex("/api/music/tracks/\\d+/lyrics")) -> lyricsJson?.let(::json)
+                ?: MockResponse().setResponseCode(404).setBody("""{"error":"no lyrics"}""")
             path == "/api/channels" -> json("""{"channels":[]}""")
             else -> MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
         }

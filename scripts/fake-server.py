@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A small fake Antresol server for driving the apps by hand (an emulator or a device).
 
-    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>] [--addons] [--kid] [--requests] [--family]
+    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>] [--addons] [--kid] [--requests] [--family] [--lyrics] [--long-titles]
 
 It answers what test-fixtures' FakeServer answers (passwordless profiles, one with a photo, home, grids, a film and
 a series page, trailers) with the same JSON, plus live channels and the programme guide. In an
@@ -14,7 +14,9 @@ Music is one album («Golden Hours» by «Northern Static», three tracks) under
 The tracks are 60 s WAV melodies made here from sine waves (Python's standard library only, rendered on
 the first request of each track), served from `/api/tracks/<id>/stream` with Range support, so they
 play with sound, seek, and keep playing in the background. Stars are kept for the run; plays are
-accepted and forgotten; no track has lyrics.
+accepted and forgotten; no track has lyrics unless --lyrics: «Morning Light» then has synced ones (an empty first line, a
+sung stretch, two instrumental lines in a row, an empty last line, as LRC files from the public lyrics service often do),
+«Slow Tide» plain ones with blank lines between the stanzas; --long-titles gives «Morning Light» a title too long for one line.
 
 The guide is one fixed schedule per channel (it depends on the channel and the UTC day the script
 was started on: it stays as it is when midnight passes during a run), cut
@@ -313,6 +315,20 @@ SONGS = {
 }
 starred = set()
 wavs, wav_lock = {}, threading.Lock()
+music_options = {"lyrics": False, "long_titles": False}
+LONG_TITLE = "Morning Light (Extended Orchestral Version with the Whole Choir and a Very Long Subtitle)"
+
+# Lyrics (--lyrics) of the first two tracks. Made up here; the shape is what real LRC files have: the first line is empty
+# (the intro), an instrumental break is an empty line or a note sign, two of them can follow each other.
+SYNCED_LYRICS = [
+    (0.0, ""), (3.0, "I walked down to the river"), (6.0, "Where the lanterns drift"), (9.0, "Nobody knows my name"),
+    (12.0, "Do you hear the water?"), (15.0, "It has changed its course"), (18.0, "And so have I"), (21.0, "Under the morning light"),
+    (24.0, "Carrying what I have"), (27.0, "One more verse to the shore"), (30.0, "And the shore is far"), (33.0, "Just wait for the tide to turn"),
+    (36.0, "♪"), (39.0, ""), (42.0, "I know the river is patient now (patient now)"),
+    (46.0, "Know the sea is waiting for someone who can stay (who can stay)"), (52.0, "La la la"), (56.0, ""),
+]
+PLAIN_LYRICS = ("Slow tide, slow tide\nCarry me home\n\nThe lamps are lit along the quay\nAnd nobody is alone\n\n\n"
+                "Slow tide, slow tide\nWash the day away")
 
 
 def cover(i):
@@ -328,9 +344,10 @@ def artist_card():
 
 
 def track(i):
-    return {"id": i, "title": SONGS[i][0], "artist": ARTIST_NAME, "artistId": ARTIST, "albumId": ALBUM, "album": ALBUM_TITLE,
+    title = LONG_TITLE if i == TRACKS[0] and music_options["long_titles"] else SONGS[i][0]
+    return {"id": i, "title": title, "artist": ARTIST_NAME, "artistId": ARTIST, "albumId": ALBUM, "album": ALBUM_TITLE,
             "discNo": 1, "trackNo": TRACKS.index(i) + 1, "durationMs": TRACK_SECONDS * 1000, "fileId": i + 8100,
-            "lossless": True, "hasLyrics": False, "cover": cover(ALBUM), "starred": i in starred, "cue": False}
+            "lossless": True, "hasLyrics": music_options["lyrics"] and i != TRACKS[2], "cover": cover(ALBUM), "starred": i in starred, "cue": False}
 
 
 def music_home():
@@ -411,7 +428,13 @@ def music(path, query):
     if match := re.fullmatch(r"/api/music/tracks/(\d+)(/lyrics)?", path):
         if int(match[1]) not in TRACKS:
             return missing
-        return 200, ({"lyrics": "", "synced": False, "source": "", "lines": []} if match[2] else track(int(match[1])))
+        if not match[2]:
+            return 200, track(int(match[1]))
+        if music_options["lyrics"] and int(match[1]) == TRACKS[0]:
+            return 200, {"lyrics": "", "synced": True, "source": "lrc", "lines": [{"t": t, "text": text} for t, text in SYNCED_LYRICS]}
+        if music_options["lyrics"] and int(match[1]) == TRACKS[1]:
+            return 200, {"lyrics": PLAIN_LYRICS, "synced": False, "source": "lrc", "lines": []}
+        return 200, {"lyrics": "", "synced": False, "source": "", "lines": []}
     return None
 
 
@@ -823,9 +846,12 @@ if __name__ == "__main__":
     args.add_argument("--kid", action="store_true", help="the profile is a kid's (no «Отдельная история»; its writes answer 403)")
     args.add_argument("--requests", action="store_true", help="kids' requests are open (see above): with --kid the profile asks, without it answers")
     args.add_argument("--family", action="store_true", help="other profiles have places in the library's titles («Семья»; see above)")
+    args.add_argument("--lyrics", action="store_true", help="the first two tracks have lyrics (synced, with empty and instrumental lines; plain, with blank lines)")
+    args.add_argument("--long-titles", action="store_true", help="the first track's title is too long for one line")
     args.add_argument("--lang", choices=["ru", "en"], default="", help="the profile's interface language (default: none chosen, English)")
     options = args.parse_args()
     ui_language[0] = options.lang
+    music_options.update(lyrics=options.lyrics, long_titles=options.long_titles)
     ME["isKid"] = options.kid
     requests_state["on"] = options.requests
     family_state["on"] = options.family

@@ -242,6 +242,8 @@ private fun PlayingOverlay(viewModel: PlayerViewModel, onExit: () -> Unit) {
             subtitleChoice = subtitleChoice,
             nextEpisode = viewModel.nextEpisode != null,
             autoSkipChoice = viewModel.hasSkipSegments,
+            // Somebody else is somewhere in what plays.
+            familyChoice = viewModel.familyHere.isNotEmpty(),
             // A stream an addon serves: only the qualities its answer lists.
             qualityChoice = viewModel.canChooseQuality,
         ),
@@ -280,6 +282,8 @@ internal data class TransportState(
     val qualityChoice: Boolean = true,
     /** «Пропускать сам» (the file has skip segments). */
     val autoSkipChoice: Boolean = false,
+    /** «Семья» (other profiles are somewhere in this item). */
+    val familyChoice: Boolean = false,
 )
 
 /** What the controls do; the key handlers return true when they used the key. */
@@ -586,6 +590,14 @@ private fun TransportControls(
                         modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.AutoSkip)),
                     )
                 }
+                if (transport.familyChoice) {
+                    PlayerIconButton(
+                        icon = AntresolIcons.People,
+                        label = stringResource(R.string.family_title),
+                        onClick = { onOpenMenu(PlayerMenu.Family) },
+                        modifier = Modifier.focusRequester(menuFocus.getValue(PlayerMenu.Family)).testTag(PlayerTags.FAMILY),
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 if (transport.nextEpisode) {
                     PlayerIconButton(icon = AntresolIcons.SkipNext, label = stringResource(R.string.player_next_episode), onClick = actions.onNext)
@@ -599,6 +611,7 @@ private fun TransportControls(
 internal object PlayerTags {
     const val SEEK_BAR = "player-seek"
     const val PLAY_PAUSE = "player-play-pause"
+    const val FAMILY = "player-family"
 }
 
 @Composable

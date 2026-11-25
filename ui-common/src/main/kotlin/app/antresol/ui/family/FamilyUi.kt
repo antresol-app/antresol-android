@@ -130,13 +130,26 @@ fun FamilyLineContent(
         FamilyFaces(members, photoUrl, faceSize, contentColor)
         Column(Modifier.weight(1f, fill = false)) {
             Text(stringResource(R.string.family_title).uppercase(), style = Antresol.typography.eyebrow, color = secondaryColor, maxLines = 1)
-            Text(
-                FamilyTexts.summary(resources, kind, members, chapters) + if (more > 0) " · " + pluralStringResource(R.plurals.family_and_more, more, more) else "",
-                style = Antresol.typography.bodyEmphasis,
-                color = contentColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // The place gives way when the line is short; «· ещё 2» is never cut.
+            Row {
+                Text(
+                    FamilyTexts.summary(resources, kind, members, chapters),
+                    style = Antresol.typography.bodyEmphasis,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (more > 0) {
+                    Text(
+                        " · " + pluralStringResource(R.plurals.family_and_more, more, more),
+                        style = Antresol.typography.bodyEmphasis,
+                        color = secondaryColor,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
         }
         Icon(AntresolIcons.ChevronRight, contentDescription = null, tint = secondaryColor, modifier = Modifier.size(16.dp))
     }

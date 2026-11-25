@@ -86,9 +86,7 @@
     <string name="detail_listen_from_start">Слушать с начала</string>
     <string name="detail_read_from_start">Читать с начала</string>
     <string name="confirm_sign_out_title">Выйти из профиля?</string>
-    <string name="confirm_sign_out_body">Устройство забудет профиль. Его придётся снова выбрать (и ввести пароль).</string>
-    <string name="confirm_change_server_title">Сменить сервер?</string>
-    <string name="confirm_change_server_body">Вы вернётесь к вводу адреса сервера. Вход в профили сохранится.</string>
+    <string name="confirm_sign_out_body">Профиль придётся выбрать и ввести пароль заново.</string>
     <string name="reader_page_failed">Не удалось загрузить страницу %1$d.</string>
     <string name="detail_go_to_series">К сериалу</string>
 

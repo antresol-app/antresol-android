@@ -142,9 +142,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
-/** Session actions that ask first: one mis-tap must not revoke the token or drop the server. */
-private enum class SessionAction { SignOut, ChangeServer }
-
 /**
  * The signed-in app: a NavHost of tab roots and pushed pages under the floating tab bar. Each tab
  * keeps its own back stack (save/restore state); tapping the current tab pops back to its root.
@@ -200,7 +197,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var showAccount by rememberSaveable { mutableStateOf(false) }
-    var confirm by rememberSaveable { mutableStateOf<SessionAction?>(null) }
+    // Signing out asks first (a mis-tap must not revoke the token); changing the server does not: saved sign-ins stay.
+    var confirmSignOut by rememberSaveable { mutableStateOf(false) }
     var currentTab by rememberSaveable { mutableStateOf(NavTab.Home) }
 
     val backStack by navController.currentBackStackEntryAsState()
@@ -213,14 +211,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
     val playback = app.playback
     // Session changes run in the app scope: a rotation must not cancel a sign-out halfway.
     val switchProfile: () -> Unit = { app.appScope.launch { session.switchProfile() } }
-    val runSessionAction: (SessionAction) -> Unit = { action ->
-        app.appScope.launch {
-            when (action) {
-                SessionAction.SignOut -> session.signOut()
-                SessionAction.ChangeServer -> session.changeServer()
-            }
-        }
-    }
+    val signOut: () -> Unit = { app.appScope.launch { session.signOut() } }
+    val changeServer: () -> Unit = { app.appScope.launch { session.changeServer() } }
     var showNowPlaying by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(playback.nowPlayingRequested) {
         if (playback.nowPlayingRequested) {
@@ -476,8 +468,8 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                             user = user,
                             onBack = back,
                             onSwitchProfile = switchProfile,
-                            onSignOut = { confirm = SessionAction.SignOut },
-                            onChangeServer = { confirm = SessionAction.ChangeServer },
+                            onSignOut = { confirmSignOut = true },
+                            onChangeServer = changeServer,
                             onPairTv = { navController.navigate(PairTvRoute) },
                             language = uiLanguage,
                             // A new order: the shell's channel list (Home's shelf, the «ТВ» tab) is read again.
@@ -550,11 +542,11 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 },
                 onSignOut = {
                     showAccount = false
-                    confirm = SessionAction.SignOut
+                    confirmSignOut = true
                 },
                 onChangeServer = {
                     showAccount = false
-                    confirm = SessionAction.ChangeServer
+                    changeServer()
                 },
                 onSettings = {
                     showAccount = false
@@ -562,14 +554,13 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                 },
             )
         }
-        confirm?.let { action ->
-            SessionActionDialog(
-                action = action,
+        if (confirmSignOut) {
+            SignOutDialog(
                 onConfirm = {
-                    confirm = null
-                    runSessionAction(action)
+                    confirmSignOut = false
+                    signOut()
                 },
-                onDismiss = { confirm = null },
+                onDismiss = { confirmSignOut = false },
             )
         }
     }
@@ -584,7 +575,6 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.pageFadeMs(): Int 
     return if (zoom) POSTER_ZOOM_MS else 200
 }
 
-/** Confirms Sign Out or Change Server; Cancel is the safe default. */
 /**
  * A page that keeps clear of a camera cutout or a side navigation bar in landscape (nothing in
  * portrait). Home and the detail pages are plain `composable`s: their backdrops go edge to edge and
@@ -599,18 +589,14 @@ private inline fun <reified T : Any> NavGraphBuilder.padded(noinline content: @C
 }
 
 @Composable
-private fun SessionActionDialog(action: SessionAction, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    val (title, body, confirmLabel) = when (action) {
-        SessionAction.SignOut -> Triple(MobileR.string.confirm_sign_out_title, MobileR.string.confirm_sign_out_body, R.string.profile_sign_out)
-        SessionAction.ChangeServer -> Triple(MobileR.string.confirm_change_server_title, MobileR.string.confirm_change_server_body, R.string.server_change)
-    }
+internal fun SignOutDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = AntresolColors.BackgroundElevated,
-        title = { Text(stringResource(title)) },
-        text = { Text(stringResource(body)) },
+        title = { Text(stringResource(MobileR.string.confirm_sign_out_title)) },
+        text = { Text(stringResource(MobileR.string.confirm_sign_out_body)) },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text(stringResource(confirmLabel), color = AntresolColors.Red) }
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.profile_sign_out), color = AntresolColors.Red) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )

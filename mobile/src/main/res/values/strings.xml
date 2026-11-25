@@ -91,9 +91,7 @@
     <string name="detail_listen_from_start">Listen from Beginning</string>
     <string name="detail_read_from_start">Read from Beginning</string>
     <string name="confirm_sign_out_title">Sign out of this profile?</string>
-    <string name="confirm_sign_out_body">This device forgets the profile. You will have to choose it (and enter its password) again.</string>
-    <string name="confirm_change_server_title">Change server?</string>
-    <string name="confirm_change_server_body">You will go back to entering a server address. Your profiles stay signed in.</string>
+    <string name="confirm_sign_out_body">You will have to choose the profile and enter its password again.</string>
     <string name="reader_page_failed">Page %1$d couldn’t be loaded.</string>
     <string name="detail_go_to_series">Go to Series</string>
 

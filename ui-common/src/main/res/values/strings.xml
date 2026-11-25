@@ -329,4 +329,34 @@
         <item quantity="one">%1$d request waiting</item>
         <item quantity="other">%1$d requests waiting</item>
     </plurals>
+
+    <!-- Family: where the other profiles are in a title (page line, list, player menu) -->
+    <string name="family_title">Family</string>
+    <plurals name="family_and_more">
+        <item quantity="one">%1$d more</item>
+        <item quantity="other">%1$d more</item>
+    </plurals>
+    <string name="family_all_watched">All watched</string>
+    <string name="family_watched">Watched</string>
+    <string name="family_read">Finished</string>
+    <string name="family_heard">Finished</string>
+    <string name="family_next">Up next: %1$s</string>
+    <string name="family_time_of">%1$s of %2$s</string>
+    <string name="family_page">p. %1$d</string>
+    <string name="family_page_of">p. %1$d of %2$d</string>
+    <string name="family_percent">%1$d%%</string>
+    <string name="family_chapter">Chapter %1$d</string>
+    <string name="family_volume">Vol. %1$s</string>
+    <string name="family_episode_code">S%1$d E%2$d</string>
+    <string name="family_episode_special">Special %1$d</string>
+    <string name="family_watch_at">Play from %1$s</string>
+    <string name="family_watch_episode">Play %1$s</string>
+    <string name="family_watch_episode_at">%1$s from %2$s</string>
+    <string name="family_listen_at">Listen from %1$s</string>
+    <string name="family_read_page">Read from p. %1$d</string>
+    <string name="family_read_at">Read from %1$d%%</string>
+    <string name="family_read_volume">Read %1$s</string>
+    <string name="family_jump_description">%1$s — from %2$s’s place</string>
+    <string name="family_note">Pick up where they are — the progress is saved to your profile.</string>
+    <string name="family_jump_failed">Couldn’t continue from there. Try again.</string>
 </resources>

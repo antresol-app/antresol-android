@@ -25,6 +25,8 @@ android {
     }
 
     testOptions {
+        // The words of a screen (FamilyTexts) are tested against the real string resources.
+        unitTests.isIncludeAndroidResources = true
         unitTests.all { it.maxHeapSize = "1g" }
     }
 }

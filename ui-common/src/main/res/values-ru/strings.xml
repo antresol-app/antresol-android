@@ -331,4 +331,36 @@
         <item quantity="many">%1$d запросов ждут ответа</item>
         <item quantity="other">%1$d запроса ждут ответа</item>
     </plurals>
+
+    <!-- Семья: где остальные профили в этом фильме, книге… (строка страницы, список, меню плеера) -->
+    <string name="family_title">Семья</string>
+    <plurals name="family_and_more">
+        <item quantity="one">ещё %1$d</item>
+        <item quantity="few">ещё %1$d</item>
+        <item quantity="many">ещё %1$d</item>
+        <item quantity="other">ещё %1$d</item>
+    </plurals>
+    <string name="family_all_watched">Всё просмотрено</string>
+    <string name="family_watched">Просмотрено</string>
+    <string name="family_read">Прочитано</string>
+    <string name="family_heard">Прослушано</string>
+    <string name="family_next">Далее: %1$s</string>
+    <string name="family_time_of">%1$s из %2$s</string>
+    <string name="family_page">стр. %1$d</string>
+    <string name="family_page_of">стр. %1$d из %2$d</string>
+    <string name="family_percent">%1$d %%</string>
+    <string name="family_chapter">Глава %1$d</string>
+    <string name="family_volume">Том %1$s</string>
+    <string name="family_episode_code">С%1$d Э%2$d</string>
+    <string name="family_episode_special">Спецвыпуск %1$d</string>
+    <string name="family_watch_at">Смотреть с %1$s</string>
+    <string name="family_watch_episode">Смотреть %1$s</string>
+    <string name="family_watch_episode_at">%1$s с %2$s</string>
+    <string name="family_listen_at">Слушать с %1$s</string>
+    <string name="family_read_page">Читать со стр. %1$d</string>
+    <string name="family_read_at">Читать с %1$d %%</string>
+    <string name="family_read_volume">Читать: %1$s</string>
+    <string name="family_jump_description">%1$s — с места профиля «%2$s»</string>
+    <string name="family_note">Продолжите с чужого места — прогресс сохранится в вашем профиле.</string>
+    <string name="family_jump_failed">Не получилось продолжить с этого места. Попробуйте ещё раз.</string>
 </resources>

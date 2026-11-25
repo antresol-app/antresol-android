@@ -32,9 +32,11 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.ApiException
 import app.antresol.core.api.attempt
+import app.antresol.core.family.familyApi
 import app.antresol.core.model.AudioTrack
 import app.antresol.core.model.AutoSkip
 import app.antresol.core.model.AutoSkipRequest
+import app.antresol.core.model.FamilyMember
 import app.antresol.core.playback.AudioMenu
 import app.antresol.core.model.EpisodeCard
 import app.antresol.core.model.FileInfo
@@ -74,6 +76,7 @@ import app.antresol.core.ways.inputVideoApi
 import app.antresol.core.ways.waysApi
 import app.antresol.core.ways.wayPlaybackApi
 import app.antresol.ui.R
+import app.antresol.ui.family.FamilyModel
 import app.antresol.ui.userMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -303,6 +306,28 @@ open class VideoPlayerViewModel(
     var noticeText: String? by mutableStateOf(null)
 
     private var currentItemId = itemId
+
+    /** «Семья»: where the other profiles are in the item that plays (a library item; an addon's stream is none). */
+    val family = FamilyModel(client.familyApi(), viewModelScope)
+
+    /** The profiles that are somewhere in the item that plays (not finished, with a position): the «Семья» menu lists them. */
+    val familyHere: List<FamilyMember> get() = family.members.filter { it.itemId == currentItemId && !it.finished && it.positionMs > 0 }
+
+    fun familyPhoto(m: FamilyMember): String? = client.urls.image(m.photo)
+
+    /**
+     * Continues from [m]'s place: their position becomes this profile's own first (never the other way round), then the
+     * player goes there: a seek in this item, or the next episode / another episode from its start / its saved place.
+     */
+    fun jumpToFamily(m: FamilyMember) = family.jump(m) { place ->
+        if (place.itemId == currentItemId && !place.next) {
+            seekTo(place.positionMs)
+        } else {
+            finishCurrent()
+            start(place.itemId, if (place.next) ResumeMode.FromStart else ResumeMode.Resume)
+        }
+    }
+
     private var wayDirect: WayPlayback.Direct? by mutableStateOf(null)
 
     /** The quality picked in the menu of an addon's stream: kept when its link is made again (a stale one). */
@@ -427,6 +452,7 @@ open class VideoPlayerViewModel(
                 val file = detail.files.firstOrNull() ?: throw PlaybackUnavailableException()
                 item = detail
                 currentItemId = detail.id
+                family.load(detail.id)
                 findNextEpisode(detail)
                 // A series or season plays one of its episodes: the early answer is not that episode's.
                 val asked = early?.takeIf { detail.id == itemId }

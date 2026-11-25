@@ -70,6 +70,12 @@ class FakeServer {
     /** The addon's search also finds a series that is not in the library («Far Away Show»). */
     @Volatile var searchSeries: Boolean = false
 
+    /** The addon's title search answers after this many ms (a search that is still looking). */
+    @Volatile var addonSearchDelayMs: Long = 0
+
+    /** `GET /api/search` finds nothing in the library. */
+    @Volatile var searchLibraryEmpty: Boolean = false
+
     /** The addon's `run` answers after this many ms (a run that is still waiting). */
     @Volatile var runDelayMs: Long = 0
 
@@ -138,7 +144,7 @@ class FakeServer {
             path == "/api/me/ui-language" -> json("""{"language":"","effective":"en"}""")
             path == "/api/me/playback-prefs" -> json("""{"audioLangs":[],"subMode":"off","subLangs":[]}""")
             path == "/api/home" -> json(home())
-            path == "/api/search" -> json("""{"library":[${movieCard(MOVIE_ID)}],"albums":[],"artists":[],"songs":[]}""")
+            path == "/api/search" -> json("""{"library":[${if (searchLibraryEmpty) "" else movieCard(MOVIE_ID)}],"albums":[],"artists":[],"songs":[]}""")
             path == "/api/items" -> json(if ("kind=series" in query) shows() else movies())
             path.matches(Regex("/api/items/\\d+/trailers")) -> json(trailers(path.split('/')[3].toLong()))
             path.matches(Regex("/api/items/\\d+")) -> json(item(path.substringAfterLast('/').toLong()))
@@ -208,7 +214,7 @@ class FakeServer {
                     {"kind":"movie","tmdbId":$OUTSIDE_TMDB,"title":"Far Away Film","year":2020,"poster":"/api/images/local/outside/poster","inLibrary":false}
                     ${if (searchSeries) """,{"kind":"series","tmdbId":$OUTSIDE_SERIES_TMDB,"title":"Far Away Show","year":2021,"poster":"/api/images/local/outside/poster","inLibrary":false}""" else ""}
                    ]}""",
-            )
+            ).setBodyDelay(addonSearchDelayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
             path == "/api/addons/alpha/x/app/step" -> when (bodyOf("ref")) {
                 null -> json(
                     """{"title":"Source","note":"Pick a source","rows":[

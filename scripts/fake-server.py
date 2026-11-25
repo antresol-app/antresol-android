@@ -73,6 +73,8 @@ SERIES, MOVIE, EPISODES = 500, 100, list(range(601, 607))
 SERIES_TMDB, MOVIE_TMDB, OUTSIDE_TMDB = 1399, 603, 9001
 # --addons: the protocol of one addon, "alpha"; what its ways remember and do is kept for the run.
 addon = {"on": False, "remembered": False, "keep": {"since": None}}
+# --lang: the profile's interface language (the apps show their words in it).
+ui_language = [""]
 # --requests: kids' requests, by kind|key (see kid_requests_answer).
 requests_state = {"on": False, "next": 4, "items": {}}
 BLOCKED_TMDB, OUTSIDE_SERIES_TMDB = 9009, 9002
@@ -722,7 +724,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/profiles": PROFILES,
             "/api/auth/token": {"token": "test-device-token", "user": {**ME, **({"canRequest": kid, "requests": not kid} if requests_state["on"] else {})}},
             "/api/me": {**ME, "deviceHistory": history_ref(), **({"canRequest": kid, "requests": not kid} if requests_state["on"] else {})},
-            "/api/me/ui-language": {"language": "", "effective": "en"},
+            "/api/me/ui-language": {"language": ui_language[0], "effective": ui_language[0] or "en"},
             "/api/me/playback-prefs": {"audioLangs": [], "subMode": "off", "subLangs": []},
             "/api/search": {"library": [movie_card(MOVIE)], "albums": [], "artists": [], "songs": []},
             "/api/home": home(),
@@ -757,7 +759,9 @@ if __name__ == "__main__":
     args.add_argument("--addons", action="store_true", help="the server has one addon, \"alpha\", speaking the `x/app` protocol (ways to watch and to keep, a title search)")
     args.add_argument("--kid", action="store_true", help="the profile is a kid's (no «Отдельная история»; its writes answer 403)")
     args.add_argument("--requests", action="store_true", help="kids' requests are open (see above): with --kid the profile asks, without it answers")
+    args.add_argument("--lang", choices=["ru", "en"], default="", help="the profile's interface language (default: none chosen, English)")
     options = args.parse_args()
+    ui_language[0] = options.lang
     ME["isKid"] = options.kid
     requests_state["on"] = options.requests
     if options.requests:

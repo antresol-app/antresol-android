@@ -66,6 +66,11 @@ import app.antresol.core.model.SearchResults
 import app.antresol.core.model.SetupStatus
 import app.antresol.core.model.StepRequest
 import app.antresol.core.model.TitleInfo
+import app.antresol.core.model.KidAsk
+import app.antresol.core.model.KidCandidate
+import app.antresol.core.model.KidRequest
+import app.antresol.core.model.RequestCount
+import app.antresol.core.model.DeclineBody
 import app.antresol.core.model.ShelvesResponse
 import app.antresol.core.model.ShuffleSource
 import app.antresol.core.model.TokenRequest
@@ -575,6 +580,40 @@ class AntresolClient(
 
     /** `GET /api/title/{kind}/{tmdbId}`: a movie or series by its TMDB id, in the library or not. */
     suspend fun title(kind: String, tmdbId: Long): TitleInfo = send("GET", url(listOf("api", "title", kind, tmdbId.toString())), null)
+
+    // endregion
+
+    // region Kid requests («Попросить», see the model in Requests.kt)
+
+    /** `GET /api/requests/search?q=&kind=`: what a kid may ask for, of one [RequestSearchKind]; 403 for anyone else or while requests are closed. */
+    suspend fun requestSearch(query: String, kind: String): List<KidCandidate> =
+        send(
+            "GET",
+            url("api/requests/search") {
+                addQueryParameter("q", query)
+                addQueryParameter("kind", kind)
+            },
+            null,
+        )
+
+    /** `POST /api/requests`: the kid's request of the title, made if it has none (asking again returns it); 403 code `rating` above the age limit. */
+    suspend fun askRequest(ask: KidAsk): KidRequest = post("api/requests", jsonBody(ask))
+
+    /** `GET /api/requests/mine`: the profile's requests, newest first. */
+    suspend fun myRequests(): List<KidRequest> = get("api/requests/mine")
+
+    /** `GET /api/requests` (admins): the pending requests, then those answered in the last 30 days, each with who asked. */
+    suspend fun allRequests(): List<KidRequest> = get("api/requests")
+
+    /** `GET /api/requests/count` (admins): how many wait for an answer. */
+    suspend fun requestCount(): RequestCount = get("api/requests/count")
+
+    /** `POST /api/requests/{id}/approve` (admins): approved without a download (a download of the title approves it too). */
+    suspend fun approveRequest(id: Long): KidRequest = send("POST", url(listOf("api", "requests", id.toString(), "approve")), null)
+
+    /** `POST /api/requests/{id}/decline` (admins): [reason] is what the kid sees (may be empty); 409 when it was answered already. */
+    suspend fun declineRequest(id: Long, reason: String): KidRequest =
+        send("POST", url(listOf("api", "requests", id.toString(), "decline")), jsonBody(DeclineBody(reason)))
 
     // endregion
 

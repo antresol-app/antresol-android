@@ -324,6 +324,8 @@ data class TitleInfo(
     val cast: List<CastMember> = emptyList(),
     /** A series' regular seasons with their episode counts. */
     val seasons: List<SeasonCount> = emptyList(),
+    /** A kid profile's «Попросить»: whether the title may be asked for and the kid's request of it (kid profiles only). */
+    val kidRequest: KidRequestState? = null,
 ) {
     /** The title as a library item with id 0, so the detail pages draw it like any other. */
     fun asItem(): ItemDetail = ItemDetail(

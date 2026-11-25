@@ -223,7 +223,7 @@ class LanPairingPhoneUiTest {
             AntresolTheme { PairTvScreen(viewModel, ownName = "Alex", ownAvatar = "grad-1", onBack = {}, cameraAllowed = false) }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("only to read the TV’s QR code", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("only reads the TV’s QR code", substring = true).assertIsDisplayed()
         compose.onNodeWithTag("pair-allow-camera").assertIsDisplayed()
         shot("lan-phone-pair-permission")
         compose.onNodeWithTag("pair-code-field").performTextInput("ABC1")

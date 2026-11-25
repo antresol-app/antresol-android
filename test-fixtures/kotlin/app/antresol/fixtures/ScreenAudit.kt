@@ -154,7 +154,8 @@ class ScreenAudit(private val compose: ComposeTestRule, private val dir: File) {
             // Cut by the line limit with no «…», or longer than its box: what a person sees as a sentence that stops.
             val clipped = layout != null && layout.multiParagraph.didExceedMaxLines && !ellipsized
             val text = texts.joinToString(" ") { it.text }.trim()
-            if (text.isNotEmpty() && node.boundsInRoot.width > 0f) {
+            // A row the list kept but did not place (scrolled away) has no position on screen.
+            if (text.isNotEmpty() && node.boundsInRoot.width > 0f && node.layoutInfo.isPlaced) {
                 val cut = node.boundsInRoot.height < node.size.height - 1 || node.boundsInRoot.width < node.size.width - 1
                 out += TextBox(text, node.boundsInRoot, ellipsized, clipped, layout?.lineCount ?: 1, cut)
             }

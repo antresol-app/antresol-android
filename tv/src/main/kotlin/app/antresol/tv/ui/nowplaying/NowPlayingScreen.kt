@@ -322,11 +322,15 @@ private fun SleepButton(audio: AudioEngine, isBook: Boolean, onMenu: (NowPlaying
         SleepTimer.EndOfItem -> sleepLabel(SleepTimer.EndOfItem, isBook)
         else -> audio.sleepRemainingMs?.let { Durations.clock(it) }
     }
+    val name = stringResource(TvR.string.now_playing_sleep)
+    // A running timer shows what is left (or «End of Song») beside the moon, not after the words «Sleep Timer»: with those the
+    // three pills of the music screen are wider than the column and the last one is cut. A screen reader still hears both.
     PillButton(
-        text = listOfNotNull(stringResource(TvR.string.now_playing_sleep), state).joinToString(" · "),
+        text = state ?: name,
         onClick = { onMenu(NowPlayingMenu.Sleep) },
         icon = TvIcons.Moon,
         modifier = modifier,
+        contentDescription = listOfNotNull(name, state).joinToString(" · "),
     )
 }
 

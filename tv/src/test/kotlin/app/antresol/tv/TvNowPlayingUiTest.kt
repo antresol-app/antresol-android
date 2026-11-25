@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -30,6 +31,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onChildren
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
@@ -207,15 +209,21 @@ class TvNowPlayingUiTest {
     }
 
     @Test
-    fun aRunningSleepTimerStillLeavesThePillsInsideTheColumn() {
+    fun aRunningSleepTimerShowsItsStateWithoutCuttingAPill() {
         start()
         app.audio.startSleepTimer(SleepTimer.EndOfItem)
-        waitFor(hasText("Sleep Timer · End of Song"))
+        waitFor(hasText("End of Song"))
         shot("now-playing-music-sleep")
         val bar = tagged("now-playing-seek")
-        val pills = listOf("Up Next", "Favorite", "Sleep Timer · End of Song").map { bounds(pill(it)) }
+        val pills = listOf("Up Next", "Favorite", "End of Song").map { bounds(pill(it)) }
         assertTrue("the pills are inside the bar: $pills vs $bar", pills.first().left >= bar.left && pills.last().right <= bar.right)
         assertNear("pills centre", center(bar), (pills.first().left + pills.last().right) / 2)
+        // No label is wider than its pill: nothing is clipped.
+        listOf("Up Next", "Favorite", "End of Song").forEach { label ->
+            assertTrue("«$label» is cut", !textOverflows(label))
+        }
+        // A screen reader says what the pill is, not only its state.
+        compose.onNode(hasContentDescription("Sleep Timer · End of Song")).assertExists()
     }
 
     @Test
@@ -335,6 +343,14 @@ class TvNowPlayingUiTest {
 
     private fun textMatching(regex: Regex) = SemanticsMatcher("text matches $regex") { node ->
         node.config.getOrNull(SemanticsProperties.Text)?.any { regex.matches(it.text) } == true
+    }
+
+    /** Whether the text [label] is wider than the room it was given. */
+    private fun textOverflows(label: String): Boolean {
+        val node = compose.onAllNodes(hasText(label) and SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true).fetchSemanticsNodes().single()
+        val results = mutableListOf<TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        return results.any { it.didOverflowWidth }
     }
 
     /** The texts of the rows drawn in the list tagged [tag], top to bottom. */

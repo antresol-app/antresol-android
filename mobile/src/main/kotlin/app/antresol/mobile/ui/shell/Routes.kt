@@ -50,6 +50,14 @@ data class SongsRoute(val title: String)
 @Serializable
 data object SettingsRoute
 
+/** «My Requests» of a kid profile. */
+@Serializable
+data object MyRequestsRoute
+
+/** «Requests» of an administrator: the kids' requests to answer. */
+@Serializable
+data object RequestsRoute
+
 /** «Sign in a TV»: the QR scanner and the approval of a TV's sign-in request. */
 @Serializable
 data object PairTvRoute

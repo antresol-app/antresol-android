@@ -318,7 +318,6 @@
     <string name="requests_open_title">Open Title Page</string>
     <string name="requests_answered_approved">Approved</string>
     <string name="requests_answered_declined">Declined</string>
-    <string name="requests_decline_title">Decline “%1$s”?</string>
     <string name="requests_decline_message">%1$s will see that you declined. You can briefly say why.</string>
     <string name="requests_reason">Reason (optional)</string>
     <string name="requests_answer_failed">Couldn’t answer. Try again.</string>

@@ -66,6 +66,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.antresol.core.model.Card
+import app.antresol.core.model.KidRequest
+import app.antresol.core.model.RequestSearchKind
+import app.antresol.core.model.RequestStatus
+import app.antresol.core.requests.requestsApi
+import app.antresol.ui.requests.MyRequestsViewModel
+import app.antresol.ui.requests.PendingRequestsViewModel
+import app.antresol.ui.requests.RequestsViewModel
 import app.antresol.core.model.Channel
 import app.antresol.core.model.Kind
 import app.antresol.core.model.ShelfId
@@ -117,6 +124,8 @@ import app.antresol.mobile.ui.nowplaying.MiniPlayer
 import app.antresol.mobile.ui.components.PageSideInsets
 import app.antresol.mobile.ui.nowplaying.MiniPlayerSpace
 import app.antresol.mobile.ui.nowplaying.NowPlayingScreen
+import app.antresol.mobile.ui.requests.MyRequestsScreen
+import app.antresol.mobile.ui.requests.RequestsScreen
 import app.antresol.mobile.ui.search.SearchScreen
 import app.antresol.mobile.ui.search.SearchViewModel
 import app.antresol.mobile.ui.pairing.PairTvScreen
@@ -235,12 +244,23 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
         UiLanguageModel(client.uiLanguageApi(), app.settings) { hostActivity?.let(MainActivity::restart) }
     }
     LaunchedEffect(uiLanguage) { uiLanguage.refresh() }
+    // An administrator's badge: how many requests wait (read again when the account sheet opens).
+    val pending = if (state.user?.requests == true) viewModel<PendingRequestsViewModel>(key = "pending-requests") { PendingRequestsViewModel(client.requestsApi()) }.pending else null
+    LaunchedEffect(showAccount) { if (showAccount) pending?.refresh() }
     // One channel list for Home's «On Air Now» and the «ТВ» tab (in the shell's store, not a page's): one refresh, not two.
     val channels: ChannelsViewModel = viewModel(key = "channels") { ChannelsViewModel(client.channelsApi()) }
 
     // A title off the library (an addon's search result) opens the page made from its TMDB id; anything else its card.
     val open: (Card) -> Unit = { card ->
         if (card.opensTitlePage) navController.navigate(TitleRoute(card.kind, card.tmdbId ?: 0)) else navController.navigate(DetailRoute(card))
+    }
+    // A request opens its title's page, or the library's own once the title has arrived.
+    val openRequest: (KidRequest) -> Unit = { request ->
+        val library = request.libraryItemId?.takeIf { request.status == RequestStatus.IN_LIBRARY && it > 0 }
+        when {
+            library != null -> navController.navigate(DetailRoute(if (request.kind == RequestSearchKind.MUSIC) Kind.ALBUM else request.kind, library))
+            request.hasTitlePage -> navController.navigate(TitleRoute(request.kind, request.tmdbId))
+        }
     }
     val playVideo: (Long, ResumeMode) -> Unit = { id, mode -> VideoPlayerActivity.start(context, id, mode) }
     // A way may pick a quality by what the phone shows: only its decoder limits it (as the player does).
@@ -379,7 +399,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                     }
                     padded<SearchRoute> {
                         SearchScreen(
-                            viewModel = viewModel { SearchViewModel(client, app.ways) },
+                            viewModel = viewModel { SearchViewModel(client, app.ways, canAsk = user?.canRequest == true) },
                             playback = playback,
                             onOpen = open,
                             onTab = selectTab,
@@ -484,6 +504,20 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                             channelPrefs = viewModel { ChannelPrefsModel(client.channelPrefsApi(), onChanged = channels::reload) },
                         )
                     }
+                    padded<MyRequestsRoute> {
+                        MyRequestsScreen(
+                            viewModel = viewModel { MyRequestsViewModel(client.requestsApi()) },
+                            onOpen = openRequest,
+                            onBack = back,
+                        )
+                    }
+                    padded<RequestsRoute> {
+                        RequestsScreen(
+                            viewModel = viewModel { RequestsViewModel(client.requestsApi()) },
+                            onOpen = openRequest,
+                            onBack = back,
+                        )
+                    }
                     padded<PairTvRoute> {
                         PairTvScreen(
                             viewModel = viewModel {
@@ -560,6 +594,23 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                     showAccount = false
                     navController.navigate(SettingsRoute)
                 },
+                onMyRequests = if (user?.canRequest == true) {
+                    {
+                        showAccount = false
+                        navController.navigate(MyRequestsRoute)
+                    }
+                } else {
+                    null
+                },
+                onRequests = if (user?.requests == true) {
+                    {
+                        showAccount = false
+                        navController.navigate(RequestsRoute)
+                    }
+                } else {
+                    null
+                },
+                pendingRequests = pending?.count ?: 0,
             )
         }
         confirm?.let { action ->

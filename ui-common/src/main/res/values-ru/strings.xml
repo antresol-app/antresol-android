@@ -318,7 +318,6 @@
     <string name="requests_open_title">Открыть страницу</string>
     <string name="requests_answered_approved">Одобрено</string>
     <string name="requests_answered_declined">Отказано</string>
-    <string name="requests_decline_title">Отказать: «%1$s»?</string>
     <string name="requests_decline_message">%1$s увидит, что вы отказали. Можно коротко объяснить почему.</string>
     <string name="requests_reason">Причина (необязательно)</string>
     <string name="requests_answer_failed">Не получилось ответить. Попробуйте ещё раз.</string>

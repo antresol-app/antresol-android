@@ -25,7 +25,6 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
@@ -1565,8 +1564,8 @@ const val PLAYER_LOG = "AntresolPlayer"
 
 /**
  * The ExoPlayer of the app's video players (films, episodes, trailers, live): media through [client]'s
- * HTTP client, decoder fallback, movie audio focus, paused when headphones are unplugged, logged
- * under [PLAYER_LOG].
+ * HTTP client, decoder fallback, a new decoder for a new surface ([FreshCodecVideoRenderer]), movie
+ * audio focus, paused when headphones are unplugged, logged under [PLAYER_LOG].
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
@@ -1574,7 +1573,7 @@ fun buildVideoPlayer(context: Context, client: AntresolClient): ExoPlayer {
     val http = OkHttpDataSource.Factory(client.httpClient)
     val dataSources = DefaultDataSource.Factory(context, http)
     return ExoPlayer.Builder(context)
-        .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(true))
+        .setRenderersFactory(VideoRenderersFactory(context))
         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
         .setLoadControl(videoLoadControl(context))
         .setAudioAttributes(

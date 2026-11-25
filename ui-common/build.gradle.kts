@@ -64,6 +64,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.androidx.media3.exoplayer.hls)
+    testImplementation(libs.androidx.media3.test.utils)
+    testImplementation(libs.androidx.media3.test.utils.robolectric)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.kotlinx.coroutines.test)

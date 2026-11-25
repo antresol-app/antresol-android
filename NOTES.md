@@ -1854,7 +1854,7 @@ The web's `FamilyProgress` on the title pages (docs/API.md section 15): who else
   «Глава 7 · 42 %» in ru and en), `RingAvatar`, `FamilyFaces`, `FamilyLineContent` (the line's content; the app draws its own button around it) and
   `familyMenuOptions` (the list's rows as `MenuOption`s, which now may carry a `leading` picture and an `action` line).
 - TV (`ui/detail/FamilyLine.kt`): the line is a white-on-focus pill under the buttons (and under Listen/Read of an audiobook or comic); OK opens `FamilyPanel`, an
-  `OptionsPanel` on the right whose rows are the family (focus on the first row there is somewhere to continue from; Back closes it and focus returns to the line).
+  `OptionsPanel` on the right whose rows are the family (focus on the first row there is somewhere to continue from; Back closes it, and on a real TV focus then lands on the first action, as after the trailer chooser: the page's Back handling, not this panel).
   A row without somewhere to continue (everything done) only closes the panel. `DetailViewModel.family` reads when the page (re)loads, so it is current after the player.
   The player's control row has a «Family» button (`PlayerMenu.Family`) when `VideoPlayerViewModel.familyHere` is not empty: the profiles somewhere in the item that plays;
   a jump there copies their position and seeks (the same item) or starts the item (an episode).

@@ -591,6 +591,7 @@ private fun ShellContent(session: SessionManager, state: AuthState.SignedIn) {
                         } else {
                             null
                         },
+                        diagnostics = app.diagnostics::report,
                     )
                 }
                 page<MyRequestsRoute>(contentFocus) {

@@ -107,4 +107,7 @@
 
     <!-- ТВ: категории каналов -->
     <string name="tv_categories">Категории</string>
+    <string name="settings_diagnostics">Диагностика</string>
+    <string name="settings_diagnostics_note">Что этот телевизор запомнил о зависаниях и перезапусках. Остаётся на нём: отсканируйте код телефоном, чтобы скопировать.</string>
+    <string name="settings_diagnostics_qr">Диагностика в QR-коде</string>
 </resources>

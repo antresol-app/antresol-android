@@ -74,7 +74,7 @@ import app.antresol.ui.theme.AntresolColors
 import app.antresol.ui.theme.AntresolShapes
 
 private enum class SettingsMenu {
-    Quality, Subtitles, Language, AutostartTarget, OverlayGuide, OverlayManual, ConfirmSignOut, History, HistoryNew, HistoryOff;
+    Quality, Subtitles, Language, AutostartTarget, OverlayGuide, OverlayManual, ConfirmSignOut, History, HistoryNew, HistoryOff, Diagnostics;
 
     /** The control that gets focus back when this panel closes: a history panel opened from the picker returns to its row. */
     val opener: SettingsMenu get() = if (this == HistoryNew || this == HistoryOff) History else this
@@ -109,6 +109,8 @@ fun SettingsScreen(
     /** An administrator with kids' requests to answer: their page, and how many wait. */
     onRequests: (() -> Unit)? = null,
     pendingRequests: PendingRequests? = null,
+    /** The diagnostics report (at most the given length) for an administrator; null: no such row. */
+    diagnostics: (suspend (maxChars: Int) -> String)? = null,
 ) {
     LaunchedEffect(channelPrefs) { channelPrefs?.refresh() }
     LaunchedEffect(pendingRequests) { pendingRequests?.refresh() }
@@ -289,6 +291,17 @@ fun SettingsScreen(
                         modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Language)),
                     )
                 }
+                // What the TV kept about its freezes and restarts, for the administrator to read.
+                if (diagnostics != null && state.user?.isAdmin == true) {
+                    item {
+                        SettingRow(
+                            label = stringResource(TvR.string.settings_diagnostics),
+                            value = "",
+                            onClick = { menu = SettingsMenu.Diagnostics },
+                            modifier = Modifier.focusRequester(openers.getValue(SettingsMenu.Diagnostics)).testTag("settings-diagnostics"),
+                        )
+                    }
+                }
             }
         }
         when (menu) {
@@ -407,6 +420,7 @@ fun SettingsScreen(
                     focusIndex = 0,
                 )
             }
+            SettingsMenu.Diagnostics -> if (diagnostics != null) DiagnosticsPanel(report = diagnostics, onDismiss = { menu = null })
             SettingsMenu.ConfirmSignOut -> ConfirmPanel(
                 title = stringResource(TvR.string.settings_sign_out_confirm, state.session.userName),
                 confirmLabel = stringResource(R.string.profile_sign_out),

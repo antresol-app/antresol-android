@@ -114,4 +114,7 @@
 
     <!-- TV channels: categories -->
     <string name="tv_categories">Categories</string>
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_diagnostics_note">What this TV kept about its freezes and restarts. It stays on this TV: scan the code with a phone to copy it.</string>
+    <string name="settings_diagnostics_qr">Diagnostics as a QR code</string>
 </resources>

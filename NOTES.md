@@ -1665,6 +1665,12 @@ The apps show what the server's addons offer, by the protocol in docs/API.md sec
   `searchSeries`, `runDelayMs` and `wayQualities` shape it), `core/.../ways/*`, `OwnTracksTest`, `DeviceWayDefaultsTest`. `scripts/fake-server.py --addons` is the same for a device.
 - Trailers: the web lists at most three per item and plays one without `play` in the embedded player; the apps did the
   latter already and now cap the list at three too (`Trailers.MAX_TRAILERS`).
+- Search (phone and TV): the addons' title searches run beside `/api/search` and add one section each after the library's
+  (a title that is not in the library opens its page, `TitleRoute`; one that is, its own page). `ui-common/.../ways/AddonTitleSearch`
+  is the part both apps share (debounce, the sections as the addons answer, `searching`); while it is true and nothing is found
+  yet the page shows its spinner instead of «No results». A kid's profile has no addon search (the server answers it 403), and
+  the server's own TMDB search (`/api/requests/search`, with the request buttons) is for kid profiles only: the apps do not have it.
+  A title off the library has no trailers: the server lists them per library item (`/api/items/{id}/trailers`), as on the web.
 
 ## TV density and the channels page
 

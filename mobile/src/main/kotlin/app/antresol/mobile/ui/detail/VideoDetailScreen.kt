@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import app.antresol.core.family.FamilyKind
 import app.antresol.core.model.Card
 import app.antresol.core.model.CastMember
 import app.antresol.core.model.EpisodeCard
@@ -185,6 +186,16 @@ private fun VideoDetailContent(
     val urls = LocalMediaUrls.current
     val configuration = LocalConfiguration.current
     val bottom = LocalBottomBarPadding.current
+    // «Семья»: where the other profiles are in this page's item (a title off the library has no progress); read when the
+    // page is shown and again when it is back in front, since the player moves the places.
+    val familyKind = if (detail.outsideLibrary) null else FamilyKind.of(item.kind)
+    if (familyKind != null) {
+        LifecycleResumeEffect(item.id) {
+            viewModel.family.load(item.id)
+            onPauseOrDispose { }
+        }
+    }
+    var familySheet by remember { mutableStateOf(false) }
     val librarySeasons = item.seasons.filter { it.episodes.isNotEmpty() }
     // Every episode of the guide (or the library's when the server has none); recomputed after
     // each watched toggle, which changes the item.
@@ -251,6 +262,19 @@ private fun VideoDetailContent(
     }
     val onTrailer: () -> Unit = { if (trailers.size == 1) openTrailer(trailers.single()) else trailerSheet = true }
     if (trailerSheet) TrailerSheet(trailers, onDismiss = { trailerSheet = false }, onOpen = openTrailer)
+    if (familySheet && familyKind != null) {
+        FamilySheet(
+            members = viewModel.family.members,
+            kind = familyKind,
+            chapters = emptyList(),
+            // Their position becomes this profile's own, then the player starts from it (a next episode from its start).
+            onJump = { member ->
+                familySheet = false
+                viewModel.family.jump(member) { place -> onPlay(place.itemId, if (place.next) ResumeMode.FromStart else ResumeMode.Resume) }
+            },
+            onDismiss = { familySheet = false },
+        )
+    }
     waysSheet?.let { choice ->
         WaysSheet(
             ways = choice.ways,
@@ -376,6 +400,12 @@ private fun VideoDetailContent(
                         modifier = buttonModifier.testTag("detail-trailer"),
                     )
                 }
+            }
+        }
+        // «Семья»: one quiet line under the buttons, only when somebody else has progress here.
+        if (familyKind != null && viewModel.family.members.isNotEmpty()) {
+            item("family") {
+                FamilyLine(viewModel.family.members, familyKind, emptyList(), viewModel.family.failed, onClick = { familySheet = true })
             }
         }
         if (item.overview.isNotBlank()) item("overview") { ExpandableText(item.overview) }

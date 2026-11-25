@@ -66,6 +66,9 @@ import app.antresol.core.model.SearchResults
 import app.antresol.core.model.SetupStatus
 import app.antresol.core.model.StepRequest
 import app.antresol.core.model.TitleInfo
+import app.antresol.core.model.AdoptBody
+import app.antresol.core.model.FamilyMember
+import app.antresol.core.model.FamilyResponse
 import app.antresol.core.model.KidAsk
 import app.antresol.core.model.KidCandidate
 import app.antresol.core.model.KidRequest
@@ -285,6 +288,15 @@ class AntresolClient(
 
     suspend fun saveProgress(itemId: Long, update: ProgressUpdate) =
         sendNoContent("PUT", url("api/progress/$itemId"), jsonBody(update))
+
+    /** `GET /api/items/{id}/family`: the other profiles' places in [itemId] (most recent first; none for a kid). */
+    suspend fun family(itemId: Long): List<FamilyMember> = get<FamilyResponse>("api/items/$itemId/family").members
+
+    /**
+     * `POST /api/progress/{itemId}/adopt`: [userId]'s unfinished position in [itemId] becomes this profile's own; answers this
+     * profile's new progress. 404 when they are not in this profile's family view or have no unfinished position there.
+     */
+    suspend fun adoptProgress(itemId: Long, userId: Long): Progress = post("api/progress/$itemId/adopt", jsonBody(AdoptBody(userId)))
 
     suspend fun setWatched(itemId: Long, watched: Boolean) =
         sendNoContent("POST", url("api/items/$itemId/watched"), jsonBody(WatchedRequest(watched)))

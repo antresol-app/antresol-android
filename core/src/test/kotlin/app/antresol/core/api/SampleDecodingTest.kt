@@ -7,6 +7,7 @@ import app.antresol.core.model.ArtistDetail
 import app.antresol.core.model.BookDetail
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.core.model.FamilyResponse
 import app.antresol.core.model.KidCandidate
 import app.antresol.core.model.KidRequest
 import app.antresol.core.model.RequestCount
@@ -130,6 +131,7 @@ class SampleDecodingTest {
         "playlists" to serializer<PlaylistList>(),
         "profiles" to ListSerializer(serializer<Profile>()),
         "progress-get" to serializer<Progress>(),
+        "family" to serializer<FamilyResponse>(),
         "requests-all" to ListSerializer(serializer<KidRequest>()),
         "requests-count" to serializer<RequestCount>(),
         "requests-mine" to ListSerializer(serializer<KidRequest>()),
@@ -270,6 +272,31 @@ class SampleDecodingTest {
         assertFalse(state.allowed)
         assertEquals("This is 16+, and this profile allows up to 6+", state.blocked)
         assertNull(state.request)
+    }
+
+    @Test
+    fun family() {
+        val members = sample<FamilyResponse>("family").members
+        assertEquals(listOf("Sam", "Robin", "Living Room", "Kim"), members.map { it.name })
+        // An episode in progress, with how much of the series is done.
+        assertEquals(601L, members[0].itemId)
+        assertEquals(2040_000L, members[0].positionMs)
+        assertEquals(1 to 2, members[0].season to members[0].episode)
+        assertEquals(1 to 6, members[0].done to members[0].total)
+        // The episode after the last finished one: not started.
+        assertTrue(members[1].next)
+        assertTrue(members[1].isKid)
+        assertEquals("/api/images/profile/3?v=2", members[1].photo)
+        // A device's account names its person; everything done.
+        assertEquals("Living Room · Sam", members[2].displayName)
+        assertTrue(members[2].finished)
+        assertEquals("Sam", members[0].displayName)
+        // A reader's place.
+        assertEquals("page:120", members[3].locator)
+        assertEquals(120 to 300, members[3].page to members[3].pages)
+        // Fields the server omits come out as their empty values.
+        assertEquals("", members[0].locator)
+        assertEquals(0.0, members[0].volume, 0.0)
     }
 
     @Test

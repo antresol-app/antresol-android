@@ -1,0 +1,6 @@
+{"members":[
+  {"userId":2,"name":"Sam","avatar":"grad-3","isKid":false,"itemId":601,"positionMs":2040000,"durationMs":2700000,"fraction":0.76,"finished":false,"updatedAt":"2026-11-25T18:30:00Z","season":1,"episode":2,"title":"Episode 2","done":1,"total":6},
+  {"userId":3,"name":"Robin","avatar":"grad-5","photo":"/api/images/profile/3?v=2","isKid":true,"itemId":603,"positionMs":0,"durationMs":0,"fraction":0,"finished":false,"updatedAt":"2026-11-24T20:00:00Z","season":1,"episode":3,"title":"Episode 3","next":true,"done":2,"total":6},
+  {"userId":7,"name":"Living Room","ownerName":"Sam","avatar":"grad-1","isKid":false,"itemId":606,"positionMs":2600000,"durationMs":2700000,"fraction":1,"finished":true,"updatedAt":"2026-11-20T09:00:00Z","season":2,"episode":2,"title":"Episode 6","done":6,"total":6},
+  {"userId":8,"name":"Kim","avatar":"grad-2","isKid":false,"itemId":42,"positionMs":0,"durationMs":0,"fraction":0.4,"finished":false,"locator":"page:120","updatedAt":"2026-11-19T09:00:00Z","page":120,"pages":300}
+]}

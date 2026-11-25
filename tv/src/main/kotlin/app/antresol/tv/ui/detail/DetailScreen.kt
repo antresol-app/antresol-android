@@ -44,7 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.tv.material3.Text
+import app.antresol.core.family.FamilyKind
 import app.antresol.core.model.Card
+import app.antresol.core.model.FamilyMember
 import app.antresol.core.model.Kind
 import app.antresol.core.model.KidAsk
 import app.antresol.core.model.RequestStatus
@@ -123,6 +125,9 @@ private const val PLAYLIST_KEY = "action/playlist"
 
 /** Focus key of «Ask a Parent» (or the state of the request) on a kid's title page. */
 private const val REQUEST_KEY = "action/request"
+
+/** Focus key of the «Семья» line under the buttons. */
+private const val FAMILY_KEY = "action/family"
 
 /** Focus key of the Trailer button of a movie or series page. */
 private const val TRAILER_KEY = "action/trailer"
@@ -207,8 +212,8 @@ private sealed interface WaysPanel {
     data class Keep(val way: AddonWay) : WaysPanel
 }
 
-/** The side panels of a detail page: playlists (music) and the trailer chooser (video). */
-private enum class PlaylistPanel { AddTo, Name, ConfirmDelete, Trailers }
+/** The side panels of a detail page: playlists (music), the trailer chooser (video) and the family's places. */
+private enum class PlaylistPanel { AddTo, Name, ConfirmDelete, Trailers, Family }
 
 @Composable
 private fun DetailContent(
@@ -255,7 +260,13 @@ private fun DetailContent(
             lastPanel = panel
         } else if (hadPanel) {
             hadPanel = false
-            focus.restore(if (lastPanel == PlaylistPanel.Trailers) TRAILER_KEY else PLAYLIST_KEY)
+            focus.restore(
+                when (lastPanel) {
+                    PlaylistPanel.Trailers -> TRAILER_KEY
+                    PlaylistPanel.Family -> FAMILY_KEY
+                    else -> PLAYLIST_KEY
+                },
+            )
         }
         if (picker != null) {
             hadPicker = true
@@ -303,6 +314,17 @@ private fun DetailContent(
     }
     val onOpen = actions.open
     val onPlay = actions.play
+    val familyKind = model.familyKind()
+    // Continuing from a profile's place: the server copies it into this profile's progress, then it plays from there.
+    val jumpFamily: (FamilyMember) -> Unit = { member ->
+        viewModel.family.jump(member) { place ->
+            when (familyKind) {
+                FamilyKind.Audiobook -> viewModel.listen(fromMs = place.positionMs, onStarted = actions.nowPlaying)
+                FamilyKind.Comic -> actions.read(place.itemId, place.next)
+                else -> onPlay(place.itemId, if (place.next) ResumeMode.FromStart else ResumeMode.Resume)
+            }
+        }
+    }
     LaunchedEffect(firstKey) {
         if (firstKey != null) focus.restore(firstKey, canTakeFocus)
     }
@@ -377,6 +399,17 @@ private fun DetailContent(
                             }
                             if (book != null) {
                                 BookActions(book, focus, viewModel, actions)
+                            }
+                            // «Семья»: one quiet line under the buttons, only when somebody else has progress here.
+                            if (familyKind != null && viewModel.family.members.isNotEmpty()) {
+                                FamilyLine(
+                                    members = viewModel.family.members,
+                                    kind = familyKind,
+                                    chapters = chapters,
+                                    onClick = { panel = PlaylistPanel.Family },
+                                    modifier = Modifier.remembersFocus(focus, FAMILY_KEY).trapHorizontalFocus(),
+                                )
+                                if (viewModel.family.failed) FamilyFailed()
                             }
                             if (video != null || music != null || book != null) {
                                 viewModel.actionError?.let { error ->
@@ -467,6 +500,9 @@ private fun DetailContent(
             }
         }
         PlaylistPanels(panel, model, viewModel, onPanel = { panel = it }, onDeleted = actions.close, onTrailer = openTrailer)
+        if (panel == PlaylistPanel.Family && familyKind != null) {
+            FamilyPanel(viewModel.family.members, familyKind, chapters, onJump = jumpFamily, onDismiss = { panel = null })
+        }
         WayPanels(
             panel = waysPanel,
             picker = picker,
@@ -550,6 +586,8 @@ private fun PlaylistPanels(
             onDismiss = { onPanel(null) },
             focusIndex = 0,
         )
+        // Drawn by the page itself (it needs the family and where continuing leads).
+        PlaylistPanel.Family -> Unit
         null -> Unit
     }
 }

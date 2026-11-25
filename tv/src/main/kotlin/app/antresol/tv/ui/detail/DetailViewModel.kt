@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.antresol.core.api.AntresolClient
+import app.antresol.core.family.FamilyKind
+import app.antresol.core.family.familyApi
 import app.antresol.core.library.EpisodeGuide
 import app.antresol.core.library.GuideSeason
 import app.antresol.core.playback.PendingWrites
@@ -35,6 +37,7 @@ import app.antresol.core.ways.WayTarget
 import app.antresol.core.ways.WaysController
 import app.antresol.core.ways.WaysSource
 import app.antresol.core.ways.waysApi
+import app.antresol.ui.family.FamilyModel
 import app.antresol.ui.requests.TitleRequest
 import app.antresol.ui.trailers.Trailers
 import app.antresol.core.playback.Episodes
@@ -176,6 +179,9 @@ class DetailViewModel(
     /** A kid profile's «Попросить у родителя» on the page of a title off the library; null on any other page. */
     val request: TitleRequest? = if (tmdbId > 0) TitleRequest(client.requestsApi(), viewModelScope) else null
 
+    /** «Семья»: where the other profiles are in what this page shows (nobody for a kid, a title off the library or music). */
+    val family = FamilyModel(client.familyApi(), viewModelScope)
+
     private var job: Job? = null
 
     /**
@@ -204,10 +210,12 @@ class DetailViewModel(
         job = viewModelScope.launch { show(load { fetch() }) }
     }
 
-    /** Shows what was loaded; the title's request state is the server's as of now. */
+    /** Shows what was loaded; the title's request state and the family's places are the server's as of now. */
     private fun show(loaded: LoadState<DetailModel>) {
         state = loaded
-        (loaded as? LoadState.Ready)?.value?.video?.let { request?.load(it.kidRequest) }
+        val model = (loaded as? LoadState.Ready)?.value ?: return
+        model.video?.let { request?.load(it.kidRequest) }
+        if (model.familyKind() != null) family.load(model.card.id)
     }
 
     /** Re-reads the page in place (back from the player); failures keep what is shown. */
@@ -378,6 +386,15 @@ class DetailViewModel(
             item.toModel(progress.await(), guide.await())
         }
     }
+}
+
+/**
+ * What «Семья» is on this page: a library movie, episode, series or season, an audiobook or a comic (its volume). A title off the
+ * library has no progress, music none to share, and a book of this TV (no reader) none to continue.
+ */
+internal fun DetailModel.familyKind(): FamilyKind? = when {
+    video?.outsideLibrary == true || card.kind == Kind.BOOK -> null
+    else -> FamilyKind.of(card.kind)
 }
 
 /** A movie or series by its TMDB id, as the page of a title that may not be in the library. */

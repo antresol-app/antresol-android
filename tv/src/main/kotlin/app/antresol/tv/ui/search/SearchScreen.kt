@@ -64,6 +64,7 @@ import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.playback.MenuOption
 import app.antresol.ui.requests.TitleRequest
+import app.antresol.ui.requests.requestBadgeLabel
 import app.antresol.ui.requests.requestStatusLabel
 import app.antresol.ui.theme.Antresol
 import app.antresol.ui.theme.AntresolColors
@@ -213,7 +214,7 @@ private const val ASK_ROW = "ask"
 private fun askBadge(): (KidRequest?) -> String? {
     val labels = listOf(
         RequestStatus.PENDING, RequestStatus.APPROVED, RequestStatus.IN_LIBRARY, RequestStatus.DECLINED,
-    ).associateWith { stringResource(requestStatusLabel(it)) }
+    ).associateWith { stringResource(requestBadgeLabel(it)) }
     return { request -> request?.let { labels[it.status] } }
 }
 

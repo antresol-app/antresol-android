@@ -25,6 +25,8 @@ class MyRequests(
 
     /** Reads the list; [quiet] keeps what is shown while it loads (a screen that came back). */
     fun load(quiet: Boolean = false) {
+        // A screen that came back asks again quietly: not while the read it started with is still on its way.
+        if (quiet && job?.isActive == true) return
         job?.cancel()
         if (!quiet || state !is LoadState.Ready) state = LoadState.Loading
         job = scope.launch {
@@ -59,6 +61,8 @@ class RequestsToAnswer(
     val answered: List<KidRequest> get() = (state as? LoadState.Ready)?.value.orEmpty().filter { it.status != RequestStatus.PENDING }
 
     fun load(quiet: Boolean = false) {
+        // A screen that came back asks again quietly: not while the read it started with is still on its way.
+        if (quiet && job?.isActive == true) return
         job?.cancel()
         if (!quiet || state !is LoadState.Ready) state = LoadState.Loading
         job = scope.launch {

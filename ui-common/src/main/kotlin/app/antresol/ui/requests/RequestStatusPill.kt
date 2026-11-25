@@ -24,11 +24,12 @@ import app.antresol.ui.theme.AntresolShapes
 
 /**
  * A request's state as the web shows it: a pill with an icon («Waiting for an answer», «Approved — coming soon»,
- * «Already in the library», «A parent said no») and, under a refusal, the reason the parent gave. Not focusable:
+ * «Already in the library», «A parent said no»; [admin]: «Approved», «Declined») and, under a refusal, the reason the
+ * parent gave. Not focusable:
  * the screens put it where a button would be.
  */
 @Composable
-fun RequestStatusPill(request: KidRequest, modifier: Modifier = Modifier) {
+fun RequestStatusPill(request: KidRequest, modifier: Modifier = Modifier, admin: Boolean = false) {
     val accent = requestStatusAccent(request.status)
     val ink = if (accent) AntresolColors.Accent else AntresolColors.Label
     Column(modifier = modifier.testTag("request-status"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -41,7 +42,7 @@ fun RequestStatusPill(request: KidRequest, modifier: Modifier = Modifier) {
                 .padding(horizontal = 14.dp, vertical = 8.dp),
         ) {
             Icon(requestStatusIcon(request.status), contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
-            Text(stringResource(requestStatusLabel(request.status)), style = Antresol.typography.bodyEmphasis.copy(color = ink), maxLines = 1)
+            Text(stringResource(requestStatusLabel(request.status, admin)), style = Antresol.typography.bodyEmphasis.copy(color = ink), maxLines = 1)
         }
         if (request.status == RequestStatus.DECLINED && request.reason.isNotBlank()) {
             Text(

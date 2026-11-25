@@ -13,13 +13,16 @@ import app.antresol.ui.components.kindLabel
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
 
-/** The words for a request's [status] («Waiting for an answer», «A parent said no», …). */
+/**
+ * The words for a request's [status] in the kid's voice («Waiting for an answer», «A parent said no», …); an
+ * administrator ([admin]) reads an answered request as «Approved» or «Declined».
+ */
 @StringRes
-fun requestStatusLabel(status: String): Int = when (status) {
+fun requestStatusLabel(status: String, admin: Boolean = false): Int = when (status) {
     RequestStatus.PENDING -> R.string.request_pending
-    RequestStatus.DECLINED -> R.string.request_declined
+    RequestStatus.DECLINED -> if (admin) R.string.requests_answered_declined else R.string.request_declined
     RequestStatus.IN_LIBRARY -> R.string.request_in_library
-    else -> R.string.request_approved
+    else -> if (admin) R.string.requests_answered_approved else R.string.request_approved
 }
 
 /** The name of a request's kind («Movie», «Album», «Book»); an album is asked for as `music`. */

@@ -1,0 +1,59 @@
+{
+  "channels": [
+    {
+      "id": 100,
+      "number": 100,
+      "name": "Plain",
+      "external": true,
+      "stream": {
+        "url": "http://a.example.test/plain.m3u8",
+        "relay": "/api/channels/live/ext/100/0/relay",
+        "format": "hls",
+        "userAgent": "UA-1",
+        "fallbacks": [],
+        "unsupported": ["web"]
+      }
+    },
+    {
+      "id": 101,
+      "number": 101,
+      "name": "Converted",
+      "external": true,
+      "stream": {
+        "url": "http://b.example.test/live/1.ts",
+        "relay": "/api/channels/live/ext/101/0/relay",
+        "remuxAudio": true,
+        "format": "ts",
+        "userAgent": "UA-2",
+        "referrer": "http://ref.example.test/",
+        "fallbacks": [
+          {
+            "url": "http://c.example.test/live/1.m3u8",
+            "relay": "/api/channels/live/ext/101/1/relay",
+            "format": "hls",
+            "unsupported": []
+          },
+          {
+            "url": "/api/channels/live/ext/101/2",
+            "relay": "/api/channels/live/ext/101/2/relay",
+            "remuxAudio": true,
+            "unsupported": []
+          }
+        ],
+        "unsupported": ["web"]
+      }
+    },
+    {
+      "id": 102,
+      "number": 102,
+      "name": "Older server",
+      "external": true,
+      "stream": {
+        "url": "http://d.example.test/old.m3u8",
+        "fallbacks": [{"url": "http://e.example.test/old.m3u8", "unsupported": []}],
+        "unsupported": []
+      }
+    }
+  ],
+  "lastChannel": 101
+}

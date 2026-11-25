@@ -496,6 +496,13 @@ class AntresolClient(
     }
 
     /**
+     * The URL the player opens for an external channel's relay [path] (`stream.relay`, a path of
+     * this server): absolute and without a media key. The relay's playlists link to relay paths
+     * that carry none, so the player sends the app's Bearer with every request (same origin only).
+     */
+    fun relayStreamUrl(path: String): String = requireNotNull(urls.resolve(path)) { "Empty relay path" }
+
+    /**
      * `POST /api/channels/opened`: «ТВ» opened, so the server refreshes the external sources marked
      * «при открытии» (when their last refresh is older than an hour). Writes nothing of the profile.
      */

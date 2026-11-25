@@ -65,7 +65,9 @@ import kotlinx.coroutines.launch
  * An external channel ([LiveStream.Ready.external]) is played straight from its provider with the
  * headers its playlist asked for (User-Agent, Referer) through a plain HTTP data source — never the
  * app's authorised client, so no Antresol credential reaches the provider. Its audio and subtitle
- * options are the stream's own tracks ([ExternalTracks]).
+ * options are the stream's own tracks ([ExternalTracks]). A stream whose audio devices cannot decode
+ * ([LiveStream.Ready.relayed]) is played through the server's relay instead, with the app's own
+ * client (the relay is the server's, so its credentials are the app's).
  *
  * The voice, on every channel: the viewer's choice on that channel (remembered per channel on the
  * device, [ExternalTrackMemory]), else the profile's audio languages («Мои языки», as for films),
@@ -509,7 +511,10 @@ class LivePlayerViewModel(
     /**
      * Loads an external stream with its own HTTP headers: a plain [DefaultHttpDataSource] (not the
      * app's client, which would add Antresol's credentials), User-Agent and Referer as the playlist
-     * asked, redirects across http/https followed (the hidden-address form is a 302).
+     * asked, redirects across http/https followed (the hidden-address form is a 302). The server's
+     * relay ([LiveStream.Ready.relayed]) is the exception: it is our own server, so the player's
+     * authorised client opens it (its playlists link to relay paths without a media key) and the
+     * provider's headers are the relay's business.
      */
     private fun loadExternal(stream: LiveStream.Ready, mime: String?) {
         loaded = stream
@@ -519,6 +524,12 @@ class LivePlayerViewModel(
         streamAudio = emptyList()
         streamSubtitles = emptyList()
         streamHeights = emptyList()
+        if (stream.relayed) {
+            player.setMediaItem(mediaItem(stream.url, metadata(), mime))
+            player.prepare()
+            player.play()
+            return
+        }
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(stream.userAgent?.takeIf { it.isNotBlank() } ?: Util.getUserAgent(context, USER_AGENT_APP))
             .setAllowCrossProtocolRedirects(true)

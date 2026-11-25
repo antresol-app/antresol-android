@@ -70,7 +70,10 @@ data class ChannelCategory(
  * An external channel's stream: the provider's URL ([url]; or the server's hidden-address form
  * `/api/channels/live/ext/{id}/{n}`, a 302 that needs the media key), the HTTP headers the
  * playlist asked for, the [fallbacks] to try in order when it does not open, and the platforms it
- * is known not to play on ([unsupported], e.g. `web`).
+ * is known not to play on ([unsupported], e.g. `web`). [relay] is the server's own relay of the
+ * stream (a path; null on a server without one) and [remuxAudio] says its audio is one a device
+ * cannot decode (MP2, AC-3...): the provider's URL is silent there, the relay plays the same
+ * stream with the audio converted to AAC (see [StreamSource.viaRelay]).
  */
 @Serializable
 data class ChannelStream(
@@ -81,13 +84,18 @@ data class ChannelStream(
     val unsupported: List<String> = emptyList(),
     /** What the stream is: `hls`, `ts` (a raw MPEG-TS stream) or ""/null (unknown). */
     val format: String? = null,
+    val relay: String? = null,
+    val remuxAudio: Boolean = false,
 ) {
     /** The primary stream and its fallbacks, in the order they are tried. */
     val sources: List<StreamSource>
-        get() = listOf(StreamSource(url, userAgent, referrer, unsupported, format)) + fallbacks
+        get() = listOf(StreamSource(url, userAgent, referrer, unsupported, format, relay, remuxAudio)) + fallbacks
 }
 
-/** One URL of an external channel with its headers; [format] as [ChannelStream.format]. */
+/**
+ * One URL of an external channel with its headers; [format], [relay] and [remuxAudio] as in
+ * [ChannelStream]. An older server sends neither of the last two: the stream is played as it is.
+ */
 @Serializable
 data class StreamSource(
     val url: String = "",
@@ -95,7 +103,17 @@ data class StreamSource(
     val referrer: String? = null,
     val unsupported: List<String> = emptyList(),
     val format: String? = null,
-)
+    val relay: String? = null,
+    val remuxAudio: Boolean = false,
+) {
+    /**
+     * The app plays [relay] instead of [url]: the server found the audio is one devices cannot
+     * decode and offers a relay that converts it. A flag without a relay (cannot be told apart
+     * from an older server) plays the provider's URL as before.
+     */
+    val viaRelay: Boolean
+        get() = remuxAudio && !relay.isNullOrBlank()
+}
 
 /**
  * One programme on a channel: a movie or an episode ([subtitle] like "S1 E5 · Episode 5"), or a

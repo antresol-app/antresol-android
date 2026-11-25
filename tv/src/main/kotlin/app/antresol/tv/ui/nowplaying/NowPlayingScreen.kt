@@ -1,11 +1,14 @@
 package app.antresol.tv.ui.nowplaying
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,21 +30,30 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.tv.material3.Text
 import app.antresol.core.model.Card
 import app.antresol.core.model.Kind
+import app.antresol.core.model.Lyrics
 import app.antresol.core.playback.Chapters
-import app.antresol.core.playback.lineIndexAt
-import app.antresol.core.playback.plainText
+import app.antresol.core.playback.rowIndexAt
+import app.antresol.core.playback.rows
 import app.antresol.tv.R as TvR
 import app.antresol.tv.playback.AudioContent
 import app.antresol.tv.playback.AudioEngine
@@ -106,7 +118,10 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
         Card(id = track?.id ?: book?.card?.id ?: 0, kind = if (book != null) Kind.AUDIOBOOK else Kind.ALBUM, title = title, poster = artwork)
     }
 
-    Box(Modifier.fillMaxSize()) {
+    // The screen's elements are one focus group of their own: the shell tells a page that has focus from one that does not by the
+    // state of the group below its own, and a page of bare buttons and a seek bar was taken for one without focus, which the
+    // shell kept answering by putting focus on the first element (the seek bar), so D-pad Up and Down never left it.
+    Box(Modifier.fillMaxSize().focusGroup()) {
         HeroBackground(tintCard)
         Row(
             modifier = Modifier
@@ -120,9 +135,10 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
                     .fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(26.dp), verticalAlignment = Alignment.Bottom) {
-                    ArtworkImage(url = urls?.image(artwork), title = title, modifier = Modifier.size(196.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // The cover and the title block: the block's last line rests on the cover's bottom edge, whatever its length.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(26.dp), verticalAlignment = Alignment.Bottom) {
+                    ArtworkImage(url = urls?.image(artwork), title = title, modifier = Modifier.size(196.dp).testTag("now-playing-cover"))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(stringResource(TvR.string.now_playing).uppercase(), style = Antresol.typography.eyebrow)
                         Text(title, style = Antresol.typography.pageTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         val byline = when (content) {
@@ -179,6 +195,7 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
 @Composable
 private fun PositionSeekBar(audio: AudioEngine, isBook: Boolean) {
     SeekBar(
+        modifier = Modifier.testTag("now-playing-seek"),
         positionMs = audio.positionMs,
         bufferedMs = audio.positionMs,
         durationMs = audio.durationMs,
@@ -213,10 +230,7 @@ private fun MusicControls(
     val audio = viewModel.audio
     val play = remember { FocusRequester() }
     LaunchedEffect(Unit) { play.tryRequestFocus() }
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    TransportRow {
         RoundIconButton(TvIcons.Shuffle, stringResource(TvR.string.now_playing_shuffle), audio::toggleShuffle, active = audio.shuffle)
         RoundIconButton(TvIcons.Previous, stringResource(R.string.now_playing_previous), audio::previous)
         PlayPauseButton(audio, Modifier.focusRequester(play))
@@ -228,7 +242,7 @@ private fun MusicControls(
             active = audio.repeatMode != Player.REPEAT_MODE_OFF,
         )
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    SecondaryRow {
         PillButton(
             text = stringResource(if (panel == MusicPanel.Lyrics) TvR.string.now_playing_up_next else TvR.string.now_playing_lyrics),
             onClick = { onPanel(if (panel == MusicPanel.Lyrics) MusicPanel.UpNext else MusicPanel.Lyrics) },
@@ -250,17 +264,14 @@ private fun MusicControls(
 private fun AudiobookControls(audio: AudioEngine, openers: Map<NowPlayingMenu, FocusRequester>, onMenu: (NowPlayingMenu) -> Unit) {
     val play = remember { FocusRequester() }
     LaunchedEffect(Unit) { play.tryRequestFocus() }
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    TransportRow {
         RoundIconButton(TvIcons.Previous, stringResource(R.string.now_playing_previous), audio::previous)
         RoundIconButton(TvIcons.SkipBack, stringResource(TvR.string.now_playing_back_15), { audio.skipBy(-AudioEngine.BACK_STEP_MS) })
         PlayPauseButton(audio, Modifier.focusRequester(play))
         RoundIconButton(TvIcons.SkipForward, stringResource(TvR.string.now_playing_forward_30), { audio.skipBy(AudioEngine.FORWARD_STEP_MS) })
         RoundIconButton(TvIcons.Next, stringResource(R.string.now_playing_next), audio::next)
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    SecondaryRow {
         PillButton(
             text = stringResource(TvR.string.now_playing_speed) + " · " + speedLabel(audio.speed),
             onClick = { onMenu(NowPlayingMenu.Speed) },
@@ -269,6 +280,27 @@ private fun AudiobookControls(audio: AudioEngine, openers: Map<NowPlayingMenu, F
         )
         SleepButton(audio, isBook = true, onMenu = onMenu, modifier = Modifier.focusRequester(openers.getValue(NowPlayingMenu.Sleep)))
     }
+}
+
+/** The transport buttons, centred under the seek bar: the middle one (Play/Pause) is on the column's axis. */
+@Composable
+private fun TransportRow(content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+/** The pills under the transport, on the same axis. */
+@Composable
+private fun SecondaryRow(content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        content = content,
+    )
 }
 
 @Composable
@@ -307,42 +339,79 @@ private fun LyricsPanel(viewModel: NowPlayingViewModel) {
         is LoadState.Failed -> PanelMessage(state.error.userMessage(LocalContext.current.resources))
         is LoadState.Ready -> {
             val lyrics = state.value
-            if (lyrics == null || lyrics.plainText.isBlank()) {
+            if (lyrics == null || lyrics.rows().isEmpty()) {
                 PanelMessage(stringResource(TvR.string.now_playing_no_lyrics))
                 return
             }
-            val lines = remember(lyrics) {
-                if (lyrics.synced && lyrics.lines.isNotEmpty()) lyrics.lines.map { it.text } else lyrics.plainText.lines()
-            }
-            // Changes with the line, not with every tick of the position.
-            val active by remember(lyrics, viewModel) { derivedStateOf { lyrics.lineIndexAt(viewModel.audio.positionMs) } }
-            val listState = rememberLazyListState()
-            LaunchedEffect(active) {
-                if (active >= 0) listState.animateScrollToItem((active - 2).coerceAtLeast(0))
-            }
-            LazyColumn(
-                state = listState,
-                userScrollEnabled = false,
-                contentPadding = PaddingValues(top = 12.dp, bottom = 120.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                itemsIndexed(lines) { index, line ->
-                    val current = index == active
-                    Text(
-                        text = line.ifBlank { "♪" },
-                        style = Antresol.typography.bodyEmphasis.copy(fontWeight = if (current) FontWeight.Bold else FontWeight.SemiBold),
-                        color = when {
-                            !lyrics.synced -> AntresolColors.Label.copy(alpha = 0.85f)
-                            current -> AntresolColors.Label
-                            else -> AntresolColors.LabelTertiary
-                        },
-                    )
-                }
+            LyricsList(lyrics, positionMs = { viewModel.audio.positionMs })
+        }
+    }
+}
+
+/**
+ * The lines of [lyrics]: no empty one is drawn, an instrumental stretch is one «♪». Synced lyrics follow the song as
+ * in Apple Music: the current line is bold and rests a third of the way down the panel (the lines already sung
+ * above it, fading out at the top edge, the lines to come below), also before the first line, so it does not jump.
+ * [positionMs] is read where the current line is worked out, so the list does not recompose with every tick.
+ */
+@Composable
+internal fun LyricsList(lyrics: Lyrics, positionMs: () -> Long, modifier: Modifier = Modifier) {
+    val rows = remember(lyrics) { lyrics.rows() }
+    val follows = lyrics.synced && lyrics.lines.isNotEmpty()
+    // Changes with the line, not with every tick of the position.
+    val active by remember(lyrics, rows) { derivedStateOf { lyrics.rowIndexAt(rows, positionMs()) } }
+    val listState = rememberLazyListState()
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        // The room above the first line and below the last one lets any line reach the third: a row scrolled to the
+        // start of the content sits at the end of the top padding.
+        // The first time (the panel opened in the middle of the song) the list jumps there, then it follows smoothly.
+        var placed by remember { mutableStateOf(false) }
+        LaunchedEffect(active) {
+            if (active < 0) return@LaunchedEffect
+            if (placed) listState.animateScrollToItem(active) else listState.scrollToItem(active)
+            placed = true
+        }
+        LazyColumn(
+            state = listState,
+            userScrollEnabled = false,
+            contentPadding = if (follows) PaddingValues(top = maxHeight / 3, bottom = maxHeight * 2 / 3) else PaddingValues(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxSize().fadeEdges(top = if (follows) 36.dp else 0.dp, bottom = 36.dp).testTag("lyrics"),
+        ) {
+            itemsIndexed(rows) { index, row ->
+                val current = index == active
+                Text(
+                    text = if (row.instrumental) "♪" else row.text,
+                    style = Antresol.typography.bodyEmphasis.copy(fontWeight = if (current) FontWeight.Bold else FontWeight.SemiBold),
+                    color = when {
+                        !follows -> AntresolColors.Label.copy(alpha = 0.85f)
+                        current -> AntresolColors.Label
+                        else -> AntresolColors.LabelTertiary
+                    },
+                    modifier = if (row.startsStanza) Modifier.padding(top = 14.dp) else Modifier,
+                )
             }
         }
     }
 }
+
+/** Fades the content out over [top] and [bottom] of its height at the edges, so a line leaving is not cut by a hard edge. */
+private fun Modifier.fadeEdges(top: Dp, bottom: Dp): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val topFraction = top.toPx() / size.height
+        val bottomFraction = bottom.toPx() / size.height
+        drawRect(
+            brush = Brush.verticalGradient(
+                0f to if (top > 0.dp) Color.Transparent else Color.Black,
+                topFraction to Color.Black,
+                1f - bottomFraction to Color.Black,
+                1f to Color.Transparent,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+    }
 
 /** The next songs in play order; OK jumps to one. */
 @Composable

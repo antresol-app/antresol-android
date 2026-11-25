@@ -20,13 +20,14 @@ import java.io.File
 /**
  * What the TV keeps for the next time it hangs (the owner's projector froze until it was unplugged,
  * with no cable to read its logs): a heartbeat with the memory and the players every minute while
- * the app is in front (every [BACKGROUND_HEARTBEAT_MS] behind), memory warnings, crashes, players
+ * the app is in front (every ten behind), memory warnings, crashes, players
  * and decoder errors ([PlayerCensus]), and at the next start how the system says the previous run
  * ended (Android 11+), with the last lines of that run. Settings → Diagnostics shows it all on the
  * screen and as a QR code; nothing is sent anywhere.
  */
 class Diagnostics(private val context: Context, private val visible: () -> Boolean) {
-    private val dir = File(context.filesDir, "diagnostics")
+    // Not `filesDir`: on the first run it makes the folder, a disk write on the main thread.
+    private val dir = File(context.dataDir, "files/diagnostics")
     val log = DiagnosticsLog(dir, Process.myPid())
     private val previousFile = File(dir, "previous.txt")
     private val activityManager = context.getSystemService(ActivityManager::class.java)
@@ -48,9 +49,13 @@ class Diagnostics(private val context: Context, private val visible: () -> Boole
             if (previous?.notable == true) runCatching { dir.mkdirs(); previousFile.writeText(previous.lines.joinToString("\n")) }
             previous?.lines?.firstOrNull()?.let { log.write("prev", it) }
             log.write("start", "v${BuildConfig.VERSION_NAME} ${device()} ${memory()}", durable = true)
+            // Every minute in front, every [BACKGROUND_EVERY] minutes behind (decided at each beat:
+            // the process starts before its activity is in front).
+            var beats = 0L
             while (true) {
-                delay(if (visible()) HEARTBEAT_MS else BACKGROUND_HEARTBEAT_MS)
-                log.write("hb", "${memory()} ${PlayerCensus.summary()} fg=${visible()}", durable = true)
+                delay(HEARTBEAT_MS)
+                beats++
+                if (visible() || beats % BACKGROUND_EVERY == 0L) log.write("hb", "${memory()} ${PlayerCensus.summary()} fg=${visible()}", durable = true)
             }
         }
     }
@@ -125,6 +130,8 @@ class Diagnostics(private val context: Context, private val visible: () -> Boole
         ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "DEPENDENCY_DIED"
         ApplicationExitInfo.REASON_OTHER -> "OTHER"
         ApplicationExitInfo.REASON_FREEZER -> "FREEZER"
+        ApplicationExitInfo.REASON_PACKAGE_STATE_CHANGE -> "PACKAGE_STATE_CHANGE"
+        ApplicationExitInfo.REASON_PACKAGE_UPDATED -> "PACKAGE_UPDATED"
         else -> "UNKNOWN($reason)"
     }
 
@@ -133,7 +140,7 @@ class Diagnostics(private val context: Context, private val visible: () -> Boole
         val crashHandlerInstalled = java.util.concurrent.atomic.AtomicBoolean(false)
         const val MB = 1024L * 1024
         const val HEARTBEAT_MS = 60_000L
-        const val BACKGROUND_HEARTBEAT_MS = 10 * 60_000L
+        const val BACKGROUND_EVERY = 10L
         const val MAX_EXITS = 5
         const val TRACE_BYTES = 64 * 1024
         const val CRASH_LINES = 8

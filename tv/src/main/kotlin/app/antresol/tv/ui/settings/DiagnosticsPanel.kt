@@ -113,8 +113,8 @@ internal fun DiagnosticsPanel(report: suspend (maxChars: Int) -> String, onDismi
     }
 }
 
-/** The QR code's text: a version-25 code at level M holds about this much and still reads from a TV screen. */
-private const val QR_CHARS = 900
-private val QR_SIZE = 220.dp
-private val PANEL_WIDTH = 760.dp
+/** The QR code's text: about a version-17 code at level M, modules of 5–6 px on a 1080p screen, which a phone reads from the sofa. */
+private const val QR_CHARS = 500
+private val QR_SIZE = 280.dp
+private val PANEL_WIDTH = 900.dp
 private const val SCROLL_STEP = 120f

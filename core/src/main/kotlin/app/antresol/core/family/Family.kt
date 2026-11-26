@@ -4,6 +4,8 @@ import app.antresol.core.api.AntresolClient
 import app.antresol.core.model.FamilyMember
 import app.antresol.core.model.Kind
 import app.antresol.core.model.Progress
+import java.time.OffsetDateTime
+import java.time.format.DateTimeParseException
 
 /** The server calls of «Семья»; [AntresolClient.familyApi] is the real one. */
 interface FamilyApi {
@@ -75,4 +77,31 @@ object Family {
 
     /** The first of [members] a page of [kind] can continue from, else null. */
     fun firstToContinue(kind: FamilyKind, members: List<FamilyMember>): FamilyMember? = members.firstOrNull { canContinue(kind, it) }
+
+    /** How far apart two places in the same item must be for the family's to be offered at the start: over two minutes. */
+    const val RESUME_GAP_MS = 120_000L
+
+    /** How many of the family the start prompt lists. */
+    const val RESUME_ROWS = 3
+
+    /**
+     * The family members the resume prompt offers when item [itemId] starts and this profile's own place in it is
+     * [ownPositionMs] (0 for a first time): the ones with a place to take (not finished, not a next episode, a position
+     * above zero) that is not about the same as this profile's: another episode always counts, the same item only when the
+     * positions are over [RESUME_GAP_MS] apart. Most recent first, at most [RESUME_ROWS]. [members] may be the family of the
+     * item itself or of its series (an episode's place is then wherever each of them is in the series).
+     */
+    fun resumeCandidates(members: List<FamilyMember>, itemId: Long, ownPositionMs: Long, limit: Int = RESUME_ROWS): List<FamilyMember> =
+        members
+            .filter { !it.finished && !it.next && it.positionMs > 0 }
+            .filter { it.itemId != itemId || kotlin.math.abs(it.positionMs - ownPositionMs) > RESUME_GAP_MS }
+            .sortedByDescending { updatedAtMillis(it) }
+            .take(limit)
+
+    /** [FamilyMember.updatedAt] as epoch milliseconds; a time that does not parse is the oldest. */
+    private fun updatedAtMillis(m: FamilyMember): Long = try {
+        OffsetDateTime.parse(m.updatedAt).toInstant().toEpochMilli()
+    } catch (e: DateTimeParseException) {
+        Long.MIN_VALUE
+    }
 }

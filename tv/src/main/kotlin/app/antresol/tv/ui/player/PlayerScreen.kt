@@ -185,8 +185,8 @@ internal fun Spinner() {
 
 /**
  * The start prompt, as on the Apple TV: the kind (or «Show · Season 1, Episode 2») in small capitals, the title, and with a
- * place of this profile's own how far it is (a thin bar and «76 min left»); below, one column of rows all as wide as each
- * other, focus on the first: «Resume from 34:10» (a first time: «Play»), a row with the avatar for each family member who is
+ * place of this profile's own one line as wide as the rows: a thin bar of how far and «76 min left» ending on the rows' right
+ * edge; below, one column of rows all as wide as each other, focus on the first: «Resume from 34:10» (a first time: «Play»), a row with the avatar for each family member who is
  * somewhere else («Daria · 1:12:40», another episode «Daria · S1 E5 · 12:40»), and «From Beginning» (not for a first time).
  */
 @Composable
@@ -203,6 +203,7 @@ internal fun ResumePrompt(
     val durationMs = item?.files?.firstOrNull()?.durationMs ?: 0L
     Box(Modifier.fillMaxSize().padding(horizontal = ScreenPaddingH, vertical = 56.dp), contentAlignment = Alignment.BottomStart) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            val showProgress = prompt.hasOwnPlace && durationMs > 0
             if (item != null) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.widthIn(max = PROMPT_TITLE_WIDTH)) {
                     val eyebrow = item.subtitle.ifBlank { kindLabel(item.kind).orEmpty() }
@@ -210,13 +211,25 @@ internal fun ResumePrompt(
                     Text(item.title, style = Antresol.typography.pageTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
-            if (prompt.hasOwnPlace && durationMs > 0) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.testTag("resume-progress")) {
-                    ProgressBar(prompt.positionMs.toFloat() / durationMs, Modifier.width(PROMPT_BAR_WIDTH))
-                    Text(Durations.remaining(resources, (durationMs - prompt.positionMs).coerceAtLeast(0)), style = Antresol.typography.caption, color = AntresolColors.LabelSecondary)
+            // One line as wide as the rows (the same left and right edges as the rows at rest): the bar takes what the label leaves,
+            // and the label ends on the rows' right edge.
+            if (showProgress) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.width(PROMPT_ROWS_WIDTH).testTag("resume-progress"),
+                ) {
+                    ProgressBar(prompt.positionMs.toFloat() / durationMs, Modifier.weight(1f).testTag("resume-bar"))
+                    Text(
+                        Durations.remaining(resources, (durationMs - prompt.positionMs).coerceAtLeast(0)),
+                        style = Antresol.typography.caption,
+                        color = AntresolColors.LabelSecondary,
+                        maxLines = 1,
+                        modifier = Modifier.testTag("resume-left"),
+                    )
                 }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.width(PROMPT_ROWS_WIDTH).padding(top = 6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.width(PROMPT_ROWS_WIDTH).padding(top = 2.dp)) {
                 ChoiceRow(
                     text = if (prompt.hasOwnPlace) stringResource(R.string.player_resume_from, Durations.clock(prompt.positionMs)) else stringResource(R.string.action_play),
                     onClick = { onChoose(true) },
@@ -250,9 +263,6 @@ private val PROMPT_ROWS_WIDTH = 380.dp
 
 /** The title above them may run wider. */
 private val PROMPT_TITLE_WIDTH = 560.dp
-
-/** The bar of how far this profile is (420 px on a 1080p screen). */
-private val PROMPT_BAR_WIDTH = 210.dp
 
 @Composable
 private fun TitleBlock(item: ItemDetail?) {

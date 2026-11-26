@@ -708,6 +708,12 @@ private fun VideoFacts(video: VideoInfo) {
     }
 }
 
+/**
+ * How the page's Play/Resume button starts the player: a series or season page lets the app choose the episode
+ * ([ResumeMode.Resume]), an episode's own page is the person's pick of that very episode ([ResumeMode.Picked]).
+ */
+internal fun primaryPlayMode(kind: String): ResumeMode = if (kind == Kind.EPISODE) ResumeMode.Picked else ResumeMode.Resume
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VideoActions(
@@ -752,7 +758,7 @@ private fun VideoActions(
             }
             PillButton(
                 text = label,
-                onClick = { onPlay(target.itemId, ResumeMode.Resume) },
+                onClick = { onPlay(target.itemId, primaryPlayMode(kind)) },
                 icon = AntresolIcons.Play,
                 style = PillStyle.Primary,
                 modifier = Modifier.remembersFocus(focus, playKey),

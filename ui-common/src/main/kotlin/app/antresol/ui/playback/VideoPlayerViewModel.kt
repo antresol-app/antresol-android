@@ -107,6 +107,12 @@ enum class ResumeMode {
     Resume,
 
     /**
+     * Continue from saved progress without asking, as [Resume], but the person picked this very item (an episode's own page):
+     * of the family only those who are in it count, not those elsewhere in its series.
+     */
+    Picked,
+
+    /**
      * Continue from saved progress, the place having been chosen by hand already (a family jump copied it into this profile's
      * own progress): nothing is asked, whoever else of the family is where.
      */
@@ -453,7 +459,7 @@ open class VideoPlayerViewModel(
      * resumes; never when the place was chosen already ([ResumeMode.FromStart], [ResumeMode.Chosen], [startAtMs]: starts
      * there), and a retry, the next episode and a family jump in the player do not pass [askFamily] at all.
      * Family members in another episode count only when the app chose the episode (a series or season, or [ResumeMode.Resume]);
-     * an episode the person picked (Ask) has only those who are in that very episode.
+     * an episode the person picked ([ResumeMode.Ask], [ResumeMode.Picked]) has only those who are in that very episode.
      */
     private fun start(itemId: Long, mode: ResumeMode, askFamily: Boolean = false, startAtMs: Long? = null) {
         startJob?.cancel()

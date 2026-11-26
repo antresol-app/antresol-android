@@ -11,6 +11,7 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
 import androidx.lifecycle.ViewModel
@@ -158,10 +159,14 @@ class FamilyResumePromptTest {
         waitFor(hasText("Sam · 20:00"))
         waitFor(hasText("Daria · 1:12:40"))
         waitFor(hasText("From Beginning"))
-        // How far this profile is: a bar and what is left of the 1 h 44 min film.
+        // How far this profile is: one line with a bar and what is left of the 1 h 44 min film.
         waitFor(hasTestTag("resume-progress"))
         waitFor(hasText("left", substring = true))
         waitFor(isFocused() and hasTestTag("resume-own"))
+        val title = compose.onNodeWithText("Movie 1", useUnmergedTree = true).getBoundsInRoot()
+        val line = compose.onNodeWithTag("resume-progress", useUnmergedTree = true).getBoundsInRoot()
+        val bar = compose.onNodeWithTag("resume-bar", useUnmergedTree = true).getBoundsInRoot()
+        val left = compose.onNodeWithTag("resume-left", useUnmergedTree = true).getBoundsInRoot()
         // One column: the rows at rest are all the same size on the same left edge (760 x 76 px at 1080p), the focused one is
         // scaled from its centre.
         val rows = listOf("resume-family-3", "resume-family-2", "resume-start").map { compose.onNodeWithTag(it, useUnmergedTree = true).getBoundsInRoot() }
@@ -171,6 +176,14 @@ class FamilyResumePromptTest {
             assertEquals(rows.first().left.value, it.left.value, 0.5f)
         }
         assertTrue(rows.zipWithNext().all { (above, below) -> below.top > above.top })
+        // The line is exactly as wide as the rows: the bar starts on their left edge and stretches, the label ends on their right
+        // edge, nothing stands between the title and the line, and the line is above the rows.
+        assertEquals(rows.first().left.value, line.left.value, 0.5f)
+        assertEquals(rows.first().right.value, line.right.value, 0.5f)
+        assertEquals(rows.first().left.value, bar.left.value, 0.5f)
+        assertEquals(rows.first().right.value, left.right.value, 0.5f)
+        assertTrue(bar.right <= left.left && bar.width.value > 100f)
+        assertTrue(title.bottom <= line.top && line.bottom <= rows.first().top)
         // Top to bottom: the own place, the family, starting over.
         key(KeyEvent.KEYCODE_DPAD_DOWN)
         waitFor(isFocused() and hasTestTag("resume-family-3"))
@@ -290,6 +303,20 @@ class FamilyResumePromptTest {
         // The family of the episode was asked for, not that of the series.
         assertTrue(fake.requests.contains("GET /api/items/${episodes[1]}/family"))
         assertFalse(fake.requests.contains("GET /api/items/${FakeServer.SERIES_ID}/family"))
+    }
+
+    @Test
+    fun anEpisodePagesOwnPlayIsAlsoThePersonsPick() {
+        // The episode page's Play button resumes (no «resume from?» question) with ResumeMode.Picked: only those in this episode.
+        seriesFamily()
+        val player = player(episodes[1], ResumeMode.Picked)
+        val prompt = asked(player)
+        assertEquals(listOf("Sam"), prompt.family.map { it.name })
+        assertTrue(fake.requests.contains("GET /api/items/${episodes[1]}/family"))
+        assertFalse(fake.requests.contains("GET /api/items/${FakeServer.SERIES_ID}/family"))
+        // Somebody elsewhere in the series only: nothing to ask, it plays at once.
+        fake.family.remove(episodes[1])
+        playedWithoutAsking(player(episodes[1], ResumeMode.Picked))
     }
 
     @Test

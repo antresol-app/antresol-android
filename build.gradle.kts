@@ -74,6 +74,37 @@ subprojects {
 }
 
 /**
+ * Robolectric's Android runtimes (a 150-200 MB jar per API level) come through Gradle like every other dependency,
+ * and the unit tests run offline on them. Left alone, Robolectric downloads them from Maven Central while the first
+ * test that needs one runs, and a failed download (CI saw those at random) fails that test and the next ones, a
+ * different few every run. Gradle retries a download, and CI keeps what it fetched in its Gradle cache. After a
+ * Robolectric upgrade the versions in libs.versions.toml move with it; a test run on a runtime that is not listed
+ * there fails naming the missing jar.
+ */
+// One configuration for each: the runtimes are one module in two versions, and a single configuration keeps the newer.
+val robolectricRuntimes = listOf(libs.robolectric.runtime.api34, libs.robolectric.runtime.api35).map { runtime ->
+    configurations.detachedConfiguration(runtime.get()).apply { isTransitive = false }
+}
+
+// Robolectric looks a runtime up by file name in one directory; Gradle's cache keeps each jar in a folder of its own.
+val prepareRobolectricRuntimes by tasks.registering(Sync::class) {
+    robolectricRuntimes.forEach { from(it) }
+    into(layout.buildDirectory.dir("robolectric-runtimes"))
+}
+
+subprojects {
+    for (androidPlugin in listOf("com.android.application", "com.android.library")) {
+        plugins.withId(androidPlugin) {
+            tasks.withType<Test>().configureEach {
+                dependsOn(prepareRobolectricRuntimes)
+                systemProperty("robolectric.offline", "true")
+                systemProperty("robolectric.dependency.dir", rootProject.layout.buildDirectory.dir("robolectric-runtimes").get().asFile.path)
+            }
+        }
+    }
+}
+
+/**
  * Reads R8's `mapping.txt` (what survived, old -> new names) and `usage.txt` (what was removed). Together they list
  * every class R8 saw. For every app class that is serializable — it has a generated `$$serializer`, or it or its
  * companion declares `serializer()` — this fails unless:

@@ -1954,7 +1954,7 @@ Owner's projector: pause a film, the system screensaver starts, resume: sound an
 
 ## CI flakes (round 26.11)
 
-CI was red on and off since 21.11, a different test each run. Four causes, all found by reproducing, none by retrying:
+CI was red on and off since 21.11, a different test each run. Five causes, all found by reproducing, none by retrying (the fifth, the app's language restart, is the one behind most "only on CI" flakes of the UI tests):
 - **Robolectric's runtime download.** Robolectric fetched `android-all-instrumented` from Maven Central while the first test ran, with no retry;
   a failed fetch (`MavenArtifactFetcher`, `Failed to fetch maven artifact`) failed that test and the next few. The jar is now a Gradle dependency
   (`robolectric-runtime-*` in `libs.versions.toml`, resolved and copied by `prepareRobolectricRuntimes` in the root build file) and the test tasks run
@@ -1968,4 +1968,10 @@ CI was red on and off since 21.11, a different test each run. Four causes, all f
 - **A tap on a card that moves** (`PhoneRequestsUiTest.aTitleAboveTheAgeLimit…`, found by the full CI-like run on the Mac; it was masked on CI because TV failed first).
   The library's shelf lands above the kid's «Find and Ask» row; a tap made before it arrived hit a card that was moving. The test now waits for the library's
   results and settles first. Hunt it with 8 `yes` processes running beside a loop of `--rerun` of the class: failed in about one run in two before, 0 of 10 after.
+- **The app restarting itself in the middle of a UI test** (`PhoneFamilyUiTest.aFilmContinuesFromTheirMinute`, `theButtonOnARow…`; CI run 45829853657). `FakeServer` answered
+  `/api/me/ui-language` with `effective: "en"`; a fresh app has no language cached, so the shell's first sync cached "en" and restarted the app
+  (`MainActivity.restart` / `restartInNewLanguage`: a new activity started, on the phone the old one finished) when the answer arrived, a different moment each run.
+  Tests that read the started activities saw that restart instead of the player (`peekNextStartedActivity() != null` was true before the player had started).
+  `FakeServer.uiLanguage` is now empty, as a fresh app's cache is, so the app never restarts in a test. With 8 `yes` processes beside the loop the class failed in 6 of 8 runs
+  before, 0 of 8 after; the whole tv and mobile suites pass under the same load.
 

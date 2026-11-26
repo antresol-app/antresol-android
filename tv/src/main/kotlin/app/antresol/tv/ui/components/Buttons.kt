@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Glow
@@ -42,8 +43,9 @@ fun PillButton(
     enabled: Boolean = true,
     /** Hold OK: what else the button does (the choice of a way by hand). */
     onLongClick: (() -> Unit)? = null,
-    /** Drawn in place of [icon] (a ring around it, say); 20 dp wide. */
+    /** Drawn in place of [icon] (a ring around it, say); [leadingSize] wide. */
     leading: (@Composable () -> Unit)? = null,
+    leadingSize: Dp = 20.dp,
     /** What a screen reader says for a button of an [icon] alone (an empty [text]): the pill is then round. */
     contentDescription: String? = null,
 ) {
@@ -99,7 +101,7 @@ fun PillButton(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (leading != null) {
-                Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) { leading() }
+                Box(Modifier.size(leadingSize), contentAlignment = Alignment.Center) { leading() }
             } else if (icon != null) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = LocalContentColor.current)
             }

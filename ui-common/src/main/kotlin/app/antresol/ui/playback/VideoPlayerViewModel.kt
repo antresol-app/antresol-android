@@ -33,6 +33,7 @@ import androidx.media3.exoplayer.util.EventLogger
 import app.antresol.core.api.AntresolClient
 import app.antresol.core.api.ApiException
 import app.antresol.core.api.attempt
+import app.antresol.core.family.Family
 import app.antresol.core.family.familyApi
 import app.antresol.core.model.AudioTrack
 import app.antresol.core.model.AutoSkip
@@ -91,6 +92,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.time.Duration
 import java.util.UUID
@@ -111,7 +113,15 @@ enum class ResumeMode {
 /** What the player screen shows. */
 sealed interface PlayerPhase {
     data object Loading : PlayerPhase
-    data class AskResume(val positionMs: Long) : PlayerPhase
+    /**
+     * "Resume from 12:34?" with [positionMs] this profile's own place, and (the TV, [VideoPlayerOptions.familyResume]) the
+     * [family] places offered beside it, most recent first: a row each, chosen with [VideoPlayerViewModel.chooseFamily].
+     * Without an own place of its own (a first time) the first row just plays and nothing starts over.
+     */
+    data class AskResume(val positionMs: Long, val family: List<FamilyMember> = emptyList()) : PlayerPhase {
+        /** This profile has somewhere to continue from (else the first row is a plain «Смотреть» and nothing starts over). */
+        val hasOwnPlace: Boolean get() = positionMs >= VideoPlayerViewModel.RESUME_PROMPT_MIN_MS
+    }
     data object Playing : PlayerPhase
 
     /** The next episode; [secondsLeft] counts down to autoplay, null when autoplay is off. */
@@ -141,6 +151,11 @@ class VideoPlayerOptions(
     val limitToDisplay: Boolean = true,
     /** Start the next episode after the Up Next countdown. */
     val autoplayNext: () -> Boolean = { true },
+    /**
+     * When a film or episode starts and another profile of the family has a place in it that this profile's own is not
+     * near, ask where to start, with a row for each (the TV). The phone's player leaves it off and asks only as before.
+     */
+    val familyResume: Boolean = false,
 )
 
 /**
@@ -308,8 +323,10 @@ open class VideoPlayerViewModel(
 
     private var currentItemId = itemId
 
+    private val familyApi = client.familyApi()
+
     /** «Семья»: where the other profiles are in the item that plays (a library item; an addon's stream is none). */
-    val family = FamilyModel(client.familyApi(), viewModelScope)
+    val family = FamilyModel(familyApi, viewModelScope)
 
     /** The profiles that are somewhere in the item that plays (not finished, with a position): the «Семья» menu lists them. */
     val familyHere: List<FamilyMember> get() = family.members.filter { it.itemId == currentItemId && !it.finished && it.positionMs > 0 }
@@ -417,14 +434,19 @@ open class VideoPlayerViewModel(
 
     init {
         player.addListener(listener)
-        if (way != null) startWay(way) else start(itemId, resume)
+        if (way != null) startWay(way) else start(itemId, resume, askFamily = options.familyResume)
         ways?.let { controller -> viewModelScope.launch { controller.outcomes.collect(::onWayOutcome) } }
         loadAutoSkip()
     }
 
     // region Starting
 
-    private fun start(itemId: Long, mode: ResumeMode) {
+    /**
+     * Opens [itemId] (a series or season plays one of its episodes). With [askFamily] (the first start of a TV player) the
+     * resume prompt also appears when somebody else of the family is somewhere this profile is not, whatever [mode] is
+     * (but never for [ResumeMode.FromStart]: that was asked for). [startAtMs] starts there without asking anything.
+     */
+    private fun start(itemId: Long, mode: ResumeMode, askFamily: Boolean = false, startAtMs: Long? = null) {
         startJob?.cancel()
         phase = PlayerPhase.Loading
         startJob = viewModelScope.launch {
@@ -432,7 +454,7 @@ open class VideoPlayerViewModel(
                 // Neither depends on the item's details, so both start alongside that request: the
                 // codec list (kept after its first use) and the resume point of [itemId] itself.
                 launch(Dispatchers.Default) { runCatching { DeviceCaps.current(context, limitToDisplay = options.limitToDisplay) } }
-                val early: Deferred<Result<Progress>>? = if (mode == ResumeMode.FromStart) {
+                val early: Deferred<Result<Progress>>? = if (mode == ResumeMode.FromStart || startAtMs != null) {
                     null
                 } else {
                     async {
@@ -454,21 +476,68 @@ open class VideoPlayerViewModel(
                 item = detail
                 currentItemId = detail.id
                 family.load(detail.id)
+                val others = if (askFamily && mode != ResumeMode.FromStart && startAtMs == null) async { familyOnStart(detail) } else null
                 findNextEpisode(detail)
                 // A series or season plays one of its episodes: the early answer is not that episode's.
                 val asked = early?.takeIf { detail.id == itemId }
                 if (asked == null) early?.cancel()
                 val saved = when {
+                    startAtMs != null -> startAtMs
                     mode == ResumeMode.FromStart -> 0L
                     asked != null -> savedPositionMs(detail, file) { asked.await().getOrThrow() }
                     else -> savedPositionMs(detail, file)
                 }
-                if (mode == ResumeMode.Ask && saved >= RESUME_PROMPT_MIN_MS) {
+                val offered = others?.await()?.let { Family.resumeCandidates(it, detail.id, saved) }.orEmpty()
+                if (offered.isNotEmpty()) {
+                    pendingFile = file
+                    phase = PlayerPhase.AskResume(saved, offered)
+                } else if (mode == ResumeMode.Ask && saved >= RESUME_PROMPT_MIN_MS) {
                     pendingFile = file
                     phase = PlayerPhase.AskResume(saved)
                 } else {
                     begin(file, saved)
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                phase = PlayerPhase.Failed(e)
+            }
+        }
+    }
+
+    /**
+     * Where each other profile is in what starts: in the item itself, and for an episode in its series, so another episode of
+     * it shows too. Nothing when the call fails or takes over [FAMILY_ASK_MS]: the player never waits long for this.
+     */
+    private suspend fun familyOnStart(detail: ItemDetail): List<FamilyMember> = try {
+        val id = if (detail.kind == Kind.EPISODE) detail.seriesId ?: detail.id else detail.id
+        withTimeoutOrNull(FAMILY_ASK_MS) { familyApi.members(id) }.orEmpty()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    /**
+     * The answer to a family row of the resume prompt: their place becomes this profile's own (the server copies it; theirs
+     * is never written), then their item plays from it. When the server refuses (they went on or finished meanwhile) the
+     * player goes to their place all the same, with no error.
+     */
+    fun chooseFamily(member: FamilyMember) {
+        val file = pendingFile ?: return
+        if (phase !is PlayerPhase.AskResume) return
+        pendingFile = null
+        phase = PlayerPhase.Loading
+        startJob = viewModelScope.launch {
+            try {
+                try {
+                    familyApi.adopt(member.itemId, member.userId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Their place is used anyway.
+                }
+                if (member.itemId == currentItemId) begin(file, member.positionMs) else start(member.itemId, ResumeMode.Resume, startAtMs = member.positionMs)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1525,6 +1594,9 @@ open class VideoPlayerViewModel(
     companion object {
         const val SEEK_STEP_MS = 10_000L
         const val RESUME_PROMPT_MIN_MS = 10_000L
+
+        /** How long the start waits for the family's places before it plays without them. */
+        private const val FAMILY_ASK_MS = 2_500L
         const val UP_NEXT_SECONDS = 10
         private const val TICK_MS = 500L
         private const val SEEK_SETTLE_MS = 700L

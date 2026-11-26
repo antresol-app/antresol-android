@@ -40,6 +40,8 @@ class PlayerViewModel(
         defaultQuality = preferences.defaultQuality,
         subtitleLanguage = preferences.subtitleLanguage,
         limitToDisplay = true,
+        // Somebody else of the family is somewhere in what starts: the prompt lists them.
+        familyResume = true,
     ),
     pendingWrites = pendingWrites,
     way = way,

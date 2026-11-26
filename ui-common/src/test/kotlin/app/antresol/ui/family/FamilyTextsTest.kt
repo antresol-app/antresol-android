@@ -43,6 +43,19 @@ class FamilyTextsTest {
     )
 
     @Test
+    fun aRowOfTheStartPromptIsTheNameAndThePlace() {
+        val daria = FamilyMember(userId = 2, name = "Daria", itemId = 10, positionMs = 4_360_000)
+        assertEquals("Daria · 1:12:40", FamilyTexts.resumeRow(en, daria, startingItemId = 10))
+        assertEquals("Daria · 1:12:40", FamilyTexts.resumeRow(ru, daria, startingItemId = 10))
+        // Another episode than the one that starts says which one; the same one does not.
+        val elsewhere = daria.copy(itemId = 11, season = 1, episode = 5, positionMs = 760_000)
+        assertEquals("Daria · S1 E5 · 12:40", FamilyTexts.resumeRow(en, elsewhere, startingItemId = 10))
+        assertEquals("Дарья · С1 Э5 · 12:40", FamilyTexts.resumeRow(ru, elsewhere.copy(name = "Дарья"), startingItemId = 10))
+        assertEquals("Daria · 12:40", FamilyTexts.resumeRow(en, elsewhere, startingItemId = 11))
+        assertEquals("Living Room · Daria · Special 1 · 12:40", FamilyTexts.resumeRow(en, elsewhere.copy(name = "Living Room", ownerName = "Daria", season = 0, episode = 1), 10))
+    }
+
+    @Test
     fun aSeriesSaysTheEpisodeAndHowFarIn() {
         val m = member(positionMs = 17 * 60_000, season = 2, episode = 5)
         assertEquals("S2 E5 · 17 min", FamilyTexts.placeOf(en, FamilyKind.Series, m))

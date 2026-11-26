@@ -139,6 +139,9 @@
     <string name="detail_in_watchlist">В «Буду смотреть»</string>
     <string name="player_resume_title">Продолжить просмотр?</string>
     <string name="player_resume_from">Продолжить с %1$s</string>
+    <string name="player_resume_family_title">С чего начать?</string>
+    <string name="player_resume_here">Продолжить · %1$s</string>
+    <string name="player_from_beginning">Сначала</string>
     <string name="player_pause">Пауза</string>
     <string name="player_up_next">Далее</string>
     <string name="player_next_in">Начнётся через %1$d с</string>

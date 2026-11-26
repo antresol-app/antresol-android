@@ -91,6 +91,14 @@ object FamilyTexts {
         }
     }
 
+    /**
+     * What a row of the start prompt says: «Дарья · 1:12:40», and for another episode than the one that starts
+     * «Дарья · С1 Э5 · 12:40». The name is never declined, so it stays the first word.
+     */
+    fun resumeRow(resources: Resources, m: FamilyMember, startingItemId: Long): String =
+        listOfNotNull(m.displayName, code(resources, m).takeIf { m.itemId != startingItemId && m.episode > 0 }, Durations.clock(m.positionMs))
+            .joinToString(" · ")
+
     /** The folded line's words: «Alex · С2 Э5 · 34 мин» (the most recent profile). */
     fun summary(resources: Resources, kind: FamilyKind, members: List<FamilyMember>, chapters: List<Chapter> = emptyList()): String {
         val first = members.firstOrNull() ?: return ""

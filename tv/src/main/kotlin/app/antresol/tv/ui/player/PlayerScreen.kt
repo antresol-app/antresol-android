@@ -42,6 +42,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,6 +56,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Text
+import app.antresol.core.model.FamilyMember
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.playback.SkipPill
 import app.antresol.tv.ui.components.ErrorView
@@ -66,6 +68,8 @@ import app.antresol.tv.ui.components.tryRequestFocus
 import app.antresol.tv.ui.home.HeroBackground
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
+import app.antresol.ui.components.ProfileAvatar
+import app.antresol.ui.family.FamilyTexts
 import app.antresol.ui.format.Durations
 import app.antresol.ui.playback.PlayerMenu
 import app.antresol.ui.playback.PlayerPhase
@@ -102,7 +106,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onExit: () -> Unit) {
         when (phase) {
             PlayerPhase.Loading -> Backdrop(viewModel.item) { Spinner() }
             is PlayerPhase.AskResume -> Backdrop(viewModel.item) {
-                ResumePrompt(viewModel.item, phase.positionMs, onChoose = viewModel::chooseResume)
+                ResumePrompt(viewModel.item, phase, photoUrl = viewModel::familyPhoto, onChoose = viewModel::chooseResume, onFamily = viewModel::chooseFamily)
             }
             PlayerPhase.Playing -> PlayingOverlay(viewModel, onExit)
             is PlayerPhase.UpNext -> UpNextOverlay(phase, onPlayNow = viewModel::playNext, onCancel = viewModel::cancelUpNext)
@@ -173,27 +177,69 @@ internal fun Spinner() {
     }
 }
 
+/**
+ * «Resume from 12:34?»: this profile's own place and «from the beginning», and (when the family has asked) a row below for each
+ * other profile that is somewhere else in it. With family rows the choices stand one under the other, focus on the first; a
+ * first time has «Play» in place of the own place, and no «from the beginning».
+ */
 @Composable
-private fun ResumePrompt(item: ItemDetail?, positionMs: Long, onChoose: (Boolean) -> Unit) {
+internal fun ResumePrompt(
+    item: ItemDetail?,
+    prompt: PlayerPhase.AskResume,
+    photoUrl: (FamilyMember) -> String?,
+    onChoose: (Boolean) -> Unit,
+    onFamily: (FamilyMember) -> Unit,
+) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.tryRequestFocus() }
+    val resources = LocalContext.current.resources
     Box(Modifier.fillMaxSize().padding(horizontal = ScreenPaddingH, vertical = 56.dp), contentAlignment = Alignment.BottomStart) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.widthIn(max = 640.dp)) {
             TitleBlock(item)
-            Text(stringResource(R.string.player_resume_title), style = Antresol.typography.bodyEmphasis, color = AntresolColors.LabelSecondary)
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 6.dp)) {
-                PillButton(
-                    text = stringResource(R.string.player_resume_from, Durations.clock(positionMs)),
-                    onClick = { onChoose(true) },
-                    icon = AntresolIcons.Play,
-                    style = PillStyle.Primary,
-                    modifier = Modifier.focusRequester(focus),
-                )
-                PillButton(
-                    text = stringResource(R.string.action_play_from_start),
-                    onClick = { onChoose(false) },
-                    icon = AntresolIcons.Restart,
-                )
+            val question = if (prompt.family.isNotEmpty() && !prompt.hasOwnPlace) R.string.player_resume_family_title else R.string.player_resume_title
+            Text(stringResource(question), style = Antresol.typography.bodyEmphasis, color = AntresolColors.LabelSecondary)
+            if (prompt.family.isEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    PillButton(
+                        text = stringResource(R.string.player_resume_from, Durations.clock(prompt.positionMs)),
+                        onClick = { onChoose(true) },
+                        icon = AntresolIcons.Play,
+                        style = PillStyle.Primary,
+                        modifier = Modifier.focusRequester(focus),
+                    )
+                    PillButton(
+                        text = stringResource(R.string.action_play_from_start),
+                        onClick = { onChoose(false) },
+                        icon = AntresolIcons.Restart,
+                    )
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    PillButton(
+                        text = if (prompt.hasOwnPlace) stringResource(R.string.player_resume_here, Durations.clock(prompt.positionMs)) else stringResource(R.string.action_play),
+                        onClick = { onChoose(true) },
+                        icon = AntresolIcons.Play,
+                        style = PillStyle.Primary,
+                        modifier = Modifier.focusRequester(focus).testTag("resume-own"),
+                    )
+                    prompt.family.forEach { member ->
+                        PillButton(
+                            text = FamilyTexts.resumeRow(resources, member, item?.id ?: 0),
+                            onClick = { onFamily(member) },
+                            leading = { ProfileAvatar(name = member.name, avatar = member.avatar, size = 28.dp, photoUrl = photoUrl(member)) },
+                            leadingSize = 28.dp,
+                            modifier = Modifier.testTag("resume-family-${member.userId}"),
+                        )
+                    }
+                    if (prompt.hasOwnPlace) {
+                        PillButton(
+                            text = stringResource(R.string.player_from_beginning),
+                            onClick = { onChoose(false) },
+                            icon = AntresolIcons.Restart,
+                            modifier = Modifier.testTag("resume-start"),
+                        )
+                    }
+                }
             }
         }
     }

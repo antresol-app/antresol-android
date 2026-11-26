@@ -139,6 +139,9 @@
     <string name="detail_in_watchlist">In Want to Watch</string>
     <string name="player_resume_title">Resume watching?</string>
     <string name="player_resume_from">Resume from %1$s</string>
+    <string name="player_resume_family_title">Where to start?</string>
+    <string name="player_resume_here">Resume · %1$s</string>
+    <string name="player_from_beginning">From Beginning</string>
     <string name="player_pause">Pause</string>
     <string name="player_up_next">Up Next</string>
     <string name="player_next_in">Starts in %1$d s</string>

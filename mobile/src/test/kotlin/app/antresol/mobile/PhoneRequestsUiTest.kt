@@ -92,6 +92,7 @@ class PhoneRequestsUiTest {
         searchFor("far")
         waitFor(hasText("Find and Ask"))
         waitFor(titled("Far Away Film"))
+        waitForTheLibrarysResults()
         settle()
         shot("requests-phone-search")
         assertTrue(fake.requests.contains("GET /api/requests/search?q=far&kind=video"))
@@ -128,6 +129,8 @@ class PhoneRequestsUiTest {
         start()
         searchFor("far")
         waitFor(titled("Grown-up Film"))
+        waitForTheLibrarysResults()
+        settle()
         compose.onAllNodes(titled("Grown-up Film"), useUnmergedTree = true).onFirst().performClick()
         waitFor(hasTestTag("request-ask"))
         waitFor(hasText("This is 16+, and this profile allows up to 6+"))
@@ -241,6 +244,12 @@ class PhoneRequestsUiTest {
             throw IllegalStateException("${e.message}; requests ${fake.requests.takeLast(12)}", e)
         }
     }
+
+    /**
+     * The library's results arrive beside the kid's titles to ask for, and its shelf goes above them: a tap made before it is
+     * in lands on a card that is moving (a tap lost on a loaded machine, a different one each run).
+     */
+    private fun waitForTheLibrarysResults() = waitFor(titled("Movie 1"))
 
     /** A card's title: its text, or its description when the card draws only the picture. */
     private fun titled(title: String) = hasText(title) or hasContentDescription(title)

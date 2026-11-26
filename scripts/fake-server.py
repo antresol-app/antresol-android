@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A small fake Antresol server for driving the apps by hand (an emulator or a device).
 
-    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>] [--addons] [--kid] [--requests] [--family] [--lyrics] [--long-titles]
+    scripts/fake-server.py [--port 8421] [--host 0.0.0.0] [--trailer <YouTube id>] [--rebuild-after <pages>] [--addons] [--kid] [--requests] [--family] [--resume-family] [--lyrics] [--long-titles]
 
 It answers what test-fixtures' FakeServer answers (passwordless profiles, one with a photo, home, grids, a film and
 a series page, trailers) with the same JSON, plus live channels and the programme guide. In an
@@ -57,6 +57,11 @@ With --family other profiles have places in the library's titles («Семья»
 copies one profile's unfinished place into this profile's own, which `GET /api/progress/{id}` then answers (kept for the run).
 Nothing of the library plays (see above), so continuing opens the player at its error page: what shows is the line, the list
 and the requests the app makes.
+
+With --resume-family (it implies --family) the places are those of the TV player's start prompt instead: «Movie 1» has only
+Daria at 1:12:40 (this profile's first time: «Play» and her row); «Movie 2» is where this profile is at 34:10, with Sam at 20:00 and
+Daria at 1:12:40 (the prompt has «Resume», two rows and «From Beginning»); «The Test Show» plays its second episode, where this
+profile is at 8:20, Sam at 20:00, and Daria is in the fourth episode at 12:40 (her row names it: «S1 E4»).
 """
 import argparse
 import json
@@ -83,7 +88,7 @@ SERIES_TMDB, MOVIE_TMDB, OUTSIDE_TMDB = 1399, 603, 9001
 # --addons: the protocol of one addon, "alpha"; what its ways remember and do is kept for the run.
 addon = {"on": False, "remembered": False, "keep": {"since": None}}
 # --family: the other profiles' places in the library's titles, and the places this profile took from them (item id -> (position, duration)).
-family_state = {"on": False, "taken": {}}
+family_state = {"on": False, "taken": {}, "resume": False}
 # --lang: the profile's interface language (the apps show their words in it).
 ui_language = [""]
 # --requests: kids' requests, by kind|key (see kid_requests_answer).
@@ -205,9 +210,22 @@ def item(i):
             **({"tmdbId": MOVIE_TMDB + (i - MOVIE)} if addon["on"] else {})}
 
 
+# --resume-family: this profile's own places (item id -> (position, duration)), before it takes any.
+RESUME_OWN = {MOVIE + 1: (34 * MIN + 10_000, 104 * MIN), EPISODES[1]: (8 * MIN + 20_000, 45 * MIN)}
+
+
 def family_places():
     """The other profiles' places by the item they are in: (user id, name, avatar, item, position ms, duration ms, finished, next, season,
     episode, how many episodes done, minutes ago)."""
+    if family_state["resume"]:
+        daria, sam = ("Дарья", "Сэм") if ui_language[0] == "ru" else ("Daria", "Sam")
+        return [
+            (5, daria, "grad-4", MOVIE, 72 * MIN + 40_000, 104 * MIN, False, False, 0, 0, 0, 90),
+            (2, sam, "grad-5", MOVIE + 1, 20 * MIN, 104 * MIN, False, False, 0, 0, 0, 30),
+            (5, daria, "grad-4", MOVIE + 1, 72 * MIN + 40_000, 104 * MIN, False, False, 0, 0, 0, 300),
+            (2, sam, "grad-5", EPISODES[1], 20 * MIN, 45 * MIN, False, False, 1, 2, 1, 120),
+            (5, daria, "grad-4", EPISODES[3], 12 * MIN + 40_000, 45 * MIN, False, False, 1, 4, 3, 15),
+        ]
     return [
         (2, "Sam", "grad-5", EPISODES[1], 20 * MIN, 45 * MIN, False, False, 1, 2, 1, 120),
         (3, "Robin", "grad-2", EPISODES[2], 0, 0, False, True, 1, 3, 2, 26 * 60),
@@ -237,7 +255,7 @@ def family_json(item_id, kid):
 
 
 def progress_json(item_id):
-    position, duration = family_state["taken"].get(item_id, (0, 0))
+    position, duration = family_state["taken"].get(item_id) or (RESUME_OWN.get(item_id, (0, 0)) if family_state["resume"] else (0, 0))
     if not position:
         return {"positionMs": 0, "durationMs": 0, "finished": False}
     return {"positionMs": position, "durationMs": duration, "finished": False, "locator": "", "fraction": position / duration,
@@ -846,6 +864,7 @@ if __name__ == "__main__":
     args.add_argument("--kid", action="store_true", help="the profile is a kid's (no «Отдельная история»; its writes answer 403)")
     args.add_argument("--requests", action="store_true", help="kids' requests are open (see above): with --kid the profile asks, without it answers")
     args.add_argument("--family", action="store_true", help="other profiles have places in the library's titles («Семья»; see above)")
+    args.add_argument("--resume-family", action="store_true", help="the places of the TV player's start prompt (implies --family; see above)")
     args.add_argument("--lyrics", action="store_true", help="the first two tracks have lyrics (synced, with empty and instrumental lines; plain, with blank lines)")
     args.add_argument("--long-titles", action="store_true", help="the first track's title is too long for one line")
     args.add_argument("--lang", choices=["ru", "en"], default="", help="the profile's interface language (default: none chosen, English)")
@@ -854,7 +873,8 @@ if __name__ == "__main__":
     music_options.update(lyrics=options.lyrics, long_titles=options.long_titles)
     ME["isKid"] = options.kid
     requests_state["on"] = options.requests
-    family_state["on"] = options.family
+    family_state["on"] = options.family or options.resume_family
+    family_state["resume"] = options.resume_family
     if options.requests:
         sample_requests()
     addon["on"] = options.addons

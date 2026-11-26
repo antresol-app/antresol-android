@@ -144,6 +144,12 @@ class FakeServer {
     /** `POST /api/progress/{id}/adopt` bodies that were taken, as `itemId userId`. */
     val adopted = CopyOnWriteArrayList<String>()
 
+    /** `POST /api/progress/{id}/adopt` answers 404 whoever is asked (they finished or went on meanwhile). */
+    @Volatile var adoptRefused = false
+
+    /** `POST /api/play/{fileId}` bodies, as `fileId body` (the fake answers 404: no film plays, but what a player asked for is seen). */
+    val plays = CopyOnWriteArrayList<String>()
+
     /** One other profile's place in an item, as the server lists it. [agoMinutes] is how long ago they were there. */
     data class FakeFamilyMember(
         val userId: Long,
@@ -188,6 +194,10 @@ class FakeServer {
                 }
                 if (path.startsWith("/api/requests")) return requests(request.method.orEmpty(), path, request.body.readUtf8())
                 if (request.method == "POST" && path.matches(Regex("/api/progress/\\d+/adopt"))) return adopt(path, request.body.readUtf8())
+                if (request.method == "POST" && path.matches(Regex("/api/play/\\d+"))) {
+                    plays += "${path.substringAfterLast('/')} ${request.body.readUtf8()}"
+                    return MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
+                }
                 // A kid has no addons; the title page is the one thing it gets of them (with its `kidRequest`).
                 if (kid && path.startsWith("/api/title/")) return addon(request.method.orEmpty(), path, "")
                 if (kid && path == "/api/addons/web") {
@@ -273,6 +283,7 @@ class FakeServer {
         val itemId = path.split('/')[3].toLong()
         val userId = Regex(""""userId"\s*:\s*(\d+)""").find(body)?.groupValues?.get(1)?.toLong() ?: 0L
         val theirs = family.values.flatten().firstOrNull { it.itemId == itemId && it.userId == userId && !it.finished && !it.next && it.positionMs > 0 }
+            ?.takeUnless { adoptRefused }
             ?: return MockResponse().setResponseCode(404).setBody("""{"error":"Not found"}""")
         adopted += "$itemId $userId"
         progress[itemId] = theirs.positionMs to theirs.durationMs

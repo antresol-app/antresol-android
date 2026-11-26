@@ -1883,10 +1883,13 @@ Owner: when a film or episode starts and another profile has a place in it that 
 - `PlayerPhase.AskResume(positionMs, family)` (`hasOwnPlace`: 10 s or more). `chooseFamily(member)`: `POST /api/progress/{theirItemId}/adopt`, then the
   member's item plays from `positionMs` (`start(..., startAtMs)`: another episode loads its file, no second prompt); a refused adopt is ignored and
   their place is used anyway, no error. `chooseResume(Boolean)` is unchanged.
-- TV `ResumePrompt` (`PlayerScreen.kt`): without family rows the two pills in a row, as before. With them one column, focus on the first row:
-  «Продолжить · 34:10» / «Resume · 34:10» (a first time: «Смотреть» / «Play», the question «С чего начать?» / «Where to start?», and no starting
-  over), a `PillButton` with the avatar per member («Дарья · 1:12:40», another episode «Дарья · С1 Э5 · 12:40»: `FamilyTexts.resumeRow`),
-  «Сначала» / «From Beginning». The in-player «Family» menu is untouched.
+- TV `ResumePrompt` (`PlayerScreen.kt`), laid out like the Apple TV's, with and without family rows: the kind (or the item's `subtitle`, «Test Show · Season 1,
+  Episode 1») in small capitals, the title, and with an own place (`hasOwnPlace`) the shared `ProgressBar` and `Durations.remaining` («Осталось 76 мин»; no
+  question line). Below, one column of `ChoiceRow`s (`Buttons.kt`: 380 dp x 38 dp = 760 x 76 px at 1080p, 10 dp apart, the pill shape, the pill colours: the
+  first row `PillStyle.Primary`, the others dark with `GlassBorder`; the icon or avatar in a 26 dp slot so the texts line up; focus 1.05 from the centre),
+  focus on the first row: «Продолжить с 34:10» / "Resume from 34:10" (`player_resume_from`; a first time: «Смотреть» / "Play" and no bar), a row with the avatar
+  per member («Дарья · 1:12:40», another episode «Дарья · С1 Э5 · 12:40»: `FamilyTexts.resumeRow`), «Сначала» / "From Beginning" (a first time has none).
+  The in-player «Family» menu is untouched.
 - Known edge: an episode's own page Play button is `ResumeMode.Resume` (the same button as the series page's), so it counts as the app's choice.
 - Tests: `FamilyRulesTest` (core), `FamilyTextsTest.aRowOfTheStartPrompt...` (ui-common), `FamilyResumePromptTest` (tv: the phase of the view model and
   the prompt's rows, focus order and requests against `FakeServer`, which now also records `POST /api/play/{fileId}` in `plays`, can refuse the adopt:

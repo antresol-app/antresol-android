@@ -8,7 +8,11 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
@@ -120,9 +124,13 @@ class FamilyResumePromptTest {
         assertFalse(prompt.hasOwnPlace)
         assertEquals(listOf("Daria"), prompt.family.map { it.name })
         show(player)
-        waitFor(hasText("Where to start?"))
+        // The kind above the title, as on the Apple TV; no question, and no bar of a place that is not there.
+        waitFor(hasText("MOVIE"))
+        waitFor(hasText("Movie 1"))
         waitFor(hasText("Play"))
         waitFor(hasText("Daria · 1:12:40"))
+        assertTrue(compose.onAllNodes(hasText("Where to start?"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodes(hasTestTag("resume-progress"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         // No «from the beginning» for somebody who has not started; focus on the first row.
         assertTrue(compose.onAllNodes(hasTestTag("resume-start"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         waitFor(isFocused() and hasTestTag("resume-own"))
@@ -146,11 +154,23 @@ class FamilyResumePromptTest {
         assertEquals(34 * min + 10_000, prompt.positionMs)
         assertEquals(listOf("Sam", "Daria"), prompt.family.map { it.name })
         show(player)
-        waitFor(hasText("Resume · 34:10"))
+        waitFor(hasText("Resume from 34:10"))
         waitFor(hasText("Sam · 20:00"))
         waitFor(hasText("Daria · 1:12:40"))
         waitFor(hasText("From Beginning"))
+        // How far this profile is: a bar and what is left of the 1 h 44 min film.
+        waitFor(hasTestTag("resume-progress"))
+        waitFor(hasText("left", substring = true))
         waitFor(isFocused() and hasTestTag("resume-own"))
+        // One column: the rows at rest are all the same size on the same left edge (760 x 76 px at 1080p), the focused one is
+        // scaled from its centre.
+        val rows = listOf("resume-family-3", "resume-family-2", "resume-start").map { compose.onNodeWithTag(it, useUnmergedTree = true).getBoundsInRoot() }
+        rows.forEach {
+            assertEquals(380f, it.width.value, 0.5f)
+            assertEquals(38f, it.height.value, 0.5f)
+            assertEquals(rows.first().left.value, it.left.value, 0.5f)
+        }
+        assertTrue(rows.zipWithNext().all { (above, below) -> below.top > above.top })
         // Top to bottom: the own place, the family, starting over.
         key(KeyEvent.KEYCODE_DPAD_DOWN)
         waitFor(isFocused() and hasTestTag("resume-family-3"))
@@ -364,7 +384,8 @@ class FamilyResumePromptTest {
         assertTrue(prompt.family.isEmpty())
         show(player)
         waitFor(hasText("Resume from 34:10"))
-        waitFor(hasText("Play from Beginning"))
+        waitFor(hasText("From Beginning"))
+        assertTrue(compose.onAllNodes(hasTestTag("resume-family-2"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     @Test

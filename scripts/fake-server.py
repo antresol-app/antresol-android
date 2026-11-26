@@ -204,7 +204,11 @@ def item(i):
                 "rating": "16+", "cast": CAST, "seasons": seasons, "next": episode_card(EPISODES[1], 1, 2, progress=0.4),
                 **({"tmdbId": SERIES_TMDB} if addon["on"] else {})}
     if i in EPISODES:
-        return {"id": i, "kind": "episode", "title": "Episode", "seriesId": SERIES, "files": [{"id": i + 1000, "durationMs": 2700000}]}
+        # The server names an episode's context «Show · Season 1, Episode 2» in the profile's language (the start prompt shows it).
+        season, number = (1, EPISODES.index(i) + 1) if EPISODES.index(i) < 4 else (2, EPISODES.index(i) - 3)
+        context = f"Test Show · Сезон {season}, серия {number}" if ui_language[0] == "ru" else f"Test Show · Season {season}, Episode {number}"
+        return {"id": i, "kind": "episode", "title": f"Episode {number}", "subtitle": context, "seriesId": SERIES,
+                "files": [{"id": i + 1000, "durationMs": 2700000}]}
     return {**movie_card(i), "overview": "A test movie.", "genres": ["Adventure"], "runtime": 104, "cast": CAST,
             "files": [{"id": i + 1000, "durationMs": 6240000, "audio": [], "subs": []}], "actions": {"play": True},
             **({"tmdbId": MOVIE_TMDB + (i - MOVIE)} if addon["on"] else {})}

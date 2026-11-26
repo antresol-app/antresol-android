@@ -206,8 +206,8 @@ class TvFamilyUiTest {
         waitUntil { fake.plays.isNotEmpty() }
         assertEquals(1000L + episodes[1], fake.plays.single().substringBefore(' ').toLong())
         assertTrue(fake.plays.single(), fake.plays.single().contains("\"startSec\":1200"))
-        assertTrue(compose.onAllNodes(hasText("Where to start?"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
-        assertTrue(compose.onAllNodes(hasText("Resume watching?"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        // No start prompt (its first row is «resume-own»).
+        assertTrue(compose.onAllNodes(hasTestTag("resume-own"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     @Test

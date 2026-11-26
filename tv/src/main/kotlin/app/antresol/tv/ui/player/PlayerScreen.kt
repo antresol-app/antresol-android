@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -55,11 +56,14 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.tv.material3.Icon
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Text
 import app.antresol.core.model.FamilyMember
 import app.antresol.core.model.ItemDetail
 import app.antresol.core.playback.SkipPill
 import app.antresol.tv.ui.components.ErrorView
+import app.antresol.tv.ui.components.ChoiceRow
 import app.antresol.tv.ui.components.GlassNotice
 import app.antresol.tv.ui.components.PillButton
 import app.antresol.tv.ui.components.PillStyle
@@ -69,6 +73,8 @@ import app.antresol.tv.ui.home.HeroBackground
 import app.antresol.ui.R
 import app.antresol.ui.components.AntresolIcons
 import app.antresol.ui.components.ProfileAvatar
+import app.antresol.ui.components.ProgressBar
+import app.antresol.ui.components.kindLabel
 import app.antresol.ui.family.FamilyTexts
 import app.antresol.ui.format.Durations
 import app.antresol.ui.playback.PlayerMenu
@@ -178,9 +184,10 @@ internal fun Spinner() {
 }
 
 /**
- * «Resume from 12:34?»: this profile's own place and «from the beginning», and (when the family has asked) a row below for each
- * other profile that is somewhere else in it. With family rows the choices stand one under the other, focus on the first; a
- * first time has «Play» in place of the own place, and no «from the beginning».
+ * The start prompt, as on the Apple TV: the kind (or «Show · Season 1, Episode 2») in small capitals, the title, and with a
+ * place of this profile's own how far it is (a thin bar and «76 min left»); below, one column of rows all as wide as each
+ * other, focus on the first: «Resume from 34:10» (a first time: «Play»), a row with the avatar for each family member who is
+ * somewhere else («Daria · 1:12:40», another episode «Daria · S1 E5 · 12:40»), and «From Beginning» (not for a first time).
  */
 @Composable
 internal fun ResumePrompt(
@@ -193,57 +200,59 @@ internal fun ResumePrompt(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.tryRequestFocus() }
     val resources = LocalContext.current.resources
+    val durationMs = item?.files?.firstOrNull()?.durationMs ?: 0L
     Box(Modifier.fillMaxSize().padding(horizontal = ScreenPaddingH, vertical = 56.dp), contentAlignment = Alignment.BottomStart) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.widthIn(max = 640.dp)) {
-            TitleBlock(item)
-            val question = if (prompt.family.isNotEmpty() && !prompt.hasOwnPlace) R.string.player_resume_family_title else R.string.player_resume_title
-            Text(stringResource(question), style = Antresol.typography.bodyEmphasis, color = AntresolColors.LabelSecondary)
-            if (prompt.family.isEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 6.dp)) {
-                    PillButton(
-                        text = stringResource(R.string.player_resume_from, Durations.clock(prompt.positionMs)),
-                        onClick = { onChoose(true) },
-                        icon = AntresolIcons.Play,
-                        style = PillStyle.Primary,
-                        modifier = Modifier.focusRequester(focus),
-                    )
-                    PillButton(
-                        text = stringResource(R.string.action_play_from_start),
-                        onClick = { onChoose(false) },
-                        icon = AntresolIcons.Restart,
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            if (item != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.widthIn(max = PROMPT_TITLE_WIDTH)) {
+                    val eyebrow = item.subtitle.ifBlank { kindLabel(item.kind).orEmpty() }
+                    if (eyebrow.isNotBlank()) Text(eyebrow.uppercase(), style = Antresol.typography.eyebrow, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(item.title, style = Antresol.typography.pageTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (prompt.hasOwnPlace && durationMs > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.testTag("resume-progress")) {
+                    ProgressBar(prompt.positionMs.toFloat() / durationMs, Modifier.width(PROMPT_BAR_WIDTH))
+                    Text(Durations.remaining(resources, (durationMs - prompt.positionMs).coerceAtLeast(0)), style = Antresol.typography.caption, color = AntresolColors.LabelSecondary)
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.width(PROMPT_ROWS_WIDTH).padding(top = 6.dp)) {
+                ChoiceRow(
+                    text = if (prompt.hasOwnPlace) stringResource(R.string.player_resume_from, Durations.clock(prompt.positionMs)) else stringResource(R.string.action_play),
+                    onClick = { onChoose(true) },
+                    style = PillStyle.Primary,
+                    modifier = Modifier.focusRequester(focus).testTag("resume-own"),
+                    leading = { Icon(AntresolIcons.Play, contentDescription = null, modifier = Modifier.size(20.dp), tint = LocalContentColor.current) },
+                )
+                prompt.family.forEach { member ->
+                    ChoiceRow(
+                        text = FamilyTexts.resumeRow(resources, member, item?.id ?: 0),
+                        onClick = { onFamily(member) },
+                        modifier = Modifier.testTag("resume-family-${member.userId}"),
+                        leading = { ProfileAvatar(name = member.name, avatar = member.avatar, size = 26.dp, photoUrl = photoUrl(member)) },
                     )
                 }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
-                    PillButton(
-                        text = if (prompt.hasOwnPlace) stringResource(R.string.player_resume_here, Durations.clock(prompt.positionMs)) else stringResource(R.string.action_play),
-                        onClick = { onChoose(true) },
-                        icon = AntresolIcons.Play,
-                        style = PillStyle.Primary,
-                        modifier = Modifier.focusRequester(focus).testTag("resume-own"),
+                if (prompt.hasOwnPlace) {
+                    ChoiceRow(
+                        text = stringResource(R.string.player_from_beginning),
+                        onClick = { onChoose(false) },
+                        modifier = Modifier.testTag("resume-start"),
+                        leading = { Icon(AntresolIcons.Restart, contentDescription = null, modifier = Modifier.size(20.dp), tint = LocalContentColor.current) },
                     )
-                    prompt.family.forEach { member ->
-                        PillButton(
-                            text = FamilyTexts.resumeRow(resources, member, item?.id ?: 0),
-                            onClick = { onFamily(member) },
-                            leading = { ProfileAvatar(name = member.name, avatar = member.avatar, size = 28.dp, photoUrl = photoUrl(member)) },
-                            leadingSize = 28.dp,
-                            modifier = Modifier.testTag("resume-family-${member.userId}"),
-                        )
-                    }
-                    if (prompt.hasOwnPlace) {
-                        PillButton(
-                            text = stringResource(R.string.player_from_beginning),
-                            onClick = { onChoose(false) },
-                            icon = AntresolIcons.Restart,
-                            modifier = Modifier.testTag("resume-start"),
-                        )
-                    }
                 }
             }
         }
     }
 }
+
+/** The rows of the start prompt, all this wide (760 px on a 1080p screen). */
+private val PROMPT_ROWS_WIDTH = 380.dp
+
+/** The title above them may run wider. */
+private val PROMPT_TITLE_WIDTH = 560.dp
+
+/** The bar of how far this profile is (420 px on a 1080p screen). */
+private val PROMPT_BAR_WIDTH = 210.dp
 
 @Composable
 private fun TitleBlock(item: ItemDetail?) {

@@ -1866,6 +1866,29 @@ The web's `FamilyProgress` on the title pages (docs/API.md section 15): who else
 - Tests: `FamilyClientTest`, `FamilyRulesTest`, `SampleDecodingTest.family` (core); `FamilyModelTest`, `FamilyTextsTest` (ui-common; needs `isIncludeAndroidResources`);
   `TvFamilyUiTest`, `PlayerFamilyMenuTest`, `PhoneFamilyUiTest` (`FakeServer.family`, `adopted`, `progress`; `scripts/fake-server.py --family` for an emulator).
 
+## Family in the start prompt (TV player only)
+Owner: when a film or episode starts and another profile has a place in it that this profile's own is not near, the resume prompt gets a row for each.
+- Rule (`:core` `Family.resumeCandidates`, pure): not finished, not `next`, `positionMs` above 0, and (the same item) more than 2 minutes from this
+  profile's own place, or (another episode) always; most recent `updatedAt` first, at most 3 (`Family.RESUME_GAP_MS`, `RESUME_ROWS`).
+- `VideoPlayerViewModel` (shared) does it only with `VideoPlayerOptions.familyResume`, which the TV's `PlayerViewModel` sets and the phone's
+  `VideoPlayerActivity` does not: the phone's player, its prompt and its `AskResume` are exactly as before. Only the first start asks (never a retry, the
+  next episode, a family jump or `ResumeMode.FromStart`); `Ask` and `Resume` both do (a «Resume» with nobody to offer starts at once, as before).
+  `start` reads `GET /api/items/{id}/family` beside the progress read (of the series for an episode, so another episode shows: an episode's own family
+  answer lists only whoever is in that very episode); a call that fails or takes over 2.5 s offers nobody.
+- `PlayerPhase.AskResume(positionMs, family)` (`hasOwnPlace`: 10 s or more). `chooseFamily(member)`: `POST /api/progress/{theirItemId}/adopt`, then the
+  member's item plays from `positionMs` (`start(..., startAtMs)`: another episode loads its file, no second prompt); a refused adopt is ignored and
+  their place is used anyway, no error. `chooseResume(Boolean)` is unchanged.
+- TV `ResumePrompt` (`PlayerScreen.kt`): without family rows the two pills in a row, as before. With them one column, focus on the first row:
+  «Продолжить · 34:10» / «Resume · 34:10» (a first time: «Смотреть» / «Play», the question «С чего начать?» / «Where to start?», and no starting
+  over), a `PillButton` with the avatar per member («Дарья · 1:12:40», another episode «Дарья · С1 Э5 · 12:40»: `FamilyTexts.resumeRow`),
+  «Сначала» / «From Beginning». The in-player «Family» menu is untouched.
+- Not done on purpose: the title page's family jump still starts with `ResumeMode.Resume`, so with a third profile elsewhere the prompt comes once
+  more after it (their place is already this profile's own, so only the others are listed).
+- Tests: `FamilyRulesTest` (core), `FamilyTextsTest.aRowOfTheStartPrompt...` (ui-common), `FamilyResumePromptTest` (tv: the phase of the view model and
+  the prompt's rows, focus order and requests against `FakeServer`, which now also records `POST /api/play/{fileId}` in `plays` and can refuse the adopt:
+  `adoptRefused`). `scripts/fake-server.py --resume-family` gives an emulator the places of the three scenes (a first time with one member, a resume with
+  two, a series member in another episode); `--lang ru` for the Russian ones.
+
 ## A new surface, a new decoder (video players, TV and phone)
 Owner's projector: pause a film, the system screensaver starts, resume: sound and subtitles play, the picture stays black.
 - The picture's `SurfaceView` surface goes with the window (screensaver, Home) and a new one comes back. ExoPlayer keeps the paused decoder and moves it

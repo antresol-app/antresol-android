@@ -134,8 +134,7 @@ Running log between milestones. Newest entries at the bottom.
   live server with D-pad key events — server entry (error + success), profile picker, password, Play focused,
   shelves, detail, Back focus restore, row focus restore, nav entry on the current tab, Movies, Music — and writes
   screenshots to `tv/build/screenshots/`. Run: `ANTRESOL_TEST_SERVER=1 ./gradlew :tv:testDebugUnitTest`
-  (excluded otherwise). Robolectric fetches `android-all-instrumented` 14 and 15 from Maven Central; in this
-  container I pre-downloaded them into `~/.m2/repository` from the Google mirror.
+  (excluded otherwise). Robolectric's `android-all-instrumented` runtime now comes through Gradle (see "CI flakes", last section).
 - CI now runs `:core:test :tv:testDebugUnitTest assembleDebug`. `:tv:assembleRelease` (R8) also builds.
 
 ### Known gaps (for TV milestones 2–3)
@@ -1952,3 +1951,21 @@ Owner's projector: pause a film, the system screensaver starts, resume: sound an
   `SETTINGS_AUDIT_REPORT=1` only writes them. The TV test runs on a manual clock (a focus glow never ends); the phone test on the normal one (a scroll waits for frames).
 - The rule for these screens: no sentence that repeats the row it sits under; a note only for a consequence or a privacy fact; when a control is unclear the control is changed
   (a device signs out with a «Sign Out» word, not a cross; Change Server no longer asks, since saved sign-ins stay).
+
+## CI flakes (round 26.11)
+
+CI was red on and off since 21.11, a different test each run. Four causes, all found by reproducing, none by retrying:
+- **Robolectric's runtime download.** Robolectric fetched `android-all-instrumented` from Maven Central while the first test ran, with no retry;
+  a failed fetch (`MavenArtifactFetcher`, `Failed to fetch maven artifact`) failed that test and the next few. The jar is now a Gradle dependency
+  (`robolectric-runtime-*` in `libs.versions.toml`, resolved and copied by `prepareRobolectricRuntimes` in the root build file) and the test tasks run
+  with `robolectric.offline=true`. A Robolectric upgrade moves those versions with it; a run on a runtime that is not listed fails naming the jar.
+- **`waitUntil` helpers that only idled the main looper** (`TvWaysUiTest` timing out at its last `waitUntil`). Compose draws and navigates only on
+  test-clock frames; the rule's `waitUntil` moves the clock, a loop of `idleMainLooper` does not. A server answer that came after the last key press
+  had settled left the app on the old screen. Every UI test's `waitUntil` now wraps `compose.waitUntil`. Repro: delay the fake server's run answer by 600 ms.
+- **`TvSetupListener` answering after `stop()`** (`TvSetupTest.jsonPostAnswersTheCodeCommitsAndCloses`, "the port is closed"). On Linux `ServerSocket.close()`
+  returns while the accept thread still sleeps in `accept()`, and a connection made in that gap is handed to it (37 % of rounds in a JDK 17 loop on the
+  Linux box; macOS never does). `acceptLoop` now closes a connection accepted after `stop()`. `aConnectionMadeRightAfterStopIsNotAnswered` fails on Linux without it.
+- **A tap on a card that moves** (`PhoneRequestsUiTest.aTitleAboveTheAgeLimit…`, found by the full CI-like run on the Mac; it was masked on CI because TV failed first).
+  The library's shelf lands above the kid's «Find and Ask» row; a tap made before it arrived hit a card that was moving. The test now waits for the library's
+  results and settles first. Hunt it with 8 `yes` processes running beside a loop of `--rerun` of the class: failed in about one run in two before, 0 of 10 after.
+

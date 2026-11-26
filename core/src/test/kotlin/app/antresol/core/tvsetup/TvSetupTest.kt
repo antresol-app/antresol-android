@@ -36,6 +36,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import java.net.InetAddress
+import java.net.Socket
 import java.util.concurrent.CopyOnWriteArrayList
 
 class TvSetupTest {
@@ -247,6 +248,27 @@ class TvSetupTest {
         assertTrue(listener.stopped)
         // Setup ended: the port is closed.
         assertTrue(runCatching { get(link.toString()) }.isFailure)
+    }
+
+    /**
+     * On Linux closing a listening socket does not wake a thread blocked in accept() at once, and a connection made in
+     * that gap is still handed to it. A stopped listener must not answer it (what made the test above fail on CI).
+     */
+    @Test
+    fun aConnectionMadeRightAfterStopIsNotAnswered() {
+        repeat(40) { round ->
+            val (listener, link) = listen(handler = okHandler())
+            Thread.sleep(5) // the accept loop is blocked in accept()
+            listener.stop()
+            val firstByte = runCatching {
+                Socket(link.host, link.port).use { socket ->
+                    socket.soTimeout = 2_000
+                    socket.getOutputStream().write("GET /setup?n=${link.nonce}&v=1 HTTP/1.1\r\nHost: tv\r\nConnection: close\r\n\r\n".toByteArray())
+                    socket.getInputStream().read()
+                }
+            }
+            assertTrue("round $round: the stopped listener answered", firstByte.isFailure || firstByte.getOrNull() == -1)
+        }
     }
 
     @Test

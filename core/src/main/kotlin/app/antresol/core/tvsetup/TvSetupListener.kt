@@ -104,6 +104,11 @@ class TvSetupListener(
             } catch (_: IOException) {
                 continue
             }
+            // On Linux a connection made just after [stop] closed the port can still be what accept() returns: not answered.
+            if (stopped) {
+                runCatching { client.close() }
+                break
+            }
             val remote = client.inetAddress
             if (remote == null || !LocalAddresses.isPrivate(remote, allowLoopback = true)) {
                 // Not from the home network: no answer at all.

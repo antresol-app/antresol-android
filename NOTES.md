@@ -1878,19 +1878,21 @@ Owner: when a film or episode starts and another profile has a place in it that 
   elsewhere; the phone keeps `Resume` there, it never asks) and `startAtMs`. Android TV has no launch with a start position (no `?t`).
   Which episodes the family may be in: when the app chose the episode (a series or season id, which the player resolves, or `ResumeMode.Resume`: the
   series page's Play/Continue, Continue Watching, the home links) `start` reads the family of the SERIES, so a member in another episode is offered with
-  its number; an episode the person picked by hand (`ResumeMode.Ask`: the episode list) reads the family of that very episode, so only those who are in it
+  its number; an episode the person picked by hand (`ResumeMode.Ask`: the episode list, `ResumeMode.Picked`: an episode's own page) reads the family of that very episode, so only those who are in it
   are offered (an episode's own answer lists only whoever has progress in it). A call that fails or takes over 2.5 s offers nobody.
 - `PlayerPhase.AskResume(positionMs, family)` (`hasOwnPlace`: 10 s or more). `chooseFamily(member)`: `POST /api/progress/{theirItemId}/adopt`, then the
   member's item plays from `positionMs` (`start(..., startAtMs)`: another episode loads its file, no second prompt); a refused adopt is ignored and
   their place is used anyway, no error. `chooseResume(Boolean)` is unchanged.
 - TV `ResumePrompt` (`PlayerScreen.kt`), laid out like the Apple TV's, with and without family rows: the kind (or the item's `subtitle`, «Test Show · Season 1,
-  Episode 1») in small capitals, the title, and with an own place (`hasOwnPlace`) the shared `ProgressBar` and `Durations.remaining` («Осталось 76 мин»; no
-  question line). Below, one column of `ChoiceRow`s (`Buttons.kt`: 380 dp x 38 dp = 760 x 76 px at 1080p, 10 dp apart, the pill shape, the pill colours: the
+  Episode 1») in small capitals, the title, and with an own place (`hasOwnPlace`) one line exactly as wide as the rows: the shared `ProgressBar` from the
+  rows' left edge, stretching, and `Durations.remaining` («Осталось 76 мин») ending on their right edge; no question line, nothing between title and
+  line. Below, one column of `ChoiceRow`s (`Buttons.kt`: 380 dp x 38 dp = 760 x 76 px at 1080p, 10 dp apart, the pill shape, the pill colours: the
   first row `PillStyle.Primary`, the others dark with `GlassBorder`; the icon or avatar in a 26 dp slot so the texts line up; focus 1.05 from the centre),
   focus on the first row: «Продолжить с 34:10» / "Resume from 34:10" (`player_resume_from`; a first time: «Смотреть» / "Play" and no bar), a row with the avatar
   per member («Дарья · 1:12:40», another episode «Дарья · С1 Э5 · 12:40»: `FamilyTexts.resumeRow`), «Сначала» / "From Beginning" (a first time has none).
   The in-player «Family» menu is untouched.
-- Known edge: an episode's own page Play button is `ResumeMode.Resume` (the same button as the series page's), so it counts as the app's choice.
+- An episode's own page Play button is the person's pick: `primaryPlayMode(kind)` (`DetailScreen.kt`) gives `ResumeMode.Picked` for an episode page
+  (resumes silently like `Resume`, but only those in that very episode are offered) and `Resume` for a series, season or film page.
 - Tests: `FamilyRulesTest` (core), `FamilyTextsTest.aRowOfTheStartPrompt...` (ui-common), `FamilyResumePromptTest` (tv: the phase of the view model and
   the prompt's rows, focus order and requests against `FakeServer`, which now also records `POST /api/play/{fileId}` in `plays`, can refuse the adopt:
   `adoptRefused`, and with `playable` plays the 30 s clip, so the next-episode test reaches «Playing» and calls `playNext()`), and

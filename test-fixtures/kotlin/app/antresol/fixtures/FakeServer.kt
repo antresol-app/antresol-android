@@ -179,6 +179,13 @@ class FakeServer {
     /** «Отдельная история на этом устройстве»: the person's histories (id → name) and the one this device writes into. */
     val histories: MutableMap<Long, String> = java.util.Collections.synchronizedMap(linkedMapOf(20L to "Living Room"))
 
+    /**
+     * The profile's interface language the server reports. Empty is what a fresh app already has cached ("follow the device"):
+     * a different one makes the app restart its screens in it (a new activity, the old one finished) at whatever moment the
+     * answer arrives, in the middle of a UI test.
+     */
+    @Volatile var uiLanguage: String = ""
+
     @Volatile var deviceHistory: Long? = null
 
     private val nextHistory = java.util.concurrent.atomic.AtomicLong(21)
@@ -239,7 +246,7 @@ class FakeServer {
             path == "/api/me" -> json(me())
             path == "/api/auth/media-key" -> json("""{"key":"test-mk","expiresAt":"2099-01-01T00:00:00Z"}""")
             path == "/api/me/devices" -> json(devicesJson)
-            path == "/api/me/ui-language" -> json("""{"language":"","effective":"en"}""")
+            path == "/api/me/ui-language" -> json("""{"language":"","effective":"$uiLanguage"}""")
             path == "/api/me/playback-prefs" -> json("""{"audioLangs":[],"subMode":"off","subLangs":[]}""")
             path == "/api/home" -> json(home())
             path == "/api/search" -> json("""{"library":[${if (searchLibraryEmpty) "" else movieCard(MOVIE_ID)}],"albums":[],"artists":[],"songs":[]}""")

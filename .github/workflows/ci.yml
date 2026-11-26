@@ -26,8 +26,21 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
 
+      # --continue: one failing module does not hide the others' failures (a red TV run once kept the phone's tests from running at all).
       - name: Unit tests and debug builds
-        run: ./gradlew --no-daemon :core:test :ui-common:testDebugUnitTest :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug
+        run: ./gradlew --no-daemon --continue :core:test :ui-common:testDebugUnitTest :tv:testDebugUnitTest :mobile:testDebugUnitTest assembleDebug
+
+      # What a red run needs to be diagnosed without a rerun: the test results (messages, stack traces) and the screenshots the UI tests take.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-reports
+          path: |
+            */build/reports/tests
+            */build/test-results
+            */build/screenshots
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Release keystore
         if: github.event_name != 'pull_request' && env.ANTRESOL_KEYSTORE_BASE64 != ''

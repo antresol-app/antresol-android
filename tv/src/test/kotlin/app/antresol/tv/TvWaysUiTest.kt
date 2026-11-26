@@ -431,26 +431,31 @@ class TvWaysUiTest {
         waitFor(isFocused() and (hasText(text) or hasAnyDescendant(hasText(text))))
     }
 
+    /**
+     * Waits for [condition] on something the app does off the main thread (a request the fake server saw). The loop
+     * is the rule's own, which moves the test clock a frame at a time: Compose draws, navigates and starts what
+     * comes next only on those frames, so a loop that only idles the main looper stalls on a machine where the
+     * answer arrives after the last key press has settled.
+     */
     private fun waitUntil(timeoutMs: Long = 15_000, condition: () -> Boolean) {
-        val end = System.currentTimeMillis() + timeoutMs
-        while (!condition()) {
-            check(System.currentTimeMillis() < end) { "timed out; the addon got ${fake.addonCalls}; requests ${fake.requests.takeLast(12)}" }
-            Thread.sleep(20)
-            ShadowLooper.idleMainLooper(50, TimeUnit.MILLISECONDS)
-        }
-    }
-
-    private fun waitFor(matcher: SemanticsMatcher, timeoutMs: Long = 10_000) {
         try {
             compose.waitUntil(timeoutMs) {
                 Thread.sleep(10)
                 ShadowLooper.idleMainLooper(50, TimeUnit.MILLISECONDS)
                 if (!compose.mainClock.autoAdvance) compose.mainClock.advanceTimeBy(16)
-                compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+                condition()
             }
         } catch (e: Throwable) {
+            throw IllegalStateException("${e.message}; the addon got ${fake.addonCalls}; requests ${fake.requests.takeLast(12)}", e)
+        }
+    }
+
+    private fun waitFor(matcher: SemanticsMatcher, timeoutMs: Long = 10_000) {
+        try {
+            waitUntil(timeoutMs) { compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        } catch (e: Throwable) {
             shot("ways-tv-failure")
-            throw IllegalStateException("${e.message}; the addon got ${fake.addonCalls}", e)
+            throw e
         }
     }
 

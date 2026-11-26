@@ -454,12 +454,18 @@ class FamilyResumePromptTest {
         compose.waitForIdle()
     }
 
+    // The rule's own loop: it moves the test clock a frame at a time, and Compose navigates and starts what comes next
+    // only on those frames (a bare looper loop stalls once the server's answer lands after the last key press settled).
     private fun waitUntil(timeoutMs: Long = 15_000, condition: () -> Boolean) {
-        val end = System.currentTimeMillis() + timeoutMs
-        while (!condition()) {
-            check(System.currentTimeMillis() < end) { "timed out; requests ${fake.requests.takeLast(14)}" }
-            Thread.sleep(20)
-            ShadowLooper.idleMainLooper(50, TimeUnit.MILLISECONDS)
+        try {
+            compose.waitUntil(timeoutMs) {
+                Thread.sleep(10)
+                ShadowLooper.idleMainLooper(50, TimeUnit.MILLISECONDS)
+                if (!compose.mainClock.autoAdvance) compose.mainClock.advanceTimeBy(16)
+                condition()
+            }
+        } catch (e: Throwable) {
+            throw IllegalStateException("${e.message}; requests ${fake.requests.takeLast(14)}", e)
         }
     }
 

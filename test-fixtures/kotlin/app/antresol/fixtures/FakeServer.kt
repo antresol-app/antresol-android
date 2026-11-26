@@ -147,8 +147,11 @@ class FakeServer {
     /** `POST /api/progress/{id}/adopt` answers 404 whoever is asked (they finished or went on meanwhile). */
     @Volatile var adoptRefused = false
 
-    /** `POST /api/play/{fileId}` bodies, as `fileId body` (the fake answers 404: no film plays, but what a player asked for is seen). */
+    /** `POST /api/play/{fileId}` bodies, as `fileId body` (what a player asked for is seen even when nothing plays). */
     val plays = CopyOnWriteArrayList<String>()
+
+    /** Library files play: `POST /api/play/{fileId}` answers a direct stream of the 30 s clip (else 404, and nothing plays). */
+    @Volatile var playable = false
 
     /** One other profile's place in an item, as the server lists it. [agoMinutes] is how long ago they were there. */
     data class FakeFamilyMember(
@@ -195,8 +198,13 @@ class FakeServer {
                 if (path.startsWith("/api/requests")) return requests(request.method.orEmpty(), path, request.body.readUtf8())
                 if (request.method == "POST" && path.matches(Regex("/api/progress/\\d+/adopt"))) return adopt(path, request.body.readUtf8())
                 if (request.method == "POST" && path.matches(Regex("/api/play/\\d+"))) {
-                    plays += "${path.substringAfterLast('/')} ${request.body.readUtf8()}"
-                    return MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
+                    val fileId = path.substringAfterLast('/')
+                    plays += "$fileId ${request.body.readUtf8()}"
+                    if (!playable) return MockResponse().setResponseCode(404).setBody("""{"error":"not found"}""")
+                    return json(
+                        """{"mode":"direct","url":"/api/stream/$fileId","startSec":0,"durationMs":30000,"audio":[],"audioIndex":-1,
+                            "subtitles":[],"quality":{"selected":"auto","applied":"auto"}}""",
+                    )
                 }
                 // A kid has no addons; the title page is the one thing it gets of them (with its `kidRequest`).
                 if (kid && path.startsWith("/api/title/")) return addon(request.method.orEmpty(), path, "")
@@ -240,6 +248,10 @@ class FakeServer {
             path.matches(Regex("/api/items/\\d+/family")) -> json(familyJson(path.split('/')[3].toLong()))
             path.matches(Regex("/api/items/\\d+")) -> json(item(path.substringAfterLast('/').toLong()))
                 .setBodyDelay(itemDelayMs, TimeUnit.MILLISECONDS)
+            playable && path.matches(Regex("/api/stream/\\d+")) -> {
+                val bytes = requireNotNull(FakeServer::class.java.getResourceAsStream("/trailer-sample.mp4")).use { it.readBytes() }
+                MockResponse().setHeader("Content-Type", "video/mp4").setBody(Buffer().write(bytes))
+            }
             path.startsWith("/api/progress/") && method == "GET" -> json(progressJson(path.substringAfterLast('/').toLongOrNull() ?: 0))
             path.startsWith("/api/music/home") || path.startsWith("/api/books/home") -> json("""{"shelves":[]}""")
             path == "/api/music/genres" -> json("""{"genres":[]}""")

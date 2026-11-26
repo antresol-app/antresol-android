@@ -1871,10 +1871,15 @@ Owner: when a film or episode starts and another profile has a place in it that 
 - Rule (`:core` `Family.resumeCandidates`, pure): not finished, not `next`, `positionMs` above 0, and (the same item) more than 2 minutes from this
   profile's own place, or (another episode) always; most recent `updatedAt` first, at most 3 (`Family.RESUME_GAP_MS`, `RESUME_ROWS`).
 - `VideoPlayerViewModel` (shared) does it only with `VideoPlayerOptions.familyResume`, which the TV's `PlayerViewModel` sets and the phone's
-  `VideoPlayerActivity` does not: the phone's player, its prompt and its `AskResume` are exactly as before. Only the first start asks (never a retry, the
-  next episode, a family jump or `ResumeMode.FromStart`); `Ask` and `Resume` both do (a «Resume» with nobody to offer starts at once, as before).
-  `start` reads `GET /api/items/{id}/family` beside the progress read (of the series for an episode, so another episode shows: an episode's own family
-  answer lists only whoever is in that very episode); a call that fails or takes over 2.5 s offers nobody.
+  `VideoPlayerActivity` does not: the phone's player, its prompt and its `AskResume` are exactly as before. Only the first start asks (`start(askFamily)` is
+  passed by the init only: not a retry, the next episode / autoplay, the player's own family jump or a family row of the prompt); `Ask` and `Resume` both
+  ask (a «Resume» with nobody to offer starts at once, as before). Never when the place was chosen already: `ResumeMode.FromStart`, the new
+  `ResumeMode.Chosen` (the title page's family jump: their place was copied into this profile's own, it continues from it and asks nothing, whoever is
+  elsewhere; the phone keeps `Resume` there, it never asks) and `startAtMs`. Android TV has no launch with a start position (no `?t`).
+  Which episodes the family may be in: when the app chose the episode (a series or season id, which the player resolves, or `ResumeMode.Resume`: the
+  series page's Play/Continue, Continue Watching, the home links) `start` reads the family of the SERIES, so a member in another episode is offered with
+  its number; an episode the person picked by hand (`ResumeMode.Ask`: the episode list) reads the family of that very episode, so only those who are in it
+  are offered (an episode's own answer lists only whoever has progress in it). A call that fails or takes over 2.5 s offers nobody.
 - `PlayerPhase.AskResume(positionMs, family)` (`hasOwnPlace`: 10 s or more). `chooseFamily(member)`: `POST /api/progress/{theirItemId}/adopt`, then the
   member's item plays from `positionMs` (`start(..., startAtMs)`: another episode loads its file, no second prompt); a refused adopt is ignored and
   their place is used anyway, no error. `chooseResume(Boolean)` is unchanged.
@@ -1882,11 +1887,11 @@ Owner: when a film or episode starts and another profile has a place in it that 
   «Продолжить · 34:10» / «Resume · 34:10» (a first time: «Смотреть» / «Play», the question «С чего начать?» / «Where to start?», and no starting
   over), a `PillButton` with the avatar per member («Дарья · 1:12:40», another episode «Дарья · С1 Э5 · 12:40»: `FamilyTexts.resumeRow`),
   «Сначала» / «From Beginning». The in-player «Family» menu is untouched.
-- Not done on purpose: the title page's family jump still starts with `ResumeMode.Resume`, so with a third profile elsewhere the prompt comes once
-  more after it (their place is already this profile's own, so only the others are listed).
+- Known edge: an episode's own page Play button is `ResumeMode.Resume` (the same button as the series page's), so it counts as the app's choice.
 - Tests: `FamilyRulesTest` (core), `FamilyTextsTest.aRowOfTheStartPrompt...` (ui-common), `FamilyResumePromptTest` (tv: the phase of the view model and
-  the prompt's rows, focus order and requests against `FakeServer`, which now also records `POST /api/play/{fileId}` in `plays` and can refuse the adopt:
-  `adoptRefused`). `scripts/fake-server.py --resume-family` gives an emulator the places of the three scenes (a first time with one member, a resume with
+  the prompt's rows, focus order and requests against `FakeServer`, which now also records `POST /api/play/{fileId}` in `plays`, can refuse the adopt:
+  `adoptRefused`, and with `playable` plays the 30 s clip, so the next-episode test reaches «Playing» and calls `playNext()`), and
+  `TvFamilyUiTest.aJumpFromTheTitlePageStartsAtTheirPlaceWithoutAskingAgain`. `scripts/fake-server.py --resume-family` gives an emulator the places of the three scenes (a first time with one member, a resume with
   two, a series member in another episode); `--lang ru` for the Russian ones.
 
 ## A new surface, a new decoder (video players, TV and phone)

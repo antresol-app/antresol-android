@@ -100,11 +100,17 @@ import kotlin.time.Duration.Companion.seconds
 
 /** How the player picks its start position. */
 enum class ResumeMode {
-    /** Ask "Resume from 12:34?" when there is saved progress (episode cards, detail rows). */
+    /** Ask "Resume from 12:34?" when there is saved progress (episode cards, detail rows: the person picked this very item). */
     Ask,
 
-    /** Continue from saved progress without asking (Resume buttons, Continue Watching). */
+    /** Continue from saved progress without asking (Resume buttons, Continue Watching: the app chose what plays). */
     Resume,
+
+    /**
+     * Continue from saved progress, the place having been chosen by hand already (a family jump copied it into this profile's
+     * own progress): nothing is asked, whoever else of the family is where.
+     */
+    Chosen,
 
     /** Start at 0 ("Play from Beginning"). */
     FromStart,
@@ -443,8 +449,11 @@ open class VideoPlayerViewModel(
 
     /**
      * Opens [itemId] (a series or season plays one of its episodes). With [askFamily] (the first start of a TV player) the
-     * resume prompt also appears when somebody else of the family is somewhere this profile is not, whatever [mode] is
-     * (but never for [ResumeMode.FromStart]: that was asked for). [startAtMs] starts there without asking anything.
+     * resume prompt also appears when somebody else of the family is somewhere this profile is not, whether [mode] asks or
+     * resumes; never when the place was chosen already ([ResumeMode.FromStart], [ResumeMode.Chosen], [startAtMs]: starts
+     * there), and a retry, the next episode and a family jump in the player do not pass [askFamily] at all.
+     * Family members in another episode count only when the app chose the episode (a series or season, or [ResumeMode.Resume]);
+     * an episode the person picked (Ask) has only those who are in that very episode.
      */
     private fun start(itemId: Long, mode: ResumeMode, askFamily: Boolean = false, startAtMs: Long? = null) {
         startJob?.cancel()
@@ -476,7 +485,11 @@ open class VideoPlayerViewModel(
                 item = detail
                 currentItemId = detail.id
                 family.load(detail.id)
-                val others = if (askFamily && mode != ResumeMode.FromStart && startAtMs == null) async { familyOnStart(detail) } else null
+                val others = if (askFamily && mode != ResumeMode.FromStart && mode != ResumeMode.Chosen && startAtMs == null) {
+                    async { familyOnStart(detail, acrossEpisodes = mode == ResumeMode.Resume || detail.id != itemId) }
+                } else {
+                    null
+                }
                 findNextEpisode(detail)
                 // A series or season plays one of its episodes: the early answer is not that episode's.
                 val asked = early?.takeIf { detail.id == itemId }
@@ -506,11 +519,12 @@ open class VideoPlayerViewModel(
     }
 
     /**
-     * Where each other profile is in what starts: in the item itself, and for an episode in its series, so another episode of
-     * it shows too. Nothing when the call fails or takes over [FAMILY_ASK_MS]: the player never waits long for this.
+     * Where each other profile is in what starts: in the item itself, and with [acrossEpisodes] (the app chose the episode) for
+     * an episode in its series, so another episode of it shows too. Nothing when the call fails or takes over [FAMILY_ASK_MS]:
+     * the player never waits long for this.
      */
-    private suspend fun familyOnStart(detail: ItemDetail): List<FamilyMember> = try {
-        val id = if (detail.kind == Kind.EPISODE) detail.seriesId ?: detail.id else detail.id
+    private suspend fun familyOnStart(detail: ItemDetail, acrossEpisodes: Boolean): List<FamilyMember> = try {
+        val id = if (detail.kind == Kind.EPISODE && acrossEpisodes) detail.seriesId ?: detail.id else detail.id
         withTimeoutOrNull(FAMILY_ASK_MS) { familyApi.members(id) }.orEmpty()
     } catch (e: CancellationException) {
         throw e

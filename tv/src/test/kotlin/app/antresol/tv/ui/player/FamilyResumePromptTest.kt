@@ -244,6 +244,104 @@ class FamilyResumePromptTest {
         assertEquals(episodes[3], player.item?.id)
     }
 
+    // region Which episode the family may be in: only when the app chose the episode
+
+    private fun seriesFamily() {
+        fake.family[FakeServer.SERIES_ID] = listOf(
+            FakeFamilyMember(5, "Daria", episodes[3], positionMs = 12 * min + 40_000, durationMs = 45 * min, season = 1, episode = 4, agoMinutes = 15),
+            FakeFamilyMember(2, "Sam", episodes[1], positionMs = 20 * min, durationMs = 45 * min, season = 1, episode = 2, agoMinutes = 120),
+        )
+        // What the server answers for the episode itself: whoever has progress in that very episode.
+        fake.family[episodes[1]] = listOf(
+            FakeFamilyMember(2, "Sam", episodes[1], positionMs = 20 * min, durationMs = 45 * min, season = 1, episode = 2, agoMinutes = 120),
+        )
+        fake.family[episodes[3]] = listOf(
+            FakeFamilyMember(5, "Daria", episodes[3], positionMs = 12 * min + 40_000, durationMs = 45 * min, season = 1, episode = 4, agoMinutes = 15),
+        )
+    }
+
+    @Test
+    fun anEpisodePickedFromTheListHasOnlyThoseWhoAreInThatEpisode() {
+        seriesFamily()
+        val player = player(episodes[1], ResumeMode.Ask)
+        val prompt = asked(player)
+        assertEquals(listOf("Sam"), prompt.family.map { it.name })
+        assertEquals(episodes[1], prompt.family.single().itemId)
+        // The family of the episode was asked for, not that of the series.
+        assertTrue(fake.requests.contains("GET /api/items/${episodes[1]}/family"))
+        assertFalse(fake.requests.contains("GET /api/items/${FakeServer.SERIES_ID}/family"))
+    }
+
+    @Test
+    fun anEpisodePickedFromTheListWithOthersOnlyElsewhereStartsAtOnce() {
+        seriesFamily()
+        fake.family.remove(episodes[1])
+        playedWithoutAsking(player(episodes[1], ResumeMode.Ask))
+    }
+
+    @Test
+    fun aResumeOfAnEpisodeAndTheSeriesPlayOfferAnotherEpisodeToo() {
+        // «Continue» on the series page: the app chose episode two, Daria is in episode four.
+        seriesFamily()
+        val resumed = asked(player(episodes[1], ResumeMode.Resume))
+        assertEquals(listOf("Daria", "Sam"), resumed.family.map { it.name })
+        assertEquals(listOf(episodes[3], episodes[1]), resumed.family.map { it.itemId })
+        // The series' Play: the app resolves the episode.
+        assertEquals(listOf("Daria", "Sam"), asked(player(FakeServer.SERIES_ID, ResumeMode.Resume)).family.map { it.name })
+        // An episode the series' Play chose is still the app's choice with «Ask» (the series resolved to it).
+        assertEquals(listOf("Daria", "Sam"), asked(player(FakeServer.SERIES_ID, ResumeMode.Ask)).family.map { it.name })
+    }
+
+    // endregion
+
+    // region No prompt when the place was chosen already
+
+    @Test
+    fun aPlaceChosenByHandIsNeverAskedAndPlaysFromTheOwnPlace() {
+        // A family jump on the title page: their place is this profile's own now, and a third profile is elsewhere.
+        fake.progress[movie] = (34 * min + 10_000) to 104 * min
+        fake.family[movie] = listOf(daria(72 * min + 40_000))
+        val player = player(movie, ResumeMode.Chosen)
+        playedWithoutAsking(player)
+        assertTrue(fake.plays.single(), fake.plays.single().contains("\"startSec\":2050"))
+        // The same for an episode with somebody in another one.
+        seriesFamily()
+        fake.progress[episodes[1]] = (8 * min) to 45 * min
+        val episode = player(episodes[1], ResumeMode.Chosen)
+        waitUntil { fake.plays.size == 2 }
+        assertFalse(episode.phase is PlayerPhase.AskResume)
+        assertTrue(fake.plays.last(), fake.plays.last().startsWith("${1000 + episodes[1]} ") && fake.plays.last().contains("\"startSec\":480"))
+    }
+
+    @Test
+    fun aPlaceTheStartWasGivenIsNeverAsked() {
+        // A family row of the prompt itself starts another episode at their place: no second prompt for the third profile.
+        seriesFamily()
+        fake.family[FakeServer.SERIES_ID] = fake.family.getValue(FakeServer.SERIES_ID) +
+            FakeFamilyMember(6, "Kim", episodes[2], positionMs = 9 * min, durationMs = 45 * min, season = 1, episode = 3, agoMinutes = 200)
+        val player = player(episodes[1], ResumeMode.Resume)
+        val prompt = asked(player)
+        player.chooseFamily(prompt.family.first { it.name == "Daria" })
+        waitUntil { fake.plays.isNotEmpty() }
+        assertEquals(1000L + episodes[3], fake.plays.single().substringBefore(' ').toLong())
+        assertFalse(player.phase is PlayerPhase.AskResume)
+    }
+
+    @Test
+    fun theNextEpisodeAfterAnEpisodeNeverAsks() {
+        fake.playable = true
+        val player = player(episodes[0], ResumeMode.Resume)
+        waitUntil { player.phase == PlayerPhase.Playing && player.nextEpisode != null }
+        assertEquals(episodes[1], player.nextEpisode?.id)
+        // Somebody is elsewhere in the series by the time the next episode starts: autoplay and the Next button just play it.
+        seriesFamily()
+        player.playNext()
+        waitUntil { fake.plays.any { it.startsWith("${1000 + episodes[1]} ") } }
+        assertFalse(player.phase is PlayerPhase.AskResume)
+    }
+
+    // endregion
+
     @Test
     fun nobodyElseOrNobodyFarAwayLeavesTheStartAsItWas() {
         // Nobody else has progress: a resume plays at once.

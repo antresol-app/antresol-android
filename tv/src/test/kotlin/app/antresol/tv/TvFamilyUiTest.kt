@@ -188,6 +188,29 @@ class TvFamilyUiTest {
     }
 
     @Test
+    fun aJumpFromTheTitlePageStartsAtTheirPlaceWithoutAskingAgain() {
+        // Sam is at 20:00 of episode two and Daria in episode four: the page's jump to Sam is a place picked by hand, so the
+        // player does not ask again where to start (it would list Daria).
+        fake.family[FakeServer.SERIES_ID] = listOf(
+            FakeFamilyMember(2, "Sam", episodes[1], positionMs = 20 * 60_000, durationMs = 45 * 60_000, season = 1, episode = 2, done = 1, total = 6, agoMinutes = 30),
+            FakeFamilyMember(5, "Daria", episodes[3], positionMs = 12 * 60_000, durationMs = 45 * 60_000, season = 1, episode = 4, done = 3, total = 6, agoMinutes = 120),
+        )
+        start()
+        openSeries()
+        toTheLine()
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitFor(hasText("S1 E2 from 20:00"))
+        assertFocusedText("Sam")
+        key(KeyEvent.KEYCODE_DPAD_CENTER)
+        waitUntil { fake.adopted.contains("${episodes[1]} 2") }
+        waitUntil { fake.plays.isNotEmpty() }
+        assertEquals(1000L + episodes[1], fake.plays.single().substringBefore(' ').toLong())
+        assertTrue(fake.plays.single(), fake.plays.single().contains("\"startSec\":1200"))
+        assertTrue(compose.onAllNodes(hasText("Where to start?"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodes(hasText("Resume watching?"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
     fun backClosesTheListAndFocusIsOnTheLineAgain() {
         seriesFamily()
         start()

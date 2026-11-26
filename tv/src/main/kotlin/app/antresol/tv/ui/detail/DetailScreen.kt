@@ -321,7 +321,8 @@ private fun DetailContent(
             when (familyKind) {
                 FamilyKind.Audiobook -> viewModel.listen(fromMs = place.positionMs, onStarted = actions.nowPlaying)
                 FamilyKind.Comic -> actions.read(place.itemId, place.next)
-                else -> onPlay(place.itemId, if (place.next) ResumeMode.FromStart else ResumeMode.Resume)
+                // Their place is this profile's own now and was picked by hand: the player asks nothing.
+                else -> onPlay(place.itemId, if (place.next) ResumeMode.FromStart else ResumeMode.Chosen)
             }
         }
     }

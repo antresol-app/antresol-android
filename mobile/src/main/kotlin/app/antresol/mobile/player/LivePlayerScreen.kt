@@ -545,8 +545,8 @@ internal fun LiveBelow(
 }
 
 /**
- * The channel and its programme under the picture: «2 · Documentaries ● LIVE» with the star, the
- * title, the episode, start and end around the progress, «Далее …».
+ * The channel and its programme under the picture: «2 · Documentaries ● LIVE ☆» (the star right after
+ * the name and its badge), the title, the episode, start and end around the progress, «Далее …».
  */
 @Composable
 internal fun LiveDetails(
@@ -566,16 +566,15 @@ internal fun LiveDetails(
         if (channel != null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ChannelLogo(urls?.image(channel.logoUrl), height = 24.dp, altUrl = urls?.image(channel.logoAlt), name = channel.name)
-                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        stringResource(R.string.tv_channel_number, channel.number, channel.name),
-                        style = Antresol.typography.title.copy(color = AntresolColors.LabelSecondary, fontFeatureSettings = "tnum"),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    LiveEdgeMark(behindLive, onGoLive)
-                }
+                // the star follows the name and its badge (not the row's end); a long name gives way first
+                Text(
+                    stringResource(R.string.tv_channel_number, channel.number, channel.name),
+                    style = Antresol.typography.title.copy(color = AntresolColors.LabelSecondary, fontFeatureSettings = "tnum"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                LiveEdgeMark(behindLive, onGoLive)
                 RoundIconButton(
                     if (channel.favorite) AntresolIcons.StarFilled else AntresolIcons.Star,
                     stringResource(if (channel.favorite) R.string.tv_favorite_remove else R.string.tv_favorite_add),

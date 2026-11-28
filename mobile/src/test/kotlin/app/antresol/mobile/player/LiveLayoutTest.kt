@@ -153,6 +153,38 @@ class LiveLayoutTest {
         capture("portrait")
     }
 
+    /** The header's star follows the name and its «LIVE» (not the row's end); a long name gives way first. */
+    private fun starFollowsTheName(name: String, label: String) {
+        val named = channel.copy(name = name)
+        val s = LiveTvState(listOf(others[0], named) + others.drop(1), 3, emptyList(), LiveStream.Ready("x", 1))
+        portrait(controls = false, s = s)
+        val star = compose.onNodeWithTag("live-favorite", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithText("3 · $name", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val density = compose.activity.resources.displayMetrics.density
+        // between the name and the star there is only the badge («Прямой эфир» is the wider, about 100 dp) and the row's gaps
+        val gap = (star.left - title.right) / density
+        assertTrue("the star is ${gap}dp after the name's end", gap in 0f..150f)
+        assertTrue("the star at $star is off the screen ${screen()}", star.right <= screen().right + 0.5f)
+        assertNothingOverflows()
+        capture("star-$label")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "en-w411dp-h891dp-port-xhdpi")
+    fun theStarFollowsAShortNameEn() = starFollowsTheName("Billions", "en-normal")
+
+    @Test
+    @Config(sdk = [35], qualifiers = "en-w411dp-h891dp-port-xhdpi")
+    fun theStarFollowsALongNameEn() = starFollowsTheName("The Extraordinary Adventures of Wildlife and Documentary Entertainment HD", "en-long")
+
+    @Test
+    @Config(sdk = [35], qualifiers = "ru-w411dp-h891dp-port-xhdpi")
+    fun theStarFollowsAShortNameRu() = starFollowsTheName("Комедии", "ru-normal")
+
+    @Test
+    @Config(sdk = [35], qualifiers = "ru-w360dp-h640dp-port")
+    fun theStarFollowsALongNameRu() = starFollowsTheName("Международный информационно-развлекательный познавательный телеканал Первый", "ru-long")
+
     @Test
     @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-xhdpi")
     fun portraitStartingShot() {
